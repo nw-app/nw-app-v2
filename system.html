@@ -4,329 +4,58 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>系統管理員｜系統社區設定</title>
-    <link id="appIcon" rel="icon" type="image/svg+xml" href="" />
-    <script>
-      (() => {
-        try {
-          const key = "nw_brand_v1";
-          const defPath =
-            "M12 2.6c1.2 5.3 2.2 6.5 9.4 9.4-7.2 2.9-8.2 4.1-9.4 9.4-1.2-5.3-2.2-6.5-9.4-9.4 7.2-2.9 8.2-4.1 9.4-9.4Z";
-          const raw = localStorage.getItem(key);
-          const parsed = raw ? JSON.parse(raw) : null;
-          const pathD = parsed && typeof parsed.logoPathD === "string" && parsed.logoPathD.trim() ? parsed.logoPathD.trim() : defPath;
-          const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="white"/><path fill="#D32F2F" d="${pathD}"/></svg>`;
-          const iconEl = document.getElementById("appIcon");
-          if (iconEl) iconEl.setAttribute("href", `data:image/svg+xml,${encodeURIComponent(svg)}`);
-        } catch {}
-      })();
-    </script>
-    <style>
-      :root {
-        --brand: #d32f2f;
-        --bg: #f2f3f5;
-        --panel: #ffffff;
-        --panel-2: #f9fafb;
-        --text: #1f2937;
-        --muted: #6b7280;
-        --border: rgba(17, 24, 39, 0.12);
-        --shadow: 0 14px 34px rgba(17, 24, 39, 0.12);
-        --radius: 16px;
-        --radius-sm: 12px;
-        --tap: 48px;
-        --sidebar-w: 280px;
-      }
-      * { box-sizing: border-box; }
-      html, body { height: 100%; }
-      body {
-        margin: 0;
-        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", Arial, sans-serif;
-        color: var(--text);
-        background: var(--bg);
-      }
-      button, input, select, textarea { font: inherit; }
-      a { color: inherit; text-decoration: none; }
-      .layout {
-        min-height: 100%;
-        display: grid;
-        grid-template-columns: var(--sidebar-w) 1fr;
-      }
-      .sidebar {
-        position: sticky;
-        top: 0;
-        height: 100dvh;
-        padding: 18px 14px;
-        background: linear-gradient(180deg, #c62828 0%, #d32f2f 45%, #b71c1c 100%);
-        color: #fff;
-        display: grid;
-        grid-template-rows: auto auto 1fr auto;
-        gap: 14px;
-      }
-      .brand {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        padding: 10px 10px;
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.12);
-        border: 1px solid rgba(255, 255, 255, 0.18);
-      }
-      .logo {
-        width: 42px;
-        height: 42px;
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.18);
-        display: grid;
-        place-items: center;
-        box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
-      }
-      .brand-title { font-weight: 900; letter-spacing: 0.2px; line-height: 1.1; }
-      .brand-sub { font-size: 12px; opacity: 0.92; margin-top: 2px; }
-      .nav {
-        display: grid;
-        gap: 8px;
-        align-content: start;
-      }
-      .nav button {
-        height: var(--tap);
-        border-radius: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.16);
-        background: rgba(255, 255, 255, 0.08);
-        color: #fff;
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        padding: 0 12px;
-        cursor: pointer;
-        transition: transform 120ms ease, background 120ms ease;
-      }
-      .nav button:hover { transform: translateY(-1px); background: rgba(255, 255, 255, 0.14); }
-      .nav button[aria-current="page"] { background: rgba(255, 255, 255, 0.22); }
-      .nav svg { width: 20px; height: 20px; flex: 0 0 auto; }
-      .nav .label { font-weight: 800; letter-spacing: 0.2px; }
-      .nav .hint { margin-left: auto; font-size: 12px; opacity: 0.92; }
-      .side-foot {
-        padding-top: 10px;
-        border-top: 1px solid rgba(255, 255, 255, 0.18);
-        display: grid;
-        gap: 10px;
-      }
-      .side-foot .tiny {
-        font-size: 12px;
-        opacity: 0.92;
-        padding: 10px 12px;
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.12);
-        border: 1px solid rgba(255, 255, 255, 0.18);
-      }
-      .main {
-        padding: 18px 18px 28px;
-        display: grid;
-        grid-template-rows: auto 1fr;
-        gap: 14px;
-      }
-      .topbar {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        padding: 14px 14px;
-        border-radius: var(--radius);
-        background: var(--panel);
-        border: 1px solid var(--border);
-        box-shadow: 0 10px 28px rgba(17, 24, 39, 0.08);
-      }
-      .title {
-        display: grid;
-        gap: 2px;
-        min-width: 220px;
-      }
-      .title h1 { margin: 0; font-size: 18px; font-weight: 900; letter-spacing: 0.2px; }
-      .title p { margin: 0; font-size: 12px; color: var(--muted); }
-      .actions { display: flex; gap: 10px; align-items: center; margin-left: auto; }
-      .btn {
-        height: var(--tap);
-        padding: 0 14px;
-        border-radius: 14px;
-        border: 1px solid rgba(17, 24, 39, 0.12);
-        background: #fff;
-        color: var(--text);
-        display: inline-flex;
-        gap: 10px;
-        align-items: center;
-        cursor: pointer;
-        transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
-      }
-      .btn:hover { transform: translateY(-1px); box-shadow: 0 14px 28px rgba(17, 24, 39, 0.12); }
-      .btn-primary {
-        background: var(--brand);
-        border-color: rgba(0, 0, 0, 0.08);
-        color: #fff;
-      }
-      .btn-primary:hover { box-shadow: 0 16px 34px rgba(211, 47, 47, 0.35); }
-      .btn[disabled] { opacity: 0.6; cursor: not-allowed; }
-      .content { display: grid; gap: 14px; }
-      .grid {
-        display: grid;
-        grid-template-columns: 1.15fr 0.85fr;
-        gap: 14px;
-        align-items: start;
-      }
-      .card {
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        box-shadow: 0 10px 26px rgba(17, 24, 39, 0.07);
-      }
-      .card-hd {
-        padding: 14px 14px 10px;
-        border-bottom: 1px solid rgba(17, 24, 39, 0.08);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-      }
-      .card-hd h2 { margin: 0; font-size: 16px; font-weight: 900; }
-      .card-hd p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
-      .card-bd { padding: 14px; }
-      .tag {
-        display: inline-flex;
-        align-items: center;
-        height: 26px;
-        padding: 0 10px;
-        border-radius: 999px;
-        font-size: 12px;
-        border: 1px solid rgba(17, 24, 39, 0.14);
-        background: var(--panel-2);
-        color: var(--muted);
-      }
-      .tag.red { background: rgba(211, 47, 47, 0.1); border-color: rgba(211, 47, 47, 0.24); color: #9f1c1c; }
-      .form { display: grid; gap: 12px; }
-      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-      .field { display: grid; gap: 6px; }
-      label { font-size: 12px; color: var(--muted); }
-      input[type="text"], select, textarea {
-        height: 44px;
-        padding: 0 12px;
-        border-radius: 14px;
-        border: 1px solid rgba(17, 24, 39, 0.14);
-        background: #fff;
-        outline: none;
-      }
-      textarea { height: 100px; padding: 10px 12px; resize: vertical; }
-      input:focus, select:focus, textarea:focus {
-        border-color: rgba(211, 47, 47, 0.42);
-        box-shadow: 0 0 0 4px rgba(211, 47, 47, 0.14);
-      }
-      .list { display: grid; gap: 10px; }
-      .item {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 10px;
-        align-items: center;
-        padding: 12px;
-        border-radius: var(--radius-sm);
-        background: #fff;
-        border: 1px solid rgba(17, 24, 39, 0.1);
-      }
-      .meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
-      .status {
-        padding: 10px 12px;
-        border-radius: 14px;
-        background: var(--panel-2);
-        border: 1px solid rgba(17, 24, 39, 0.1);
-        color: var(--muted);
-        font-size: 12px;
-        line-height: 1.6;
-      }
-      .status.error { color: #9f1c1c; border-color: rgba(211, 47, 47, 0.24); background: rgba(211, 47, 47, 0.08); }
-      @media (max-width: 1024px), (max-height: 520px) {
-        .layout { grid-template-columns: 76px 1fr; }
-        .brand-title, .brand-sub, .nav .label, .nav .hint, .side-foot { display: none; }
-        .nav button { justify-content: center; padding: 0; }
-      }
-      @media (max-width: 760px) {
-        .layout { grid-template-columns: 1fr; }
-        .sidebar {
-          height: auto;
-          grid-template-rows: auto;
-          grid-auto-flow: column;
-          align-items: center;
-          overflow-x: auto;
-          overflow-y: hidden;
-          padding: 10px 10px;
-          gap: 10px;
-        }
-        .brand { min-width: 180px; }
-        .nav { display: flex; gap: 10px; }
-        .nav button { flex: 0 0 auto; border-radius: 999px; padding: 0 12px; }
-        .main { padding: 14px 12px 24px; }
-        .grid { grid-template-columns: 1fr; }
-        .topbar { flex-wrap: wrap; }
-        .title { min-width: 0; flex: 1 1 100%; }
-        .actions { width: 100%; justify-content: flex-end; }
-        .row { grid-template-columns: 1fr; }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        * { transition: none !important; scroll-behavior: auto !important; }
-      }
-    </style>
+    <link rel="icon" type="image/svg+xml" href="logo.svg" />
+    <link rel="stylesheet" href="system.css" />
   </head>
   <body>
     <div class="layout">
-      <aside class="sidebar" aria-label="系統管理員選單">
-        <div class="brand">
-          <div class="logo" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" style="width:22px;height:22px;">
-              <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="white" stroke-width="1.7"/>
-              <path d="M19.4 12a7.5 7.5 0 0 0-.1-1l2-1.6-2-3.5-2.4 1a7.9 7.9 0 0 0-1.8-1.1L14.8 2H9.2l-.3 2.8a7.9 7.9 0 0 0-1.8 1.1l-2.4-1-2 3.5 2 1.6a7.5 7.5 0 0 0 0 2l-2 1.6 2 3.5 2.4-1a7.9 7.9 0 0 0 1.8 1.1L9.2 22h5.6l.3-2.8a7.9 7.9 0 0 0 1.8-1.1l2.4 1 2-3.5-2-1.6c.1-.3.1-.6.1-1Z" stroke="white" stroke-width="1.2" stroke-linejoin="round" opacity="0.95"/>
-            </svg>
+      <header class="frame-hd">
+        <div class="frame-hd-row">
+          <div class="frame-brand">
+            <img src="logo.svg" alt="" />
+            <div class="meta">
+              <div class="title">系統管理員</div>
+              <div class="sub" id="loginInfo">—</div>
+            </div>
           </div>
-          <div>
-            <div class="brand-title">系統管理員</div>
-            <div class="brand-sub">系統社區設定｜原型</div>
+          <div class="frame-actions">
+            <button class="btn" type="button" id="btnReset">重置示例</button>
+            <button class="btn btn-primary" type="button" id="btnSignOut">登出</button>
           </div>
         </div>
+        <div class="frame-title">
+          <h1 id="pageTitle">連結設定</h1>
+          <p id="pageSubtitle">設定「社區後台」與「住戶前台」按鈕功能與連結（使用本機儲存示意）</p>
+        </div>
+      </header>
 
+      <main class="frame-bd">
+        <section class="content" id="content" aria-live="polite"></section>
+      </main>
+
+      <footer class="frame-ft" aria-label="系統管理員選單">
         <nav class="nav" id="nav">
           <button type="button" data-page="links" aria-current="page">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M10.5 13.5 8 16a3 3 0 0 1-4.2-4.2l2.5-2.5" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
-              <path d="M13.5 10.5 16 8a3 3 0 0 1 4.2 4.2l-2.5 2.5" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
-              <path d="M9.5 14.5 14.5 9.5" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M10.5 13.5 8 16a3 3 0 0 1-4.2-4.2l2.5-2.5" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M13.5 10.5 16 8a3 3 0 0 1 4.2 4.2l-2.5 2.5" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M9.5 14.5 14.5 9.5" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
             </svg>
             <span class="label">連結設定</span>
             <span class="hint">UI</span>
           </button>
           <button type="button" data-page="accounts" aria-current="false">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M8.5 12.2a3.2 3.2 0 1 0-3.2-3.2 3.2 3.2 0 0 0 3.2 3.2Z" stroke="white" stroke-width="1.7"/>
-              <path d="M18 11.3a2.8 2.8 0 1 0-2.8-2.8 2.8 2.8 0 0 0 2.8 2.8Z" stroke="white" stroke-width="1.7" opacity="0.95"/>
-              <path d="M3.5 20a6 6 0 0 1 10.5-3.8" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
-              <path d="M14 20a4.8 4.8 0 0 1 9.5-1.2" stroke="white" stroke-width="1.7" stroke-linecap="round" opacity="0.95"/>
+              <path d="M8.5 12.2a3.2 3.2 0 1 0-3.2-3.2 3.2 3.2 0 0 0 3.2 3.2Z" stroke="rgba(31,41,55,0.85)" stroke-width="1.7"/>
+              <path d="M18 11.3a2.8 2.8 0 1 0-2.8-2.8 2.8 2.8 0 0 0 2.8 2.8Z" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" opacity="0.95"/>
+              <path d="M3.5 20a6 6 0 0 1 10.5-3.8" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M14 20a4.8 4.8 0 0 1 9.5-1.2" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round" opacity="0.95"/>
             </svg>
             <span class="label">帳號開通</span>
             <span class="hint">Auth</span>
           </button>
         </nav>
-
-        <div class="side-foot">
-          <div class="tiny" id="loginInfo">—</div>
-        </div>
-      </aside>
-
-      <main class="main">
-        <header class="topbar">
-          <div class="title">
-            <h1 id="pageTitle">連結設定</h1>
-            <p id="pageSubtitle">設定「社區後台」與「住戶前台」按鈕功能與連結（使用本機儲存示意）</p>
-          </div>
-          <div class="actions">
-            <button class="btn" type="button" id="btnReset">重置示例</button>
-            <button class="btn btn-primary" type="button" id="btnSignOut">登出</button>
-          </div>
-        </header>
-
-        <section class="content" id="content" aria-live="polite"></section>
-      </main>
+      </footer>
     </div>
 
     <template id="tplLinks">
@@ -370,8 +99,8 @@
         <section class="card">
           <div class="card-hd">
             <div>
-              <h2>社區帳號開通（示意）</h2>
-              <p>建立/停用社區登入帳號（使用本機儲存示意）</p>
+              <h2>新增社區（建立社區帳號）</h2>
+              <p>每個社區的前台/後台資料各自獨立，互不相干</p>
             </div>
             <span class="tag red">社區</span>
           </div>
@@ -446,346 +175,7 @@
 
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-    <script>
-      const firebaseConfig = {
-        apiKey: "AIzaSyCRvuSL6t3RS5_523CGd3gxJgdRDuDXFvQ",
-        authDomain: "nw-app-v2.firebaseapp.com",
-        projectId: "nw-app-v2",
-        storageBucket: "nw-app-v2.firebasestorage.app",
-        messagingSenderId: "448152056602",
-        appId: "1:448152056602:web:3ed9e5d9ed04d541cf32a3",
-        measurementId: "G-G2ZD312B6V",
-      };
-
-      firebase.initializeApp(firebaseConfig);
-      const auth = firebase.auth();
-
-      const STORAGE_CONFIG = "csp_config_v1";
-      const STORAGE_ACCOUNTS = "csp_accounts_v1";
-
-      const catalogCommunityButtons = [
-        { id: "parcel", name: "包裹郵件", defaultUrl: "#community/parcel" },
-        { id: "visitor", name: "訪客登記", defaultUrl: "#community/visitor" },
-        { id: "residents", name: "住戶造冊", defaultUrl: "#community/residents" },
-        { id: "facility", name: "設施預約", defaultUrl: "#community/facility" },
-        { id: "bulletin", name: "公告系統", defaultUrl: "#community/bulletin" },
-        { id: "parking", name: "綠色停車", defaultUrl: "#community/parking" },
-      ];
-
-      const catalogResidentButtons = [
-        { id: "resident-bulletin", name: "公告", defaultUrl: "#resident/resident-bulletin" },
-        { id: "resident-parcel", name: "包裹通知", defaultUrl: "#resident/resident-parcel" },
-        { id: "resident-facility", name: "設施預約", defaultUrl: "#resident/resident-facility" },
-        { id: "resident-parking", name: "綠色停車", defaultUrl: "#resident/resident-parking" },
-      ];
-
-      function defaultConfig() {
-        const toButton = (x) => ({ enabled: true, url: x.defaultUrl });
-        return {
-          communityButtons: Object.fromEntries(catalogCommunityButtons.map((x) => [x.id, toButton(x)])),
-          residentButtons: Object.fromEntries(catalogResidentButtons.map((x) => [x.id, toButton(x)])),
-        };
-      }
-
-      function loadConfig() {
-        try {
-          const raw = localStorage.getItem(STORAGE_CONFIG);
-          if (!raw) return defaultConfig();
-          const parsed = JSON.parse(raw);
-          const d = defaultConfig();
-          return {
-            communityButtons: { ...d.communityButtons, ...(parsed.communityButtons || {}) },
-            residentButtons: { ...d.residentButtons, ...(parsed.residentButtons || {}) },
-          };
-        } catch {
-          return defaultConfig();
-        }
-      }
-
-      function saveConfig(cfg) {
-        localStorage.setItem(STORAGE_CONFIG, JSON.stringify(cfg));
-      }
-
-      function defaultAccounts() {
-        return {
-          communities: [
-            { id: "c001", name: "紅樹林社區", enabled: true, username: "community_admin_01" },
-            { id: "c002", name: "白石社區", enabled: true, username: "community_admin_02" },
-          ],
-          residents: [
-            { id: "r001", communityId: "c001", unit: "A-1203", name: "林小姐", enabled: true, username: "A1203" },
-            { id: "r002", communityId: "c001", unit: "B-0808", name: "陳先生", enabled: true, username: "B0808" },
-            { id: "r003", communityId: "c002", unit: "C-0501", name: "張小姐", enabled: false, username: "C0501" },
-          ],
-        };
-      }
-
-      function loadAccounts() {
-        try {
-          const raw = localStorage.getItem(STORAGE_ACCOUNTS);
-          if (!raw) return defaultAccounts();
-          const parsed = JSON.parse(raw);
-          const d = defaultAccounts();
-          return {
-            communities: Array.isArray(parsed.communities) ? parsed.communities : d.communities,
-            residents: Array.isArray(parsed.residents) ? parsed.residents : d.residents,
-          };
-        } catch {
-          return defaultAccounts();
-        }
-      }
-
-      function saveAccounts(data) {
-        localStorage.setItem(STORAGE_ACCOUNTS, JSON.stringify(data));
-      }
-
-      function normalizeText(v) {
-        return String(v || "").trim();
-      }
-
-      function setBusy(isBusy) {
-        document.querySelectorAll("button, input, select, textarea").forEach((el) => {
-          if (el.id === "btnSignOut") return;
-          el.disabled = Boolean(isBusy);
-        });
-      }
-
-      function setNavCurrent(page) {
-        document.querySelectorAll("#nav button").forEach((b) => b.setAttribute("aria-current", b.dataset.page === page ? "page" : "false"));
-      }
-
-      function renderLinks() {
-        const host = document.getElementById("content");
-        host.innerHTML = "";
-        const node = document.getElementById("tplLinks").content.cloneNode(true);
-        host.appendChild(node);
-
-        const cfg = loadConfig();
-        const renderGroup = (containerId, items, storeKey) => {
-          const container = document.getElementById(containerId);
-          container.innerHTML = items.map((x) => {
-            const v = cfg[storeKey]?.[x.id] || { enabled: true, url: x.defaultUrl };
-            return `
-              <div style="display:grid; grid-template-columns: 1.05fr 0.7fr 1.25fr; gap:12px;">
-                <div class="field">
-                  <label>功能</label>
-                  <input type="text" value="${x.name}" readonly />
-                </div>
-                <div class="field">
-                  <label>狀態</label>
-                  <select data-link-enabled="${storeKey}:${x.id}">
-                    <option value="true" ${v.enabled ? "selected" : ""}>啟用</option>
-                    <option value="false" ${!v.enabled ? "selected" : ""}>停用</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label>連結</label>
-                  <input type="text" value="${v.url || ""}" placeholder="${x.defaultUrl}" data-link-url="${storeKey}:${x.id}" />
-                </div>
-              </div>
-            `;
-          }).join("");
-        };
-
-        renderGroup("communityLinks", catalogCommunityButtons, "communityButtons");
-        renderGroup("residentLinks", catalogResidentButtons, "residentButtons");
-
-        document.getElementById("btnSaveLinks").addEventListener("click", () => {
-          const next = loadConfig();
-          document.querySelectorAll("[data-link-enabled]").forEach((el) => {
-            const [storeKey, id] = el.getAttribute("data-link-enabled").split(":");
-            next[storeKey][id] = next[storeKey][id] || {};
-            next[storeKey][id].enabled = el.value === "true";
-          });
-          document.querySelectorAll("[data-link-url]").forEach((el) => {
-            const [storeKey, id] = el.getAttribute("data-link-url").split(":");
-            next[storeKey][id] = next[storeKey][id] || {};
-            next[storeKey][id].url = normalizeText(el.value);
-          });
-          saveConfig(next);
-          const s = document.getElementById("linksStatus");
-          s.textContent = "已儲存設定（示意）。";
-          s.classList.remove("error");
-        });
-      }
-
-      function renderAccounts() {
-        const host = document.getElementById("content");
-        host.innerHTML = "";
-        const node = document.getElementById("tplAccounts").content.cloneNode(true);
-        host.appendChild(node);
-
-        const data = loadAccounts();
-        const communitySelect = document.getElementById("r_community");
-        communitySelect.innerHTML = data.communities.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
-
-        const renderLists = () => {
-          const d = loadAccounts();
-          const cList = document.getElementById("communityList");
-          cList.innerHTML = d.communities.map((c) => `
-            <div class="item">
-              <div>
-                <div style="font-weight:900;">${c.name}</div>
-                <div class="meta">
-                  <span class="tag ${c.enabled ? "red" : ""}">${c.enabled ? "啟用" : "停用"}</span>
-                  <span class="tag">帳號：${c.username}</span>
-                  <span class="tag">ID：${c.id}</span>
-                </div>
-              </div>
-              <button class="btn" type="button" data-toggle-community="${c.id}">${c.enabled ? "停用" : "啟用"}</button>
-            </div>
-          `).join("");
-
-          const activeId = communitySelect.value || d.communities[0]?.id || "";
-          const rList = document.getElementById("residentList");
-          const residents = d.residents.filter((r) => r.communityId === activeId);
-          rList.innerHTML = residents.map((r) => `
-            <div class="item">
-              <div>
-                <div style="font-weight:900;">${r.unit}｜${r.name}</div>
-                <div class="meta">
-                  <span class="tag ${r.enabled ? "red" : ""}">${r.enabled ? "已開通" : "未開通"}</span>
-                  <span class="tag">帳號：${r.username}</span>
-                  <span class="tag">ID：${r.id}</span>
-                </div>
-              </div>
-              <button class="btn" type="button" data-toggle-resident="${r.id}">${r.enabled ? "停用" : "啟用"}</button>
-            </div>
-          `).join("") || `
-            <div class="item">
-              <div>
-                <div style="font-weight:900;">尚無住戶帳號</div>
-                <div class="meta"><span class="tag">提示</span></div>
-              </div>
-              <span class="tag">—</span>
-            </div>
-          `;
-
-          document.querySelectorAll("[data-toggle-community]").forEach((btn) => {
-            btn.addEventListener("click", () => {
-              const id = btn.getAttribute("data-toggle-community");
-              const next = loadAccounts();
-              next.communities = next.communities.map((c) => c.id === id ? { ...c, enabled: !c.enabled } : c);
-              saveAccounts(next);
-              renderLists();
-            });
-          });
-
-          document.querySelectorAll("[data-toggle-resident]").forEach((btn) => {
-            btn.addEventListener("click", () => {
-              const id = btn.getAttribute("data-toggle-resident");
-              const next = loadAccounts();
-              next.residents = next.residents.map((r) => r.id === id ? { ...r, enabled: !r.enabled } : r);
-              saveAccounts(next);
-              renderLists();
-            });
-          });
-        };
-
-        communitySelect.addEventListener("change", () => renderLists());
-
-        document.getElementById("formCreateCommunity").addEventListener("submit", (e) => {
-          e.preventDefault();
-          const name = normalizeText(document.getElementById("c_name").value);
-          const username = normalizeText(document.getElementById("c_user").value);
-          if (!name || !username) {
-            const s = document.getElementById("acctStatus");
-            s.textContent = "請填寫社區名稱與登入帳號（示意）。";
-            s.classList.add("error");
-            return;
-          }
-          const next = loadAccounts();
-          const id = `c${String(Date.now()).slice(-6)}`;
-          next.communities = [{ id, name, enabled: true, username }, ...next.communities];
-          saveAccounts(next);
-          document.getElementById("c_name").value = "";
-          document.getElementById("c_user").value = "";
-          communitySelect.innerHTML = next.communities.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
-          communitySelect.value = id;
-          const s = document.getElementById("acctStatus");
-          s.textContent = "已建立社區帳號（示意）。";
-          s.classList.remove("error");
-          renderLists();
-        });
-
-        document.getElementById("formCreateResident").addEventListener("submit", (e) => {
-          e.preventDefault();
-          const communityId = communitySelect.value;
-          const unit = normalizeText(document.getElementById("r_unit").value);
-          const name = normalizeText(document.getElementById("r_name").value);
-          const username = normalizeText(document.getElementById("r_user").value);
-          const enabled = document.getElementById("r_enabled").value === "true";
-          if (!communityId || !unit || !name || !username) {
-            const s = document.getElementById("acctStatus");
-            s.textContent = "請填寫所屬社區、戶號、姓名與登入帳號（示意）。";
-            s.classList.add("error");
-            return;
-          }
-          const next = loadAccounts();
-          const id = `r${String(Date.now()).slice(-6)}`;
-          next.residents = [{ id, communityId, unit, name, enabled, username }, ...next.residents];
-          saveAccounts(next);
-          document.getElementById("r_unit").value = "";
-          document.getElementById("r_name").value = "";
-          document.getElementById("r_user").value = "";
-          const s = document.getElementById("acctStatus");
-          s.textContent = "已建立住戶帳號（示意）。";
-          s.classList.remove("error");
-          renderLists();
-        });
-
-        renderLists();
-      }
-
-      function openPage(page) {
-        const titleEl = document.getElementById("pageTitle");
-        const subEl = document.getElementById("pageSubtitle");
-        setNavCurrent(page);
-
-        if (page === "accounts") {
-          titleEl.textContent = "帳號開通";
-          subEl.textContent = "管理社區與住戶的登入帳號開通狀態（示意）";
-          renderAccounts();
-          return;
-        }
-        titleEl.textContent = "連結設定";
-        subEl.textContent = "設定「社區後台」與「住戶前台」按鈕功能與連結（使用本機儲存示意）";
-        renderLinks();
-      }
-
-      document.getElementById("btnReset").addEventListener("click", () => {
-        saveConfig(defaultConfig());
-        saveAccounts(defaultAccounts());
-        openPage("links");
-      });
-
-      document.getElementById("btnSignOut").addEventListener("click", async () => {
-        setBusy(true);
-        try {
-          sessionStorage.removeItem("csp_role");
-          await auth.signOut();
-          location.href = "index.html";
-        } catch {
-          location.href = "index.html";
-        }
-      });
-
-      document.querySelectorAll("#nav button").forEach((b) => b.addEventListener("click", () => openPage(b.dataset.page)));
-
-      auth.onAuthStateChanged((user) => {
-        const role = sessionStorage.getItem("csp_role");
-        if (!user) {
-          location.href = "index.html";
-          return;
-        }
-        if (role !== "admin") {
-          location.href = "index.html";
-          return;
-        }
-        document.getElementById("loginInfo").textContent = `已登入：${user.email || "（未知）"}`;
-      });
-
-      openPage("links");
-    </script>
+    <script src="firebase-config.js"></script>
+    <script src="system.js"></script>
   </body>
 </html>
