@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>住戶｜社區前台</title>
+    <style>
+      :root {
+        --brand: #d32f2f;
+        --bg: #f2f3f5;
+        --panel: #ffffff;
+        --panel-2: #f9fafb;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --border: rgba(17, 24, 39, 0.12);
+        --shadow: 0 14px 34px rgba(17, 24, 39, 0.12);
+        --radius: 16px;
+        --radius-sm: 12px;
+        --tap: 48px;
+        --sidebar-w: 260px;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", Arial, sans-serif;
+        color: var(--text);
+        background: var(--bg);
+      }
+      button, input, select { font: inherit; }
+      a { color: inherit; text-decoration: none; }
+      .layout {
+        min-height: 100%;
+        display: grid;
+        grid-template-columns: var(--sidebar-w) 1fr;
+      }
+      .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100dvh;
+        padding: 18px 14px;
+        background: linear-gradient(180deg, #c62828 0%, #d32f2f 45%, #b71c1c 100%);
+        color: #fff;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 14px;
+      }
+      .brand {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 10px 10px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+      }
+      .logo {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.18);
+        display: grid;
+        place-items: center;
+        box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
+      }
+      .brand-title { font-weight: 900; letter-spacing: 0.2px; line-height: 1.1; }
+      .brand-sub { font-size: 12px; opacity: 0.92; margin-top: 2px; }
+      .nav {
+        display: grid;
+        gap: 10px;
+        align-content: start;
+      }
+      .nav a {
+        height: var(--tap);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.08);
+        transition: transform 120ms ease, background 120ms ease;
+      }
+      .nav a:hover { transform: translateY(-1px); background: rgba(255, 255, 255, 0.14); }
+      .nav a[aria-current="page"] { background: rgba(255, 255, 255, 0.22); }
+      .nav svg { width: 20px; height: 20px; flex: 0 0 auto; }
+      .nav .label { font-weight: 800; letter-spacing: 0.2px; }
+      .nav .hint { margin-left: auto; font-size: 12px; opacity: 0.92; }
+      .side-foot {
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.18);
+        display: grid;
+        gap: 10px;
+      }
+      .side-foot .tiny {
+        font-size: 12px;
+        opacity: 0.92;
+        padding: 10px 12px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+      }
+      .main {
+        padding: 18px 18px 28px;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 14px;
+      }
+      .topbar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 14px 14px;
+        border-radius: var(--radius);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        box-shadow: 0 10px 28px rgba(17, 24, 39, 0.08);
+      }
+      .title {
+        display: grid;
+        gap: 2px;
+        min-width: 220px;
+      }
+      .title h1 { margin: 0; font-size: 18px; font-weight: 900; letter-spacing: 0.2px; }
+      .title p { margin: 0; font-size: 12px; color: var(--muted); }
+      .actions { display: flex; gap: 10px; align-items: center; margin-left: auto; }
+      .btn {
+        height: var(--tap);
+        padding: 0 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(17, 24, 39, 0.12);
+        background: #fff;
+        color: var(--text);
+        display: inline-flex;
+        gap: 10px;
+        align-items: center;
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+      }
+      .btn:hover { transform: translateY(-1px); box-shadow: 0 14px 28px rgba(17, 24, 39, 0.12); }
+      .btn-primary {
+        background: var(--brand);
+        border-color: rgba(0, 0, 0, 0.08);
+        color: #fff;
+      }
+      .btn-primary:hover { box-shadow: 0 16px 34px rgba(211, 47, 47, 0.35); }
+      .content { display: grid; gap: 14px; }
+      .grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 14px;
+        align-items: start;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: 0 10px 26px rgba(17, 24, 39, 0.07);
+      }
+      .card-hd {
+        padding: 14px 14px 10px;
+        border-bottom: 1px solid rgba(17, 24, 39, 0.08);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .card-hd h2 { margin: 0; font-size: 16px; font-weight: 900; }
+      .card-hd p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+      .card-bd { padding: 14px; }
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        height: 26px;
+        padding: 0 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        border: 1px solid rgba(17, 24, 39, 0.14);
+        background: var(--panel-2);
+        color: var(--muted);
+      }
+      .tag.red { background: rgba(211, 47, 47, 0.1); border-color: rgba(211, 47, 47, 0.24); color: #9f1c1c; }
+      .list { display: grid; gap: 10px; }
+      .item {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        align-items: center;
+        padding: 12px;
+        border-radius: var(--radius-sm);
+        background: #fff;
+        border: 1px solid rgba(17, 24, 39, 0.1);
+      }
+      .meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+      .muted { color: var(--muted); }
+      @media (max-width: 1024px), (max-height: 520px) {
+        .layout { grid-template-columns: 76px 1fr; }
+        .brand-title, .brand-sub, .nav .label, .nav .hint, .side-foot { display: none; }
+        .nav a { justify-content: center; padding: 0; }
+      }
+      @media (max-width: 760px) {
+        .layout { grid-template-columns: 1fr; }
+        .sidebar {
+          height: auto;
+          grid-template-rows: auto;
+          grid-auto-flow: column;
+          align-items: center;
+          overflow-x: auto;
+          overflow-y: hidden;
+          padding: 10px 10px;
+          gap: 10px;
+        }
+        .brand { min-width: 180px; }
+        .nav { display: flex; gap: 10px; }
+        .nav a { flex: 0 0 auto; border-radius: 999px; padding: 0 12px; }
+        .main { padding: 14px 12px 24px; }
+        .grid { grid-template-columns: 1fr; }
+        .topbar { flex-wrap: wrap; }
+        .title { min-width: 0; flex: 1 1 100%; }
+        .actions { width: 100%; justify-content: flex-end; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * { transition: none !important; scroll-behavior: auto !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar" aria-label="住戶前台選單">
+        <div class="brand">
+          <div class="logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" style="width:22px;height:22px;">
+              <path d="M4 10.5 12 4l8 6.5V20a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20v-9.5Z" stroke="white" stroke-width="1.7" />
+              <path d="M9 21v-7a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v7" stroke="white" stroke-width="1.7" />
+            </svg>
+          </div>
+          <div>
+            <div class="brand-title">住戶前台</div>
+            <div class="brand-sub">社區服務｜原型</div>
+          </div>
+        </div>
+
+        <nav class="nav" id="nav"></nav>
+
+        <div class="side-foot">
+          <div class="tiny" id="loginInfo">—</div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="title">
+            <h1 id="pageTitle">首頁</h1>
+            <p id="pageSubtitle">住戶前台頁面後續再規劃設計（示意）</p>
+          </div>
+          <div class="actions">
+            <button class="btn" type="button" id="btnGoCommunity">社區後台</button>
+            <button class="btn btn-primary" type="button" id="btnSignOut">登出</button>
+          </div>
+        </header>
+
+        <section class="content" id="content" aria-live="polite"></section>
+      </main>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script>
+      const firebaseConfig = {
+        apiKey: "AIzaSyCRvuSL6t3RS5_523CGd3gxJgdRDuDXFvQ",
+        authDomain: "nw-app-v2.firebaseapp.com",
+        projectId: "nw-app-v2",
+        storageBucket: "nw-app-v2.firebasestorage.app",
+        messagingSenderId: "448152056602",
+        appId: "1:448152056602:web:3ed9e5d9ed04d541cf32a3",
+        measurementId: "G-G2ZD312B6V",
+      };
+
+      firebase.initializeApp(firebaseConfig);
+      const auth = firebase.auth();
+
+      const STORAGE_CONFIG = "csp_config_v1";
+      const catalogResidentButtons = [
+        { id: "resident-bulletin", name: "公告", defaultUrl: "#resident/resident-bulletin", hint: "通知" },
+        { id: "resident-parcel", name: "包裹通知", defaultUrl: "#resident/resident-parcel", hint: "收發" },
+        { id: "resident-facility", name: "設施預約", defaultUrl: "#resident/resident-facility", hint: "預約" },
+        { id: "resident-parking", name: "綠色停車", defaultUrl: "#resident/resident-parking", hint: "車位" },
+      ];
+
+      const navEl = document.getElementById("nav");
+      const contentEl = document.getElementById("content");
+      const pageTitleEl = document.getElementById("pageTitle");
+      const pageSubtitleEl = document.getElementById("pageSubtitle");
+
+      function defaultConfig() {
+        const toButton = (x) => ({ enabled: true, url: x.defaultUrl });
+        return { residentButtons: Object.fromEntries(catalogResidentButtons.map((x) => [x.id, toButton(x)])) };
+      }
+
+      function loadConfig() {
+        try {
+          const raw = localStorage.getItem(STORAGE_CONFIG);
+          if (!raw) return defaultConfig();
+          const parsed = JSON.parse(raw);
+          const d = defaultConfig();
+          return { residentButtons: { ...d.residentButtons, ...(parsed.residentButtons || {}) } };
+        } catch {
+          return defaultConfig();
+        }
+      }
+
+      function parseRoute() {
+        const raw = String(location.hash || "").replace(/^#/, "").trim();
+        if (!raw) return { moduleId: "home" };
+        const parts = raw.split("/");
+        const role = parts[0] || "resident";
+        if (role !== "resident") return { moduleId: "home" };
+        return { moduleId: parts[1] || "home" };
+      }
+
+      function buildNav() {
+        const cfg = loadConfig();
+        const items = [{ id: "home", name: "首頁", hint: "Home", icon: "home", enabled: true, url: "#resident/home" }]
+          .concat(catalogResidentButtons.map((x) => ({ ...x, ...cfg.residentButtons[x.id] })));
+        navEl.innerHTML = items
+          .filter((x) => x.enabled)
+          .map((m) => `
+            <a href="${m.url || "#resident/home"}" data-id="${m.id}" aria-current="false">
+              <span aria-hidden="true">${icon(m.icon || "dot")}</span>
+              <span class="label">${m.name}</span>
+              <span class="hint">${m.hint || ""}</span>
+            </a>
+          `)
+          .join("");
+        navEl.querySelectorAll("a").forEach((a) => {
+          a.addEventListener("click", (e) => {
+            e.preventDefault();
+            location.hash = a.getAttribute("href");
+          });
+        });
+      }
+
+      function icon(kind) {
+        if (kind === "home") {
+          return `
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M4 10.5 12 4l8 6.5V20a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20v-9.5Z" stroke="white" stroke-width="1.7" />
+              <path d="M9 21v-7a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v7" stroke="white" stroke-width="1.7" />
+            </svg>
+          `;
+        }
+        return `
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M12 21.5c5.247 0 9.5-4.253 9.5-9.5S17.247 2.5 12 2.5 2.5 6.753 2.5 12 6.753 21.5 12 21.5Z" stroke="white" stroke-width="1.7" opacity="0.9"/>
+            <path d="M12 8.2h.01" stroke="white" stroke-width="3.2" stroke-linecap="round"/>
+            <path d="M12 16v-5" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        `;
+      }
+
+      function setActive(moduleId) {
+        navEl.querySelectorAll("a").forEach((a) => a.setAttribute("aria-current", a.dataset.id === moduleId ? "page" : "false"));
+
+        if (moduleId === "resident-bulletin") {
+          pageTitleEl.textContent = "公告";
+          pageSubtitleEl.textContent = "最新公告與重要通知（示意）";
+          contentEl.innerHTML = bulletinView();
+          return;
+        }
+        if (moduleId === "resident-parcel") {
+          pageTitleEl.textContent = "包裹通知";
+          pageSubtitleEl.textContent = "待領取包裹提醒（示意）";
+          contentEl.innerHTML = parcelView();
+          return;
+        }
+        if (moduleId === "resident-facility") {
+          pageTitleEl.textContent = "設施預約";
+          pageSubtitleEl.textContent = "查看時段與我的預約（示意）";
+          contentEl.innerHTML = facilityView();
+          return;
+        }
+        if (moduleId === "resident-parking") {
+          pageTitleEl.textContent = "綠色停車";
+          pageSubtitleEl.textContent = "我的車位與充電資訊（示意）";
+          contentEl.innerHTML = parkingView();
+          return;
+        }
+        pageTitleEl.textContent = "首頁";
+        pageSubtitleEl.textContent = "住戶前台頁面後續再規劃設計（示意）";
+        contentEl.innerHTML = homeView();
+      }
+
+      function homeView() {
+        const cfg = loadConfig();
+        const enabled = catalogResidentButtons
+          .map((x) => ({ ...x, ...cfg.residentButtons[x.id] }))
+          .filter((x) => x.enabled);
+
+        return `
+          <div class="grid">
+            <section class="card">
+              <div class="card-hd">
+                <div>
+                  <h2>快速入口</h2>
+                  <p>此處按鈕可由系統管理員設定啟用/連結</p>
+                </div>
+                <span class="tag red">入口</span>
+              </div>
+              <div class="card-bd">
+                <div class="list">
+                  ${enabled.map((b) => `
+                    <div class="item">
+                      <div>
+                        <div style="font-weight:900;">${b.name}</div>
+                        <div class="meta">
+                          <span class="tag red">啟用</span>
+                          <span class="tag">${b.url || b.defaultUrl}</span>
+                        </div>
+                      </div>
+                      <button class="btn btn-primary" type="button" data-open="${b.id}">開啟</button>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="card-hd">
+                <div>
+                  <h2>住戶資訊（示意）</h2>
+                  <p>後續可串接住戶資料、通知、我的預約</p>
+                </div>
+                <span class="tag">預留</span>
+              </div>
+              <div class="card-bd">
+                <div class="list">
+                  <div class="item">
+                    <div>
+                      <div style="font-weight:900;">未讀公告</div>
+                      <div class="muted" style="margin-top:6px;">2 則</div>
+                    </div>
+                    <span class="tag red">提醒</span>
+                  </div>
+                  <div class="item">
+                    <div>
+                      <div style="font-weight:900;">待領取包裹</div>
+                      <div class="muted" style="margin-top:6px;">1 件</div>
+                    </div>
+                    <span class="tag">通知</span>
+                  </div>
+                  <div class="item">
+                    <div>
+                      <div style="font-weight:900;">我的預約</div>
+                      <div class="muted" style="margin-top:6px;">今晚 19:00 健身房</div>
+                    </div>
+                    <span class="tag">行程</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        `;
+      }
+
+      function bulletinView() {
+        return `
+          <div class="grid">
+            <section class="card">
+              <div class="card-hd">
+                <div>
+                  <h2>公告列表</h2>
+                  <p>分類與置頂（示意）</p>
+                </div>
+                <span class="tag red">通知</span>
+              </div>
+              <div class="card-bd">
+                <div class="list">
+                  ${[
+                    { title: "【置頂】電梯年度保養通知", meta: ["重要通知", "2026/05/07"], tag: "置頂" },
+                    { title: "游泳池清潔消毒時間調整", meta: ["設備維護", "2026/05/06"], tag: "更新" },
+                    { title: "端午節社區活動報名", meta: ["活動訊息", "2026/05/05"], tag: "活動" },
+                  ].map((x) => `
+                    <div class="item">
+                      <div>
+                        <div style="font-weight:900;">${x.title}</div>
+                        <div class="meta">
+                          <span class="tag red">${x.tag}</span>
+                          <span class="tag">${x.meta[0]}</span>
+                          <span class="tag">${x.meta[1]}</span>
+                        </div>
+                      </div>
+                      <button class="btn" type="button" data-read>閱讀</button>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="card-hd">
+                <div>
+                  <h2>閱讀狀態（預留）</h2>
+                  <p>後續可加入未讀提醒、收藏、回覆</p>
+                </div>
+                <span class="tag">預留</span>
+              </div>
+              <div class="card-bd">
+                <div class="list">
+                  <div class="item">
+                    <div>
+                      <div style="font-weight:900;">未讀</div>
+                      <div class="muted" style="margin-top:6px;">2 則</div>
+                    </div>
+                    <span class="tag red">提醒</span>
+                  </div>
+                  <div class="item">
+                    <div>
+                      <div style="font-weight:900;">已讀</div>
+                      <div class="muted" style="margin-top:6px;">15 則</div>
+                    </div>
+                    <span class="tag">統計</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        `;
+      }
+
+      function parcelView() {
+        return `
+          <div class="grid">
+            <section class="card">
+              <div class="card-hd">
+                <div>
+                  <h2>待領取</h2>
+                  <p>由社區後台登記後推送（示意）</p>
+                </div>
+                <span class="tag red">提醒</span>
+              </div>
+              <div class="card-bd">
+                <div class="list">
+                  ${[
+                    { title: "A-1203｜宅配", meta: ["17:10 到貨", "狀態：待領取"] },
+                    { title: "A-1203｜郵局掛號", meta: ["15:42 到貨", "狀態：待領取"] },
+                  ].map((x) => `
+                    <div class="item">
+                      <div>
+                        <div style="font-weight:900;">${x.title}</div>
+                        <div class="meta">
+                          <span class="tag">${x.meta[0]}</span>
+                          <span class="tag red">${x.meta[1]}</span>
+                        </div>
+                      </div>
+                      <button class="btn" type="button">確認</button>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="card-hd">
+                <div>
+                  <h2>領取紀錄（預留）</h2>
+                  <p>後續可串接簽收、QR Code</p>
+                </div>
+                <span class="tag">預留</span>
+              </div>
+              <div class="card-bd">
+                <div class="list">
+                  <div class="item">
+                    <div>
+                      <div style="font-weight:900;">最近領取</div>
+                      <div class="muted" style="margin-top:6px;">2026/05/06 19:20</div>
+                    </div>
+                    <span class="tag">紀錄</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        `;
+      }
+
+      function facilityView() {
+        return `
+          <div class="grid">
+            <section class="card">
+              <div class="card-hd">
+                <div>
+                  <h2>可預約時段（示意）</h2>
+                  <p>後續可加入規則、名額、付款等</p>
+                </div>
+                <span class="tag red">預約</span>
+              </div>
+              <div class="card-bd">
+                <div class="list">
+                  ${[
+                    { title: "健身房｜19:00–20:00", meta: ["剩餘：3", "狀態：可預約"] },
+                    { title: "交誼廳｜20:00–22:00", meta: ["剩餘：1", "狀態：可預約"] },
+                  ].map((x) => `
+                    <div class="item">
+                      <div>
+                        <div style="font-weight:900;">${x.title}</div>
+                        <div class="meta">
+                          <span class="tag">${x.meta[0]}</span>
+                          <span class="tag red">${x.meta[1]}</span>
+                        </div>
+                      </div>
+                      <button class="btn btn-primary" type="button">預約</button>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="card-hd">
+                <div>
+                  <h2>我的預約（示意）</h2>
+                  <p>後續可加入取消、改期與審核</p>
+                </div>
+                <span class="tag">行程</span>
+              </div>
+              <div class="card-bd">
+                <div class="list">
+                  <div class="item">
+                    <div>
+                      <div style="font-weight:900;">健身房｜今晚 19:00–20:00</div>
+                      <div class="meta">
+                        <span class="tag red">已確認</span>
+                        <span class="tag">人數：3</span>
+                      </div>
+                    </div>
+                    <button class="btn" type="button">取消</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        `;
+      }
+
+      function parkingView() {
+        return `
+          <div class="grid">
+            <section class="card">
+              <div class="card-hd">
+                <div>
+                  <h2>我的車位（示意）</h2>
+                  <p>後續可串接充電樁狀態、費率</p>
+                </div>
+                <span class="tag red">綠能</span>
+              </div>
+              <div class="card-bd">
+                <div class="list">
+                  <div class="item">
+                    <div>
+                      <div style="font-weight:900;">B1-086｜EV</div>
+                      <div class="meta">
+                        <span class="tag red">充電樁：私人</span>
+                        <span class="tag">狀態：正常</span>
+                      </div>
+                    </div>
+                    <button class="btn" type="button">詳情</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="card-hd">
+                <div>
+                  <h2>使用規範（預留）</h2>
+                  <p>可加入違規提醒、申請流程</p>
+                </div>
+                <span class="tag">預留</span>
+              </div>
+              <div class="card-bd">
+                <div class="list">
+                  <div class="item">
+                    <div>
+                      <div style="font-weight:900;">停車規範</div>
+                      <div class="muted" style="margin-top:6px;">示意文字</div>
+                    </div>
+                    <span class="tag">公告</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        `;
+      }
+
+      function hydrateHomeButtons() {
+        contentEl.querySelectorAll("[data-open]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const id = btn.getAttribute("data-open");
+            location.hash = `#resident/${id}`;
+          });
+        });
+      }
+
+      function render() {
+        buildNav();
+        const r = parseRoute();
+        setActive(r.moduleId);
+        if (r.moduleId === "home") hydrateHomeButtons();
+      }
+
+      document.getElementById("btnGoCommunity").addEventListener("click", () => {
+        location.href = "admin.html#community/community-dashboard";
+      });
+
+      document.getElementById("btnSignOut").addEventListener("click", async () => {
+        try {
+          sessionStorage.removeItem("csp_role");
+          await auth.signOut();
+        } catch {}
+        location.href = "index.html";
+      });
+
+      auth.onAuthStateChanged((user) => {
+        const role = sessionStorage.getItem("csp_role");
+        if (!user) {
+          location.href = "index.html";
+          return;
+        }
+        if (role !== "resident") {
+          location.href = "index.html";
+          return;
+        }
+        document.getElementById("loginInfo").textContent = `已登入：${user.email || "（未知）"}`;
+        render();
+      });
+
+      window.addEventListener("hashchange", () => render());
+    </script>
+  </body>
+</html>

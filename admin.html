@@ -1,0 +1,2362 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>社區服務系統平台｜HTML 原型</title>
+    <style>
+      :root {
+        --brand: #d32f2f;
+        --bg: #f2f3f5;
+        --panel: #ffffff;
+        --panel-2: #f9fafb;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --border: rgba(17, 24, 39, 0.12);
+        --shadow: 0 10px 30px rgba(17, 24, 39, 0.12);
+        --radius: 16px;
+        --radius-sm: 12px;
+        --sidebar-w: 260px;
+        --rail-w: 76px;
+        --tap: 48px;
+        --gap: 16px;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", Arial, sans-serif;
+        color: var(--text);
+        background: var(--bg);
+      }
+      a { color: inherit; text-decoration: none; }
+      button, input, select, textarea { font: inherit; }
+      ::selection { background: rgba(211, 47, 47, 0.18); }
+      .layout {
+        min-height: 100%;
+        display: grid;
+        grid-template-columns: var(--sidebar-w) 1fr;
+      }
+      .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100dvh;
+        background: linear-gradient(180deg, #c62828 0%, #d32f2f 45%, #b71c1c 100%);
+        color: #fff;
+        padding: 18px 14px;
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+        gap: 14px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 10px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.12);
+        backdrop-filter: blur(10px);
+      }
+      .brand-badge {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.2);
+        display: grid;
+        place-items: center;
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+      }
+      .brand-title {
+        line-height: 1.1;
+        font-weight: 800;
+        letter-spacing: 0.2px;
+      }
+      .brand-sub {
+        font-size: 12px;
+        opacity: 0.9;
+        margin-top: 2px;
+      }
+      .side-tools {
+        display: grid;
+        gap: 10px;
+        padding: 2px;
+      }
+      .pill {
+        height: var(--tap);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 12px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+      }
+      .pill strong { font-size: 13px; }
+      .pill span { font-size: 12px; opacity: 0.9; }
+      .nav {
+        display: grid;
+        gap: 8px;
+        align-content: start;
+      }
+      .nav a {
+        height: var(--tap);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.08);
+        transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+      }
+      .nav a:hover { transform: translateY(-1px); background: rgba(255, 255, 255, 0.14); }
+      .nav a[aria-current="page"] {
+        background: rgba(255, 255, 255, 0.22);
+        border-color: rgba(255, 255, 255, 0.3);
+      }
+      .nav svg { flex: 0 0 auto; width: 22px; height: 22px; }
+      .nav .label { font-weight: 700; letter-spacing: 0.2px; }
+      .nav .hint { font-size: 12px; opacity: 0.9; margin-left: auto; }
+      .sidebar-foot {
+        display: grid;
+        gap: 10px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(255, 255, 255, 0.18);
+      }
+      .side-mini {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.12);
+      }
+      .side-mini small { opacity: 0.9; }
+      .main {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 14px;
+        padding: 18px 18px 90px;
+      }
+      .topbar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 14px 14px;
+        border-radius: var(--radius);
+        background: var(--panel);
+        box-shadow: 0 10px 28px rgba(17, 24, 39, 0.08);
+        border: 1px solid var(--border);
+      }
+      .topbar-title {
+        min-width: 220px;
+        display: grid;
+        gap: 2px;
+      }
+      .topbar-title h1 {
+        margin: 0;
+        font-size: 18px;
+        letter-spacing: 0.2px;
+      }
+      .topbar-title p {
+        margin: 0;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .search {
+        flex: 1 1 auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 14px;
+        background: var(--panel-2);
+        border: 1px solid rgba(17, 24, 39, 0.1);
+      }
+      .search input {
+        width: 100%;
+        border: 0;
+        outline: none;
+        background: transparent;
+        color: var(--text);
+      }
+      .actions { display: flex; gap: 10px; align-items: center; }
+      .role-select {
+        height: var(--tap);
+        padding: 0 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(17, 24, 39, 0.12);
+        background: #fff;
+        color: var(--text);
+        cursor: pointer;
+      }
+      .role-select:focus {
+        outline: none;
+        border-color: rgba(211, 47, 47, 0.42);
+        box-shadow: 0 0 0 4px rgba(211, 47, 47, 0.14);
+      }
+      .btn {
+        height: var(--tap);
+        padding: 0 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(17, 24, 39, 0.12);
+        background: #fff;
+        color: var(--text);
+        display: inline-flex;
+        gap: 10px;
+        align-items: center;
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease, border-color 120ms ease;
+      }
+      .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(17, 24, 39, 0.12); }
+      .btn-primary {
+        background: var(--brand);
+        border-color: rgba(0, 0, 0, 0.08);
+        color: #fff;
+      }
+      .btn-primary:hover { box-shadow: 0 14px 28px rgba(211, 47, 47, 0.35); }
+      .btn svg { width: 18px; height: 18px; }
+      .content {
+        display: grid;
+        gap: 14px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 14px;
+        align-items: start;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: 0 10px 26px rgba(17, 24, 39, 0.07);
+      }
+      .card-hd {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 14px 10px;
+        border-bottom: 1px solid rgba(17, 24, 39, 0.08);
+      }
+      .card-hd .left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+      .chip {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        background: rgba(211, 47, 47, 0.12);
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(211, 47, 47, 0.25);
+      }
+      .chip svg { width: 22px; height: 22px; color: var(--brand); }
+      .card-hd h2 {
+        margin: 0;
+        font-size: 16px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .card-hd p {
+        margin: 2px 0 0;
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .card-bd { padding: 14px; }
+      .form {
+        display: grid;
+        gap: 12px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .field { display: grid; gap: 6px; }
+      label { font-size: 12px; color: var(--muted); }
+      input[type="text"], input[type="date"], input[type="time"], select, textarea {
+        height: 44px;
+        padding: 0 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(17, 24, 39, 0.14);
+        background: #fff;
+        outline: none;
+      }
+      textarea { height: 100px; padding: 10px 12px; resize: vertical; }
+      input:focus, select:focus, textarea:focus {
+        border-color: rgba(211, 47, 47, 0.42);
+        box-shadow: 0 0 0 4px rgba(211, 47, 47, 0.14);
+      }
+      .kpi {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .kpi .k {
+        padding: 12px 12px;
+        border-radius: var(--radius-sm);
+        background: var(--panel-2);
+        border: 1px solid rgba(17, 24, 39, 0.08);
+      }
+      .k .n {
+        font-weight: 900;
+        font-size: 18px;
+        letter-spacing: 0.3px;
+      }
+      .k .t { font-size: 12px; color: var(--muted); margin-top: 2px; }
+      .list {
+        display: grid;
+        gap: 10px;
+      }
+      .item {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        padding: 12px;
+        border-radius: var(--radius-sm);
+        background: #fff;
+        border: 1px solid rgba(17, 24, 39, 0.1);
+      }
+      .item .meta {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        height: 26px;
+        padding: 0 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        border: 1px solid rgba(17, 24, 39, 0.14);
+        background: var(--panel-2);
+        color: var(--muted);
+      }
+      .tag.red {
+        background: rgba(211, 47, 47, 0.1);
+        border-color: rgba(211, 47, 47, 0.24);
+        color: #9f1c1c;
+      }
+      .muted { color: var(--muted); }
+      .two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .dynamic-slot {
+        position: fixed;
+        right: 14px;
+        bottom: 14px;
+        width: min(420px, calc(100vw - 28px));
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(17, 24, 39, 0.14);
+        border-radius: 18px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(12px);
+        overflow: hidden;
+      }
+      .slot-hd {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 12px;
+        border-bottom: 1px solid rgba(17, 24, 39, 0.08);
+      }
+      .slot-hd strong { font-size: 13px; }
+      .slot-bd { padding: 12px; display: grid; gap: 10px; }
+      .slot-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        align-items: center;
+        padding: 10px 10px;
+        border-radius: 14px;
+        background: var(--panel-2);
+        border: 1px dashed rgba(17, 24, 39, 0.18);
+      }
+      .slot-row small { color: var(--muted); }
+      .fab {
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        border: 0;
+        background: var(--brand);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        box-shadow: 0 14px 28px rgba(211, 47, 47, 0.35);
+      }
+      .fab:active { transform: translateY(1px); }
+      .fab svg { width: 20px; height: 20px; }
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        background: rgba(17, 24, 39, 0.94);
+        color: #fff;
+        padding: 10px 12px;
+        border-radius: 14px;
+        font-size: 12px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 140ms ease, transform 140ms ease;
+      }
+      .toast.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(-4px);
+      }
+      @media (max-width: 1024px), (max-height: 520px) {
+        .layout { grid-template-columns: var(--rail-w) 1fr; }
+        .sidebar { padding: 14px 10px; }
+        .brand { justify-content: center; }
+        .brand-title, .brand-sub, .pill strong, .pill span, .nav .label, .nav .hint, .side-mini div { display: none; }
+        .pill, .nav a, .side-mini { justify-content: center; padding: 0; }
+        .nav a { gap: 0; }
+        .side-mini { justify-content: center; }
+        .main { padding: 16px 16px 90px; }
+        .grid { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 700px) {
+        .layout { grid-template-columns: 1fr; }
+        .sidebar {
+          position: sticky;
+          top: 0;
+          height: auto;
+          grid-template-rows: auto;
+          grid-auto-flow: column;
+          align-items: center;
+          overflow-x: auto;
+          overflow-y: hidden;
+          padding: 10px 10px;
+          gap: 10px;
+        }
+        .brand { min-width: 180px; }
+        .side-tools, .sidebar-foot { display: none; }
+        .nav {
+          display: flex;
+          gap: 10px;
+          align-items: center;
+          padding-right: 6px;
+        }
+        .nav a {
+          flex: 0 0 auto;
+          height: 44px;
+          padding: 0 12px;
+          gap: 10px;
+          border-radius: 999px;
+        }
+        .nav .label, .nav .hint { display: inline; }
+        .main { padding: 14px 12px 108px; }
+        .topbar { flex-wrap: wrap; }
+        .topbar-title { min-width: 0; flex: 1 1 100%; }
+        .actions { width: 100%; justify-content: flex-end; }
+        .kpi { grid-template-columns: 1fr; }
+        .row { grid-template-columns: 1fr; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * { transition: none !important; scroll-behavior: auto !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout" id="app">
+      <aside class="sidebar" aria-label="主選單">
+        <div class="brand">
+          <div class="brand-badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M4 10.5 12 4l8 6.5V20a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20v-9.5Z" stroke="white" stroke-width="1.7" />
+              <path d="M9 21v-7a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v7" stroke="white" stroke-width="1.7" />
+            </svg>
+          </div>
+          <div>
+            <div class="brand-title">社區服務系統</div>
+            <div class="brand-sub" id="brandRole">社區｜原型</div>
+          </div>
+        </div>
+
+        <div class="side-tools" aria-label="狀態">
+          <div class="pill" role="status">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+            <div>
+              <strong>今日值班</strong>
+              <div><span>管理員｜大廳</span></div>
+            </div>
+          </div>
+        </div>
+
+        <nav class="nav" id="nav"></nav>
+
+        <div class="sidebar-foot">
+          <div class="side-mini" role="note" aria-label="提示">
+            <div>
+              <div style="font-weight:800; letter-spacing:0.2px;">擴充預留</div>
+              <small>右下角 Dynamic Slot</small>
+            </div>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:18px;height:18px;opacity:0.95;">
+              <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z" stroke="white" stroke-width="1.7"/>
+              <path d="M12 16v-5" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M12 8.2h.01" stroke="white" stroke-width="3.2" stroke-linecap="round"/>
+            </svg>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main" aria-label="內容區">
+        <header class="topbar">
+          <div class="topbar-title">
+            <h1 id="pageTitle">包裹郵件</h1>
+            <p id="pageSubtitle">快速登記、查詢與領取確認（示意）</p>
+          </div>
+
+          <div class="search" role="search" aria-label="全站快速搜尋">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z" stroke="rgba(31,41,55,0.7)" stroke-width="1.7"/>
+              <path d="M21 21l-4.3-4.3" stroke="rgba(31,41,55,0.7)" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+            <input id="globalSearch" type="text" placeholder="輸入住戶/訪客/包裹單號/設施名稱..." autocomplete="off" />
+          </div>
+
+          <div class="actions">
+            <select id="roleSelect" class="role-select" aria-label="切換角色">
+              <option value="admin">系統管理員</option>
+              <option value="community" selected>社區</option>
+              <option value="resident">住戶</option>
+            </select>
+            <button class="btn" id="btnDemoData" type="button">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 8v8M8 12h8" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
+                <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z" stroke="rgba(31,41,55,0.35)" stroke-width="1.7"/>
+              </svg>
+              產生示例
+            </button>
+            <button class="btn btn-primary" id="btnQuickAction" type="button">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+              快速新增
+            </button>
+          </div>
+        </header>
+
+        <section class="content" id="content" aria-live="polite"></section>
+      </main>
+    </div>
+
+    <aside class="dynamic-slot" aria-label="Dynamic Slot（功能擴充預留位）">
+      <div class="slot-hd">
+        <strong>Dynamic Slot（預留）</strong>
+        <button class="fab" type="button" id="btnAddSlot" aria-label="新增預留功能卡片">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="slot-bd" id="slotBody">
+        <div class="slot-row">
+          <div>
+            <div style="font-weight:800; letter-spacing:0.2px;">新增功能預留位</div>
+            <small>複製卡片模板即可快速擴充模組</small>
+          </div>
+          <span class="tag red">Slot 1</span>
+        </div>
+      </div>
+    </aside>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <template id="module-card-template">
+      <article class="card" data-module-card>
+        <div class="card-hd">
+          <div class="left">
+            <div class="chip" aria-hidden="true"></div>
+            <div style="min-width:0;">
+              <h2 data-title></h2>
+              <p data-desc></p>
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <span class="tag" data-badge></span>
+            <button class="btn" type="button" data-action>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M5 12h14" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
+                <path d="M13 5l7 7-7 7" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              進入
+            </button>
+          </div>
+        </div>
+        <div class="card-bd" data-body></div>
+      </article>
+    </template>
+
+    <script>
+      const icons = {
+        parcel: `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M21 8.5 12 13 3 8.5 12 4l9 4.5Z" stroke="white" stroke-width="1.7" stroke-linejoin="round"/>
+            <path d="M21 8.5V17a2 2 0 0 1-1.1 1.8L12 22l-7.9-3.2A2 2 0 0 1 3 17V8.5" stroke="white" stroke-width="1.7" stroke-linejoin="round"/>
+            <path d="M12 13v9" stroke="white" stroke-width="1.7" />
+          </svg>
+        `,
+        visitor: `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z" stroke="white" stroke-width="1.7"/>
+            <path d="M4 20a8 8 0 0 1 16 0" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        `,
+        residents: `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M7 21v-9a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v9" stroke="white" stroke-width="1.7"/>
+            <path d="M12 7a3.5 3.5 0 1 0-3.5-3.5A3.5 3.5 0 0 0 12 7Z" stroke="white" stroke-width="1.7"/>
+          </svg>
+        `,
+        facility: `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M7 3h10v4H7V3Z" stroke="white" stroke-width="1.7"/>
+            <path d="M6 7h12v14H6V7Z" stroke="white" stroke-width="1.7"/>
+            <path d="M9 11h6M9 15h6" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        `,
+        bulletin: `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M7 4h10v16H7V4Z" stroke="white" stroke-width="1.7"/>
+            <path d="M9 8h6M9 12h6M9 16h4" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        `,
+        parking: `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M7 21V3h6a5 5 0 0 1 0 10H7" stroke="white" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M17 13.5c2 2 2 5.5-1.5 7" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+            <path d="M14.5 13.5c2 2 2 5.5-1.5 7" stroke="white" stroke-width="1.7" stroke-linecap="round" opacity="0.85"/>
+          </svg>
+        `,
+        plus: `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" stroke="rgba(31,41,55,0.8)" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        `,
+        dashboard: `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 13.5V6.5A2.5 2.5 0 0 1 6.5 4h3A2.5 2.5 0 0 1 12 6.5v7A2.5 2.5 0 0 1 9.5 16h-3A2.5 2.5 0 0 1 4 13.5Z" stroke="white" stroke-width="1.7"/>
+            <path d="M12 10.5V6.5A2.5 2.5 0 0 1 14.5 4h3A2.5 2.5 0 0 1 20 6.5v4A2.5 2.5 0 0 1 17.5 13h-3A2.5 2.5 0 0 1 12 10.5Z" stroke="white" stroke-width="1.7" opacity="0.95"/>
+            <path d="M12 17.5v-1A2.5 2.5 0 0 1 14.5 14h3A2.5 2.5 0 0 1 20 16.5v1A2.5 2.5 0 0 1 17.5 20h-3A2.5 2.5 0 0 1 12 17.5Z" stroke="white" stroke-width="1.7" opacity="0.95"/>
+            <path d="M4 17.5v-1A2.5 2.5 0 0 1 6.5 14h3A2.5 2.5 0 0 1 12 16.5v1A2.5 2.5 0 0 1 9.5 20h-3A2.5 2.5 0 0 1 4 17.5Z" stroke="white" stroke-width="1.7" opacity="0.95"/>
+          </svg>
+        `,
+        settings: `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="white" stroke-width="1.7"/>
+            <path d="M19.4 12a7.5 7.5 0 0 0-.1-1l2-1.6-2-3.5-2.4 1a7.9 7.9 0 0 0-1.8-1.1L14.8 2H9.2l-.3 2.8a7.9 7.9 0 0 0-1.8 1.1l-2.4-1-2 3.5 2 1.6a7.5 7.5 0 0 0 0 2l-2 1.6 2 3.5 2.4-1a7.9 7.9 0 0 0 1.8 1.1L9.2 22h5.6l.3-2.8a7.9 7.9 0 0 0 1.8-1.1l2.4 1 2-3.5-2-1.6c.1-.3.1-.6.1-1Z" stroke="white" stroke-width="1.2" stroke-linejoin="round" opacity="0.95"/>
+          </svg>
+        `,
+        users: `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M8.5 12.2a3.2 3.2 0 1 0-3.2-3.2 3.2 3.2 0 0 0 3.2 3.2Z" stroke="white" stroke-width="1.7"/>
+            <path d="M18 11.3a2.8 2.8 0 1 0-2.8-2.8 2.8 2.8 0 0 0 2.8 2.8Z" stroke="white" stroke-width="1.7" opacity="0.95"/>
+            <path d="M3.5 20a6 6 0 0 1 10.5-3.8" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+            <path d="M14 20a4.8 4.8 0 0 1 9.5-1.2" stroke="white" stroke-width="1.7" stroke-linecap="round" opacity="0.95"/>
+          </svg>
+        `,
+      };
+
+      const communityBackofficeModules = [
+        {
+          id: "parcel",
+          name: "包裹郵件",
+          hint: "收發",
+          desc: "登記到貨、通知住戶、領取簽收",
+          badge: "常用",
+          icon: icons.parcel,
+          render() {
+            return `
+              <div class="kpi" aria-label="今日概覽">
+                <div class="k"><div class="n" id="kpiParcelIn">8</div><div class="t">今日到貨</div></div>
+                <div class="k"><div class="n" id="kpiParcelOut">5</div><div class="t">已領取</div></div>
+                <div class="k"><div class="n" id="kpiParcelHold">3</div><div class="t">待領取</div></div>
+              </div>
+              <div class="grid" style="margin-top:14px;">
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.plus}</div>
+                      <div style="min-width:0;">
+                        <h2>到貨登記</h2>
+                        <p>輸入必要資訊即可建立到貨紀錄（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag red">快捷</span>
+                  </div>
+                  <div class="card-bd">
+                    <form class="form" id="formParcel">
+                      <div class="row">
+                        <div class="field">
+                          <label for="p_unit">門牌/戶號</label>
+                          <input id="p_unit" type="text" placeholder="例：A-1203" />
+                        </div>
+                        <div class="field">
+                          <label for="p_carrier">物流/郵件</label>
+                          <select id="p_carrier">
+                            <option>宅配</option>
+                            <option>郵局</option>
+                            <option>超商店到店</option>
+                            <option>其他</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="field">
+                          <label for="p_code">單號（可選）</label>
+                          <input id="p_code" type="text" placeholder="例：SF123456789" />
+                        </div>
+                        <div class="field">
+                          <label for="p_note">備註</label>
+                          <input id="p_note" type="text" placeholder="例：冷藏、易碎、代收" />
+                        </div>
+                      </div>
+                      <div style="display:flex; gap:10px; justify-content:flex-end;">
+                        <button class="btn" type="reset">清除</button>
+                        <button class="btn btn-primary" type="submit">儲存登記</button>
+                      </div>
+                    </form>
+                  </div>
+                </section>
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.parcel}</div>
+                      <div style="min-width:0;">
+                        <h2>待領取清單</h2>
+                        <p>點擊可快速變更狀態（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag">列表</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="list" id="parcelList"></div>
+                  </div>
+                </section>
+              </div>
+            `;
+          },
+          afterRender() {
+            const list = document.getElementById("parcelList");
+            const items = [
+              { title: "A-1203｜宅配", meta: ["待領取", "17:10 到貨"], tag: "待領取" },
+              { title: "B-0808｜郵局掛號", meta: ["待領取", "15:42 到貨"], tag: "待領取" },
+              { title: "C-0501｜店到店", meta: ["待領取", "11:05 到貨"], tag: "待領取" },
+            ];
+            list.innerHTML = items.map((x, idx) => `
+              <div class="item">
+                <div>
+                  <div style="font-weight:800;">${x.title}</div>
+                  <div class="meta" style="margin-top:6px;">
+                    <span class="tag red">${x.meta[0]}</span>
+                    <span class="tag">${x.meta[1]}</span>
+                  </div>
+                </div>
+                <button class="btn" type="button" data-pickup="${idx}">簽收</button>
+              </div>
+            `).join("");
+            list.querySelectorAll("[data-pickup]").forEach((btn) => {
+              btn.addEventListener("click", () => toast("已標記為「已領取」（示意）"));
+            });
+            document.getElementById("formParcel")?.addEventListener("submit", (e) => {
+              e.preventDefault();
+              toast("已儲存到貨登記（示意）");
+            });
+          },
+        },
+        {
+          id: "visitor",
+          name: "訪客登記",
+          hint: "門禁",
+          desc: "到訪資訊、車牌、進出時間管理",
+          badge: "安全",
+          icon: icons.visitor,
+          render() {
+            return `
+              <div class="grid">
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.visitor}</div>
+                      <div style="min-width:0;">
+                        <h2>到訪登記</h2>
+                        <p>保留欄位可擴充（證件、拍照、簽名等）</p>
+                      </div>
+                    </div>
+                    <span class="tag red">重點</span>
+                  </div>
+                  <div class="card-bd">
+                    <form class="form" id="formVisitor">
+                      <div class="row">
+                        <div class="field">
+                          <label for="v_name">訪客姓名</label>
+                          <input id="v_name" type="text" placeholder="例：王小明" />
+                        </div>
+                        <div class="field">
+                          <label for="v_phone">聯絡電話</label>
+                          <input id="v_phone" type="text" placeholder="例：09xx-xxx-xxx" />
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="field">
+                          <label for="v_unit">拜訪戶號</label>
+                          <input id="v_unit" type="text" placeholder="例：A-1203" />
+                        </div>
+                        <div class="field">
+                          <label for="v_plate">車牌（可選）</label>
+                          <input id="v_plate" type="text" placeholder="例：ABC-1234" />
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="field">
+                          <label for="v_in">進入時間</label>
+                          <input id="v_in" type="time" value="18:00" />
+                        </div>
+                        <div class="field">
+                          <label for="v_out">預計離開</label>
+                          <input id="v_out" type="time" value="19:00" />
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label for="v_note">備註</label>
+                        <input id="v_note" type="text" placeholder="例：送貨、拜訪、工程維修" />
+                      </div>
+                      <div style="display:flex; gap:10px; justify-content:flex-end;">
+                        <button class="btn" type="reset">清除</button>
+                        <button class="btn btn-primary" type="submit">完成登記</button>
+                      </div>
+                    </form>
+                  </div>
+                </section>
+
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.bulletin}</div>
+                      <div style="min-width:0;">
+                        <h2>今日訪客</h2>
+                        <p>快速查詢與出場結束（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag">即時</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="list" id="visitorList"></div>
+                  </div>
+                </section>
+              </div>
+            `;
+          },
+          afterRender() {
+            document.getElementById("visitorList").innerHTML = [
+              { title: "王小明 → A-1203", meta: ["已入場", "車牌 ABC-1234"], tag: "訪客" },
+              { title: "陳小姐 → B-0808", meta: ["已入場", "步行"], tag: "訪客" },
+            ].map((x) => `
+              <div class="item">
+                <div>
+                  <div style="font-weight:800;">${x.title}</div>
+                  <div class="meta" style="margin-top:6px;">
+                    <span class="tag red">${x.meta[0]}</span>
+                    <span class="tag">${x.meta[1]}</span>
+                  </div>
+                </div>
+                <button class="btn" type="button" data-exit>出場</button>
+              </div>
+            `).join("");
+            document.querySelectorAll("[data-exit]").forEach((b) => b.addEventListener("click", () => toast("已完成出場（示意）")));
+            document.getElementById("formVisitor")?.addEventListener("submit", (e) => {
+              e.preventDefault();
+              toast("已完成訪客登記（示意）");
+            });
+          },
+        },
+        {
+          id: "residents",
+          name: "住戶造冊",
+          hint: "名冊",
+          desc: "住戶/承租/車位/聯絡方式彙整",
+          badge: "資料",
+          icon: icons.residents,
+          render() {
+            return `
+              <div class="grid">
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.residents}</div>
+                      <div style="min-width:0;">
+                        <h2>新增/更新住戶</h2>
+                        <p>欄位可依社區規範調整（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag red">常駐</span>
+                  </div>
+                  <div class="card-bd">
+                    <form class="form" id="formResident">
+                      <div class="row">
+                        <div class="field">
+                          <label for="r_unit">戶號</label>
+                          <input id="r_unit" type="text" placeholder="例：A-1203" />
+                        </div>
+                        <div class="field">
+                          <label for="r_type">身份</label>
+                          <select id="r_type">
+                            <option>屋主</option>
+                            <option>承租</option>
+                            <option>同住</option>
+                            <option>管理</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="field">
+                          <label for="r_name">姓名</label>
+                          <input id="r_name" type="text" placeholder="例：林小姐" />
+                        </div>
+                        <div class="field">
+                          <label for="r_phone">電話</label>
+                          <input id="r_phone" type="text" placeholder="例：02-xxxx-xxxx / 09xx-xxx-xxx" />
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="field">
+                          <label for="r_parking">車位（可選）</label>
+                          <input id="r_parking" type="text" placeholder="例：B1-086" />
+                        </div>
+                        <div class="field">
+                          <label for="r_emg">緊急聯絡（可選）</label>
+                          <input id="r_emg" type="text" placeholder="例：家屬 09xx-xxx-xxx" />
+                        </div>
+                      </div>
+                      <div style="display:flex; gap:10px; justify-content:flex-end;">
+                        <button class="btn" type="reset">清除</button>
+                        <button class="btn btn-primary" type="submit">儲存</button>
+                      </div>
+                    </form>
+                  </div>
+                </section>
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.bulletin}</div>
+                      <div style="min-width:0;">
+                        <h2>快速查詢</h2>
+                        <p>示範：可用戶號、姓名、車位查找</p>
+                      </div>
+                    </div>
+                    <span class="tag">查詢</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="field">
+                      <label for="r_q">搜尋</label>
+                      <input id="r_q" type="text" placeholder="例：A-1203 / 林 / B1-086" />
+                    </div>
+                    <div class="list" id="residentList" style="margin-top:12px;"></div>
+                  </div>
+                </section>
+              </div>
+            `;
+          },
+          afterRender() {
+            const list = document.getElementById("residentList");
+            const data = [
+              { title: "A-1203｜林小姐（屋主）", meta: ["09xx-xxx-xxx", "車位 B1-086"] },
+              { title: "B-0808｜陳先生（承租）", meta: ["09xx-xxx-xxx", "車位 —"] },
+              { title: "C-0501｜張小姐（同住）", meta: ["02-xxxx-xxxx", "車位 B2-012"] },
+            ];
+            const renderList = (q) => {
+              const qq = (q || "").trim().toLowerCase();
+              list.innerHTML = data
+                .filter((x) => x.title.toLowerCase().includes(qq) || x.meta.join(" ").toLowerCase().includes(qq))
+                .map((x) => `
+                  <div class="item">
+                    <div>
+                      <div style="font-weight:800;">${x.title}</div>
+                      <div class="meta" style="margin-top:6px;">
+                        <span class="tag">${x.meta[0]}</span>
+                        <span class="tag">${x.meta[1]}</span>
+                      </div>
+                    </div>
+                    <button class="btn" type="button" data-open>檢視</button>
+                  </div>
+                `).join("");
+              list.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => toast("已開啟住戶資料（示意）")));
+            };
+            renderList("");
+            document.getElementById("r_q").addEventListener("input", (e) => renderList(e.target.value));
+            document.getElementById("formResident")?.addEventListener("submit", (e) => {
+              e.preventDefault();
+              toast("已儲存住戶資料（示意）");
+            });
+          },
+        },
+        {
+          id: "facility",
+          name: "設施預約",
+          hint: "預約",
+          desc: "時段控管、名額與審核流程（示意）",
+          badge: "熱門",
+          icon: icons.facility,
+          render() {
+            return `
+              <div class="grid">
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.facility}</div>
+                      <div style="min-width:0;">
+                        <h2>新增預約</h2>
+                        <p>場地、日期、時段與人數（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag red">排程</span>
+                  </div>
+                  <div class="card-bd">
+                    <form class="form" id="formFacility">
+                      <div class="row">
+                        <div class="field">
+                          <label for="f_name">設施</label>
+                          <select id="f_name">
+                            <option>健身房</option>
+                            <option>交誼廳</option>
+                            <option>KTV 室</option>
+                            <option>桌球室</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label for="f_date">日期</label>
+                          <input id="f_date" type="date" />
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="field">
+                          <label for="f_start">開始時間</label>
+                          <input id="f_start" type="time" value="19:00" />
+                        </div>
+                        <div class="field">
+                          <label for="f_end">結束時間</label>
+                          <input id="f_end" type="time" value="20:00" />
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="field">
+                          <label for="f_unit">戶號</label>
+                          <input id="f_unit" type="text" placeholder="例：A-1203" />
+                        </div>
+                        <div class="field">
+                          <label for="f_people">人數（可選）</label>
+                          <input id="f_people" type="text" placeholder="例：3" />
+                        </div>
+                      </div>
+                      <div style="display:flex; gap:10px; justify-content:flex-end;">
+                        <button class="btn" type="reset">清除</button>
+                        <button class="btn btn-primary" type="submit">送出預約</button>
+                      </div>
+                    </form>
+                  </div>
+                </section>
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.bulletin}</div>
+                      <div style="min-width:0;">
+                        <h2>今日時段</h2>
+                        <p>以卡片清單呈現（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag">日程</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="list" id="facilityList"></div>
+                  </div>
+                </section>
+              </div>
+            `;
+          },
+          afterRender() {
+            document.getElementById("facilityList").innerHTML = [
+              { title: "健身房｜19:00–20:00", meta: ["A-1203", "3 人"], tag: "已確認" },
+              { title: "交誼廳｜20:00–22:00", meta: ["B-0808", "5 人"], tag: "審核中" },
+            ].map((x) => `
+              <div class="item">
+                <div>
+                  <div style="font-weight:800;">${x.title}</div>
+                  <div class="meta" style="margin-top:6px;">
+                    <span class="tag red">${x.tag}</span>
+                    <span class="tag">${x.meta[0]}</span>
+                    <span class="tag">${x.meta[1]}</span>
+                  </div>
+                </div>
+                <button class="btn" type="button" data-detail>詳情</button>
+              </div>
+            `).join("");
+            document.querySelectorAll("[data-detail]").forEach((b) => b.addEventListener("click", () => toast("已開啟預約詳情（示意）")));
+            const date = document.getElementById("f_date");
+            if (date && !date.value) {
+              const today = new Date();
+              const pad = (n) => String(n).padStart(2, "0");
+              date.value = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+            }
+            document.getElementById("formFacility")?.addEventListener("submit", (e) => {
+              e.preventDefault();
+              toast("已送出預約（示意）");
+            });
+          },
+        },
+        {
+          id: "bulletin",
+          name: "公告系統",
+          hint: "公告",
+          desc: "分類公告、置頂、閱讀回覆（示意）",
+          badge: "通知",
+          icon: icons.bulletin,
+          render() {
+            return `
+              <div class="grid">
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.bulletin}</div>
+                      <div style="min-width:0;">
+                        <h2>發布公告</h2>
+                        <p>適合管理室/管委會發布重要訊息（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag red">對外</span>
+                  </div>
+                  <div class="card-bd">
+                    <form class="form" id="formBulletin">
+                      <div class="row">
+                        <div class="field">
+                          <label for="b_type">分類</label>
+                          <select id="b_type">
+                            <option>重要通知</option>
+                            <option>設備維護</option>
+                            <option>活動訊息</option>
+                            <option>其他</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label for="b_pin">置頂</label>
+                          <select id="b_pin">
+                            <option>否</option>
+                            <option>是</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label for="b_title">標題</label>
+                        <input id="b_title" type="text" placeholder="例：電梯年度保養通知" />
+                      </div>
+                      <div class="field">
+                        <label for="b_body">內容</label>
+                        <textarea id="b_body" placeholder="輸入公告內容..."></textarea>
+                      </div>
+                      <div style="display:flex; gap:10px; justify-content:flex-end;">
+                        <button class="btn" type="reset">清除</button>
+                        <button class="btn btn-primary" type="submit">發布</button>
+                      </div>
+                    </form>
+                  </div>
+                </section>
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.parcel}</div>
+                      <div style="min-width:0;">
+                        <h2>公告列表</h2>
+                        <p>分類/置頂/閱讀狀態（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag">Feed</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="list" id="bulletinList"></div>
+                  </div>
+                </section>
+              </div>
+            `;
+          },
+          afterRender() {
+            document.getElementById("bulletinList").innerHTML = [
+              { title: "【置頂】電梯年度保養通知", meta: ["重要通知", "2026/05/07"], tag: "置頂" },
+              { title: "游泳池清潔消毒時間調整", meta: ["設備維護", "2026/05/06"], tag: "更新" },
+              { title: "端午節社區活動報名", meta: ["活動訊息", "2026/05/05"], tag: "活動" },
+            ].map((x) => `
+              <div class="item">
+                <div>
+                  <div style="font-weight:900;">${x.title}</div>
+                  <div class="meta" style="margin-top:6px;">
+                    <span class="tag red">${x.tag}</span>
+                    <span class="tag">${x.meta[0]}</span>
+                    <span class="tag">${x.meta[1]}</span>
+                  </div>
+                </div>
+                <button class="btn" type="button" data-read>閱讀</button>
+              </div>
+            `).join("");
+            document.querySelectorAll("[data-read]").forEach((b) => b.addEventListener("click", () => toast("已開啟公告內容（示意）")));
+            document.getElementById("formBulletin")?.addEventListener("submit", (e) => {
+              e.preventDefault();
+              toast("已發布公告（示意）");
+            });
+          },
+        },
+        {
+          id: "parking",
+          name: "綠色停車",
+          hint: "車位",
+          desc: "電動車/節能車位管理與登記（示意）",
+          badge: "綠能",
+          icon: icons.parking,
+          render() {
+            return `
+              <div class="grid">
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.parking}</div>
+                      <div style="min-width:0;">
+                        <h2>車位登記</h2>
+                        <p>可擴充充電樁狀態、費率、審核（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag red">綠能</span>
+                  </div>
+                  <div class="card-bd">
+                    <form class="form" id="formParking">
+                      <div class="row">
+                        <div class="field">
+                          <label for="g_unit">戶號</label>
+                          <input id="g_unit" type="text" placeholder="例：A-1203" />
+                        </div>
+                        <div class="field">
+                          <label for="g_slot">車位</label>
+                          <input id="g_slot" type="text" placeholder="例：B1-086" />
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="field">
+                          <label for="g_type">車種</label>
+                          <select id="g_type">
+                            <option>電動車（EV）</option>
+                            <option>油電混合（Hybrid）</option>
+                            <option>節能車</option>
+                            <option>其他</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label for="g_plate">車牌</label>
+                          <input id="g_plate" type="text" placeholder="例：EV-2026" />
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="field">
+                          <label for="g_charger">充電樁</label>
+                          <select id="g_charger">
+                            <option>無</option>
+                            <option>有（私人）</option>
+                            <option>有（公用）</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label for="g_status">狀態</label>
+                          <select id="g_status">
+                            <option>正常</option>
+                            <option>停用</option>
+                            <option>維護中</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div style="display:flex; gap:10px; justify-content:flex-end;">
+                        <button class="btn" type="reset">清除</button>
+                        <button class="btn btn-primary" type="submit">儲存</button>
+                      </div>
+                    </form>
+                  </div>
+                </section>
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.bulletin}</div>
+                      <div style="min-width:0;">
+                        <h2>車位狀態</h2>
+                        <p>示意：支援排序、篩選、狀態色彩</p>
+                      </div>
+                    </div>
+                    <span class="tag">狀態</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="list" id="parkingList"></div>
+                  </div>
+                </section>
+              </div>
+            `;
+          },
+          afterRender() {
+            document.getElementById("parkingList").innerHTML = [
+              { title: "B1-086｜A-1203｜EV", meta: ["充電樁：私人", "狀態：正常"], tag: "可用" },
+              { title: "B1-021｜B-0808｜Hybrid", meta: ["充電樁：無", "狀態：正常"], tag: "可用" },
+              { title: "B2-014｜C-0501｜EV", meta: ["充電樁：公用", "狀態：維護中"], tag: "維護" },
+            ].map((x) => `
+              <div class="item">
+                <div>
+                  <div style="font-weight:900;">${x.title}</div>
+                  <div class="meta" style="margin-top:6px;">
+                    <span class="tag red">${x.tag}</span>
+                    <span class="tag">${x.meta[0]}</span>
+                    <span class="tag">${x.meta[1]}</span>
+                  </div>
+                </div>
+                <button class="btn" type="button" data-edit>編輯</button>
+              </div>
+            `).join("");
+            document.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => toast("已開啟車位編輯（示意）")));
+            document.getElementById("formParking")?.addEventListener("submit", (e) => {
+              e.preventDefault();
+              toast("已儲存綠色停車資料（示意）");
+            });
+          },
+        },
+      ];
+
+      const STORAGE_CONFIG = "csp_config_v1";
+      const STORAGE_ACCOUNTS = "csp_accounts_v1";
+      const STORAGE_ACTIVE_COMMUNITY = "csp_active_community_v1";
+
+      const roles = {
+        admin: { id: "admin", name: "系統管理員", defaultModule: "admin-dashboard", searchPlaceholder: "輸入社區/帳號/功能..." },
+        community: { id: "community", name: "社區", defaultModule: "community-dashboard", searchPlaceholder: "輸入住戶/訪客/包裹單號/設施名稱..." },
+        resident: { id: "resident", name: "住戶", defaultModule: "resident-dashboard", searchPlaceholder: "輸入公告關鍵字/設施/包裹通知..." },
+      };
+
+      const catalogCommunityButtons = [
+        { id: "parcel", name: "包裹郵件", defaultUrl: "#community/parcel" },
+        { id: "visitor", name: "訪客登記", defaultUrl: "#community/visitor" },
+        { id: "residents", name: "住戶造冊", defaultUrl: "#community/residents" },
+        { id: "facility", name: "設施預約", defaultUrl: "#community/facility" },
+        { id: "bulletin", name: "公告系統", defaultUrl: "#community/bulletin" },
+        { id: "parking", name: "綠色停車", defaultUrl: "#community/parking" },
+      ];
+
+      const catalogResidentButtons = [
+        { id: "resident-bulletin", name: "公告", defaultUrl: "#resident/resident-bulletin" },
+        { id: "resident-parcel", name: "包裹通知", defaultUrl: "#resident/resident-parcel" },
+        { id: "resident-facility", name: "設施預約", defaultUrl: "#resident/resident-facility" },
+        { id: "resident-parking", name: "綠色停車", defaultUrl: "#resident/resident-parking" },
+      ];
+
+      function defaultConfig() {
+        const toButton = (x) => ({ enabled: true, url: x.defaultUrl });
+        return {
+          communityButtons: Object.fromEntries(catalogCommunityButtons.map((x) => [x.id, toButton(x)])),
+          residentButtons: Object.fromEntries(catalogResidentButtons.map((x) => [x.id, toButton(x)])),
+        };
+      }
+
+      function loadConfig() {
+        try {
+          const raw = localStorage.getItem(STORAGE_CONFIG);
+          if (!raw) return defaultConfig();
+          const parsed = JSON.parse(raw);
+          const d = defaultConfig();
+          return {
+            communityButtons: { ...d.communityButtons, ...(parsed.communityButtons || {}) },
+            residentButtons: { ...d.residentButtons, ...(parsed.residentButtons || {}) },
+          };
+        } catch {
+          return defaultConfig();
+        }
+      }
+
+      function saveConfig(cfg) {
+        localStorage.setItem(STORAGE_CONFIG, JSON.stringify(cfg));
+      }
+
+      function defaultAccounts() {
+        return {
+          communities: [
+            { id: "c001", name: "紅樹林社區", enabled: true, username: "community_admin_01" },
+            { id: "c002", name: "白石社區", enabled: true, username: "community_admin_02" },
+          ],
+          residents: [
+            { id: "r001", communityId: "c001", unit: "A-1203", name: "林小姐", enabled: true, username: "A1203" },
+            { id: "r002", communityId: "c001", unit: "B-0808", name: "陳先生", enabled: true, username: "B0808" },
+            { id: "r003", communityId: "c002", unit: "C-0501", name: "張小姐", enabled: false, username: "C0501" },
+          ],
+        };
+      }
+
+      function loadAccounts() {
+        try {
+          const raw = localStorage.getItem(STORAGE_ACCOUNTS);
+          if (!raw) return defaultAccounts();
+          const parsed = JSON.parse(raw);
+          const d = defaultAccounts();
+          return {
+            communities: Array.isArray(parsed.communities) ? parsed.communities : d.communities,
+            residents: Array.isArray(parsed.residents) ? parsed.residents : d.residents,
+          };
+        } catch {
+          return defaultAccounts();
+        }
+      }
+
+      function saveAccounts(data) {
+        localStorage.setItem(STORAGE_ACCOUNTS, JSON.stringify(data));
+      }
+
+      function loadActiveCommunityId(accounts) {
+        const saved = localStorage.getItem(STORAGE_ACTIVE_COMMUNITY);
+        const first = accounts.communities.find((x) => x.enabled)?.id || accounts.communities[0]?.id || "";
+        if (!saved) return first;
+        if (accounts.communities.some((x) => x.id === saved)) return saved;
+        return first;
+      }
+
+      function saveActiveCommunityId(id) {
+        localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, id);
+      }
+
+      function normalizeUrl(url) {
+        return String(url || "").trim();
+      }
+
+      function openLink(url) {
+        const u = normalizeUrl(url);
+        if (!u) return false;
+        if (u.startsWith("#")) {
+          location.hash = u;
+          return true;
+        }
+        if (/^https?:\/\//i.test(u)) {
+          window.open(u, "_blank", "noopener,noreferrer");
+          return true;
+        }
+        toast(`連結格式不支援（示意）：${u}`);
+        return false;
+      }
+
+      function makePlaceholderModule(id, name, hint) {
+        return {
+          id,
+          name,
+          hint,
+          desc: "前台頁面後續再規劃設計（示意）",
+          badge: "前台",
+          icon: icons.dashboard,
+          render() {
+            return `
+              <div class="grid">
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.dashboard}</div>
+                      <div style="min-width:0;">
+                        <h2>${name}</h2>
+                        <p>此區為住戶前台內容，保留後續規劃版面與流程</p>
+                      </div>
+                    </div>
+                    <span class="tag red">待設計</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="list">
+                      <div class="item">
+                        <div>
+                          <div style="font-weight:900;">版面與互動流程</div>
+                          <div class="muted" style="margin-top:6px;">依住戶使用情境（手機橫式/平板）設計主要操作路徑</div>
+                        </div>
+                        <span class="tag">TODO</span>
+                      </div>
+                      <div class="item">
+                        <div>
+                          <div style="font-weight:900;">資料來源與權限</div>
+                          <div class="muted" style="margin-top:6px;">串接公告、預約、包裹通知與個人設定</div>
+                        </div>
+                        <span class="tag">TODO</span>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.settings}</div>
+                      <div style="min-width:0;">
+                        <h2>快速入口（示意）</h2>
+                        <p>此處連結可由管理端設定</p>
+                      </div>
+                    </div>
+                    <span class="tag">入口</span>
+                  </div>
+                  <div class="card-bd" id="residentQuickArea"></div>
+                </section>
+              </div>
+            `;
+          },
+          afterRender() {
+            const cfg = loadConfig();
+            const host = document.getElementById("residentQuickArea");
+            const buttons = catalogResidentButtons.map((x) => ({ id: x.id, name: x.name, ...cfg.residentButtons[x.id] }));
+            host.innerHTML = `
+              <div class="list">
+                ${buttons.map((b) => `
+                  <div class="item">
+                    <div>
+                      <div style="font-weight:900;">${b.name}</div>
+                      <div class="meta" style="margin-top:6px;">
+                        <span class="tag ${b.enabled ? "red" : ""}">${b.enabled ? "啟用" : "停用"}</span>
+                        <span class="tag">${b.url || "（未設定）"}</span>
+                      </div>
+                    </div>
+                    <button class="btn ${b.enabled ? "btn-primary" : ""}" type="button" data-open="${b.id}" ${b.enabled ? "" : "disabled"}>開啟</button>
+                  </div>
+                `).join("")}
+              </div>
+            `;
+            host.querySelectorAll("[data-open]").forEach((btn) => {
+              btn.addEventListener("click", () => {
+                const id = btn.getAttribute("data-open");
+                const link = cfg.residentButtons?.[id]?.url;
+                if (!openLink(link)) toast("尚未設定連結（示意）");
+              });
+            });
+          },
+        };
+      }
+
+      const adminModules = [
+        {
+          id: "admin-dashboard",
+          name: "系統總覽",
+          hint: "主控",
+          desc: "設定社區/住戶功能連結與帳號開通（示意）",
+          badge: "管理",
+          icon: icons.dashboard,
+          render() {
+            const accounts = loadAccounts();
+            const communityCount = accounts.communities.length;
+            const residentCount = accounts.residents.length;
+            const residentEnabled = accounts.residents.filter((x) => x.enabled).length;
+            return `
+              <div class="kpi" aria-label="系統概覽">
+                <div class="k"><div class="n">${communityCount}</div><div class="t">社區數</div></div>
+                <div class="k"><div class="n">${residentCount}</div><div class="t">住戶帳號</div></div>
+                <div class="k"><div class="n">${residentEnabled}</div><div class="t">已開通</div></div>
+              </div>
+              <div class="grid" style="margin-top:14px;">
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.settings}</div>
+                      <div style="min-width:0;">
+                        <h2>功能按鈕與連結設定</h2>
+                        <p>控制「社區」與「住戶」頁面入口與連結（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag red">核心</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="list">
+                      <div class="item">
+                        <div>
+                          <div style="font-weight:900;">社區後台按鈕</div>
+                          <div class="muted" style="margin-top:6px;">設定 6 大模組入口與連結</div>
+                        </div>
+                        <button class="btn btn-primary" type="button" data-go="admin-link-settings">前往</button>
+                      </div>
+                      <div class="item">
+                        <div>
+                          <div style="font-weight:900;">住戶前台按鈕</div>
+                          <div class="muted" style="margin-top:6px;">設定住戶入口（前台後續設計）</div>
+                        </div>
+                        <button class="btn btn-primary" type="button" data-go="admin-link-settings">前往</button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.users}</div>
+                      <div style="min-width:0;">
+                        <h2>帳號開通設定</h2>
+                        <p>建立社區與住戶帳號、啟用/停用（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag">帳號</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="list">
+                      <div class="item">
+                        <div>
+                          <div style="font-weight:900;">社區帳號</div>
+                          <div class="muted" style="margin-top:6px;">建立/停用社區登入帳號</div>
+                        </div>
+                        <button class="btn" type="button" data-go="admin-accounts">管理</button>
+                      </div>
+                      <div class="item">
+                        <div>
+                          <div style="font-weight:900;">住戶帳號</div>
+                          <div class="muted" style="margin-top:6px;">建立/停用住戶登入帳號</div>
+                        </div>
+                        <button class="btn" type="button" data-go="admin-accounts">管理</button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            `;
+          },
+          afterRender() {
+            document.querySelectorAll("[data-go]").forEach((b) => {
+              b.addEventListener("click", () => setActive("admin", b.getAttribute("data-go")));
+            });
+          },
+        },
+        {
+          id: "admin-link-settings",
+          name: "連結設定",
+          hint: "設定",
+          desc: "設定社區/住戶頁面按鈕功能與連結（示意）",
+          badge: "設定",
+          icon: icons.settings,
+          render() {
+            const cfg = loadConfig();
+            const renderGroup = (title, items, storeKey) => `
+              <section class="card">
+                <div class="card-hd">
+                  <div class="left">
+                    <div class="chip" aria-hidden="true">${icons.settings}</div>
+                    <div style="min-width:0;">
+                      <h2>${title}</h2>
+                      <p>啟用/停用與連結 URL（#role/module 或 https://...）</p>
+                    </div>
+                  </div>
+                  <span class="tag red">可擴充</span>
+                </div>
+                <div class="card-bd">
+                  <div class="form" style="gap:10px;">
+                    ${items.map((x) => {
+                      const v = (cfg[storeKey] && cfg[storeKey][x.id]) ? cfg[storeKey][x.id] : { enabled: true, url: x.defaultUrl };
+                      return `
+                        <div style="display:grid; grid-template-columns: 1.1fr 0.65fr 1.25fr; gap:12px;">
+                          <div class="field">
+                            <label>功能</label>
+                            <input type="text" value="${x.name}" readonly />
+                          </div>
+                          <div class="field">
+                            <label>狀態</label>
+                            <select data-link-enabled="${storeKey}:${x.id}">
+                              <option value="true" ${v.enabled ? "selected" : ""}>啟用</option>
+                              <option value="false" ${!v.enabled ? "selected" : ""}>停用</option>
+                            </select>
+                          </div>
+                          <div class="field">
+                            <label>連結</label>
+                            <input type="text" value="${v.url || ""}" placeholder="${x.defaultUrl}" data-link-url="${storeKey}:${x.id}" />
+                          </div>
+                        </div>
+                      `;
+                    }).join("")}
+                  </div>
+                </div>
+              </section>
+            `;
+            return `
+              <div class="grid">
+                ${renderGroup("社區後台按鈕", catalogCommunityButtons, "communityButtons")}
+                ${renderGroup("住戶前台按鈕", catalogResidentButtons, "residentButtons")}
+              </div>
+              <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:14px;">
+                <button class="btn" type="button" id="btnResetLinks">重置預設</button>
+                <button class="btn btn-primary" type="button" id="btnSaveLinks">儲存設定</button>
+              </div>
+            `;
+          },
+          afterRender() {
+            document.getElementById("btnSaveLinks").addEventListener("click", () => {
+              const cfg = loadConfig();
+              const next = { ...cfg, communityButtons: { ...cfg.communityButtons }, residentButtons: { ...cfg.residentButtons } };
+              document.querySelectorAll("[data-link-enabled]").forEach((el) => {
+                const [storeKey, id] = el.getAttribute("data-link-enabled").split(":");
+                const enabled = el.value === "true";
+                next[storeKey][id] = next[storeKey][id] || {};
+                next[storeKey][id].enabled = enabled;
+              });
+              document.querySelectorAll("[data-link-url]").forEach((el) => {
+                const [storeKey, id] = el.getAttribute("data-link-url").split(":");
+                const url = normalizeUrl(el.value);
+                next[storeKey][id] = next[storeKey][id] || {};
+                next[storeKey][id].url = url;
+              });
+              saveConfig(next);
+              toast("已儲存連結設定（示意）");
+            });
+            document.getElementById("btnResetLinks").addEventListener("click", () => {
+              saveConfig(defaultConfig());
+              toast("已重置為預設設定（示意）");
+              setActive("admin", "admin-link-settings");
+            });
+          },
+        },
+        {
+          id: "admin-accounts",
+          name: "帳號開通",
+          hint: "帳號",
+          desc: "社區/住戶登入帳號開通設定（示意）",
+          badge: "管理",
+          icon: icons.users,
+          render() {
+            const data = loadAccounts();
+            const activeId = loadActiveCommunityId(data);
+            const communities = data.communities;
+            const residents = data.residents;
+            const activeResidents = residents.filter((r) => r.communityId === activeId);
+            return `
+              <div class="grid">
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.users}</div>
+                      <div style="min-width:0;">
+                        <h2>社區帳號</h2>
+                        <p>建立/停用社區登入帳號（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag red">社區</span>
+                  </div>
+                  <div class="card-bd">
+                    <form class="form" id="formCreateCommunity">
+                      <div class="row">
+                        <div class="field">
+                          <label for="ac_name">社區名稱</label>
+                          <input id="ac_name" type="text" placeholder="例：新社區" />
+                        </div>
+                        <div class="field">
+                          <label for="ac_user">帳號（示意）</label>
+                          <input id="ac_user" type="text" placeholder="例：community_admin_03" />
+                        </div>
+                      </div>
+                      <div style="display:flex; gap:10px; justify-content:flex-end;">
+                        <button class="btn btn-primary" type="submit">建立社區帳號</button>
+                      </div>
+                    </form>
+                    <div class="list" style="margin-top:12px;" id="communityAccountList">
+                      ${communities.map((c) => `
+                        <div class="item">
+                          <div>
+                            <div style="font-weight:900;">${c.name}</div>
+                            <div class="meta" style="margin-top:6px;">
+                              <span class="tag ${c.enabled ? "red" : ""}">${c.enabled ? "啟用" : "停用"}</span>
+                              <span class="tag">帳號：${c.username}</span>
+                              <span class="tag">ID：${c.id}</span>
+                            </div>
+                          </div>
+                          <button class="btn" type="button" data-toggle-community="${c.id}">${c.enabled ? "停用" : "啟用"}</button>
+                        </div>
+                      `).join("")}
+                    </div>
+                  </div>
+                </section>
+
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.users}</div>
+                      <div style="min-width:0;">
+                        <h2>住戶帳號</h2>
+                        <p>建立/停用住戶登入帳號（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag">住戶</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="field">
+                      <label for="ar_community">所屬社區</label>
+                      <select id="ar_community">
+                        ${communities.map((c) => `<option value="${c.id}" ${c.id === activeId ? "selected" : ""}>${c.name}</option>`).join("")}
+                      </select>
+                    </div>
+                    <form class="form" id="formCreateResident" style="margin-top:12px;">
+                      <div class="row">
+                        <div class="field">
+                          <label for="ar_unit">戶號</label>
+                          <input id="ar_unit" type="text" placeholder="例：A-1203" />
+                        </div>
+                        <div class="field">
+                          <label for="ar_name">姓名</label>
+                          <input id="ar_name" type="text" placeholder="例：林小姐" />
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="field">
+                          <label for="ar_user">帳號（示意）</label>
+                          <input id="ar_user" type="text" placeholder="例：A1203" />
+                        </div>
+                        <div class="field">
+                          <label for="ar_enabled">狀態</label>
+                          <select id="ar_enabled">
+                            <option value="true" selected>啟用</option>
+                            <option value="false">停用</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div style="display:flex; gap:10px; justify-content:flex-end;">
+                        <button class="btn btn-primary" type="submit">建立住戶帳號</button>
+                      </div>
+                    </form>
+                    <div class="list" style="margin-top:12px;" id="residentAccountList">
+                      ${activeResidents.map((r) => `
+                        <div class="item">
+                          <div>
+                            <div style="font-weight:900;">${r.unit}｜${r.name}</div>
+                            <div class="meta" style="margin-top:6px;">
+                              <span class="tag ${r.enabled ? "red" : ""}">${r.enabled ? "已開通" : "未開通"}</span>
+                              <span class="tag">帳號：${r.username}</span>
+                              <span class="tag">ID：${r.id}</span>
+                            </div>
+                          </div>
+                          <button class="btn" type="button" data-toggle-resident="${r.id}">${r.enabled ? "停用" : "啟用"}</button>
+                        </div>
+                      `).join("")}
+                    </div>
+                  </div>
+                </section>
+              </div>
+            `;
+          },
+          afterRender() {
+            const data = loadAccounts();
+            const communitySelect = document.getElementById("ar_community");
+            communitySelect.addEventListener("change", () => {
+              saveActiveCommunityId(communitySelect.value);
+              setActive("admin", "admin-accounts");
+            });
+            document.querySelectorAll("[data-toggle-community]").forEach((btn) => {
+              btn.addEventListener("click", () => {
+                const id = btn.getAttribute("data-toggle-community");
+                const next = loadAccounts();
+                next.communities = next.communities.map((c) => c.id === id ? { ...c, enabled: !c.enabled } : c);
+                saveAccounts(next);
+                toast("已更新社區狀態（示意）");
+                setActive("admin", "admin-accounts");
+              });
+            });
+            document.querySelectorAll("[data-toggle-resident]").forEach((btn) => {
+              btn.addEventListener("click", () => {
+                const id = btn.getAttribute("data-toggle-resident");
+                const next = loadAccounts();
+                next.residents = next.residents.map((r) => r.id === id ? { ...r, enabled: !r.enabled } : r);
+                saveAccounts(next);
+                toast("已更新住戶狀態（示意）");
+                setActive("admin", "admin-accounts");
+              });
+            });
+            document.getElementById("formCreateCommunity")?.addEventListener("submit", (e) => {
+              e.preventDefault();
+              const name = normalizeUrl(document.getElementById("ac_name").value);
+              const username = normalizeUrl(document.getElementById("ac_user").value);
+              if (!name || !username) return toast("請填寫社區名稱與帳號（示意）");
+              const next = loadAccounts();
+              const id = `c${String(Date.now()).slice(-6)}`;
+              next.communities = [{ id, name, enabled: true, username }, ...next.communities];
+              saveAccounts(next);
+              toast("已建立社區帳號（示意）");
+              setActive("admin", "admin-accounts");
+            });
+            document.getElementById("formCreateResident")?.addEventListener("submit", (e) => {
+              e.preventDefault();
+              const communityId = document.getElementById("ar_community").value;
+              const unit = normalizeUrl(document.getElementById("ar_unit").value);
+              const name = normalizeUrl(document.getElementById("ar_name").value);
+              const username = normalizeUrl(document.getElementById("ar_user").value);
+              const enabled = document.getElementById("ar_enabled").value === "true";
+              if (!unit || !name || !username) return toast("請填寫戶號、姓名與帳號（示意）");
+              const next = loadAccounts();
+              const id = `r${String(Date.now()).slice(-6)}`;
+              next.residents = [{ id, communityId, unit, name, enabled, username }, ...next.residents];
+              saveAccounts(next);
+              toast("已建立住戶帳號（示意）");
+              setActive("admin", "admin-accounts");
+            });
+          },
+        },
+      ];
+
+      const communityModules = [
+        {
+          id: "community-dashboard",
+          name: "社區後台總覽",
+          hint: "總覽",
+          desc: "社區後台入口按鈕（可由系統管理員設定）",
+          badge: "後台",
+          icon: icons.dashboard,
+          render() {
+            const cfg = loadConfig();
+            const buttons = catalogCommunityButtons.map((x) => ({ id: x.id, name: x.name, ...cfg.communityButtons[x.id] }));
+            const accounts = loadAccounts();
+            const activeId = loadActiveCommunityId(accounts);
+            const communityName = accounts.communities.find((c) => c.id === activeId)?.name || "未指定社區";
+            return `
+              <div class="grid">
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.dashboard}</div>
+                      <div style="min-width:0;">
+                        <h2>${communityName}</h2>
+                        <p>管理室後台入口（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag red">入口</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="list">
+                      ${buttons.map((b) => `
+                        <div class="item">
+                          <div>
+                            <div style="font-weight:900;">${b.name}</div>
+                            <div class="meta" style="margin-top:6px;">
+                              <span class="tag ${b.enabled ? "red" : ""}">${b.enabled ? "啟用" : "停用"}</span>
+                              <span class="tag">${b.url || "（未設定）"}</span>
+                            </div>
+                          </div>
+                          <button class="btn ${b.enabled ? "btn-primary" : ""}" type="button" data-open="${b.id}" ${b.enabled ? "" : "disabled"}>開啟</button>
+                        </div>
+                      `).join("")}
+                    </div>
+                  </div>
+                </section>
+
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.users}</div>
+                      <div style="min-width:0;">
+                        <h2>住戶帳號開通</h2>
+                        <p>社區端可設定住戶帳號狀態（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag">帳號</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="list">
+                      <div class="item">
+                        <div>
+                          <div style="font-weight:900;">管理住戶帳號</div>
+                          <div class="muted" style="margin-top:6px;">啟用/停用與基本資料</div>
+                        </div>
+                        <button class="btn" type="button" data-go="community-resident-accounts">前往</button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            `;
+          },
+          afterRender() {
+            const cfg = loadConfig();
+            document.querySelectorAll("[data-open]").forEach((btn) => {
+              btn.addEventListener("click", () => {
+                const id = btn.getAttribute("data-open");
+                const link = cfg.communityButtons?.[id]?.url;
+                if (!openLink(link)) setActive("community", id);
+              });
+            });
+            document.querySelectorAll("[data-go]").forEach((btn) => btn.addEventListener("click", () => setActive("community", btn.getAttribute("data-go"))));
+          },
+        },
+        {
+          id: "community-resident-accounts",
+          name: "住戶帳號開通",
+          hint: "帳號",
+          desc: "社區端設定住戶頁面登入帳號開通（示意）",
+          badge: "後台",
+          icon: icons.users,
+          render() {
+            const data = loadAccounts();
+            const activeId = loadActiveCommunityId(data);
+            const communities = data.communities.filter((c) => c.enabled);
+            const residents = data.residents.filter((r) => r.communityId === activeId);
+            return `
+              <div class="grid">
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.users}</div>
+                      <div style="min-width:0;">
+                        <h2>住戶帳號管理</h2>
+                        <p>僅顯示所屬社區（示意）</p>
+                      </div>
+                    </div>
+                    <span class="tag red">社區</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="field">
+                      <label for="cc_community">社區</label>
+                      <select id="cc_community">
+                        ${communities.map((c) => `<option value="${c.id}" ${c.id === activeId ? "selected" : ""}>${c.name}</option>`).join("")}
+                      </select>
+                    </div>
+                    <div class="list" style="margin-top:12px;" id="communityResidentList">
+                      ${residents.map((r) => `
+                        <div class="item">
+                          <div>
+                            <div style="font-weight:900;">${r.unit}｜${r.name}</div>
+                            <div class="meta" style="margin-top:6px;">
+                              <span class="tag ${r.enabled ? "red" : ""}">${r.enabled ? "已開通" : "未開通"}</span>
+                              <span class="tag">帳號：${r.username}</span>
+                            </div>
+                          </div>
+                          <button class="btn" type="button" data-toggle="${r.id}">${r.enabled ? "停用" : "啟用"}</button>
+                        </div>
+                      `).join("") || `
+                        <div class="item">
+                          <div>
+                            <div style="font-weight:900;">尚無住戶帳號</div>
+                            <div class="muted" style="margin-top:6px;">可由系統管理員建立或後續擴充社區建立流程</div>
+                          </div>
+                          <span class="tag">提示</span>
+                        </div>
+                      `}
+                    </div>
+                  </div>
+                </section>
+
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.settings}</div>
+                      <div style="min-width:0;">
+                        <h2>登入開通規則（預留）</h2>
+                        <p>可擴充：簡訊驗證、首次登入啟用、同戶多人等</p>
+                      </div>
+                    </div>
+                    <span class="tag">預留</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="list">
+                      <div class="item">
+                        <div>
+                          <div style="font-weight:900;">開通方式</div>
+                          <div class="muted" style="margin-top:6px;">由社區端啟用（示意）</div>
+                        </div>
+                        <span class="tag red">目前</span>
+                      </div>
+                      <div class="item">
+                        <div>
+                          <div style="font-weight:900;">預留擴充</div>
+                          <div class="muted" style="margin-top:6px;">可新增審核流程與權限群組</div>
+                        </div>
+                        <span class="tag">Slot</span>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            `;
+          },
+          afterRender() {
+            const select = document.getElementById("cc_community");
+            select.addEventListener("change", () => {
+              saveActiveCommunityId(select.value);
+              setActive("community", "community-resident-accounts");
+            });
+            document.querySelectorAll("[data-toggle]").forEach((btn) => {
+              btn.addEventListener("click", () => {
+                const id = btn.getAttribute("data-toggle");
+                const next = loadAccounts();
+                next.residents = next.residents.map((r) => r.id === id ? { ...r, enabled: !r.enabled } : r);
+                saveAccounts(next);
+                toast("已更新住戶狀態（示意）");
+                setActive("community", "community-resident-accounts");
+              });
+            });
+          },
+        },
+        ...communityBackofficeModules,
+      ];
+
+      const residentModules = [
+        {
+          id: "resident-dashboard",
+          name: "住戶前台",
+          hint: "首頁",
+          desc: "住戶前台後續再規劃設計（示意）",
+          badge: "前台",
+          icon: icons.dashboard,
+          render() {
+            return `
+              <div class="grid">
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.dashboard}</div>
+                      <div style="min-width:0;">
+                        <h2>住戶前台（待設計）</h2>
+                        <p>以手機橫式與平板使用情境為主，後續可加入個人化資訊</p>
+                      </div>
+                    </div>
+                    <span class="tag red">下一步</span>
+                  </div>
+                  <div class="card-bd">
+                    <div class="list">
+                      <div class="item">
+                        <div>
+                          <div style="font-weight:900;">常用入口</div>
+                          <div class="muted" style="margin-top:6px;">公告、包裹通知、設施預約、停車等</div>
+                        </div>
+                        <span class="tag">規劃</span>
+                      </div>
+                      <div class="item">
+                        <div>
+                          <div style="font-weight:900;">通知中心</div>
+                          <div class="muted" style="margin-top:6px;">推播/未讀提醒/簽收提示</div>
+                        </div>
+                        <span class="tag">規劃</span>
+                      </div>
+                      <div class="item">
+                        <div>
+                          <div style="font-weight:900;">我的資料</div>
+                          <div class="muted" style="margin-top:6px;">戶號、車位、家庭成員、設定</div>
+                        </div>
+                        <span class="tag">規劃</span>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+                <section class="card">
+                  <div class="card-hd">
+                    <div class="left">
+                      <div class="chip" aria-hidden="true">${icons.settings}</div>
+                      <div style="min-width:0;">
+                        <h2>入口按鈕（示意）</h2>
+                        <p>由系統管理員設定啟用與連結</p>
+                      </div>
+                    </div>
+                    <span class="tag">入口</span>
+                  </div>
+                  <div class="card-bd" id="residentDashboardButtons"></div>
+                </section>
+              </div>
+            `;
+          },
+          afterRender() {
+            const cfg = loadConfig();
+            const host = document.getElementById("residentDashboardButtons");
+            const buttons = catalogResidentButtons.map((x) => ({ id: x.id, name: x.name, ...cfg.residentButtons[x.id] }));
+            host.innerHTML = `
+              <div class="list">
+                ${buttons.map((b) => `
+                  <div class="item">
+                    <div>
+                      <div style="font-weight:900;">${b.name}</div>
+                      <div class="meta" style="margin-top:6px;">
+                        <span class="tag ${b.enabled ? "red" : ""}">${b.enabled ? "啟用" : "停用"}</span>
+                        <span class="tag">${b.url || "（未設定）"}</span>
+                      </div>
+                    </div>
+                    <button class="btn ${b.enabled ? "btn-primary" : ""}" type="button" data-open="${b.id}" ${b.enabled ? "" : "disabled"}>開啟</button>
+                  </div>
+                `).join("")}
+              </div>
+            `;
+            host.querySelectorAll("[data-open]").forEach((btn) => {
+              btn.addEventListener("click", () => {
+                const id = btn.getAttribute("data-open");
+                const link = cfg.residentButtons?.[id]?.url;
+                if (!openLink(link)) toast("尚未設定連結（示意）");
+              });
+            });
+          },
+        },
+        makePlaceholderModule("resident-bulletin", "公告", "公告"),
+        makePlaceholderModule("resident-parcel", "包裹通知", "包裹"),
+        makePlaceholderModule("resident-facility", "設施預約", "預約"),
+        makePlaceholderModule("resident-parking", "綠色停車", "停車"),
+      ];
+
+      function getRoleModules(roleId) {
+        if (roleId === "admin") return adminModules;
+        if (roleId === "resident") return residentModules;
+        return communityModules;
+      }
+
+      const navEl = document.getElementById("nav");
+      const contentEl = document.getElementById("content");
+      const pageTitleEl = document.getElementById("pageTitle");
+      const pageSubtitleEl = document.getElementById("pageSubtitle");
+      const toastEl = document.getElementById("toast");
+      const globalSearchEl = document.getElementById("globalSearch");
+      const roleSelectEl = document.getElementById("roleSelect");
+      const brandRoleEl = document.getElementById("brandRole");
+
+      let currentRoleId = "community";
+
+      function toast(message) {
+        toastEl.textContent = message;
+        toastEl.classList.add("show");
+        window.clearTimeout(toastEl._t);
+        toastEl._t = window.setTimeout(() => toastEl.classList.remove("show"), 1600);
+      }
+
+      function parseRoute() {
+        const raw = String(location.hash || "").replace(/^#/, "").trim();
+        if (!raw) return { roleId: "community", moduleId: roles.community.defaultModule };
+        const parts = raw.split("/");
+        const roleId = roles[parts[0]] ? parts[0] : "community";
+        const moduleId = parts[1] || roles[roleId].defaultModule;
+        return { roleId, moduleId };
+      }
+
+      function setRoute(roleId, moduleId) {
+        history.replaceState(null, "", `#${roleId}/${moduleId}`);
+      }
+
+      function buildNav(roleId) {
+        const modules = getRoleModules(roleId);
+        navEl.innerHTML = modules.map((m) => `
+          <a href="#${roleId}/${m.id}" data-id="${m.id}" aria-current="false">
+            <span aria-hidden="true">${m.icon}</span>
+            <span class="label">${m.name}</span>
+            <span class="hint">${m.hint}</span>
+          </a>
+        `).join("");
+        navEl.querySelectorAll("a").forEach((a) => {
+          a.addEventListener("click", (e) => {
+            e.preventDefault();
+            setActive(roleId, a.dataset.id);
+          });
+        });
+      }
+
+      function setActive(roleId, moduleId) {
+        const modules = getRoleModules(roleId);
+        const m = modules.find((x) => x.id === moduleId) || modules[0];
+        currentRoleId = roleId;
+
+        roleSelectEl.value = roleId;
+        brandRoleEl.textContent = `${roles[roleId].name}｜原型`;
+        globalSearchEl.placeholder = roles[roleId].searchPlaceholder;
+
+        buildNav(roleId);
+        navEl.querySelectorAll("a").forEach((a) => {
+          a.setAttribute("aria-current", a.dataset.id === m.id ? "page" : "false");
+        });
+
+        pageTitleEl.textContent = m.name;
+        pageSubtitleEl.textContent = m.desc;
+        contentEl.innerHTML = "";
+
+        const tpl = document.getElementById("module-card-template");
+        const node = tpl.content.cloneNode(true);
+        const chip = node.querySelector(".chip");
+        chip.innerHTML = m.icon;
+        node.querySelector("[data-title]").textContent = m.name;
+        node.querySelector("[data-desc]").textContent = m.desc;
+        node.querySelector("[data-badge]").textContent = m.badge;
+        node.querySelector("[data-body]").innerHTML = m.render();
+        node.querySelector("[data-action]").addEventListener("click", () => toast(`已進入「${m.name}」（示意）`));
+        contentEl.appendChild(node);
+
+        m.afterRender?.();
+        setRoute(roleId, m.id);
+      }
+
+      function initSlot() {
+        const btnAdd = document.getElementById("btnAddSlot");
+        const slotBody = document.getElementById("slotBody");
+        let slotCount = 1;
+        btnAdd.addEventListener("click", () => {
+          slotCount += 1;
+          const row = document.createElement("div");
+          row.className = "slot-row";
+          row.innerHTML = `
+            <div>
+              <div style="font-weight:800; letter-spacing:0.2px;">動態預留位 ${slotCount}</div>
+              <small>可作為新模組入口、快捷操作、通知中心等</small>
+            </div>
+            <span class="tag red">Slot ${slotCount}</span>
+          `;
+          slotBody.appendChild(row);
+          toast("已新增 Dynamic Slot（示意）");
+        });
+      }
+
+      function bindTopbar() {
+        document.getElementById("btnQuickAction").addEventListener("click", () => {
+          const r = parseRoute();
+          const name = getRoleModules(r.roleId).find((x) => x.id === r.moduleId)?.name || "功能";
+          toast(`快速新增：${name}（示意）`);
+        });
+        document.getElementById("btnDemoData").addEventListener("click", () => {
+          saveConfig(defaultConfig());
+          saveAccounts(defaultAccounts());
+          const r = parseRoute();
+          setActive(r.roleId, r.moduleId);
+          toast("已產生示例資料（示意）");
+        });
+        globalSearchEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            toast(`搜尋：「${globalSearchEl.value || "（空）"}」（示意）`);
+          }
+        });
+        roleSelectEl.addEventListener("change", () => {
+          const roleId = roleSelectEl.value;
+          setActive(roleId, roles[roleId].defaultModule);
+        });
+      }
+
+      initSlot();
+      bindTopbar();
+      const initial = parseRoute();
+      setActive(initial.roleId, initial.moduleId);
+      window.addEventListener("hashchange", () => {
+        const r = parseRoute();
+        setActive(r.roleId, r.moduleId);
+      });
+    </script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script>
+      const firebaseConfig = {
+        apiKey: "AIzaSyCRvuSL6t3RS5_523CGd3gxJgdRDuDXFvQ",
+        authDomain: "nw-app-v2.firebaseapp.com",
+        projectId: "nw-app-v2",
+        storageBucket: "nw-app-v2.firebasestorage.app",
+        messagingSenderId: "448152056602",
+        appId: "1:448152056602:web:3ed9e5d9ed04d541cf32a3",
+        measurementId: "G-G2ZD312B6V",
+      };
+      try {
+        firebase.initializeApp(firebaseConfig);
+      } catch {}
+      firebase.auth().onAuthStateChanged((user) => {
+        const role = sessionStorage.getItem("csp_role");
+        if (!user || role !== "community") {
+          location.href = "index.html";
+        }
+      });
+    </script>
+  </body>
+</html>
