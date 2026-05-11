@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta http-equiv="refresh" content="0; url=admin.html#community/parking" />
     <title>綠色停車</title>
+    <link id="appIcon" rel="icon" type="image/svg+xml" href="" />
+    <script>
+      (() => {
+        try {
+          const key = "nw_brand_v1";
+          const defPath =
+            "M12 2.6c1.2 5.3 2.2 6.5 9.4 9.4-7.2 2.9-8.2 4.1-9.4 9.4-1.2-5.3-2.2-6.5-9.4-9.4 7.2-2.9 8.2-4.1 9.4-9.4Z";
+          const raw = localStorage.getItem(key);
+          const parsed = raw ? JSON.parse(raw) : null;
+          const pathD = parsed && typeof parsed.logoPathD === "string" && parsed.logoPathD.trim() ? parsed.logoPathD.trim() : defPath;
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="white"/><path fill="#D32F2F" d="${pathD}"/></svg>`;
+          const iconEl = document.getElementById("appIcon");
+          if (iconEl) iconEl.setAttribute("href", `data:image/svg+xml,${encodeURIComponent(svg)}`);
+        } catch {}
+      })();
+    </script>
   </head>
   <body>
     <script>

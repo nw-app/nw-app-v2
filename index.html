@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>社區服務系統平台｜登入</title>
+    <link id="appIcon" rel="icon" type="image/svg+xml" href="" />
     <style>
       :root {
         --brand: #d32f2f;
@@ -219,11 +220,11 @@
       <div class="mast-inner">
         <div class="mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" style="width:46px;height:46px;">
-            <path d="M12 2.6c1.2 5.3 2.2 6.5 9.4 9.4-7.2 2.9-8.2 4.1-9.4 9.4-1.2-5.3-2.2-6.5-9.4-9.4 7.2-2.9 8.2-4.1 9.4-9.4Z" fill="#D32F2F"/>
+            <path id="brandMark" d="M12 2.6c1.2 5.3 2.2 6.5 9.4 9.4-7.2 2.9-8.2 4.1-9.4 9.4-1.2-5.3-2.2-6.5-9.4-9.4 7.2-2.9 8.2-4.1 9.4-9.4Z" fill="#D32F2F"/>
           </svg>
         </div>
-        <div class="mast-title">西北守護星</div>
-        <div class="mast-sub">西北好用心 住戶更安心</div>
+        <div class="mast-title" id="brandName">西北守護星</div>
+        <div class="mast-sub" id="brandSlogan">西北好用心 住戶更安心</div>
       </div>
     </header>
 
@@ -283,6 +284,52 @@
 
       firebase.initializeApp(firebaseConfig);
       const auth = firebase.auth();
+
+      const BRAND_STORAGE_KEY = "nw_brand_v1";
+      const DEFAULT_BRAND = Object.freeze({
+        name: "西北守護星",
+        slogan: "西北好用心 住戶更安心",
+        logoPathD: "M12 2.6c1.2 5.3 2.2 6.5 9.4 9.4-7.2 2.9-8.2 4.1-9.4 9.4-1.2-5.3-2.2-6.5-9.4-9.4 7.2-2.9 8.2-4.1 9.4-9.4Z",
+      });
+
+      function loadBrand() {
+        try {
+          const raw = localStorage.getItem(BRAND_STORAGE_KEY);
+          if (!raw) return DEFAULT_BRAND;
+          const parsed = JSON.parse(raw);
+          const name = parsed && typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : DEFAULT_BRAND.name;
+          const slogan = parsed && typeof parsed.slogan === "string" && parsed.slogan.trim() ? parsed.slogan.trim() : DEFAULT_BRAND.slogan;
+          const logoPathD =
+            parsed && typeof parsed.logoPathD === "string" && parsed.logoPathD.trim()
+              ? parsed.logoPathD.trim()
+              : DEFAULT_BRAND.logoPathD;
+          return { name, slogan, logoPathD };
+        } catch {
+          return DEFAULT_BRAND;
+        }
+      }
+
+      function applyBrand() {
+        const brand = loadBrand();
+        const nameEl = document.getElementById("brandName");
+        const sloganEl = document.getElementById("brandSlogan");
+        const markEl = document.getElementById("brandMark");
+        if (nameEl) nameEl.textContent = brand.name;
+        if (sloganEl) sloganEl.textContent = brand.slogan;
+        if (markEl) markEl.setAttribute("d", brand.logoPathD);
+
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="white"/><path fill="#D32F2F" d="${brand.logoPathD}"/></svg>`;
+        const href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+        const iconEl = document.getElementById("appIcon");
+        if (iconEl) iconEl.setAttribute("href", href);
+      }
+
+      window.setBrand = (next) => {
+        localStorage.setItem(BRAND_STORAGE_KEY, JSON.stringify(next || {}));
+        location.reload();
+      };
+
+      applyBrand();
 
       const routes = Object.freeze({
         admin: "system.html",
