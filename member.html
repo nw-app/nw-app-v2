@@ -27,13 +27,6 @@
             <span class="user-avatar-fallback" id="userAvatarFallback" aria-hidden="true">U</span>
           </button>
         </div>
-        <div class="user-menu" id="userMenu" hidden>
-          <div class="user-meta" id="loginInfo">—</div>
-          <div class="menu-actions">
-            <button class="btn" type="button" id="btnGoCommunity">社區後台</button>
-            <button class="btn btn-primary" type="button" id="btnSignOut">登出</button>
-          </div>
-        </div>
       </header>
 
       <div class="frame-midtop" aria-label="頁中上">
@@ -54,8 +47,42 @@
 
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="js/firebase-config.js"></script>
     <script src="js/member.js"></script>
     <script src="js/pwa.js"></script>
+
+    <div class="modal" id="profileModal" hidden>
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="profileModalTitle">個人資訊</h3>
+          <button class="modal-close" type="button" id="btnCloseProfileModal" aria-label="關閉">×</button>
+        </div>
+        <form id="profileForm">
+          <div class="modal-body">
+            <div class="profile-item">
+              <div class="profile-label">角色名稱</div>
+              <div class="profile-value" id="profileRole">—</div>
+            </div>
+            <div class="profile-item">
+              <div class="profile-label">大頭照</div>
+              <div class="profile-avatar">
+                <span class="user-avatar-fallback" id="profileAvatarFallback" aria-hidden="true">U</span>
+              </div>
+            </div>
+            <div class="profile-item">
+              <div class="profile-label">姓名</div>
+              <input id="profileName" type="text" placeholder="請輸入姓名" autocomplete="off" />
+            </div>
+            <div class="status" id="profileStatus" hidden></div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" id="btnCloseProfileModalFt">關閉</button>
+            <button class="btn btn-primary" type="button" id="btnSignOut">登出</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </body>
 </html>

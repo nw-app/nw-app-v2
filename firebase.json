@@ -1,0 +1,22 @@
+{
+  "firestore": {
+    "rules": "firebase/firebase.rules"
+  },
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "firebase/**"
+    ],
+    "headers": [
+      {
+        "source": "/manifest.webmanifest",
+        "headers": [
+          { "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" }
+        ]
+      }
+    ]
+  }
+}

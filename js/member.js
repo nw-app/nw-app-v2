@@ -6,10 +6,21 @@
     firebase.initializeApp(firebaseConfig);
   } catch {}
   const auth = firebase.auth();
+  const db = firebase.firestore();
+  try {
+    db.settings({ experimentalAutoDetectLongPolling: true, ignoreUndefinedProperties: true });
+  } catch {}
 
   const STORAGE_CONFIG = "csp_config_v1";
   const STORAGE_ACCOUNTS = "csp_accounts_v1";
   const STORAGE_ACTIVE_COMMUNITY = "csp_active_community_v1";
+
+  const state = {
+    communities: [],
+    config: null,
+    unsubCommunities: null,
+    unsubConfig: null,
+  };
   const catalogResidentButtons = [
     { id: "resident-bulletin", name: "公告", defaultUrl: "#resident/resident-bulletin", hint: "通知" },
     { id: "resident-parcel", name: "包裹通知", defaultUrl: "#resident/resident-parcel", hint: "收發" },
@@ -28,17 +39,7 @@
   }
 
   function loadAccounts() {
-    try {
-      const raw = localStorage.getItem(STORAGE_ACCOUNTS);
-      if (!raw) return { communities: [], residents: [] };
-      const parsed = JSON.parse(raw);
-      return {
-        communities: Array.isArray(parsed.communities) ? parsed.communities : [],
-        residents: Array.isArray(parsed.residents) ? parsed.residents : [],
-      };
-    } catch {
-      return { communities: [], residents: [] };
-    }
+    return { communities: state.communities, residents: [] };
   }
 
   function resolveActiveCommunityId() {
@@ -53,29 +54,62 @@
     return "default";
   }
 
-  function configKey(communityId) {
-    return `${STORAGE_CONFIG}:${String(communityId || "default")}`;
-  }
-
-  function ensureConfigMigrated(communityId) {
-    const key = configKey(communityId);
-    if (localStorage.getItem(key)) return;
-    const legacy = localStorage.getItem(STORAGE_CONFIG);
-    if (legacy) localStorage.setItem(key, legacy);
+  function configDocRef(communityId) {
+    return db.collection("communities").doc(String(communityId || "default")).collection("settings").doc("app_config");
   }
 
   function loadConfig() {
     try {
-      const communityId = resolveActiveCommunityId();
-      ensureConfigMigrated(communityId);
-      const raw = localStorage.getItem(configKey(communityId));
-      if (!raw) return defaultConfig();
-      const parsed = JSON.parse(raw);
+      const parsed = state.config && typeof state.config === "object" ? state.config : {};
       const d = defaultConfig();
       return { residentButtons: { ...d.residentButtons, ...(parsed.residentButtons || {}) } };
     } catch {
       return defaultConfig();
     }
+  }
+
+  function refreshLoginInfo(user) {
+    const accounts = loadAccounts();
+    const cid = resolveActiveCommunityId();
+    const cname = accounts.communities.find((c) => c.id === cid)?.name || cid;
+    const el = document.getElementById("loginInfo");
+    if (el) el.textContent = `已登入：${user.email || "（未知）"}｜${cname}`;
+  }
+
+  function ensureConfigSubscription() {
+    const cid = resolveActiveCommunityId();
+    if (state.unsubConfig) state.unsubConfig();
+    state.unsubConfig = configDocRef(cid).onSnapshot(
+      (doc) => {
+        state.config = doc && doc.exists ? (doc.data() || null) : null;
+        render();
+      },
+      () => {
+        state.config = null;
+        render();
+      }
+    );
+  }
+
+  function ensureCommunitiesSubscription(user) {
+    if (state.unsubCommunities) return;
+    state.unsubCommunities = db.collection("communities").onSnapshot(
+      (snap) => {
+        state.communities = snap.docs.map((d) => {
+          const v = d.data() || {};
+          return { id: String(v.id || d.id), name: String(v.name || ""), enabled: v.enabled !== false };
+        });
+        refreshLoginInfo(user);
+        ensureConfigSubscription();
+        render();
+      },
+      () => {
+        state.communities = [];
+        refreshLoginInfo(user);
+        ensureConfigSubscription();
+        render();
+      }
+    );
   }
 
   function parseRoute() {
@@ -478,17 +512,27 @@
     if (r.moduleId === "home") hydrateHomeButtons();
   }
 
-  document.getElementById("btnGoCommunity").addEventListener("click", () => {
-    location.href = "admin.html#community/community-dashboard";
-  });
+  const btnGoCommunity = document.getElementById("btnGoCommunity");
+  if (btnGoCommunity) {
+    btnGoCommunity.addEventListener("click", () => {
+      location.href = "admin.html#community/community-dashboard";
+    });
+  }
 
-  document.getElementById("btnSignOut").addEventListener("click", async () => {
-    try {
-      sessionStorage.removeItem("csp_role");
-      await auth.signOut();
-    } catch {}
-    location.href = "index.html";
-  });
+  const bindSignOut = () => {
+    const btn = document.getElementById("btnSignOut");
+    if (!btn || btn._boundSignOut) return;
+    btn._boundSignOut = true;
+    btn.addEventListener("click", async () => {
+      try {
+        sessionStorage.removeItem("csp_role");
+        await auth.signOut();
+      } catch {}
+      location.href = "index.html";
+    });
+  };
+  bindSignOut();
+  document.addEventListener("DOMContentLoaded", bindSignOut);
 
   auth.onAuthStateChanged((user) => {
     const role = sessionStorage.getItem("csp_role");
@@ -500,12 +544,10 @@
       location.href = "index.html";
       return;
     }
-    const accounts = loadAccounts();
-    const cid = resolveActiveCommunityId();
-    const cname = accounts.communities.find((c) => c.id === cid)?.name || cid;
-    document.getElementById("loginInfo").textContent = `已登入：${user.email || "（未知）"}｜${cname}`;
+    refreshLoginInfo(user);
     const fallback = document.getElementById("userAvatarFallback");
     if (fallback) fallback.textContent = String(user.email || "U").trim().slice(0, 1).toUpperCase() || "U";
+    ensureCommunitiesSubscription(user);
     render();
   });
 

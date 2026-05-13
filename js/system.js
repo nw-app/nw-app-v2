@@ -6,10 +6,24 @@
     firebase.initializeApp(firebaseConfig);
   } catch {}
   const auth = firebase.auth();
+  const db = firebase.firestore();
+  const FieldValue = firebase.firestore.FieldValue;
+  try {
+    db.settings({ experimentalAutoDetectLongPolling: true, ignoreUndefinedProperties: true });
+  } catch {}
 
   const STORAGE_CONFIG = "csp_config_v1";
   const STORAGE_ACCOUNTS = "csp_accounts_v1";
   const STORAGE_ACTIVE_COMMUNITY = "csp_active_community_v1";
+
+  const state = {
+    communities: [],
+    configByCommunityId: new Map(),
+    unsubCommunities: null,
+    unsubConfig: null,
+    unsubResidents: null,
+    currentPage: "accounts",
+  };
 
   const catalogCommunityButtons = [
     { id: "parcel", name: "包裹郵件", defaultUrl: "#community/parcel" },
@@ -39,6 +53,10 @@
     return `${STORAGE_CONFIG}:${String(communityId || "default")}`;
   }
 
+  function configDocRef(communityId) {
+    return db.collection("communities").doc(String(communityId || "default")).collection("settings").doc("app_config");
+  }
+
   function loadActiveCommunityId(accounts) {
     const saved = localStorage.getItem(STORAGE_ACTIVE_COMMUNITY);
     const list = accounts && Array.isArray(accounts.communities) ? accounts.communities : [];
@@ -57,19 +75,10 @@
     localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, v);
   }
 
-  function ensureConfigMigrated(communityId) {
-    const key = configKey(communityId);
-    if (localStorage.getItem(key)) return;
-    const legacy = localStorage.getItem(STORAGE_CONFIG);
-    if (legacy) localStorage.setItem(key, legacy);
-  }
-
   function loadConfig(communityId) {
     try {
-      ensureConfigMigrated(communityId);
-      const raw = localStorage.getItem(configKey(communityId));
-      if (!raw) return defaultConfig();
-      const parsed = JSON.parse(raw);
+      const raw = state.configByCommunityId.get(String(communityId || "default")) || null;
+      const parsed = raw && typeof raw === "object" ? raw : {};
       const d = defaultConfig();
       return {
         communityButtons: { ...d.communityButtons, ...(parsed.communityButtons || {}) },
@@ -80,41 +89,20 @@
     }
   }
 
-  function saveConfig(cfg, communityId) {
-    localStorage.setItem(configKey(communityId), JSON.stringify(cfg));
-  }
-
-  function defaultAccounts() {
-    return {
-      communities: [
-        { id: "c001", name: "紅樹林社區", enabled: true, username: "community_admin_01", level: "銅", image: "" },
-        { id: "c002", name: "白石社區", enabled: true, username: "community_admin_02", level: "銅", image: "" },
-      ],
-      residents: [
-        { id: "r001", communityId: "c001", unit: "A-1203", name: "林小姐", enabled: true, username: "A1203" },
-        { id: "r002", communityId: "c001", unit: "B-0808", name: "陳先生", enabled: true, username: "B0808" },
-        { id: "r003", communityId: "c002", unit: "C-0501", name: "張小姐", enabled: false, username: "C0501" },
-      ],
-    };
+  async function saveConfig(cfg, communityId) {
+    const cid = String(communityId || "default");
+    await configDocRef(cid).set(
+      {
+        communityButtons: cfg && cfg.communityButtons ? cfg.communityButtons : {},
+        residentButtons: cfg && cfg.residentButtons ? cfg.residentButtons : {},
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
   }
 
   function loadAccounts() {
-    try {
-      const raw = localStorage.getItem(STORAGE_ACCOUNTS);
-      if (!raw) return defaultAccounts();
-      const parsed = JSON.parse(raw);
-      const d = defaultAccounts();
-      return {
-        communities: Array.isArray(parsed.communities) ? parsed.communities : d.communities,
-        residents: Array.isArray(parsed.residents) ? parsed.residents : d.residents,
-      };
-    } catch {
-      return defaultAccounts();
-    }
-  }
-
-  function saveAccounts(data) {
-    localStorage.setItem(STORAGE_ACCOUNTS, JSON.stringify(data));
+    return { communities: state.communities, residents: [] };
   }
 
   function normalizeText(v) {
@@ -171,7 +159,7 @@
     renderGroup("communityLinks", catalogCommunityButtons, "communityButtons");
     renderGroup("residentLinks", catalogResidentButtons, "residentButtons");
 
-    document.getElementById("btnSaveLinks").addEventListener("click", () => {
+    document.getElementById("btnSaveLinks").addEventListener("click", async () => {
       const next = loadConfig(activeCommunityId);
       document.querySelectorAll("[data-link-enabled]").forEach((el) => {
         const [storeKey, id] = el.getAttribute("data-link-enabled").split(":");
@@ -183,10 +171,18 @@
         next[storeKey][id] = next[storeKey][id] || {};
         next[storeKey][id].url = normalizeText(el.value);
       });
-      saveConfig(next, activeCommunityId);
+      setBusy(true);
       const s = document.getElementById("linksStatus");
-      s.textContent = `已儲存設定（社區：${activeCommunityName}）。`;
-      s.classList.remove("error");
+      try {
+        await saveConfig(next, activeCommunityId);
+        s.textContent = `已儲存設定（社區：${activeCommunityName}）。`;
+        s.classList.remove("error");
+      } catch {
+        s.textContent = "儲存失敗，請稍後再試。";
+        s.classList.add("error");
+      } finally {
+        setBusy(false);
+      }
     });
   }
 
@@ -196,17 +192,24 @@
     const node = document.getElementById("tplAccounts").content.cloneNode(true);
     host.appendChild(node);
 
-    const data = loadAccounts();
     const communitySelect = document.getElementById("r_community");
-    communitySelect.innerHTML = data.communities.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
-    const initialCommunityId = loadActiveCommunityId(data);
+    const statusEl = document.getElementById("acctStatus");
+
+    const setOptions = () => {
+      const list = state.communities || [];
+      communitySelect.innerHTML = list.map((c) => `<option value="${c.id}">${c.name || c.id}</option>`).join("");
+    };
+
+    setOptions();
+    const initialCommunityId = loadActiveCommunityId({ communities: state.communities });
     if (initialCommunityId) communitySelect.value = initialCommunityId;
 
+    let currentResidents = [];
+
     const renderResidentList = () => {
-      const d = loadAccounts();
-      const activeId = communitySelect.value || d.communities[0]?.id || "";
+      const activeId = communitySelect.value || "";
       const rList = document.getElementById("residentList");
-      const residents = d.residents.filter((r) => r.communityId === activeId);
+      const residents = (currentResidents || []).filter((r) => String(r.communityId || "") === String(activeId || ""));
       rList.innerHTML = residents.map((r) => `
             <div class="item">
               <div>
@@ -214,7 +217,6 @@
                 <div class="meta">
                   <span class="tag ${r.enabled ? "red" : ""}">${r.enabled ? "已開通" : "未開通"}</span>
                   <span class="tag">帳號：${r.username}</span>
-                  <span class="tag">ID：${r.id}</span>
                 </div>
               </div>
               <button class="btn" type="button" data-toggle-resident="${r.id}">${r.enabled ? "停用" : "啟用"}</button>
@@ -229,23 +231,67 @@
             </div>
           `;
 
-      document.querySelectorAll("[data-toggle-resident]").forEach((btn) => {
-        btn.addEventListener("click", () => {
+      rList.querySelectorAll("[data-toggle-resident]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-toggle-resident");
-          const next = loadAccounts();
-          next.residents = next.residents.map((r) => r.id === id ? { ...r, enabled: !r.enabled } : r);
-          saveAccounts(next);
-          renderResidentList();
+          const found = (currentResidents || []).find((x) => String(x.id || "") === String(id || ""));
+          if (!id || !found) return;
+          setBusy(true);
+          try {
+            await db.collection("users").doc(String(id)).set(
+              { enabled: !found.enabled, updatedAt: FieldValue.serverTimestamp() },
+              { merge: true }
+            );
+          } catch {
+            if (statusEl) {
+              statusEl.textContent = "更新失敗，請稍後再試。";
+              statusEl.classList.add("error");
+            }
+          } finally {
+            setBusy(false);
+          }
         });
       });
     };
 
+    const subscribeResidents = (communityId) => {
+      if (state.unsubResidents) state.unsubResidents();
+      currentResidents = [];
+      const rList = document.getElementById("residentList");
+      if (rList) rList.innerHTML = `<div class="status">讀取中...</div>`;
+      const cid = String(communityId || "default");
+      state.unsubResidents = db.collection("users").where("community", "==", cid).onSnapshot(
+        (snap) => {
+          currentResidents = snap.docs.map((d) => {
+            const v = d.data() || {};
+            const role = String(v.role || "");
+            if (role && role !== "住戶") return null;
+            return {
+              id: d.id,
+              communityId: String(v.community || cid),
+              unit: String(v.houseNo || v.unit || ""),
+              name: String(v.displayName || v.name || ""),
+              username: String(v.username || ""),
+              enabled: v.enabled !== false,
+            };
+          }).filter(Boolean);
+          renderResidentList();
+        },
+        () => {
+          if (statusEl) {
+            statusEl.textContent = "讀取住戶資料失敗。";
+            statusEl.classList.add("error");
+          }
+        }
+      );
+    };
+
     communitySelect.addEventListener("change", () => {
       setActiveCommunityId(communitySelect.value);
-      renderResidentList();
+      subscribeResidents(communitySelect.value);
     });
 
-    document.getElementById("formCreateResident").addEventListener("submit", (e) => {
+    document.getElementById("formCreateResident").addEventListener("submit", async (e) => {
       e.preventDefault();
       const communityId = communitySelect.value;
       const unit = normalizeText(document.getElementById("r_unit").value);
@@ -253,25 +299,47 @@
       const username = normalizeText(document.getElementById("r_user").value);
       const enabled = document.getElementById("r_enabled").value === "true";
       if (!communityId || !unit || !name || !username) {
-        const s = document.getElementById("acctStatus");
-        s.textContent = "請填寫所屬社區、戶號、姓名與登入帳號（示意）。";
-        s.classList.add("error");
+        if (statusEl) {
+          statusEl.textContent = "請填寫所屬社區、戶號、姓名與登入帳號（示意）。";
+          statusEl.classList.add("error");
+        }
         return;
       }
-      const next = loadAccounts();
-      const id = `r${String(Date.now()).slice(-6)}`;
-      next.residents = [{ id, communityId, unit, name, enabled, username }, ...next.residents];
-      saveAccounts(next);
-      document.getElementById("r_unit").value = "";
-      document.getElementById("r_name").value = "";
-      document.getElementById("r_user").value = "";
-      const s = document.getElementById("acctStatus");
-      s.textContent = "已建立住戶帳號（示意）。";
-      s.classList.remove("error");
-      renderResidentList();
+
+      setBusy(true);
+      try {
+        const id = db.collection("users").doc().id;
+        await db.collection("users").doc(id).set(
+          {
+            role: "住戶",
+            community: String(communityId || "default"),
+            houseNo: unit,
+            displayName: name,
+            username,
+            enabled: Boolean(enabled),
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        document.getElementById("r_unit").value = "";
+        document.getElementById("r_name").value = "";
+        document.getElementById("r_user").value = "";
+        if (statusEl) {
+          statusEl.textContent = "已建立住戶帳號（示意）。";
+          statusEl.classList.remove("error");
+        }
+      } catch {
+        if (statusEl) {
+          statusEl.textContent = "建立失敗，請稍後再試。";
+          statusEl.classList.add("error");
+        }
+      } finally {
+        setBusy(false);
+      }
     });
 
-    renderResidentList();
+    subscribeResidents(initialCommunityId || communitySelect.value || "default");
   }
 
   function renderCommunity() {
@@ -299,6 +367,7 @@
 
     let editCommunityId = "";
     let modalImageData = "";
+    let modalImageFile = null;
     let detachKeydown = () => {};
 
     const setImagePreview = (dataUrl) => {
@@ -322,15 +391,74 @@
       modalStatus.textContent = String(msg || "");
       modalStatus.hidden = false;
       modalStatus.classList.add("error");
+      modalStatus.scrollIntoView({ block: "nearest" });
     };
+
+    const showModalInfo = (msg) => {
+      if (!modalStatus) return;
+      modalStatus.textContent = String(msg || "");
+      modalStatus.hidden = false;
+      modalStatus.classList.remove("error");
+      modalStatus.scrollIntoView({ block: "nearest" });
+    };
+
+    const fileToCompressedDataUrl = (file) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("read-failed"));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error("image-decode-failed"));
+        img.onload = () => {
+          const targetW = 600;
+          const targetH = 300;
+          const ratio = targetW / targetH;
+          const srcW = img.naturalWidth || 0;
+          const srcH = img.naturalHeight || 0;
+          if (!srcW || !srcH) {
+            reject(new Error("bad-image"));
+            return;
+          }
+
+          let cropW = srcW;
+          let cropH = srcH;
+          let sx = 0;
+          let sy = 0;
+          if (srcW / srcH > ratio) {
+            cropW = Math.round(srcH * ratio);
+            cropH = srcH;
+            sx = Math.round((srcW - cropW) / 2);
+          } else {
+            cropW = srcW;
+            cropH = Math.round(srcW / ratio);
+            sy = Math.round((srcH - cropH) / 2);
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("no-canvas"));
+            return;
+          }
+          ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, targetW, targetH);
+          const out = canvas.toDataURL("image/jpeg", 0.78);
+          resolve(out);
+        };
+        img.src = String(reader.result || "");
+      };
+      reader.readAsDataURL(file);
+    });
 
     const closeModal = () => {
       if (!modal) return;
       modal.hidden = true;
       editCommunityId = "";
+      modalImageFile = null;
       setImagePreview("");
       clearModalStatus();
       if (form) form.reset();
+      if (imageInput) imageInput.value = "";
       detachKeydown();
       detachKeydown = () => {};
     };
@@ -344,7 +472,9 @@
       if (inputName) inputName.value = mode === "edit" && community ? String(community.name || "") : "";
       if (inputCode) inputCode.value = mode === "edit" && community ? String(community.username || "") : "";
       if (inputLevel) inputLevel.value = mode === "edit" && community ? String(community.level || "銅") : "銅";
-      setImagePreview(mode === "edit" && community ? String(community.image || "") : "");
+      modalImageFile = null;
+      if (imageInput) imageInput.value = "";
+      setImagePreview(mode === "edit" && community ? String(community.imageDataUrl || "") : "");
       modal.hidden = false;
 
       const onKeyDown = (e) => {
@@ -377,43 +507,64 @@
       const cList = document.getElementById("communityList");
       cList.innerHTML = (d.communities || []).map((c) => `
             <div class="item community-item">
-              <div class="community-thumb">
-                ${c.image ? `<img src="${c.image}" alt="社區圖片">` : `<div class="fallback">2:1</div>`}
+              <div class="community-row1">
+                <div class="community-row1-left">
+                  <div class="community-thumb">
+                    ${c.imageDataUrl ? `<img src="${c.imageDataUrl}" alt="社區圖片">` : `<div class="fallback">2:1</div>`}
+                  </div>
+                  <div class="community-code">${c.username}</div>
+                  <div class="community-name">${c.name}</div>
+                </div>
               </div>
-              <div>
-                <div style="font-weight:900;">${c.name}</div>
-                <div class="meta">
+              <div class="community-row2">
+                <div class="community-meta meta">
                   ${levelBadgeHtml(c.level)}
                   <div class="switch-label">${c.enabled ? "啟用" : "停用"}</div>
                   <label class="switch">
                     <input type="checkbox" data-toggle-community="${c.id}" ${c.enabled ? "checked" : ""} />
                     <span class="slider"></span>
                   </label>
-                  <div class="tag">代號：${c.username}</div>
                 </div>
-              </div>
-              <div class="community-actions">
-                <button class="btn" type="button" data-edit-community="${c.id}">編輯</button>
-                <button class="btn" type="button" data-delete-community="${c.id}">刪除</button>
+                <div class="community-actions">
+                  <button class="icon-btn" type="button" data-edit-community="${c.id}" aria-label="編輯" title="編輯">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-2.8l-.2-.2a2 2 0 0 0-2.8 0L5 17v3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                      <path d="M13.5 6.5 17.5 10.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                  <button class="icon-btn danger" type="button" data-delete-community="${c.id}" aria-label="刪除" title="刪除">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M9 4h6l1 2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                      <path d="M6 6h12l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                      <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           `).join("") || `<div class="status">尚無社區資料。</div>`;
 
       cList.querySelectorAll("[data-toggle-community]").forEach((input) => {
-        input.addEventListener("change", () => {
+        input.addEventListener("change", async () => {
           const id = input.getAttribute("data-toggle-community");
-          const next = loadAccounts();
-          next.communities = (next.communities || []).map((c) => c.id === id ? { ...c, enabled: input.checked } : c);
-          saveAccounts(next);
-          refresh();
+          if (!id) return;
+          setBusy(true);
+          try {
+            await db.collection("communities").doc(String(id)).set(
+              { enabled: Boolean(input.checked), updatedAt: FieldValue.serverTimestamp() },
+              { merge: true }
+            );
+          } catch {
+          } finally {
+            setBusy(false);
+          }
         });
       });
 
       cList.querySelectorAll("[data-edit-community]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const id = btn.getAttribute("data-edit-community");
-          const next = loadAccounts();
-          const c = (next.communities || []).find((x) => x.id === id);
+          const c = (state.communities || []).find((x) => x && String(x.id || "") === String(id || ""));
           if (!c) return;
           setActiveCommunityId(id);
           openModal("edit", c);
@@ -421,16 +572,28 @@
       });
 
       cList.querySelectorAll("[data-delete-community]").forEach((btn) => {
-        btn.addEventListener("click", () => {
+        btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-delete-community");
-          const next = loadAccounts();
-          next.communities = (next.communities || []).filter((c) => c.id !== id);
-          saveAccounts(next);
-          const activeId = loadActiveCommunityId(next);
-          if (!next.communities.find((c) => c.id === activeId)) {
-            setActiveCommunityId(next.communities[0]?.id || "default");
+          if (!id) return;
+          const target = (state.communities || []).find((c) => String(c?.id || "") === String(id)) || null;
+          const ok = await (window.nwConfirm ? window.nwConfirm({
+            title: "確認刪除",
+            message: `確定要刪除「${target ? String(target.name || id) : id}」？此操作無法復原。`,
+            okText: "刪除",
+            cancelText: "取消",
+            danger: true,
+          }) : Promise.resolve(window.confirm("確定要刪除？此操作無法復原。")));
+          if (!ok) return;
+          setBusy(true);
+          try {
+            await db.collection("communities").doc(String(id)).delete();
+            if (localStorage.getItem(STORAGE_ACTIVE_COMMUNITY) === String(id)) {
+              localStorage.removeItem(STORAGE_ACTIVE_COMMUNITY);
+            }
+          } catch {
+          } finally {
+            setBusy(false);
           }
-          refresh();
         });
       });
     };
@@ -459,6 +622,7 @@
       imageInput.addEventListener("change", () => {
         const file = imageInput.files && imageInput.files[0];
         if (!file) return;
+        modalImageFile = file;
         const reader = new FileReader();
         reader.onload = () => setImagePreview(String(reader.result || ""));
         reader.readAsDataURL(file);
@@ -466,7 +630,7 @@
     }
 
     if (form) {
-      form.addEventListener("submit", (e) => {
+      form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const name = normalizeText(inputName ? inputName.value : "");
         const code = normalizeText(inputCode ? inputCode.value : "");
@@ -475,36 +639,104 @@
           showModalError("請填寫社區名稱與社區代號。");
           return;
         }
-        const next = loadAccounts();
-        const list = next.communities || [];
+        const list = state.communities || [];
         const duplicated = list.some((c) => String(c?.username || "") === code && String(c?.id || "") !== String(editCommunityId || ""));
         if (duplicated) {
           showModalError("社區代號已存在，請更換。");
           return;
         }
+        showModalInfo("儲存中...");
+        setBusy(true);
+        try {
+          const isEdit = Boolean(editCommunityId);
+          const id = isEdit ? String(editCommunityId) : db.collection("communities").doc().id;
+          const existing = isEdit ? (state.communities || []).find((c) => String(c?.id || "") === id) : null;
+          let imageDataUrl = existing ? String(existing.imageDataUrl || "") : "";
+          if (modalImageFile) imageDataUrl = await fileToCompressedDataUrl(modalImageFile);
 
-        if (editCommunityId) {
-          const id = editCommunityId;
-          next.communities = list.map((c) => c.id === id ? { ...c, name, username: code, level, image: modalImageData } : c);
-          saveAccounts(next);
+          const payload = {
+            id,
+            name,
+            username: code,
+            level,
+            imageDataUrl,
+            updatedAt: FieldValue.serverTimestamp(),
+          };
+          if (!isEdit) payload.createdAt = FieldValue.serverTimestamp();
+          if (!isEdit) payload.enabled = true;
+
+          await db.collection("communities").doc(id).set(payload, { merge: true });
+          if (!isEdit) await saveConfig(defaultConfig(), id);
           setActiveCommunityId(id);
-        } else {
-          const id = `c${String(Date.now()).slice(-6)}`;
-          next.communities = [{ id, name, enabled: true, username: code, level, image: modalImageData }, ...list];
-          saveAccounts(next);
-          saveConfig(defaultConfig(), id);
-          setActiveCommunityId(id);
+          closeModal();
+        } catch (err) {
+          const code = String(err && err.code ? err.code : "");
+          if (code.includes("permission-denied")) {
+            showModalError("沒有權限執行此操作。");
+          } else if (code.includes("resource-exhausted")) {
+            showModalError("圖片過大，請換小一點的圖片再試。");
+          } else {
+            showModalError("儲存失敗，請稍後再試。");
+          }
+        } finally {
+          setBusy(false);
         }
-
-        closeModal();
-        refresh();
       });
     }
 
     refresh();
   }
 
+  function ensureCommunitiesSubscription() {
+    if (state.unsubCommunities) return;
+    state.unsubCommunities = db.collection("communities").onSnapshot(
+      (snap) => {
+        state.communities = snap.docs.map((d) => {
+          const v = d.data() || {};
+          return {
+            id: String(v.id || d.id),
+            name: String(v.name || ""),
+            username: String(v.username || ""),
+            enabled: v.enabled !== false,
+            level: String(v.level || "銅"),
+            imageDataUrl: String(v.imageDataUrl || ""),
+          };
+        });
+        openPage(state.currentPage);
+      },
+      () => {
+        state.communities = [];
+        openPage(state.currentPage);
+      }
+    );
+  }
+
+  function ensureConfigSubscription(communityId) {
+    const cid = String(communityId || "default");
+    if (state.unsubConfig) state.unsubConfig();
+    state.unsubConfig = configDocRef(cid).onSnapshot(
+      (doc) => {
+        state.configByCommunityId.set(cid, doc && doc.exists ? (doc.data() || {}) : {});
+        if (state.currentPage === "links") {
+          const subEl = document.getElementById("pageSubtitle");
+          const accounts = loadAccounts();
+          const activeId = loadActiveCommunityId(accounts);
+          const activeName = accounts.communities.find((c) => c.id === activeId)?.name || activeId;
+          if (subEl) subEl.textContent = `設定「社區後台」與「住戶前台」按鈕功能與連結（社區：${activeName}）`;
+          renderLinks();
+        }
+      },
+      () => {
+        state.configByCommunityId.set(cid, {});
+        if (state.currentPage === "links") {
+          renderLinks();
+        }
+      }
+    );
+  }
+
   function openPage(page) {
+    state.currentPage = page;
     const titleEl = document.getElementById("pageTitle");
     const subEl = document.getElementById("pageSubtitle");
     setNavCurrent(page);
@@ -529,30 +761,37 @@
     const activeName = accounts.communities.find((c) => c.id === activeId)?.name || activeId;
     subEl.textContent = `設定「社區後台」與「住戶前台」按鈕功能與連結（社區：${activeName}）`;
     subEl.style.display = "";
+    ensureConfigSubscription(activeId);
     renderLinks();
   }
 
-  document.getElementById("btnReset").addEventListener("click", () => {
-    const accounts = defaultAccounts();
-    saveAccounts(accounts);
-    localStorage.removeItem(STORAGE_CONFIG);
-    accounts.communities.forEach((c) => {
-      localStorage.removeItem(configKey(c.id));
-      saveConfig(defaultConfig(), c.id);
+  const btnReset = document.getElementById("btnReset");
+  if (btnReset) {
+    btnReset.addEventListener("click", () => {
+      localStorage.removeItem(STORAGE_ACTIVE_COMMUNITY);
+      localStorage.removeItem(STORAGE_ACCOUNTS);
+      localStorage.removeItem(STORAGE_CONFIG);
+      location.reload();
     });
-    openPage("accounts");
-  });
+  }
 
-  document.getElementById("btnSignOut").addEventListener("click", async () => {
-    setBusy(true);
-    try {
-      sessionStorage.removeItem("csp_role");
-      await auth.signOut();
-      location.href = "index.html";
-    } catch {
-      location.href = "index.html";
-    }
-  });
+  const bindSignOut = () => {
+    const btn = document.getElementById("btnSignOut");
+    if (!btn || btn._boundSignOut) return;
+    btn._boundSignOut = true;
+    btn.addEventListener("click", async () => {
+      setBusy(true);
+      try {
+        sessionStorage.removeItem("csp_role");
+        await auth.signOut();
+        location.href = "index.html";
+      } catch {
+        location.href = "index.html";
+      }
+    });
+  };
+  bindSignOut();
+  document.addEventListener("DOMContentLoaded", bindSignOut);
 
   document.querySelectorAll("#nav button").forEach((b) => b.addEventListener("click", () => openPage(b.dataset.page)));
 
@@ -566,10 +805,13 @@
       location.href = "index.html";
       return;
     }
-    document.getElementById("loginInfo").textContent = `已登入：${user.email || "（未知）"}`;
+    const loginInfo = document.getElementById("loginInfo");
+    if (loginInfo) loginInfo.textContent = `已登入：${user.email || "（未知）"}`;
     const fallback = document.getElementById("userAvatarFallback");
     if (fallback) fallback.textContent = String(user.email || "U").trim().slice(0, 1).toUpperCase() || "U";
+
+    ensureCommunitiesSubscription();
+    openPage(state.currentPage);
   });
 
-  openPage("accounts");
 })();
