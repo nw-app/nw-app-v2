@@ -25,14 +25,12 @@ body {
 a { color: inherit; text-decoration: none; }
 button, input, select { font: inherit; }
 .mast {
-  width: min(520px, 100%);
   text-align: center;
-  display: grid;
-  justify-items: center;
-  gap: 10px;
+  margin: 0;
+  padding: 0;
 }
 .mast-inner {
-  width: 100%;
+  width: min(520px, 100%);
   text-align: center;
   display: grid;
   justify-items: center;
@@ -68,7 +66,8 @@ button, input, select { font: inherit; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 28px 18px 44px;
+  min-height: 100dvh;
+  padding: 18px 18px 44px;
   gap: 18px;
   background: radial-gradient(900px 520px at 20% 15%, rgba(211, 47, 47, 0.18), transparent 60%),
     radial-gradient(760px 520px at 80% 30%, rgba(17, 24, 39, 0.08), transparent 60%),
@@ -247,10 +246,27 @@ input:focus, select:focus {
   gap: 10px;
   margin-top: 4px;
 }
-@media (max-width: 420px) {
-  .mast { padding: 46px 16px 78px; }
-  .mast-title { font-size: 30px; }
-  .card { padding: 28px 20px; }
+@media (max-width: 420px), (max-height: 740px) {
+  .wrap { padding: 12px 14px 16px; gap: 12px; }
+  .mast-inner { gap: 6px; }
+  .mark { width: 48px; height: 48px; }
+  .mark img { width: 48px; height: 48px; }
+  .mast-title { font-size: 26px; }
+  .mast-sub { font-size: 13px; }
+
+  .card { padding: 20px 18px; gap: 14px; border-radius: 22px; }
+  .form { gap: 12px; }
+  .field { gap: 8px; }
+  .remember { font-size: 13px; gap: 8px; }
+  .remember input { width: 18px; height: 18px; }
+
+  input[type="text"], input[type="email"], input[type="password"], select { height: 48px; border-radius: 14px; }
+  .input-wrap input { padding-right: 48px; }
+  .icon-btn { width: 36px; height: 36px; border-radius: 12px; right: 8px; }
+
+  .status { padding: 10px 12px; border-radius: 14px; font-size: 12px; min-height: 38px; }
+  .actions { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn { height: 48px; border-radius: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; scroll-behavior: auto !important; }
