@@ -217,10 +217,13 @@ a { color: inherit; text-decoration: none; }
 }
 .layout {
   height: 100dvh;
+  height: 100svh;
   display: grid;
   grid-template-columns: 1fr;
   grid-template-rows: minmax(56px, 8vh) minmax(56px, 8vh) minmax(0, 76vh) minmax(56px, 8vh);
   background: var(--bg);
+  padding-bottom: 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
 }
 .frame-hd {
   display: flex;
