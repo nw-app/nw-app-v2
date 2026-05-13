@@ -1,4 +1,4 @@
-const CACHE_VERSION = "nwapp-v1";
+const CACHE_VERSION = "nwapp-v3";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -34,21 +34,39 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+self.addEventListener("message", (event) => {
+  const data = event && event.data ? event.data : null;
+  if (data && data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   if (new URL(req.url).origin !== self.location.origin) return;
 
+  const accept = req.headers.get("accept") || "";
+  const isHtml = req.mode === "navigate" || accept.includes("text/html");
+
   event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy)).catch(() => {});
-          return res;
-        })
-        .catch(() => caches.match("./index.html"));
-    })
+    (isHtml
+      ? fetch(req)
+          .then((res) => {
+            const copy = res.clone();
+            caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy)).catch(() => {});
+            return res;
+          })
+          .catch(() => caches.match(req).then((cached) => cached || caches.match("./index.html")))
+      : caches.match(req).then((cached) => {
+          if (cached) return cached;
+          return fetch(req)
+            .then((res) => {
+              const copy = res.clone();
+              caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy)).catch(() => {});
+              return res;
+            })
+            .catch(() => caches.match("./index.html"));
+        }))
   );
 });

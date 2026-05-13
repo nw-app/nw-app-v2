@@ -2,6 +2,14 @@
   const DISMISS_KEY = "nw_pwa_install_dismissed_v1";
   const DISMISS_DAYS = 30;
 
+  function updateForcePortrait() {
+    const hasTouch = typeof navigator !== "undefined" && Number(navigator.maxTouchPoints || 0) > 0;
+    const smallScreen = Math.min(window.innerWidth, window.innerHeight) <= 900;
+    const isMobileLike = hasTouch && smallScreen;
+    const isLandscape = window.innerWidth > window.innerHeight;
+    document.documentElement.classList.toggle("force-portrait", Boolean(isMobileLike && isLandscape));
+  }
+
   function isStandalone() {
     return window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
   }
@@ -79,9 +87,36 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js").catch(() => {});
+      updateForcePortrait();
+      navigator.serviceWorker.register("./sw.js").then((reg) => {
+        reg.update().catch(() => {});
+
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: "SKIP_WAITING" });
+        }
+
+        reg.addEventListener("updatefound", () => {
+          const worker = reg.installing;
+          if (!worker) return;
+          worker.addEventListener("statechange", () => {
+            if (worker.state === "installed" && navigator.serviceWorker.controller) {
+              if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+            }
+          });
+        });
+      }).catch(() => {});
     });
   }
+
+  window.addEventListener("resize", () => updateForcePortrait());
+  window.addEventListener("orientationchange", () => updateForcePortrait());
+
+  let didReloadForSw = false;
+  navigator.serviceWorker?.addEventListener?.("controllerchange", () => {
+    if (didReloadForSw) return;
+    didReloadForSw = true;
+    location.reload();
+  });
 
   let deferredPrompt = null;
   window.addEventListener("beforeinstallprompt", (e) => {

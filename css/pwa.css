@@ -55,3 +55,21 @@
   color: #fff;
   border-color: rgba(0, 0, 0, 0);
 }
+
+html.force-portrait body {
+  background: #0b0f16;
+}
+
+html.force-portrait .wrap,
+html.force-portrait .layout {
+  max-width: min(520px, calc(100vh - 24px));
+  margin-left: auto;
+  margin-right: auto;
+}
+
+html.force-portrait .pwa-install {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: min(520px, calc(100vh - 24px));
+}
