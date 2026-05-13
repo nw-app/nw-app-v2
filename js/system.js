@@ -87,8 +87,8 @@
   function defaultAccounts() {
     return {
       communities: [
-        { id: "c001", name: "紅樹林社區", enabled: true, username: "community_admin_01" },
-        { id: "c002", name: "白石社區", enabled: true, username: "community_admin_02" },
+        { id: "c001", name: "紅樹林社區", enabled: true, username: "community_admin_01", level: "銅", image: "" },
+        { id: "c002", name: "白石社區", enabled: true, username: "community_admin_02", level: "銅", image: "" },
       ],
       residents: [
         { id: "r001", communityId: "c001", unit: "A-1203", name: "林小姐", enabled: true, username: "A1203" },
@@ -147,7 +147,7 @@
       container.innerHTML = items.map((x) => {
         const v = cfg[storeKey]?.[x.id] || { enabled: true, url: x.defaultUrl };
         return `
-              <div style="display:grid; grid-template-columns: 1.05fr 0.7fr 1.25fr; gap:12px;">
+              <div class="link-row">
                 <div class="field">
                   <label>功能</label>
                   <input type="text" value="${x.name}" readonly />
@@ -199,51 +199,11 @@
     const data = loadAccounts();
     const communitySelect = document.getElementById("r_community");
     communitySelect.innerHTML = data.communities.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
-    const formCreateCommunity = document.getElementById("formCreateCommunity");
-    const cNameEl = document.getElementById("c_name");
-    const cUserEl = document.getElementById("c_user");
-    const submitBtn = formCreateCommunity ? formCreateCommunity.querySelector('button[type="submit"]') : null;
-    let editCommunityId = "";
+    const initialCommunityId = loadActiveCommunityId(data);
+    if (initialCommunityId) communitySelect.value = initialCommunityId;
 
-    const cancelBtn = document.createElement("button");
-    cancelBtn.type = "button";
-    cancelBtn.className = "btn";
-    cancelBtn.textContent = "取消";
-    cancelBtn.hidden = true;
-    cancelBtn.addEventListener("click", () => {
-      editCommunityId = "";
-      if (submitBtn) submitBtn.textContent = "建立";
-      cancelBtn.hidden = true;
-      if (cNameEl) cNameEl.value = "";
-      if (cUserEl) cUserEl.value = "";
-      const s = document.getElementById("acctStatus");
-      if (s) s.classList.remove("error");
-    });
-    if (submitBtn && submitBtn.parentElement && !submitBtn.parentElement.querySelector("[data-cancel-edit]")) {
-      cancelBtn.setAttribute("data-cancel-edit", "1");
-      submitBtn.parentElement.insertBefore(cancelBtn, submitBtn);
-    }
-
-    const renderLists = () => {
+    const renderResidentList = () => {
       const d = loadAccounts();
-      const cList = document.getElementById("communityList");
-      cList.innerHTML = d.communities.map((c) => `
-            <div class="item">
-              <div>
-                <div style="font-weight:900;">${c.name}</div>
-                <div class="meta">
-                  <span class="tag ${c.enabled ? "red" : ""}">${c.enabled ? "啟用" : "停用"}</span>
-                  <span class="tag">帳號：${c.username}</span>
-                  <span class="tag">ID：${c.id}</span>
-                </div>
-              </div>
-              <div style="display:flex; gap:10px; align-items:center;">
-                <button class="btn" type="button" data-edit-community="${c.id}">編輯</button>
-                <button class="btn" type="button" data-toggle-community="${c.id}">${c.enabled ? "停用" : "啟用"}</button>
-              </div>
-            </div>
-          `).join("");
-
       const activeId = communitySelect.value || d.communities[0]?.id || "";
       const rList = document.getElementById("residentList");
       const residents = d.residents.filter((r) => r.communityId === activeId);
@@ -269,83 +229,20 @@
             </div>
           `;
 
-      document.querySelectorAll("[data-toggle-community]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const id = btn.getAttribute("data-toggle-community");
-          const next = loadAccounts();
-          next.communities = next.communities.map((c) => c.id === id ? { ...c, enabled: !c.enabled } : c);
-          saveAccounts(next);
-          renderLists();
-        });
-      });
-
-      document.querySelectorAll("[data-edit-community]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const id = btn.getAttribute("data-edit-community");
-          const next = loadAccounts();
-          const c = next.communities.find((x) => x.id === id);
-          if (!c) return;
-          editCommunityId = id;
-          if (cNameEl) cNameEl.value = c.name || "";
-          if (cUserEl) cUserEl.value = c.username || "";
-          if (submitBtn) submitBtn.textContent = "儲存";
-          cancelBtn.hidden = false;
-          communitySelect.value = id;
-          setActiveCommunityId(id);
-          renderLists();
-        });
-      });
-
       document.querySelectorAll("[data-toggle-resident]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const id = btn.getAttribute("data-toggle-resident");
           const next = loadAccounts();
           next.residents = next.residents.map((r) => r.id === id ? { ...r, enabled: !r.enabled } : r);
           saveAccounts(next);
-          renderLists();
+          renderResidentList();
         });
       });
     };
 
     communitySelect.addEventListener("change", () => {
       setActiveCommunityId(communitySelect.value);
-      renderLists();
-    });
-
-    document.getElementById("formCreateCommunity").addEventListener("submit", (e) => {
-      e.preventDefault();
-      const name = normalizeText(document.getElementById("c_name").value);
-      const username = normalizeText(document.getElementById("c_user").value);
-      if (!name || !username) {
-        const s = document.getElementById("acctStatus");
-        s.textContent = "請填寫社區名稱與登入帳號。";
-        s.classList.add("error");
-        return;
-      }
-      const next = loadAccounts();
-      if (editCommunityId) {
-        const id = editCommunityId;
-        next.communities = next.communities.map((c) => c.id === id ? { ...c, name, username } : c);
-        saveAccounts(next);
-        setActiveCommunityId(id);
-        editCommunityId = "";
-        if (submitBtn) submitBtn.textContent = "建立";
-        cancelBtn.hidden = true;
-      } else {
-        const id = `c${String(Date.now()).slice(-6)}`;
-        next.communities = [{ id, name, enabled: true, username }, ...next.communities];
-        saveAccounts(next);
-        saveConfig(defaultConfig(), id);
-        setActiveCommunityId(id);
-        communitySelect.value = id;
-      }
-      document.getElementById("c_name").value = "";
-      document.getElementById("c_user").value = "";
-      communitySelect.innerHTML = next.communities.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
-      const s = document.getElementById("acctStatus");
-      s.textContent = "已儲存社區資料。";
-      s.classList.remove("error");
-      renderLists();
+      renderResidentList();
     });
 
     document.getElementById("formCreateResident").addEventListener("submit", (e) => {
@@ -371,10 +268,10 @@
       const s = document.getElementById("acctStatus");
       s.textContent = "已建立住戶帳號（示意）。";
       s.classList.remove("error");
-      renderLists();
+      renderResidentList();
     });
 
-    renderLists();
+    renderResidentList();
   }
 
   function renderCommunity() {
@@ -383,48 +280,228 @@
     const node = document.getElementById("tplCommunity").content.cloneNode(true);
     host.appendChild(node);
 
-    const data = loadAccounts();
-    const communities = Array.isArray(data.communities) ? data.communities : [];
-    const currentId = loadActiveCommunityId(data);
+    const addBtn = document.getElementById("btnAddCommunity");
+    const modal = document.getElementById("communityModal");
+    const modalTitle = document.getElementById("communityModalTitle");
+    const modalStatus = document.getElementById("communityModalStatus");
+    const form = document.getElementById("communityModalForm");
+    const inputName = document.getElementById("modal_c_name");
+    const inputCode = document.getElementById("modal_c_code");
+    const inputLevel = document.getElementById("modal_c_level");
+    const imageInput = document.getElementById("communityImageInput");
+    const imagePreview = document.getElementById("communityImagePreview");
+    const imagePlaceholder = document.getElementById("communityImagePlaceholder");
+    const imageUploader = document.getElementById("communityImageUploader");
+    const submitBtn = document.getElementById("btnSubmitCommunityModal");
+    const cancelBtn = document.getElementById("btnCancelCommunityModal");
+    const closeBtn = document.getElementById("btnCloseCommunityModal");
+    const backdrop = modal ? modal.querySelector("[data-modal-close]") : null;
 
-    const select = document.getElementById("activeCommunitySelect");
-    const label = document.getElementById("activeCommunityLabel");
-    const list = document.getElementById("communityPickList");
+    let editCommunityId = "";
+    let modalImageData = "";
+    let detachKeydown = () => {};
 
-    const setActive = (id) => {
-      setActiveCommunityId(id);
-      const fresh = loadAccounts();
-      const active = (fresh.communities || []).find((c) => c && c.id === id);
-      if (label) label.textContent = active ? `目前社區：${active.name}（${active.id}）` : `目前社區：${id}`;
-      if (select) select.value = id;
-      if (list) {
-        list.querySelectorAll("[data-community-pick]").forEach((btn) => {
-          const isActive = btn.getAttribute("data-community-pick") === id;
-          btn.setAttribute("aria-current", isActive ? "page" : "false");
-        });
+    const setImagePreview = (dataUrl) => {
+      modalImageData = dataUrl || "";
+      if (imagePreview) {
+        imagePreview.src = modalImageData || "";
+        imagePreview.style.display = modalImageData ? "block" : "none";
       }
+      if (imagePlaceholder) imagePlaceholder.style.display = modalImageData ? "none" : "block";
     };
 
-    if (select) {
-      select.innerHTML = communities.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
-      select.value = currentId;
-      select.addEventListener("change", () => setActive(select.value));
-    }
+    const clearModalStatus = () => {
+      if (!modalStatus) return;
+      modalStatus.hidden = true;
+      modalStatus.textContent = "";
+      modalStatus.classList.remove("error");
+    };
 
-    if (list) {
-      list.innerHTML = communities.map((c) => `
-        <button class="btn" type="button" data-community-pick="${c.id}" aria-current="${c.id === currentId ? "page" : "false"}">
-          ${c.name}
-        </button>
-      `).join("") || `
-        <div class="status">尚無社區資料。</div>
-      `;
-      list.querySelectorAll("[data-community-pick]").forEach((btn) => {
-        btn.addEventListener("click", () => setActive(btn.getAttribute("data-community-pick")));
+    const showModalError = (msg) => {
+      if (!modalStatus) return;
+      modalStatus.textContent = String(msg || "");
+      modalStatus.hidden = false;
+      modalStatus.classList.add("error");
+    };
+
+    const closeModal = () => {
+      if (!modal) return;
+      modal.hidden = true;
+      editCommunityId = "";
+      setImagePreview("");
+      clearModalStatus();
+      if (form) form.reset();
+      detachKeydown();
+      detachKeydown = () => {};
+    };
+
+    const openModal = (mode, community) => {
+      if (!modal) return;
+      editCommunityId = mode === "edit" && community ? String(community.id || "") : "";
+      if (modalTitle) modalTitle.textContent = mode === "edit" ? "編輯社區" : "新增社區";
+      if (submitBtn) submitBtn.textContent = mode === "edit" ? "儲存" : "建立";
+      clearModalStatus();
+      if (inputName) inputName.value = mode === "edit" && community ? String(community.name || "") : "";
+      if (inputCode) inputCode.value = mode === "edit" && community ? String(community.username || "") : "";
+      if (inputLevel) inputLevel.value = mode === "edit" && community ? String(community.level || "銅") : "銅";
+      setImagePreview(mode === "edit" && community ? String(community.image || "") : "");
+      modal.hidden = false;
+
+      const onKeyDown = (e) => {
+        if (e.key === "Escape") closeModal();
+      };
+      document.addEventListener("keydown", onKeyDown);
+      detachKeydown = () => document.removeEventListener("keydown", onKeyDown);
+
+      requestAnimationFrame(() => {
+        if (inputName) inputName.focus();
+      });
+    };
+
+    const levelBadgeHtml = (level) => {
+      const lv = String(level || "銅");
+      const safe = lv === "金" || lv === "銀" || lv === "銅" ? lv : "銅";
+      return `
+        <div class="level-badge" data-level="${safe}" aria-label="社區級別：${safe}">
+          <svg class="level-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="2" opacity="0.9"></circle>
+            <path d="M12 7.5l1.3 2.7 3 .4-2.2 2.1.5 3-2.6-1.4-2.6 1.4.5-3-2.2-2.1 3-.4L12 7.5z" fill="currentColor" opacity="0.85"></path>
+          </svg>
+          <span>${safe}</span>
+        </div>
+      `.trim();
+    };
+
+    const renderCommunityList = () => {
+      const d = loadAccounts();
+      const cList = document.getElementById("communityList");
+      cList.innerHTML = (d.communities || []).map((c) => `
+            <div class="item community-item">
+              <div class="community-thumb">
+                ${c.image ? `<img src="${c.image}" alt="社區圖片">` : `<div class="fallback">2:1</div>`}
+              </div>
+              <div>
+                <div style="font-weight:900;">${c.name}</div>
+                <div class="meta">
+                  ${levelBadgeHtml(c.level)}
+                  <div class="switch-label">${c.enabled ? "啟用" : "停用"}</div>
+                  <label class="switch">
+                    <input type="checkbox" data-toggle-community="${c.id}" ${c.enabled ? "checked" : ""} />
+                    <span class="slider"></span>
+                  </label>
+                  <div class="tag">代號：${c.username}</div>
+                </div>
+              </div>
+              <div class="community-actions">
+                <button class="btn" type="button" data-edit-community="${c.id}">編輯</button>
+                <button class="btn" type="button" data-delete-community="${c.id}">刪除</button>
+              </div>
+            </div>
+          `).join("") || `<div class="status">尚無社區資料。</div>`;
+
+      cList.querySelectorAll("[data-toggle-community]").forEach((input) => {
+        input.addEventListener("change", () => {
+          const id = input.getAttribute("data-toggle-community");
+          const next = loadAccounts();
+          next.communities = (next.communities || []).map((c) => c.id === id ? { ...c, enabled: input.checked } : c);
+          saveAccounts(next);
+          refresh();
+        });
+      });
+
+      cList.querySelectorAll("[data-edit-community]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-edit-community");
+          const next = loadAccounts();
+          const c = (next.communities || []).find((x) => x.id === id);
+          if (!c) return;
+          setActiveCommunityId(id);
+          openModal("edit", c);
+        });
+      });
+
+      cList.querySelectorAll("[data-delete-community]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-delete-community");
+          const next = loadAccounts();
+          next.communities = (next.communities || []).filter((c) => c.id !== id);
+          saveAccounts(next);
+          const activeId = loadActiveCommunityId(next);
+          if (!next.communities.find((c) => c.id === activeId)) {
+            setActiveCommunityId(next.communities[0]?.id || "default");
+          }
+          refresh();
+        });
+      });
+    };
+
+    const refresh = () => {
+      const d = loadAccounts();
+      const currentId = loadActiveCommunityId(d);
+
+      renderCommunityList();
+      setActiveCommunityId(currentId);
+    };
+
+    if (addBtn) addBtn.addEventListener("click", () => openModal("create"));
+    if (cancelBtn) cancelBtn.addEventListener("click", closeModal);
+    if (closeBtn) closeBtn.addEventListener("click", closeModal);
+    if (backdrop) backdrop.addEventListener("click", closeModal);
+    if (imageUploader && imageInput) {
+      const openPicker = () => imageInput.click();
+      imageUploader.addEventListener("click", openPicker);
+      imageUploader.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openPicker();
+        }
+      });
+      imageInput.addEventListener("change", () => {
+        const file = imageInput.files && imageInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => setImagePreview(String(reader.result || ""));
+        reader.readAsDataURL(file);
       });
     }
 
-    setActive(currentId);
+    if (form) {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const name = normalizeText(inputName ? inputName.value : "");
+        const code = normalizeText(inputCode ? inputCode.value : "");
+        const level = normalizeText(inputLevel ? inputLevel.value : "銅") || "銅";
+        if (!name || !code) {
+          showModalError("請填寫社區名稱與社區代號。");
+          return;
+        }
+        const next = loadAccounts();
+        const list = next.communities || [];
+        const duplicated = list.some((c) => String(c?.username || "") === code && String(c?.id || "") !== String(editCommunityId || ""));
+        if (duplicated) {
+          showModalError("社區代號已存在，請更換。");
+          return;
+        }
+
+        if (editCommunityId) {
+          const id = editCommunityId;
+          next.communities = list.map((c) => c.id === id ? { ...c, name, username: code, level, image: modalImageData } : c);
+          saveAccounts(next);
+          setActiveCommunityId(id);
+        } else {
+          const id = `c${String(Date.now()).slice(-6)}`;
+          next.communities = [{ id, name, enabled: true, username: code, level, image: modalImageData }, ...list];
+          saveAccounts(next);
+          saveConfig(defaultConfig(), id);
+          setActiveCommunityId(id);
+        }
+
+        closeModal();
+        refresh();
+      });
+    }
+
+    refresh();
   }
 
   function openPage(page) {
@@ -433,14 +510,16 @@
     setNavCurrent(page);
 
     if (page === "community") {
-      titleEl.textContent = "社區";
-      subEl.textContent = "選擇目前操作的社區（連結設定/帳號資料以此社區為準）";
+      titleEl.textContent = "社區列表";
+      subEl.textContent = "";
+      subEl.style.display = "none";
       renderCommunity();
       return;
     }
     if (page === "accounts") {
       titleEl.textContent = "帳號開通";
       subEl.textContent = "管理社區與住戶的登入帳號開通狀態（示意）";
+      subEl.style.display = "";
       renderAccounts();
       return;
     }
@@ -449,6 +528,7 @@
     const activeId = loadActiveCommunityId(accounts);
     const activeName = accounts.communities.find((c) => c.id === activeId)?.name || activeId;
     subEl.textContent = `設定「社區後台」與「住戶前台」按鈕功能與連結（社區：${activeName}）`;
+    subEl.style.display = "";
     renderLinks();
   }
 

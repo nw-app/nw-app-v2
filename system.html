@@ -118,36 +118,7 @@
     </template>
 
     <template id="tplAccounts">
-      <div class="grid">
-        <section class="card">
-          <div class="card-hd">
-            <div>
-              <h2>新增社區（建立社區帳號）</h2>
-              <p>每個社區的前台/後台資料各自獨立，互不相干</p>
-            </div>
-            <span class="tag red">社區</span>
-          </div>
-          <div class="card-bd">
-            <form class="form" id="formCreateCommunity">
-              <div class="row">
-                <div class="field">
-                  <label for="c_name">社區名稱</label>
-                  <input id="c_name" type="text" placeholder="例：新社區" />
-                </div>
-                <div class="field">
-                  <label for="c_user">登入帳號（示意）</label>
-                  <input id="c_user" type="text" placeholder="例：community_admin_03" />
-                </div>
-              </div>
-              <div style="display:flex; gap:10px; justify-content:flex-end;">
-                <button class="btn btn-primary" type="submit">建立</button>
-              </div>
-            </form>
-
-            <div class="list" id="communityList" style="margin-top:12px;"></div>
-          </div>
-        </section>
-
+      <div class="grid grid-1">
         <section class="card">
           <div class="card-hd">
             <div>
@@ -197,27 +168,56 @@
     </template>
 
     <template id="tplCommunity">
-      <div class="grid">
+      <div class="grid grid-1">
         <section class="card">
           <div class="card-hd">
             <div>
-              <h2>目前社區</h2>
-              <p>你在「連結」分頁編輯的設定，會套用到此社區</p>
+              <h2>新增社區（建立社區帳號）</h2>
             </div>
-            <span class="tag red">社區</span>
+            <button class="btn btn-primary" type="button" id="btnAddCommunity">新增社區</button>
           </div>
           <div class="card-bd">
-            <div class="row">
-              <div class="field">
-                <label for="activeCommunitySelect">選擇社區</label>
-                <select id="activeCommunitySelect"></select>
-              </div>
-              <div class="field">
-                <label>狀態</label>
-                <div class="status" id="activeCommunityLabel">—</div>
+            <div class="list" id="communityList" style="margin-top:12px;"></div>
+
+            <div class="modal" id="communityModal" hidden>
+              <div class="modal-backdrop" data-modal-close="1"></div>
+              <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="communityModalTitle">
+                <div class="modal-hd">
+                  <h3 class="modal-title" id="communityModalTitle">新增社區</h3>
+                  <button class="modal-close" type="button" id="btnCloseCommunityModal" aria-label="關閉">×</button>
+                </div>
+                <form id="communityModalForm">
+                  <div class="modal-body">
+                    <div class="image-uploader" id="communityImageUploader" role="button" tabindex="0" aria-label="上傳社區圖片">
+                      <img class="image-preview" id="communityImagePreview" alt="" />
+                      <div class="image-placeholder" id="communityImagePlaceholder">上傳社區圖片（2:1）</div>
+                      <input id="communityImageInput" type="file" accept="image/*" hidden />
+                    </div>
+                    <div class="field">
+                      <label for="modal_c_name">社區名稱</label>
+                      <input id="modal_c_name" type="text" placeholder="例：新社區" autocomplete="off" required />
+                    </div>
+                    <div class="field">
+                      <label for="modal_c_code">社區代號</label>
+                      <input id="modal_c_code" type="text" placeholder="例：c003" autocomplete="off" required />
+                    </div>
+                    <div class="field">
+                      <label for="modal_c_level">社區級別</label>
+                      <select id="modal_c_level" required>
+                        <option value="金">金</option>
+                        <option value="銀">銀</option>
+                        <option value="銅" selected>銅</option>
+                      </select>
+                    </div>
+                    <div class="status" id="communityModalStatus" hidden></div>
+                  </div>
+                  <div class="modal-ft">
+                    <button class="btn" type="button" id="btnCancelCommunityModal">取消</button>
+                    <button class="btn btn-primary" type="submit" id="btnSubmitCommunityModal">建立</button>
+                  </div>
+                </form>
               </div>
             </div>
-            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;" id="communityPickList"></div>
           </div>
         </section>
       </div>
