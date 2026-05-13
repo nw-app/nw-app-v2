@@ -20,11 +20,16 @@
           <div class="brand">
             <img src="logo.svg" alt="" />
             <div class="meta">
-              <div class="title">社區APP後台</div>
-              <div class="sub" id="loginInfo">—</div>
+              <div class="title">西北守護星</div>
             </div>
           </div>
-          <div class="actions">
+          <button class="user-avatar" type="button" id="btnUserMenu" aria-label="使用者選單" aria-haspopup="true" aria-expanded="false">
+            <span class="user-avatar-fallback" id="userAvatarFallback" aria-hidden="true">U</span>
+          </button>
+        </div>
+        <div class="user-menu" id="userMenu" hidden>
+          <div class="user-meta" id="loginInfo">—</div>
+          <div class="menu-actions">
             <select id="roleSelect" class="role-select" aria-label="切換角色">
               <option value="admin">系統管理員</option>
               <option value="community" selected>社區</option>

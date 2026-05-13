@@ -28,6 +28,7 @@ button, input, select { font: inherit; }
   text-align: center;
   margin: 0;
   padding: 0;
+  align-self: center;
 }
 .mast-inner {
   width: min(520px, 100%);
@@ -63,12 +64,11 @@ button, input, select { font: inherit; }
 }
 .wrap {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+  justify-items: center;
   min-height: 100dvh;
-  padding: 18px 18px 44px;
-  gap: 18px;
+  padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
   background: radial-gradient(900px 520px at 20% 15%, rgba(211, 47, 47, 0.18), transparent 60%),
     radial-gradient(760px 520px at 80% 30%, rgba(17, 24, 39, 0.08), transparent 60%),
     radial-gradient(820px 560px at 55% 85%, rgba(211, 47, 47, 0.12), transparent 58%);
@@ -89,6 +89,7 @@ button, input, select { font: inherit; }
   border-radius: 26px;
   border: 1px solid rgba(17, 24, 39, 0.08);
   box-shadow: 0 22px 60px rgba(17, 24, 39, 0.14);
+  grid-row: 2;
 }
 .card h2 {
   margin: 0;
@@ -247,7 +248,7 @@ input:focus, select:focus {
   margin-top: 4px;
 }
 @media (max-width: 420px), (max-height: 740px) {
-  .wrap { padding: 12px 14px 16px; gap: 12px; }
+  .wrap { padding: calc(12px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom)); }
   .mast-inner { gap: 6px; }
   .mark { width: 48px; height: 48px; }
   .mark img { width: 48px; height: 48px; }
@@ -265,7 +266,7 @@ input:focus, select:focus {
   .icon-btn { width: 36px; height: 36px; border-radius: 12px; right: 8px; }
 
   .status { padding: 10px 12px; border-radius: 14px; font-size: 12px; min-height: 38px; }
-  .actions { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .actions { gap: 10px; }
   .btn { height: 48px; border-radius: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {

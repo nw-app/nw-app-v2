@@ -20,11 +20,16 @@
           <div class="frame-brand">
             <img src="logo.svg" alt="" />
             <div class="meta">
-              <div class="title">住戶前台</div>
-              <div class="sub" id="loginInfo">—</div>
+              <div class="title">西北守護星</div>
             </div>
           </div>
-          <div class="frame-actions">
+          <button class="user-avatar" type="button" id="btnUserMenu" aria-label="使用者選單" aria-haspopup="true" aria-expanded="false">
+            <span class="user-avatar-fallback" id="userAvatarFallback" aria-hidden="true">U</span>
+          </button>
+        </div>
+        <div class="user-menu" id="userMenu" hidden>
+          <div class="user-meta" id="loginInfo">—</div>
+          <div class="menu-actions">
             <button class="btn" type="button" id="btnGoCommunity">社區後台</button>
             <button class="btn btn-primary" type="button" id="btnSignOut">登出</button>
           </div>

@@ -57,6 +57,43 @@
     return el;
   }
 
+  function initUserMenu() {
+    const btn = document.getElementById("btnUserMenu");
+    const menu = document.getElementById("userMenu");
+    if (!btn || !menu) return;
+
+    const close = () => {
+      menu.hidden = true;
+      btn.setAttribute("aria-expanded", "false");
+    };
+
+    const open = () => {
+      menu.hidden = false;
+      btn.setAttribute("aria-expanded", "true");
+    };
+
+    const toggle = () => {
+      if (menu.hidden) open();
+      else close();
+    };
+
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggle();
+    });
+
+    document.addEventListener("click", (e) => {
+      if (menu.hidden) return;
+      if (btn.contains(e.target) || menu.contains(e.target)) return;
+      close();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") close();
+    });
+  }
+
   function showBanner(onInstall) {
     if (isStandalone()) return;
     if (!shouldShow()) return;
@@ -88,6 +125,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       updateForcePortrait();
+      initUserMenu();
       navigator.serviceWorker.register("./sw.js").then((reg) => {
         reg.update().catch(() => {});
 

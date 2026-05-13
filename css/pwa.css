@@ -73,3 +73,56 @@ html.force-portrait .pwa-install {
   transform: translateX(-50%);
   width: min(520px, calc(100vh - 24px));
 }
+
+.user-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: #fff;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.user-avatar-fallback {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: rgba(211, 47, 47, 0.12);
+  color: #9f1c1c;
+  font-weight: 900;
+  display: grid;
+  place-items: center;
+  letter-spacing: 0.2px;
+}
+
+.user-menu[hidden] { display: none; }
+.user-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 12px;
+  width: min(320px, calc(100vw - 24px));
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  border-radius: 16px;
+  box-shadow: 0 18px 60px rgba(17, 24, 39, 0.2);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  z-index: 50;
+}
+
+.user-menu .user-meta {
+  font-size: 12px;
+  color: rgba(31, 41, 55, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-menu .menu-actions {
+  display: grid;
+  gap: 10px;
+}

@@ -20,11 +20,16 @@
           <div class="frame-brand">
             <img src="logo.svg" alt="" />
             <div class="meta">
-              <div class="title">系統管理員</div>
-              <div class="sub" id="loginInfo">—</div>
+              <div class="title">西北守護星</div>
             </div>
           </div>
-          <div class="frame-actions">
+          <button class="user-avatar" type="button" id="btnUserMenu" aria-label="使用者選單" aria-haspopup="true" aria-expanded="false">
+            <span class="user-avatar-fallback" id="userAvatarFallback" aria-hidden="true">U</span>
+          </button>
+        </div>
+        <div class="user-menu" id="userMenu" hidden>
+          <div class="user-meta" id="loginInfo">—</div>
+          <div class="menu-actions">
             <button class="btn" type="button" id="btnReset">重置示例</button>
             <button class="btn btn-primary" type="button" id="btnSignOut">登出</button>
           </div>
@@ -33,8 +38,8 @@
 
       <div class="frame-midtop" aria-label="頁中上">
         <div class="frame-title">
-          <h1 id="pageTitle">連結設定</h1>
-          <p id="pageSubtitle">設定「社區後台」與「住戶前台」按鈕功能與連結（使用本機儲存示意）</p>
+          <h1 id="pageTitle">帳號開通</h1>
+          <p id="pageSubtitle">管理社區與住戶的登入帳號開通狀態（示意）</p>
         </div>
       </div>
 
@@ -44,24 +49,33 @@
 
       <footer class="frame-ft" aria-label="系統管理員選單">
         <nav class="nav" id="nav">
-          <button type="button" data-page="links" aria-current="page">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M10.5 13.5 8 16a3 3 0 0 1-4.2-4.2l2.5-2.5" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
-              <path d="M13.5 10.5 16 8a3 3 0 0 1 4.2 4.2l-2.5 2.5" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
-              <path d="M9.5 14.5 14.5 9.5" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
-            </svg>
-            <span class="label">連結設定</span>
-            <span class="hint">UI</span>
-          </button>
-          <button type="button" data-page="accounts" aria-current="false">
+          <button type="button" data-page="accounts" aria-current="page">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M8.5 12.2a3.2 3.2 0 1 0-3.2-3.2 3.2 3.2 0 0 0 3.2 3.2Z" stroke="rgba(31,41,55,0.85)" stroke-width="1.7"/>
               <path d="M18 11.3a2.8 2.8 0 1 0-2.8-2.8 2.8 2.8 0 0 0 2.8 2.8Z" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" opacity="0.95"/>
               <path d="M3.5 20a6 6 0 0 1 10.5-3.8" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
               <path d="M14 20a4.8 4.8 0 0 1 9.5-1.2" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round" opacity="0.95"/>
             </svg>
-            <span class="label">帳號開通</span>
+            <span class="label">帳號</span>
             <span class="hint">Auth</span>
+          </button>
+          <button type="button" data-page="community" aria-current="false">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4.5 10.3 12 5.7l7.5 4.6" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M6.2 10.3V19h11.6v-8.7" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M9 19v-5.3h6V19" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="label">社區</span>
+            <span class="hint">App</span>
+          </button>
+          <button type="button" data-page="links" aria-current="false">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M10.5 13.5 8 16a3 3 0 0 1-4.2-4.2l2.5-2.5" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M13.5 10.5 16 8a3 3 0 0 1 4.2 4.2l-2.5 2.5" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M9.5 14.5 14.5 9.5" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+            <span class="label">連結</span>
+            <span class="hint">UI</span>
           </button>
         </nav>
       </footer>
@@ -180,6 +194,33 @@
         </section>
       </div>
       <div class="status" id="acctStatus" style="margin-top:12px;">提示：此頁面示範「開通/停用」狀態與資料欄位，登入權限示意以角色選擇為主。</div>
+    </template>
+
+    <template id="tplCommunity">
+      <div class="grid">
+        <section class="card">
+          <div class="card-hd">
+            <div>
+              <h2>目前社區</h2>
+              <p>你在「連結」分頁編輯的設定，會套用到此社區</p>
+            </div>
+            <span class="tag red">社區</span>
+          </div>
+          <div class="card-bd">
+            <div class="row">
+              <div class="field">
+                <label for="activeCommunitySelect">選擇社區</label>
+                <select id="activeCommunitySelect"></select>
+              </div>
+              <div class="field">
+                <label>狀態</label>
+                <div class="status" id="activeCommunityLabel">—</div>
+              </div>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;" id="communityPickList"></div>
+          </div>
+        </section>
+      </div>
     </template>
 
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>

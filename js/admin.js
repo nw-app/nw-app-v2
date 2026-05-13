@@ -220,6 +220,8 @@
       const cname = accounts.communities.find((c) => c.id === cid)?.name || cid;
       loginInfoEl.textContent = `已登入：${user.email || "（未知）"}｜${cname}`;
     }
+    const fallback = document.getElementById("userAvatarFallback");
+    if (fallback) fallback.textContent = String(user.email || "U").trim().slice(0, 1).toUpperCase() || "U";
     if (handleHashRoute()) return;
     renderDashboard();
   });

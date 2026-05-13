@@ -377,11 +377,67 @@
     renderLists();
   }
 
+  function renderCommunity() {
+    const host = document.getElementById("content");
+    host.innerHTML = "";
+    const node = document.getElementById("tplCommunity").content.cloneNode(true);
+    host.appendChild(node);
+
+    const data = loadAccounts();
+    const communities = Array.isArray(data.communities) ? data.communities : [];
+    const currentId = loadActiveCommunityId(data);
+
+    const select = document.getElementById("activeCommunitySelect");
+    const label = document.getElementById("activeCommunityLabel");
+    const list = document.getElementById("communityPickList");
+
+    const setActive = (id) => {
+      setActiveCommunityId(id);
+      const fresh = loadAccounts();
+      const active = (fresh.communities || []).find((c) => c && c.id === id);
+      if (label) label.textContent = active ? `目前社區：${active.name}（${active.id}）` : `目前社區：${id}`;
+      if (select) select.value = id;
+      if (list) {
+        list.querySelectorAll("[data-community-pick]").forEach((btn) => {
+          const isActive = btn.getAttribute("data-community-pick") === id;
+          btn.setAttribute("aria-current", isActive ? "page" : "false");
+        });
+      }
+    };
+
+    if (select) {
+      select.innerHTML = communities.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
+      select.value = currentId;
+      select.addEventListener("change", () => setActive(select.value));
+    }
+
+    if (list) {
+      list.innerHTML = communities.map((c) => `
+        <button class="btn" type="button" data-community-pick="${c.id}" aria-current="${c.id === currentId ? "page" : "false"}">
+          ${c.name}
+        </button>
+      `).join("") || `
+        <div class="status">尚無社區資料。</div>
+      `;
+      list.querySelectorAll("[data-community-pick]").forEach((btn) => {
+        btn.addEventListener("click", () => setActive(btn.getAttribute("data-community-pick")));
+      });
+    }
+
+    setActive(currentId);
+  }
+
   function openPage(page) {
     const titleEl = document.getElementById("pageTitle");
     const subEl = document.getElementById("pageSubtitle");
     setNavCurrent(page);
 
+    if (page === "community") {
+      titleEl.textContent = "社區";
+      subEl.textContent = "選擇目前操作的社區（連結設定/帳號資料以此社區為準）";
+      renderCommunity();
+      return;
+    }
     if (page === "accounts") {
       titleEl.textContent = "帳號開通";
       subEl.textContent = "管理社區與住戶的登入帳號開通狀態（示意）";
@@ -404,7 +460,7 @@
       localStorage.removeItem(configKey(c.id));
       saveConfig(defaultConfig(), c.id);
     });
-    openPage("links");
+    openPage("accounts");
   });
 
   document.getElementById("btnSignOut").addEventListener("click", async () => {
@@ -431,7 +487,9 @@
       return;
     }
     document.getElementById("loginInfo").textContent = `已登入：${user.email || "（未知）"}`;
+    const fallback = document.getElementById("userAvatarFallback");
+    if (fallback) fallback.textContent = String(user.email || "U").trim().slice(0, 1).toUpperCase() || "U";
   });
 
-  openPage("links");
+  openPage("accounts");
 })();
