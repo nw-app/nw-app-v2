@@ -1,0 +1,201 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isAdmin() {
+      return (request.auth != null && request.auth.token.email == "nwapp.eason@gmail.com")
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
+            && (
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == "系統管理員"
+              || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == "系統管理者"
+            )
+          );
+    }
+
+    function isCommunityStaff() {
+       return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') != "住戶"
+         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') != "停用";
+    }
+
+    match /users/{uid} {
+      allow read: if request.auth != null && (
+        request.auth.uid == uid || 
+        isAdmin() || 
+        (isCommunityStaff() && resource.data.community == getUserData().community)
+      );
+      
+      allow create: if request.auth != null && (
+        isAdmin() || 
+        (isCommunityStaff() && request.resource.data.community == getUserData().community)
+      );
+      
+      allow update: if request.auth != null && (
+        request.auth.uid == uid || 
+        isAdmin() || 
+        (isCommunityStaff() && resource.data.community == getUserData().community)
+      );
+      
+      allow delete: if request.auth != null && (
+        isAdmin() || 
+        (isCommunityStaff() && resource.data.community == getUserData().community)
+      );
+
+      // 住戶錢包與收益
+      match /wallet/{walletId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+      match /parking_earnings/{docId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+    
+    match /user_lookup/{phone} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    match /communities/{slug} {
+      // 允許任何人讀取社區基本資料 (for 預覽頁面)
+      allow read: if true;
+      allow update: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+      allow create, delete: if isAdmin();
+      
+      match /app_modules/{module} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+      }
+
+      match /announcements/{announceId} {
+        // 允許任何人讀取公告 (for 預覽頁面)
+        allow read: if true;
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+      }
+
+      match /settings/{settingId} {
+        // 允許任何人讀取設定 (for 設施預覽頁面)
+        allow read: if true;
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+      }
+
+      match /parking_spots/{spotId} {
+        allow read: if request.auth != null && (isAdmin() || slug == getUserData().community);
+        // 允許管理員寫入，或允許該社區的住戶寫入自己的車位
+        allow write: if request.auth != null && (
+          isAdmin() || 
+          (isCommunityStaff() && slug == getUserData().community) || 
+          (slug == getUserData().community)
+        );
+      }
+
+      match /parking_residents/{docId} {
+        allow read, list: if request.auth != null && (isAdmin() || slug == getUserData().community || docId == request.auth.uid || resource.data.uid == request.auth.uid);
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community) || docId == request.auth.uid || resource.data.uid == request.auth.uid);
+      }
+
+      match /parking_income_daily/{dayId} {
+        allow read: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+      }
+
+      match /parking_notifications/{nid} {
+        allow read, list: if request.auth != null && (isAdmin() || slug == getUserData().community);
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+      }
+
+      match /facility_configs/{configId} {
+        // 允許任何人讀取設施設定 (for 設施預覽頁面)
+        allow read: if true;
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+      }
+
+      match /reservations/{resId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+        allow update, delete: if request.auth != null && (
+          isAdmin() || 
+          (isCommunityStaff() && slug == getUserData().community) ||
+          resource.data.createdBy == request.auth.uid
+        );
+      }
+
+      match /mails/{mailId} {
+        allow read: if request.auth != null && (
+          isAdmin() || 
+          (isCommunityStaff() && slug == getUserData().community) ||
+          (getUserData().houseNo == resource.data.houseNo)
+        );
+        allow write: if request.auth != null && (
+          isAdmin() || 
+          (isCommunityStaff() && slug == getUserData().community)
+        );
+      }
+
+      match /points_logs/{logId} {
+        allow read: if request.auth != null && (
+          isAdmin() || 
+          (isCommunityStaff() && slug == getUserData().community) ||
+          resource.data.houseNo == getUserData().houseNo
+        );
+        allow create: if request.auth != null;
+      }
+
+      match /pending_accounts/{reqId} {
+        allow create: if request.resource.data.community == slug
+          && request.resource.data.status == "pending"
+          && request.resource.data.createdAt is int
+          && request.resource.data.get('photoDataUrl', '') is string
+          && request.resource.data.houseNo is string
+          && request.resource.data.displayName is string
+          && request.resource.data.phone is string
+          && request.resource.data.get('address', '') is string
+          && request.resource.data.email is string
+          && request.resource.data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+          && request.resource.data.password is string
+          && request.resource.data.password.matches('^[A-Za-z0-9]{6,}$');
+
+        allow read, list, update, delete: if request.auth != null && (
+          isAdmin() || (isCommunityStaff() && slug == getUserData().community)
+        );
+      }
+
+      match /house_nos/{houseNoId} {
+        allow read, list: if request.auth != null && (
+          isAdmin() || (isCommunityStaff() && slug == getUserData().community)
+        );
+        allow create, update, delete: if request.auth != null && (
+          isAdmin() || (isCommunityStaff() && slug == getUserData().community)
+        );
+      }
+
+      match /parking_schedules/{sid} {
+        allow read: if request.auth != null && (isAdmin() || slug == getUserData().community || resource.data.uid == request.auth.uid);
+        allow write: if request.auth != null && (isAdmin() || (slug == getUserData().community && (request.resource.data.uid == request.auth.uid || resource.data.uid == request.auth.uid)));
+      }
+
+      match /parking_bookings/{bid} {
+        allow read, list: if request.auth != null && (isAdmin() || slug == getUserData().community);
+        allow write: if request.auth != null && (isAdmin() || slug == getUserData().community);
+      }
+    }
+
+    // --- SOS 警報規則 (關鍵修復) ---
+    match /sos_alerts/{alertId} {
+      // 允許任何已登入使用者發送求救
+      allow create: if request.auth != null;
+      // 僅允許系統管理員，或同社區的管理員/總幹事讀取與解除警報
+      allow read, update, delete: if request.auth != null && (
+        isAdmin() || 
+        (isCommunityStaff() && resource.data.community == getUserData().community)
+      );
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

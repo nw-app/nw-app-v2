@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>系統管理員｜系統社區設定</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#d32f2f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <link rel="stylesheet" href="css/system.css" />
+    <link rel="stylesheet" href="css/pwa.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <header class="frame-hd">
+        <div class="frame-hd-row">
+          <div class="frame-brand">
+            <img src="logo.svg" alt="" />
+            <div class="meta">
+              <div class="title">系統管理員</div>
+              <div class="sub" id="loginInfo">—</div>
+            </div>
+          </div>
+          <div class="frame-actions">
+            <button class="btn" type="button" id="btnReset">重置示例</button>
+            <button class="btn btn-primary" type="button" id="btnSignOut">登出</button>
+          </div>
+        </div>
+        <div class="frame-title">
+          <h1 id="pageTitle">連結設定</h1>
+          <p id="pageSubtitle">設定「社區後台」與「住戶前台」按鈕功能與連結（使用本機儲存示意）</p>
+        </div>
+      </header>
+
+      <main class="frame-bd">
+        <section class="content" id="content" aria-live="polite"></section>
+      </main>
+
+      <footer class="frame-ft" aria-label="系統管理員選單">
+        <nav class="nav" id="nav">
+          <button type="button" data-page="links" aria-current="page">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M10.5 13.5 8 16a3 3 0 0 1-4.2-4.2l2.5-2.5" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M13.5 10.5 16 8a3 3 0 0 1 4.2 4.2l-2.5 2.5" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M9.5 14.5 14.5 9.5" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+            <span class="label">連結設定</span>
+            <span class="hint">UI</span>
+          </button>
+          <button type="button" data-page="accounts" aria-current="false">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M8.5 12.2a3.2 3.2 0 1 0-3.2-3.2 3.2 3.2 0 0 0 3.2 3.2Z" stroke="rgba(31,41,55,0.85)" stroke-width="1.7"/>
+              <path d="M18 11.3a2.8 2.8 0 1 0-2.8-2.8 2.8 2.8 0 0 0 2.8 2.8Z" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" opacity="0.95"/>
+              <path d="M3.5 20a6 6 0 0 1 10.5-3.8" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M14 20a4.8 4.8 0 0 1 9.5-1.2" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round" opacity="0.95"/>
+            </svg>
+            <span class="label">帳號開通</span>
+            <span class="hint">Auth</span>
+          </button>
+        </nav>
+      </footer>
+    </div>
+
+    <template id="tplLinks">
+      <div class="grid">
+        <section class="card">
+          <div class="card-hd">
+            <div>
+              <h2>社區後台按鈕</h2>
+              <p>控制社區後台入口（啟用/停用/連結）</p>
+            </div>
+            <span class="tag red">社區</span>
+          </div>
+          <div class="card-bd">
+            <div class="form" id="communityLinks"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-hd">
+            <div>
+              <h2>住戶前台按鈕</h2>
+              <p>控制住戶前台入口（啟用/停用/連結）</p>
+            </div>
+            <span class="tag">住戶</span>
+          </div>
+          <div class="card-bd">
+            <div class="form" id="residentLinks"></div>
+          </div>
+        </section>
+      </div>
+
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:14px;">
+        <button class="btn" type="button" id="btnSaveLinks">儲存設定</button>
+      </div>
+
+      <div class="status" id="linksStatus" style="margin-top:12px;">提示：連結支援 #community/parcel 或 #resident/resident-bulletin 或 https://...（示意）。</div>
+    </template>
+
+    <template id="tplAccounts">
+      <div class="grid">
+        <section class="card">
+          <div class="card-hd">
+            <div>
+              <h2>新增社區（建立社區帳號）</h2>
+              <p>每個社區的前台/後台資料各自獨立，互不相干</p>
+            </div>
+            <span class="tag red">社區</span>
+          </div>
+          <div class="card-bd">
+            <form class="form" id="formCreateCommunity">
+              <div class="row">
+                <div class="field">
+                  <label for="c_name">社區名稱</label>
+                  <input id="c_name" type="text" placeholder="例：新社區" />
+                </div>
+                <div class="field">
+                  <label for="c_user">登入帳號（示意）</label>
+                  <input id="c_user" type="text" placeholder="例：community_admin_03" />
+                </div>
+              </div>
+              <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button class="btn btn-primary" type="submit">建立</button>
+              </div>
+            </form>
+
+            <div class="list" id="communityList" style="margin-top:12px;"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-hd">
+            <div>
+              <h2>住戶帳號開通（示意）</h2>
+              <p>建立/停用住戶登入帳號（使用本機儲存示意）</p>
+            </div>
+            <span class="tag">住戶</span>
+          </div>
+          <div class="card-bd">
+            <div class="field">
+              <label for="r_community">所屬社區</label>
+              <select id="r_community"></select>
+            </div>
+            <form class="form" id="formCreateResident" style="margin-top:12px;">
+              <div class="row">
+                <div class="field">
+                  <label for="r_unit">戶號</label>
+                  <input id="r_unit" type="text" placeholder="例：A-1203" />
+                </div>
+                <div class="field">
+                  <label for="r_name">姓名</label>
+                  <input id="r_name" type="text" placeholder="例：林小姐" />
+                </div>
+              </div>
+              <div class="row">
+                <div class="field">
+                  <label for="r_user">登入帳號（示意）</label>
+                  <input id="r_user" type="text" placeholder="例：A1203" />
+                </div>
+                <div class="field">
+                  <label for="r_enabled">狀態</label>
+                  <select id="r_enabled">
+                    <option value="true" selected>啟用</option>
+                    <option value="false">停用</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button class="btn btn-primary" type="submit">建立</button>
+              </div>
+            </form>
+            <div class="list" id="residentList" style="margin-top:12px;"></div>
+          </div>
+        </section>
+      </div>
+      <div class="status" id="acctStatus" style="margin-top:12px;">提示：此頁面示範「開通/停用」狀態與資料欄位，登入權限示意以角色選擇為主。</div>
+    </template>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/system.js"></script>
+    <script src="js/pwa.js"></script>
+  </body>
+</html>
