@@ -1,4 +1,4 @@
-const CACHE_VERSION = "nwapp-v86";
+const CACHE_VERSION = "nwapp-v98";
 const PRECACHE = [
   "./",
   "./index.html",

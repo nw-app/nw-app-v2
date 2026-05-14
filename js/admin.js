@@ -8,7 +8,12 @@
   const auth = firebase.auth();
   const db = firebase.firestore();
   try {
-    db.settings({ experimentalAutoDetectLongPolling: true, ignoreUndefinedProperties: true });
+    db.settings({
+      experimentalAutoDetectLongPolling: true,
+      experimentalForceLongPolling: true,
+      useFetchStreams: false,
+      ignoreUndefinedProperties: true,
+    });
   } catch {}
 
   const STORAGE_CONFIG = "csp_config_v1";
@@ -18,20 +23,16 @@
   const state = {
     communities: [],
     config: null,
-    unsubCommunities: null,
-    unsubConfig: null,
   };
 
   const moduleCatalog = [
-    { id: "parcel", name: "包裹郵件", desc: "登記到貨、通知住戶、領取簽收", badge: "常用", page: "nw01.html" },
-    { id: "visitor", name: "訪客登記", desc: "到訪資訊、車牌、進出時間管理", badge: "安全", page: "nw02.html" },
-    { id: "residents", name: "住戶造冊", desc: "住戶/承租/車位/聯絡方式彙整", badge: "資料", page: "nw03.html" },
-    { id: "facility", name: "設施預約", desc: "時段控管、名額與審核流程", badge: "熱門", page: "nw04.html" },
-    { id: "bulletin", name: "公告系統", desc: "分類公告、置頂、閱讀回覆", badge: "通知", page: "nw05.html" },
-    { id: "parking", name: "綠色停車", desc: "電動車/節能車位管理與登記", badge: "綠能", page: "nw06.html" },
+    { id: "parcel", name: "包裹郵件", desc: "登記到貨、通知住戶、領取簽收", badge: "常用", page: "#community/parcel" },
+    { id: "visitor", name: "訪客登記", desc: "到訪資訊、車牌、進出時間管理", badge: "安全", page: "#community/visitor" },
+    { id: "residents", name: "住戶造冊", desc: "住戶/承租/車位/聯絡方式彙整", badge: "資料", page: "#community/residents" },
+    { id: "facility", name: "設施預約", desc: "時段控管、名額與審核流程", badge: "熱門", page: "#community/facility" },
+    { id: "bulletin", name: "公告系統", desc: "分類公告、置頂、閱讀回覆", badge: "通知", page: "#community/bulletin" },
+    { id: "parking", name: "綠色停車", desc: "電動車/節能車位管理與登記", badge: "綠能", page: "#community/parking" },
   ];
-
-  const moduleToPage = Object.fromEntries(moduleCatalog.map((m) => [m.id, m.page]));
 
   const toastEl = document.getElementById("toast");
   const contentEl = document.getElementById("content");
@@ -158,47 +159,39 @@
 
   function ensureConfigSubscription() {
     const cid = resolveActiveCommunityId();
-    if (state.unsubConfig) state.unsubConfig();
-    state.unsubConfig = configDocRef(cid).onSnapshot(
-      (doc) => {
-        state.config = doc && doc.exists ? (doc.data() || null) : null;
-        if (handleHashRoute()) return;
-        renderDashboard();
-      },
-      () => {
-        state.config = null;
-        if (handleHashRoute()) return;
-        renderDashboard();
-      }
-    );
+    configDocRef(cid).get().then((doc) => {
+      state.config = doc && doc.exists ? (doc.data() || null) : null;
+      if (handleHashRoute()) return;
+      renderDashboard();
+    }).catch(() => {
+      state.config = null;
+      if (handleHashRoute()) return;
+      renderDashboard();
+    });
   }
 
   function ensureCommunitiesSubscription(user) {
-    if (state.unsubCommunities) return;
-    state.unsubCommunities = db.collection("communities").onSnapshot(
-      (snap) => {
-        state.communities = snap.docs.map((d) => {
-          const v = d.data() || {};
-          return {
-            id: String(v.id || d.id),
-            name: String(v.name || ""),
-            username: String(v.username || ""),
-            enabled: v.enabled !== false,
-          };
-        });
-        refreshLoginInfo(user);
-        ensureConfigSubscription();
-        if (handleHashRoute()) return;
-        renderDashboard();
-      },
-      () => {
-        state.communities = [];
-        refreshLoginInfo(user);
-        ensureConfigSubscription();
-        if (handleHashRoute()) return;
-        renderDashboard();
-      }
-    );
+    db.collection("communities").get().then((snap) => {
+      state.communities = snap.docs.map((d) => {
+        const v = d.data() || {};
+        return {
+          id: String(v.id || d.id),
+          name: String(v.name || ""),
+          username: String(v.username || ""),
+          enabled: v.enabled !== false,
+        };
+      });
+      refreshLoginInfo(user);
+      ensureConfigSubscription();
+      if (handleHashRoute()) return;
+      renderDashboard();
+    }).catch(() => {
+      state.communities = [];
+      refreshLoginInfo(user);
+      ensureConfigSubscription();
+      if (handleHashRoute()) return;
+      renderDashboard();
+    });
   }
 
   function resolveUrl(moduleId) {
@@ -206,11 +199,10 @@
     if (!cfg.enabled) return { enabled: false, url: "" };
     const u = cfg.url;
     if (u.startsWith("#community/")) {
-      const id = u.split("/")[1] || moduleId;
-      return { enabled: true, url: moduleToPage[id] || moduleToPage[moduleId] || "" };
+      return { enabled: true, url: u };
     }
     if (u.startsWith("#")) {
-      return { enabled: true, url: moduleToPage[moduleId] || "" };
+      return { enabled: true, url: u };
     }
     return { enabled: true, url: u };
   }
@@ -269,18 +261,49 @@
     });
   }
 
+  function renderModule(moduleId) {
+    const m = moduleCatalog.find((x) => x && x.id === moduleId) || null;
+    if (!m) {
+      toast("尚未設定此頁面（示意）");
+      renderDashboard();
+      return;
+    }
+    contentEl.innerHTML = `
+      <section class="card">
+        <div class="card-hd">
+          <div class="left">
+            <div class="chip" aria-hidden="true">${iconSvg(m.id)}</div>
+            <div style="min-width:0;">
+              <h2>${m.name}</h2>
+              <p>${m.desc}</p>
+            </div>
+          </div>
+          <span class="tag red">${m.badge || ""}</span>
+        </div>
+        <div class="card-bd">
+          <div class="row">
+            <div class="muted">此功能頁面尚未建置（示意）。</div>
+          </div>
+          <button class="btn" type="button" data-back>返回總覽</button>
+        </div>
+      </section>
+    `;
+    const backBtn = contentEl.querySelector("[data-back]");
+    if (backBtn) {
+      backBtn.addEventListener("click", () => {
+        location.hash = "#community/community-dashboard";
+      });
+    }
+  }
+
   function handleHashRoute() {
     const raw = String(location.hash || "").replace(/^#/, "").trim();
     const parts = raw.split("/");
     if (parts[0] !== "community") return false;
     const moduleId = parts[1] || "community-dashboard";
     if (moduleId === "community-dashboard") return false;
-    const url = moduleToPage[moduleId];
-    if (url) {
-      location.replace(url);
-      return true;
-    }
-    return false;
+    renderModule(moduleId);
+    return true;
   }
 
   if (globalSearchEl) {
@@ -321,12 +344,45 @@
   bindSignOut();
   document.addEventListener("DOMContentLoaded", bindSignOut);
 
-  auth.onAuthStateChanged((user) => {
-    const role = sessionStorage.getItem("csp_role");
-    if (!user || role !== "community") {
-      location.href = "index.html";
+  auth.onAuthStateChanged(async (user) => {
+    const redirectToIndex = () => {
+      if (window.__nw_redirecting) return;
+      window.__nw_redirecting = true;
+      location.replace("index.html");
+    };
+
+    if (!user) {
+      redirectToIndex();
       return;
     }
+
+    let role = String(sessionStorage.getItem("csp_role") || "").trim().toLowerCase();
+    if (!role) {
+      try {
+        const udoc = await db.collection("users").doc(String(user.uid)).get();
+        const udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
+        const r = String(udata.role || "").trim();
+        if (r === "admin" || r === "系統管理員" || r === "系統管理者" || r === "系統") role = "admin";
+        else if (r === "community" || r === "社區") role = "community";
+        else if (r) role = "resident";
+        if (role) sessionStorage.setItem("csp_role", role);
+      } catch {}
+    }
+
+    if (role && role !== "community" && role !== "admin") {
+      if (role === "resident") {
+        const key = readUrlCommunityKey();
+        const cPart = key ? `?c=${encodeURIComponent(key)}` : "";
+        if (!window.__nw_redirecting) {
+          window.__nw_redirecting = true;
+          location.replace(`member.html${cPart}`);
+        }
+        return;
+      }
+      redirectToIndex();
+      return;
+    }
+
     refreshLoginInfo(user);
     ensureUrlCommunityKey(user).then(() => refreshLoginInfo(user)).catch(() => {});
     const fallback = document.getElementById("userAvatarFallback");

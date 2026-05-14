@@ -32,17 +32,7 @@
         </div>
       </header>
 
-      <div class="frame-midtop" aria-label="頁中上">
-        <div class="frame-hd-row">
-          <div class="frame-title">
-            <h1>功能入口</h1>
-            <p>圖卡式快速操作｜依系統設定啟用/停用與導向</p>
-          </div>
-          <div class="search" role="search" aria-label="全站快速搜尋">
-            <input id="globalSearch" type="text" placeholder="輸入住戶/訪客/包裹單號/設施名稱..." autocomplete="off" />
-          </div>
-        </div>
-      </div>
+      <div class="frame-midtop" aria-label="頁中上"></div>
 
       <main class="frame-bd" aria-label="頁中">
         <section id="content" aria-live="polite"></section>
@@ -54,27 +44,27 @@
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20v-9.5Z" stroke="currentColor" stroke-width="1.7"/><path d="M9 21v-7a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v7" stroke="currentColor" stroke-width="1.7"/></svg>
             <span class="label">總覽</span>
           </a>
-          <a href="nw01.html">
+          <a href="#community/parcel">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 8.5 12 13 3 8.5 12 4l9 4.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M21 8.5V17a2 2 0 0 1-1.1 1.8L12 22l-7.9-3.2A2 2 0 0 1 3 17V8.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 13v9" stroke="currentColor" stroke-width="1.7"/></svg>
             <span class="label">包裹</span>
           </a>
-          <a href="nw02.html">
+          <a href="#community/visitor">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z" stroke="currentColor" stroke-width="1.7"/><path d="M4 20a8 8 0 0 1 16 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
             <span class="label">訪客</span>
           </a>
-          <a href="nw03.html">
+          <a href="#community/residents">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 21v-9a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v9" stroke="currentColor" stroke-width="1.7"/><path d="M12 7a3.5 3.5 0 1 0-3.5-3.5A3.5 3.5 0 0 0 12 7Z" stroke="currentColor" stroke-width="1.7"/></svg>
             <span class="label">造冊</span>
           </a>
-          <a href="nw04.html">
+          <a href="#community/facility">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3h10v4H7V3Z" stroke="currentColor" stroke-width="1.7"/><path d="M6 7h12v14H6V7Z" stroke="currentColor" stroke-width="1.7"/><path d="M9 11h6M9 15h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
             <span class="label">預約</span>
           </a>
-          <a href="nw05.html">
+          <a href="#community/bulletin">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 4h10v16H7V4Z" stroke="currentColor" stroke-width="1.7"/><path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
             <span class="label">公告</span>
           </a>
-          <a href="nw06.html">
+          <a href="#community/parking">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 21V3h6a5 5 0 0 1 0 10H7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 13.5c2 2 2 5.5-1.5 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M14.5 13.5c2 2 2 5.5-1.5 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity="0.85"/></svg>
             <span class="label">停車</span>
           </a>
@@ -117,6 +107,7 @@
             <div class="status" id="profileStatus" hidden></div>
           </div>
           <div class="modal-ft">
+            <div class="profile-switch" id="profileSwitch" hidden></div>
             <button class="btn" type="button" id="btnCloseProfileModalFt">關閉</button>
             <button class="btn btn-primary" type="button" id="btnSignOut">登出</button>
           </div>

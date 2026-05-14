@@ -8,7 +8,12 @@
   const auth = firebase.auth();
   const db = firebase.firestore();
   try {
-    db.settings({ experimentalAutoDetectLongPolling: true, ignoreUndefinedProperties: true });
+    db.settings({
+      experimentalAutoDetectLongPolling: true,
+      experimentalForceLongPolling: true,
+      useFetchStreams: false,
+      ignoreUndefinedProperties: true,
+    });
   } catch {}
 
   const STORAGE_CONFIG = "csp_config_v1";
@@ -18,8 +23,6 @@
   const state = {
     communities: [],
     config: null,
-    unsubCommunities: null,
-    unsubConfig: null,
   };
   const catalogResidentButtons = [
     { id: "resident-bulletin", name: "公告", defaultUrl: "#resident/resident-bulletin", hint: "通知" },
@@ -146,38 +149,30 @@
 
   function ensureConfigSubscription() {
     const cid = resolveActiveCommunityId();
-    if (state.unsubConfig) state.unsubConfig();
-    state.unsubConfig = configDocRef(cid).onSnapshot(
-      (doc) => {
-        state.config = doc && doc.exists ? (doc.data() || null) : null;
-        render();
-      },
-      () => {
-        state.config = null;
-        render();
-      }
-    );
+    configDocRef(cid).get().then((doc) => {
+      state.config = doc && doc.exists ? (doc.data() || null) : null;
+      render();
+    }).catch(() => {
+      state.config = null;
+      render();
+    });
   }
 
   function ensureCommunitiesSubscription(user) {
-    if (state.unsubCommunities) return;
-    state.unsubCommunities = db.collection("communities").onSnapshot(
-      (snap) => {
-        state.communities = snap.docs.map((d) => {
-          const v = d.data() || {};
-          return { id: String(v.id || d.id), name: String(v.name || ""), username: String(v.username || ""), enabled: v.enabled !== false };
-        });
-        refreshLoginInfo(user);
-        ensureConfigSubscription();
-        render();
-      },
-      () => {
-        state.communities = [];
-        refreshLoginInfo(user);
-        ensureConfigSubscription();
-        render();
-      }
-    );
+    db.collection("communities").get().then((snap) => {
+      state.communities = snap.docs.map((d) => {
+        const v = d.data() || {};
+        return { id: String(v.id || d.id), name: String(v.name || ""), username: String(v.username || ""), enabled: v.enabled !== false };
+      });
+      refreshLoginInfo(user);
+      ensureConfigSubscription();
+      render();
+    }).catch(() => {
+      state.communities = [];
+      refreshLoginInfo(user);
+      ensureConfigSubscription();
+      render();
+    });
   }
 
   function parseRoute() {
@@ -602,16 +597,45 @@
   bindSignOut();
   document.addEventListener("DOMContentLoaded", bindSignOut);
 
-  auth.onAuthStateChanged((user) => {
-    const role = sessionStorage.getItem("csp_role");
+  auth.onAuthStateChanged(async (user) => {
+    const redirectToIndex = () => {
+      if (window.__nw_redirecting) return;
+      window.__nw_redirecting = true;
+      location.replace("index.html");
+    };
+
     if (!user) {
-      location.href = "index.html";
+      redirectToIndex();
       return;
     }
-    if (role !== "resident") {
-      location.href = "index.html";
+
+    let role = String(sessionStorage.getItem("csp_role") || "").trim().toLowerCase();
+    if (!role) {
+      try {
+        const udoc = await db.collection("users").doc(String(user.uid)).get();
+        const udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
+        const r = String(udata.role || "").trim();
+        if (r === "admin" || r === "系統管理員" || r === "系統管理者" || r === "系統") role = "admin";
+        else if (r === "community" || r === "社區") role = "community";
+        else if (r) role = "resident";
+        if (role) sessionStorage.setItem("csp_role", role);
+      } catch {}
+    }
+
+    if (role && role !== "resident" && role !== "admin") {
+      if (role === "community") {
+        const key = readUrlCommunityKey();
+        const cPart = key ? `?c=${encodeURIComponent(key)}` : "";
+        if (!window.__nw_redirecting) {
+          window.__nw_redirecting = true;
+          location.replace(`admin.html${cPart}#community/community-dashboard`);
+        }
+        return;
+      }
+      redirectToIndex();
       return;
     }
+
     refreshLoginInfo(user);
     ensureUrlCommunityKey(user).then(() => refreshLoginInfo(user)).catch(() => {});
     const fallback = document.getElementById("userAvatarFallback");

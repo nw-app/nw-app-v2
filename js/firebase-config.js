@@ -7,3 +7,5 @@ window.FIREBASE_CONFIG = {
   appId: "1:448152056602:web:3ed9e5d9ed04d541cf32a3",
   measurementId: "G-G2ZD312B6V",
 };
+
+try { firebase.firestore?.setLogLevel?.("silent"); } catch {}

@@ -9,7 +9,12 @@
   const db = firebase.firestore();
   const FieldValue = firebase.firestore.FieldValue;
   try {
-    db.settings({ experimentalAutoDetectLongPolling: true, experimentalForceLongPolling: true, ignoreUndefinedProperties: true });
+    db.settings({
+      experimentalAutoDetectLongPolling: true,
+      experimentalForceLongPolling: true,
+      useFetchStreams: false,
+      ignoreUndefinedProperties: true,
+    });
   } catch {}
 
   const STORAGE_CONFIG = "csp_config_v1";
@@ -668,16 +673,7 @@
         onError(err);
       });
 
-      state.unsubResidents = q.onSnapshot(
-        (snap) => {
-          window.clearTimeout(t);
-          applySnap(snap);
-        },
-        (err) => {
-          window.clearTimeout(t);
-          onError(err);
-        }
-      );
+      state.unsubResidents = null;
     };
 
     communitySelect.addEventListener("change", () => {
@@ -1536,65 +1532,57 @@
   }
 
   function ensureCommunitiesSubscription() {
-    if (state.unsubCommunities) return;
-    state.unsubCommunities = db.collection("communities").onSnapshot(
-      (snap) => {
-        const list = snap.docs.map((d) => {
-          const v = d.data() || {};
-          const units = Array.isArray(v.units) ? v.units.map((x) => String(x || "").trim()).filter(Boolean) : [];
-          return {
-            id: String(v.id || d.id),
-            name: String(v.name || ""),
-            username: String(v.username || ""),
-            enabled: v.enabled !== false,
-            level: String(v.level || "銅"),
-            area: String(v.area || "台北"),
-            imageDataUrl: String(v.imageDataUrl || ""),
-            units,
-          };
-        });
-        
-        const areaOrder = { "台北": 1, "新北": 2, "桃園": 3 };
-        state.communities = list.sort((a, b) => {
-          const oA = areaOrder[a.area] || 99;
-          const oB = areaOrder[b.area] || 99;
-          if (oA !== oB) return oA - oB;
-          const cA = String(a.username || "");
-          const cB = String(b.username || "");
-          return cA.localeCompare(cB, "zh-TW", { numeric: true });
-        });
-        
-        openPage(state.currentPage);
-      },
-      () => {
-        state.communities = [];
-        openPage(state.currentPage);
-      }
-    );
+    db.collection("communities").get().then((snap) => {
+      const list = snap.docs.map((d) => {
+        const v = d.data() || {};
+        const units = Array.isArray(v.units) ? v.units.map((x) => String(x || "").trim()).filter(Boolean) : [];
+        return {
+          id: String(v.id || d.id),
+          name: String(v.name || ""),
+          username: String(v.username || ""),
+          enabled: v.enabled !== false,
+          level: String(v.level || "銅"),
+          area: String(v.area || "台北"),
+          imageDataUrl: String(v.imageDataUrl || ""),
+          units,
+        };
+      });
+
+      const areaOrder = { "台北": 1, "新北": 2, "桃園": 3 };
+      state.communities = list.sort((a, b) => {
+        const oA = areaOrder[a.area] || 99;
+        const oB = areaOrder[b.area] || 99;
+        if (oA !== oB) return oA - oB;
+        const cA = String(a.username || "");
+        const cB = String(b.username || "");
+        return cA.localeCompare(cB, "zh-TW", { numeric: true });
+      });
+      openPage(state.currentPage);
+    }).catch(() => {
+      state.communities = [];
+      openPage(state.currentPage);
+    });
   }
 
   function ensureConfigSubscription(communityId) {
     const cid = String(communityId || "default");
-    if (state.unsubConfig) state.unsubConfig();
-    state.unsubConfig = configDocRef(cid).onSnapshot(
-      (doc) => {
-        state.configByCommunityId.set(cid, doc && doc.exists ? (doc.data() || {}) : {});
-        if (state.currentPage === "links") {
-          const subEl = document.getElementById("pageSubtitle");
-          const accounts = loadAccounts();
-          const activeId = loadActiveCommunityId(accounts);
-          const activeName = accounts.communities.find((c) => c.id === activeId)?.name || activeId;
-          if (subEl) subEl.textContent = `設定「社區後台」與「住戶前台」按鈕功能與連結（社區：${activeName}）`;
-          renderLinks();
-        }
-      },
-      () => {
-        state.configByCommunityId.set(cid, {});
-        if (state.currentPage === "links") {
-          renderLinks();
-        }
+    state.unsubConfig = null;
+    configDocRef(cid).get().then((doc) => {
+      state.configByCommunityId.set(cid, doc && doc.exists ? (doc.data() || {}) : {});
+      if (state.currentPage === "links") {
+        const subEl = document.getElementById("pageSubtitle");
+        const accounts = loadAccounts();
+        const activeId = loadActiveCommunityId(accounts);
+        const activeName = accounts.communities.find((c) => c.id === activeId)?.name || activeId;
+        if (subEl) subEl.textContent = `設定「社區後台」與「住戶前台」按鈕功能與連結（社區：${activeName}）`;
+        renderLinks();
       }
-    );
+    }).catch(() => {
+      state.configByCommunityId.set(cid, {});
+      if (state.currentPage === "links") {
+        renderLinks();
+      }
+    });
   }
 
   function openPage(page) {

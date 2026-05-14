@@ -234,9 +234,33 @@ html.force-portrait .pwa-install {
   justify-content: center;
   width: 100%;
 }
+.profile-row.single { justify-content: center; }
 .profile-value.community { color: var(--brand, #d32f2f); }
+.profile-switch[hidden] { display: none; }
+.profile-switch {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.modal-ft .profile-switch {
+  width: auto;
+  margin-right: auto;
+  justify-content: flex-start;
+}
 .profile-avatar { display: flex; align-items: center; }
 .profile-avatar .user-avatar-fallback { width: 56px; height: 56px; font-size: 18px; }
+#communityNameSub.clickable { cursor: pointer; }
+.community-picker-list { display: grid; gap: 10px; width: 100%; }
+.community-picker-item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.community-picker-item .btn { width: 100%; }
 #profileModal .modal-body { align-items: center; text-align: center; }
 #profileModal .profile-item { justify-items: center; width: 100%; }
 #profileModal .profile-avatar { justify-content: center; width: 100%; }

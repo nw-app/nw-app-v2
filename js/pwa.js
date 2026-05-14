@@ -1,6 +1,18 @@
 (() => {
   const DISMISS_KEY = "nw_pwa_install_dismissed_v1";
   const DISMISS_DAYS = 30;
+  const shouldSuppressFirestoreAbort = (err) => {
+    const msg = String((err && (err.message || err.reason?.message)) || err || "");
+    return msg.includes("net::ERR_ABORTED") && msg.includes("google.firestore.v1.Firestore/Listen/channel");
+  };
+
+  window.addEventListener("unhandledrejection", (e) => {
+    if (shouldSuppressFirestoreAbort(e && e.reason)) e.preventDefault();
+  });
+
+  window.addEventListener("error", (e) => {
+    if (shouldSuppressFirestoreAbort(e && e.error)) e.preventDefault();
+  });
 
   function updateForcePortrait() {
     const hasTouch = typeof navigator !== "undefined" && Number(navigator.maxTouchPoints || 0) > 0;
@@ -62,6 +74,7 @@
     const modal = document.getElementById("profileModal");
     if (!btn || !modal) return;
 
+    const communityNameSub = document.getElementById("communityNameSub");
     const backdrop = modal.querySelector("[data-modal-close]");
     const closeBtn = document.getElementById("btnCloseProfileModal");
     const closeBtnFt = document.getElementById("btnCloseProfileModalFt");
@@ -73,6 +86,7 @@
     const headerAvatar = document.getElementById("userAvatarFallback");
     const headerAvatarImg = document.getElementById("userAvatarImg");
     const greetingEl = document.getElementById("userGreeting");
+    const switchEl = document.getElementById("profileSwitch");
 
     const getRoleText = () => {
       const r = String(sessionStorage.getItem("csp_role") || "").trim().toLowerCase();
@@ -92,6 +106,121 @@
       if (!e) return "";
       const part = e.split("@")[0] || "";
       return String(part || "").trim();
+    };
+
+    const isSystemAdminAccount = (user, data) => {
+      const role = String(data && data.role ? data.role : "").trim();
+      if (role === "admin" || role === "系統管理員" || role === "系統管理者" || role === "系統") return true;
+      const email = String((data && (data.email || data.username)) || (user && user.email) || "").trim().toLowerCase();
+      return email === "nwapp.eason@gmail.com";
+    };
+
+    const isCommunityPickerSupportedPage = () => {
+      const page = String(location.pathname || "").split("/").pop().toLowerCase();
+      return page === "admin.html" || page === "member.html";
+    };
+
+    const ensureCommunityPickerModal = () => {
+      let el = document.getElementById("communityPickerModal");
+      if (el) return el;
+      el = document.createElement("div");
+      el.id = "communityPickerModal";
+      el.className = "modal";
+      el.hidden = true;
+      el.innerHTML = `
+        <div class="modal-backdrop" data-modal-close="1"></div>
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="communityPickerTitle">
+          <div class="modal-hd">
+            <h3 class="modal-title" id="communityPickerTitle">切換社區</h3>
+            <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          </div>
+          <div class="modal-body">
+            <div class="community-picker-list" id="communityPickerList">
+              <div class="status">讀取中...</div>
+            </div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">關閉</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(el);
+      return el;
+    };
+
+    const openCommunityPicker = async (db, targetPage, activeCodeOrId) => {
+      const modal = ensureCommunityPickerModal();
+      const listEl = document.getElementById("communityPickerList");
+      modal.hidden = false;
+      document.body.style.overflow = "hidden";
+      if (listEl) listEl.innerHTML = `<div class="status">讀取中...</div>`;
+
+      const close = () => {
+        modal.hidden = true;
+        document.body.style.overflow = "";
+      };
+
+      const closerEls = modal.querySelectorAll("[data-modal-close]");
+      closerEls.forEach((x) => x.addEventListener("click", close, { once: true }));
+      const onKeyDown = (e) => {
+        if (e.key === "Escape") close();
+      };
+      document.addEventListener("keydown", onKeyDown, { once: true });
+
+      if (!db) {
+        if (listEl) listEl.innerHTML = `<div class="status error">Firestore 尚未初始化</div>`;
+        return;
+      }
+
+      try {
+        const snap = await db.collection("communities").get();
+        const list = snap.docs.map((d) => {
+          const v = d.data() || {};
+          return {
+            id: String(v.id || d.id),
+            name: String(v.name || ""),
+            username: String(v.username || ""),
+            area: String(v.area || ""),
+            enabled: v.enabled !== false,
+          };
+        }).filter((x) => x && x.name);
+
+        const areaOrder = { "台北": 1, "新北": 2, "桃園": 3 };
+        list.sort((a, b) => {
+          const oa = areaOrder[a.area] || 99;
+          const ob = areaOrder[b.area] || 99;
+          if (oa !== ob) return oa - ob;
+          return String(a.username || a.name || "").localeCompare(String(b.username || b.name || ""), "zh-TW", { numeric: true });
+        });
+
+        if (!listEl) return;
+        if (!list.length) {
+          listEl.innerHTML = `<div class="status">尚無社區資料</div>`;
+          return;
+        }
+
+        const activeKey = String(activeCodeOrId || "").trim().toLowerCase();
+        listEl.innerHTML = list.map((c) => {
+          const key = String(c.username || c.id || "").trim();
+          const isActive = activeKey && (key.toLowerCase() === activeKey || String(c.id || "").toLowerCase() === activeKey);
+          const cls = isActive ? "btn btn-primary" : "btn";
+          return `<div class="community-picker-item"><button type="button" class="${cls}" data-community-key="${encodeURIComponent(key)}">${c.name}</button></div>`;
+        }).join("");
+
+        listEl.querySelectorAll("[data-community-key]").forEach((b) => {
+          b.addEventListener("click", () => {
+            const key = decodeURIComponent(String(b.getAttribute("data-community-key") || "").trim());
+            if (!key) return;
+            try { sessionStorage.setItem("csp_last_cid", key); } catch {}
+            try { sessionStorage.setItem("csp_role", targetPage === "admin" ? "community" : "resident"); } catch {}
+            const cPart = `?c=${encodeURIComponent(key)}`;
+            if (targetPage === "admin") location.href = `admin.html${cPart}#community/community-dashboard`;
+            else location.href = `member.html${cPart}`;
+          });
+        });
+      } catch (e) {
+        if (listEl) listEl.innerHTML = `<div class="status error">讀取社區清單失敗</div>`;
+      }
     };
 
     const showStatus = (msg, isError) => {
@@ -114,6 +243,72 @@
         });
       } catch {}
       return db;
+    };
+
+    const getCommunityKeyForNav = () => {
+      try {
+        const fromUrl = new URLSearchParams(location.search).get("c");
+        if (fromUrl) return String(fromUrl || "").trim();
+      } catch {}
+      try {
+        const fromSession = String(sessionStorage.getItem("csp_last_cid") || "").trim();
+        if (fromSession) return fromSession;
+      } catch {}
+      try {
+        const fromLocal = String(localStorage.getItem("csp_active_community_v1") || "").trim();
+        if (fromLocal) return fromLocal;
+      } catch {}
+      return "";
+    };
+
+    const resolveSwitchTargets = () => {
+      const page = String(location.pathname || "").split("/").pop().toLowerCase();
+      if (page === "system.html") return ["admin", "member"];
+      if (page === "admin.html") return ["system", "member"];
+      if (page === "member.html") return ["system", "admin"];
+      return [];
+    };
+
+    const urlForTarget = (target) => {
+      const c = getCommunityKeyForNav();
+      const cPart = c && c !== "default" ? `?c=${encodeURIComponent(c)}` : "";
+      if (target === "system") return "system.html";
+      if (target === "admin") return `admin.html${cPart}#community/community-dashboard`;
+      if (target === "member") return `member.html${cPart}`;
+      return "";
+    };
+
+    const roleForTarget = (target) => {
+      if (target === "system") return "admin";
+      if (target === "admin") return "community";
+      if (target === "member") return "resident";
+      return "";
+    };
+
+    const labelForTarget = (target) => {
+      if (target === "system") return "系統";
+      if (target === "admin") return "社區";
+      if (target === "member") return "住戶";
+      return "";
+    };
+
+    const updateSwitchButtons = () => {
+      if (!switchEl) return;
+      const fb = window.firebase;
+      const user = fb && fb.auth ? fb.auth().currentUser : null;
+      if (!isSystemAdminAccount(user, switchEl._profileData || {})) {
+        switchEl.hidden = true;
+        switchEl.innerHTML = "";
+        return;
+      }
+      const targets = resolveSwitchTargets();
+      if (!targets.length) {
+        switchEl.hidden = true;
+        switchEl.innerHTML = "";
+        return;
+      }
+      switchEl.hidden = false;
+      switchEl.innerHTML = targets.map((t) => `<button class="btn" type="button" data-profile-switch="${t}">${labelForTarget(t)}</button>`).join("");
     };
 
     const loadProfile = async (user) => {
@@ -155,6 +350,24 @@
           }
         }
       }
+      if (switchEl) switchEl._profileData = data || {};
+      updateSwitchButtons();
+      const sysAdmin = isSystemAdminAccount(user, data || {});
+      if (communityNameSub) {
+        if (sysAdmin && isCommunityPickerSupportedPage()) {
+          communityNameSub.classList.add("clickable");
+          if (!communityNameSub._boundPicker) {
+            communityNameSub._boundPicker = true;
+            communityNameSub.addEventListener("click", () => {
+              const page = String(location.pathname || "").split("/").pop().toLowerCase();
+              const target = page === "admin.html" ? "admin" : "member";
+              openCommunityPicker(ensureDb(), target, new URLSearchParams(location.search).get("c") || sessionStorage.getItem("csp_last_cid") || localStorage.getItem("csp_active_community_v1") || "");
+            });
+          }
+        } else {
+          communityNameSub.classList.remove("clickable");
+        }
+      }
       const displayName = String(
         data.displayName ||
         data.name ||
@@ -188,12 +401,21 @@
       const communityItemEl = document.getElementById("profileCommunityItem");
       if (communityItemEl && communityTextEl) {
         let cname = "—";
-        const roleText = getRoleText();
-        if (roleText === "系統管理員") {
+        if (sysAdmin) {
           cname = "系統管理員";
           communityTextEl.textContent = cname;
           communityItemEl.hidden = false;
+          communityItemEl.classList.add("single");
+          if (roleEl) {
+            roleEl.textContent = "";
+            roleEl.style.display = "none";
+          }
         } else {
+          communityItemEl.classList.remove("single");
+          if (roleEl) {
+            roleEl.style.display = "";
+            roleEl.textContent = getRoleText();
+          }
           const cid = String(data.community || localStorage.getItem("csp_active_community_v1") || "").trim();
           if (cid && cid !== "default") {
             try {
@@ -254,6 +476,22 @@
       e.stopPropagation();
       open();
     });
+
+    if (switchEl && !switchEl._boundSwitch) {
+      switchEl._boundSwitch = true;
+      switchEl.addEventListener("click", (e) => {
+        const t = e.target && e.target.closest ? e.target.closest("[data-profile-switch]") : null;
+        if (!t) return;
+        const target = String(t.getAttribute("data-profile-switch") || "").trim();
+        const role = roleForTarget(target);
+        const url = urlForTarget(target);
+        if (!role || !url) return;
+        try {
+          sessionStorage.setItem("csp_role", role);
+        } catch {}
+        location.href = url;
+      });
+    }
 
     if (backdrop) backdrop.addEventListener("click", close);
     if (closeBtn) closeBtn.addEventListener("click", close);
