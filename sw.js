@@ -1,4 +1,4 @@
-const CACHE_VERSION = "nwapp-v76";
+const CACHE_VERSION = "nwapp-v86";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -44,10 +44,14 @@ self.addEventListener("message", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
-  if (new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
 
   const accept = req.headers.get("accept") || "";
   const isHtml = req.mode === "navigate" || accept.includes("text/html");
+  const path = url.pathname || "";
+  const isCss = path.endsWith(".css") || req.destination === "style";
+  const isJs = path.endsWith(".js") || path.endsWith(".mjs") || req.destination === "script";
 
   event.respondWith(
     (isHtml
@@ -58,15 +62,31 @@ self.addEventListener("fetch", (event) => {
             return res;
           })
           .catch(() => caches.match(req).then((cached) => cached || caches.match("./index.html")))
-      : caches.match(req).then((cached) => {
-          if (cached) return cached;
-          return fetch(req)
-            .then((res) => {
-              const copy = res.clone();
-              caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy)).catch(() => {});
-              return res;
-            })
-            .catch(() => caches.match("./index.html"));
-        }))
+      : (isJs || isCss)
+        ? caches.match(req).then((cached) => {
+            const update = fetch(req)
+              .then((res) => {
+                const copy = res.clone();
+                caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy)).catch(() => {});
+                return res;
+              })
+              .catch(() => null);
+
+            if (cached) {
+              event.waitUntil(update);
+              return cached;
+            }
+            return update.then((res) => res || new Response("", { status: 504 }));
+          })
+        : caches.match(req).then((cached) => {
+            if (cached) return cached;
+            return fetch(req)
+              .then((res) => {
+                const copy = res.clone();
+                caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy)).catch(() => {});
+                return res;
+              })
+              .catch(() => null);
+          }))
   );
 });

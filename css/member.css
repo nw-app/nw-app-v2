@@ -248,9 +248,9 @@ a { color: inherit; text-decoration: none; }
   min-width: 0;
 }
 .frame-brand img { width: 34px; height: 34px; display: block; }
-.frame-brand .meta { min-width: 0; }
-.frame-brand .title { font-weight: 900; letter-spacing: 0.2px; font-size: 20px; line-height: 1.1; }
-.frame-brand .sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frame-brand .meta { min-width: 0; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.frame-brand .title { font-weight: 900; letter-spacing: 0.2px; font-size: 20px; line-height: 1.05; }
+.frame-brand .sub { color: var(--brand); font-size: 14px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.05; }
 .frame-actions { display: flex; gap: 10px; align-items: center; }
 .frame-midtop {
   background: #fff;
@@ -295,6 +295,7 @@ a { color: inherit; text-decoration: none; }
 }
 .frame-ft .nav a:hover { transform: translateY(-1px); background: rgba(17, 24, 39, 0.04); }
 .frame-ft .nav a[aria-current="page"] { background: rgba(211, 47, 47, 0.1); color: #9f1c1c; }
+.frame-ft .nav a[aria-current="page"] svg path { stroke: currentColor !important; }
 .frame-ft .nav svg { width: 22px; height: 22px; }
 .frame-ft .nav .label { font-size: 12px; font-weight: 800; letter-spacing: 0.2px; line-height: 1.05; }
 .frame-ft .nav .hint { display: none; }

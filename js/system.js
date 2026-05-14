@@ -9,7 +9,7 @@
   const db = firebase.firestore();
   const FieldValue = firebase.firestore.FieldValue;
   try {
-    db.settings({ experimentalAutoDetectLongPolling: true, ignoreUndefinedProperties: true });
+    db.settings({ experimentalAutoDetectLongPolling: true, experimentalForceLongPolling: true, ignoreUndefinedProperties: true });
   } catch {}
 
   const STORAGE_CONFIG = "csp_config_v1";
@@ -314,6 +314,56 @@
       return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
     };
 
+    const normalizePhoneDigits = (input) => {
+      const raw = String(input || "").trim();
+      let digits = raw.replace(/\D/g, "");
+      if (!digits) return "";
+      if (digits.startsWith("886") && digits.length === 12) digits = `0${digits.slice(3)}`;
+      return digits;
+    };
+
+    const getSecondaryAuth = () => {
+      const fb = window.firebase;
+      if (!fb || !firebaseConfig) return null;
+      try {
+        return fb.app("nwapp-secondary").auth();
+      } catch {
+        try {
+          return fb.initializeApp(firebaseConfig, "nwapp-secondary").auth();
+        } catch {
+          return null;
+        }
+      }
+    };
+
+    const createAuthUser = async (email, password) => {
+      const a = getSecondaryAuth();
+      if (!a) throw new Error("no-secondary-auth");
+      const cred = await a.createUserWithEmailAndPassword(String(email || ""), String(password || ""));
+      const u = cred && cred.user ? cred.user : null;
+      const uid = u && u.uid ? String(u.uid) : "";
+      if (!uid) throw new Error("no-uid");
+      return { uid, auth: a, user: u };
+    };
+
+    const upsertUserLookup = async ({ phoneNormalized, email, phone, uid, community, communityCode, role }) => {
+      const key = normalizePhoneDigits(phoneNormalized);
+      if (!key) return;
+      await db.collection("user_lookup").doc(key).set(
+        {
+          uid: String(uid || ""),
+          email: String(email || ""),
+          phone: String(phone || ""),
+          phoneNormalized: key,
+          community: String(community || ""),
+          communityCode: String(communityCode || ""),
+          role: String(role || ""),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    };
+
     const setAvatarPreview = (dataUrl) => {
       avatarPreviewData = String(dataUrl || "");
       if (avatarPreview) {
@@ -386,8 +436,8 @@
     };
 
     const viewToRoleValue = (view) => {
-      if (view === "admin") return "admin";
-      if (view === "community") return "community";
+      if (view === "admin") return "系統管理員";
+      if (view === "community") return "社區";
       return "住戶";
     };
 
@@ -530,64 +580,102 @@
       const base = db.collection("users");
       const q =
         view === "admin"
-          ? base.where("role", "in", ["admin", "系統管理員", "系統"])
+          ? base.where("role", "in", ["系統管理員", "系統管理者", "系統", "admin"])
           : base.where("community", "==", cid);
-      state.unsubResidents = q.onSnapshot(
-        (snap) => {
-          currentUsers = snap.docs.map((d) => {
-            const v = d.data() || {};
-            const role = String(v.role || "");
-            if (!matchesRole(role, view)) return null;
-            return {
-              id: d.id,
-              communityId: String(v.community || cid),
-              unit: String(v.houseNo || v.unit || ""),
-              name: String(v.displayName || v.name || ""),
-              username: String(v.username || v.email || v.phone || ""),
-              role: String(v.role || ""),
-              email: String(v.email || ""),
-              phone: String(v.phone || ""),
-              address: String(v.address || ""),
-              residentRoles: Array.isArray(v.residentRoles) ? v.residentRoles : [],
-              residentRoleOther: String(v.residentRoleOther || ""),
-              avatarDataUrl: String(v.avatarDataUrl || ""),
-              enabled: v.enabled !== false,
-              category: String(v.category || v.residentCategory || ""),
-            };
-          }).filter(Boolean);
-          if (view === "admin") {
-            const me = auth && auth.currentUser ? auth.currentUser : null;
-            const email = me && me.email ? String(me.email || "").trim() : "";
-            if (email) {
-              const exists = currentUsers.some((u) => String(u.username || "").toLowerCase() === email.toLowerCase());
-              if (!exists) {
-                currentUsers.unshift({
-                  id: "__auth_admin__",
-                  communityId: "",
-                  unit: "",
-                  name: email,
-                  username: email,
-                  role: "admin",
-                  email,
-                  phone: "",
-                  address: "",
-                  residentRoles: [],
-                  residentRoleOther: "",
-                  avatarDataUrl: "",
-                  enabled: true,
-                  category: "",
-                  readOnly: true,
-                });
-              }
+
+      let didLoad = false;
+      const renderError = (msg) => {
+        if (!rList) return;
+        rList.innerHTML = `<div class="status error">${String(msg || "讀取失敗。")}</div>`;
+      };
+
+      const applySnap = (snap) => {
+        didLoad = true;
+        currentUsers = snap.docs.map((d) => {
+          const v = d.data() || {};
+          const role = String(v.role || "");
+          if (!matchesRole(role, view)) return null;
+          return {
+            id: d.id,
+            communityId: String(v.community || cid),
+            unit: String(v.houseNo || v.unit || ""),
+            name: String(v.displayName || v.name || ""),
+            username: String(v.username || v.email || v.phone || ""),
+            role: String(v.role || ""),
+            email: String(v.email || ""),
+            phone: String(v.phone || ""),
+            address: String(v.address || ""),
+            residentRoles: Array.isArray(v.residentRoles) ? v.residentRoles : [],
+            residentRoleOther: String(v.residentRoleOther || ""),
+            avatarDataUrl: String(v.avatarDataUrl || ""),
+            enabled: v.enabled !== false,
+            category: String(v.category || v.residentCategory || ""),
+          };
+        }).filter(Boolean);
+        if (view === "admin") {
+          const me = auth && auth.currentUser ? auth.currentUser : null;
+          const email = me && me.email ? String(me.email || "").trim() : "";
+          if (email) {
+            const exists = currentUsers.some((u) => String(u.username || "").toLowerCase() === email.toLowerCase());
+            if (!exists) {
+              currentUsers.unshift({
+                id: "__auth_admin__",
+                communityId: "",
+                unit: "",
+                name: email,
+                username: email,
+                role: "系統管理員",
+                email,
+                phone: "",
+                address: "",
+                residentRoles: [],
+                residentRoleOther: "",
+                avatarDataUrl: "",
+                enabled: true,
+                category: "",
+                readOnly: true,
+              });
             }
           }
-          renderUserList();
+        }
+        renderUserList();
+      };
+
+      const onError = (err) => {
+        const code = String(err && err.code ? err.code : "");
+        const msg =
+          code.includes("permission-denied") ? "讀取失敗：沒有權限（請用系統管理員帳號登入）。" :
+          code.includes("unavailable") ? "讀取失敗：連線不穩定，請稍後再試。" :
+          "讀取住戶資料失敗，請稍後再試。";
+        if (!didLoad) renderError(msg);
+        if (statusEl) {
+          statusEl.textContent = msg;
+          statusEl.classList.add("error");
+        }
+      };
+
+      const t = window.setTimeout(() => {
+        if (didLoad) return;
+        renderError("讀取逾時，請確認網路或重新登入後再試。");
+      }, 8000);
+
+      q.get().then((snap) => {
+        if (didLoad) return;
+        window.clearTimeout(t);
+        applySnap(snap);
+      }).catch((err) => {
+        window.clearTimeout(t);
+        onError(err);
+      });
+
+      state.unsubResidents = q.onSnapshot(
+        (snap) => {
+          window.clearTimeout(t);
+          applySnap(snap);
         },
-        () => {
-          if (statusEl) {
-            statusEl.textContent = "讀取住戶資料失敗。";
-            statusEl.classList.add("error");
-          }
+        (err) => {
+          window.clearTimeout(t);
+          onError(err);
         }
       );
     };
@@ -783,6 +871,11 @@
           showModalError("電子郵件與手機號碼皆為必填。");
           return;
         }
+        const phoneNormalized = normalizePhoneDigits(phone);
+        if (!phoneNormalized) {
+          showModalError("手機號碼格式不正確。");
+          return;
+        }
         const loginAccount = email;
         const password = editUserId ? passwordRaw : (passwordRaw || phone);
         if (!password && !editUserId) {
@@ -798,9 +891,23 @@
         }
 
         setBusy(true);
+        let createdAuth = null;
         try {
           const isEdit = Boolean(editUserId) && !forceCreateUser;
-          const id = isEdit ? String(editUserId) : db.collection("users").doc().id;
+          let id = isEdit ? String(editUserId) : "";
+          if (!isEdit) {
+            const isCurrentAdmin = Boolean(forceCreateUser) && modalRoleView === "admin" && auth.currentUser && auth.currentUser.uid;
+            if (isCurrentAdmin) {
+              id = String(auth.currentUser.uid);
+            } else {
+              createdAuth = await createAuthUser(email, password);
+              id = String(createdAuth.uid);
+            }
+          }
+          if (!id) {
+            showModalError("建立失敗，請稍後再試。");
+            return;
+          }
           const roleValue = viewToRoleValue(modalRoleView);
           const passwordHash = password ? await sha256Hex(password) : "";
           const avatarDataUrl = avatarFile ? await fileToAvatarDataUrl(avatarFile) : "";
@@ -813,7 +920,7 @@
             username: loginAccount,
             email,
             phone,
-            phoneNormalized: phone.replace(/\D/g, ""),
+            phoneNormalized,
             address,
             enabled: Boolean(enabled),
             updatedAt: FieldValue.serverTimestamp(),
@@ -830,6 +937,9 @@
           }
           if (!isEdit) payload.createdAt = FieldValue.serverTimestamp();
           await db.collection("users").doc(id).set(payload, { merge: true });
+          const c = (state.communities || []).find((x) => String(x && x.id ? x.id : "") === String(payload.community || ""));
+          const communityCode = c ? String(c.username || "") : "";
+          await upsertUserLookup({ phoneNormalized, email, phone, uid: id, community: payload.community, communityCode, role: payload.role });
           if (communitySelect.value !== String(communityId || "")) {
             communitySelect.value = String(communityId || "");
             setActiveCommunityId(communitySelect.value);
@@ -841,8 +951,18 @@
           }
           closeModal();
         } catch {
-          showModalError(isEdit ? "更新失敗，請稍後再試。" : "建立失敗，請稍後再試。");
+          if (createdAuth && createdAuth.user && typeof createdAuth.user.delete === "function") {
+            try {
+              await createdAuth.user.delete();
+            } catch {}
+          }
+          showModalError((Boolean(editUserId) && !forceCreateUser) ? "更新失敗，請稍後再試。" : "建立失敗，請稍後再試。");
         } finally {
+          if (createdAuth && createdAuth.auth) {
+            try {
+              await createdAuth.auth.signOut();
+            } catch {}
+          }
           setBusy(false);
         }
       });
@@ -1402,7 +1522,10 @@
       const t = e.target && e.target.closest ? e.target.closest("[data-area]") : null;
       if (!t) return;
       const v = String(t.getAttribute("data-area") || "全部");
-      if (v === String(state.communityAreaFilter || "全部")) return;
+      const cur = String(state.communityAreaFilter || "全部");
+      const roleView = String(state.accountsRoleView || "resident");
+      const shouldForceToResident = state.currentPage === "accounts" && roleView !== "resident";
+      if (v === cur && !shouldForceToResident) return;
       state.communityAreaFilter = v;
       if (state.currentPage === "accounts") state.accountsRoleView = "resident";
       try {
@@ -1416,7 +1539,7 @@
     if (state.unsubCommunities) return;
     state.unsubCommunities = db.collection("communities").onSnapshot(
       (snap) => {
-        state.communities = snap.docs.map((d) => {
+        const list = snap.docs.map((d) => {
           const v = d.data() || {};
           const units = Array.isArray(v.units) ? v.units.map((x) => String(x || "").trim()).filter(Boolean) : [];
           return {
@@ -1430,6 +1553,17 @@
             units,
           };
         });
+        
+        const areaOrder = { "台北": 1, "新北": 2, "桃園": 3 };
+        state.communities = list.sort((a, b) => {
+          const oA = areaOrder[a.area] || 99;
+          const oB = areaOrder[b.area] || 99;
+          if (oA !== oB) return oA - oB;
+          const cA = String(a.username || "");
+          const cB = String(b.username || "");
+          return cA.localeCompare(cB, "zh-TW", { numeric: true });
+        });
+        
         openPage(state.currentPage);
       },
       () => {

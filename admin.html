@@ -21,9 +21,12 @@
             <img src="logo.svg" alt="" />
             <div class="meta">
               <div class="title">西北守護星</div>
+              <div class="sub" id="communityNameSub"></div>
             </div>
           </div>
           <button class="user-avatar" type="button" id="btnUserMenu" aria-label="使用者選單" aria-haspopup="true" aria-expanded="false">
+            <span class="user-greet" id="userGreeting">Hi~</span>
+            <img class="user-avatar-img" id="userAvatarImg" alt="" />
             <span class="user-avatar-fallback" id="userAvatarFallback" aria-hidden="true">U</span>
           </button>
         </div>
@@ -47,13 +50,34 @@
 
       <footer class="frame-ft" aria-label="頁尾">
         <nav class="nav" aria-label="快捷入口">
-          <a href="admin.html#community/community-dashboard" aria-current="page">總覽</a>
-          <a href="nw01.html">包裹</a>
-          <a href="nw02.html">訪客</a>
-          <a href="nw03.html">造冊</a>
-          <a href="nw04.html">預約</a>
-          <a href="nw05.html">公告</a>
-          <a href="nw06.html">停車</a>
+          <a href="admin.html#community/community-dashboard" aria-current="page">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20v-9.5Z" stroke="currentColor" stroke-width="1.7"/><path d="M9 21v-7a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v7" stroke="currentColor" stroke-width="1.7"/></svg>
+            <span class="label">總覽</span>
+          </a>
+          <a href="nw01.html">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 8.5 12 13 3 8.5 12 4l9 4.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M21 8.5V17a2 2 0 0 1-1.1 1.8L12 22l-7.9-3.2A2 2 0 0 1 3 17V8.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 13v9" stroke="currentColor" stroke-width="1.7"/></svg>
+            <span class="label">包裹</span>
+          </a>
+          <a href="nw02.html">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z" stroke="currentColor" stroke-width="1.7"/><path d="M4 20a8 8 0 0 1 16 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            <span class="label">訪客</span>
+          </a>
+          <a href="nw03.html">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 21v-9a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v9" stroke="currentColor" stroke-width="1.7"/><path d="M12 7a3.5 3.5 0 1 0-3.5-3.5A3.5 3.5 0 0 0 12 7Z" stroke="currentColor" stroke-width="1.7"/></svg>
+            <span class="label">造冊</span>
+          </a>
+          <a href="nw04.html">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3h10v4H7V3Z" stroke="currentColor" stroke-width="1.7"/><path d="M6 7h12v14H6V7Z" stroke="currentColor" stroke-width="1.7"/><path d="M9 11h6M9 15h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            <span class="label">預約</span>
+          </a>
+          <a href="nw05.html">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 4h10v16H7V4Z" stroke="currentColor" stroke-width="1.7"/><path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            <span class="label">公告</span>
+          </a>
+          <a href="nw06.html">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 21V3h6a5 5 0 0 1 0 10H7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 13.5c2 2 2 5.5-1.5 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M14.5 13.5c2 2 2 5.5-1.5 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity="0.85"/></svg>
+            <span class="label">停車</span>
+          </a>
         </nav>
       </footer>
     </div>
@@ -76,12 +100,11 @@
         </div>
         <form id="profileForm">
           <div class="modal-body">
-            <div class="profile-item">
-              <div class="profile-label">角色名稱</div>
+            <div class="profile-row" id="profileCommunityItem" hidden>
+              <div class="profile-value community" id="profileCommunityText">—</div>
               <div class="profile-value" id="profileRole">—</div>
             </div>
             <div class="profile-item">
-              <div class="profile-label">大頭照</div>
               <div class="profile-avatar">
                 <img id="profileAvatarImg" alt="" />
                 <span class="user-avatar-fallback" id="profileAvatarFallback" aria-hidden="true">U</span>

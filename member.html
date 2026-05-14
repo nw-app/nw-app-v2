@@ -21,9 +21,12 @@
             <img src="logo.svg" alt="" />
             <div class="meta">
               <div class="title">西北守護星</div>
+              <div class="sub" id="communityNameSub"></div>
             </div>
           </div>
           <button class="user-avatar" type="button" id="btnUserMenu" aria-label="使用者選單" aria-haspopup="true" aria-expanded="false">
+            <span class="user-greet" id="userGreeting">Hi~</span>
+            <img class="user-avatar-img" id="userAvatarImg" alt="" />
             <span class="user-avatar-fallback" id="userAvatarFallback" aria-hidden="true">U</span>
           </button>
         </div>
@@ -61,12 +64,11 @@
         </div>
         <form id="profileForm">
           <div class="modal-body">
-            <div class="profile-item">
-              <div class="profile-label">角色名稱</div>
+            <div class="profile-row" id="profileCommunityItem" hidden>
+              <div class="profile-value community" id="profileCommunityText">—</div>
               <div class="profile-value" id="profileRole">—</div>
             </div>
             <div class="profile-item">
-              <div class="profile-label">大頭照</div>
               <div class="profile-avatar">
                 <img id="profileAvatarImg" alt="" />
                 <span class="user-avatar-fallback" id="profileAvatarFallback" aria-hidden="true">U</span>

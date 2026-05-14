@@ -42,11 +42,76 @@
     return { communities: state.communities, residents: [] };
   }
 
+  function readUrlCommunityKey() {
+    try {
+      const params = new URLSearchParams(location.search);
+      return String(params.get("c") || "").trim();
+    } catch {
+      return "";
+    }
+  }
+
+  function setHeaderCommunityText(text) {
+    const subEl = document.getElementById("communityNameSub");
+    if (!subEl) return;
+    const t = String(text || "").trim();
+    subEl.textContent = t && t !== "default" ? t : "";
+  }
+
+  async function ensureUrlCommunityKey(user) {
+    const existing = readUrlCommunityKey();
+    if (existing) return existing;
+
+    try {
+      const fromSession = String(sessionStorage.getItem("csp_last_cid") || "").trim();
+      if (fromSession) {
+        const u = new URL(location.href);
+        u.searchParams.set("c", fromSession);
+        history.replaceState(null, "", u.toString());
+        return fromSession;
+      }
+    } catch {}
+
+    if (!user) return "";
+    try {
+      const udoc = await db.collection("users").doc(String(user.uid)).get();
+      const udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
+      const cid = String(udata.community || "").trim();
+      if (!cid || cid === "default") return "";
+      const cdoc = await db.collection("communities").doc(cid).get();
+      const cdata = cdoc && cdoc.exists ? (cdoc.data() || {}) : {};
+      const code = String(cdata.username || "").trim();
+      const key = code || cid;
+      if (!key) return "";
+      try { sessionStorage.setItem("csp_last_cid", key); } catch {}
+      const u = new URL(location.href);
+      u.searchParams.set("c", key);
+      history.replaceState(null, "", u.toString());
+      return key;
+    } catch {
+      return "";
+    }
+  }
+
   function resolveActiveCommunityId() {
     const accounts = loadAccounts();
+    const list = accounts.communities || [];
+    
+    try {
+      const urlCidRaw = readUrlCommunityKey();
+      const urlCid = urlCidRaw.toLowerCase();
+      if (urlCid) {
+        const found = list.find((x) => x && (String(x.id || "").trim().toLowerCase() === urlCid || String(x.username || "").trim().toLowerCase() === urlCid));
+        if (found && found.id) {
+          localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, found.id);
+          return found.id;
+        }
+      }
+    } catch {}
+
     const saved = localStorage.getItem(STORAGE_ACTIVE_COMMUNITY);
-    const first = accounts.communities.find((x) => x && x.enabled)?.id || accounts.communities[0]?.id || "";
-    if (saved && accounts.communities.some((x) => x && x.id === saved)) return saved;
+    const first = list.find((x) => x && x.enabled)?.id || list[0]?.id || "";
+    if (saved && list.some((x) => x && x.id === saved)) return saved;
     if (first) {
       localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, first);
       return first;
@@ -71,9 +136,12 @@
   function refreshLoginInfo(user) {
     const accounts = loadAccounts();
     const cid = resolveActiveCommunityId();
-    const cname = accounts.communities.find((c) => c.id === cid)?.name || cid;
+    const c = accounts.communities.find((x) => x && x.id === cid) || null;
+    const urlC = readUrlCommunityKey();
+    const cname = c ? String(c.name || "").trim() : "";
     const el = document.getElementById("loginInfo");
-    if (el) el.textContent = `已登入：${user.email || "（未知）"}｜${cname}`;
+    if (el) el.textContent = `已登入：${user.email || "（未知）"}｜${cname || urlC || cid}`;
+    setHeaderCommunityText(cname);
   }
 
   function ensureConfigSubscription() {
@@ -97,7 +165,7 @@
       (snap) => {
         state.communities = snap.docs.map((d) => {
           const v = d.data() || {};
-          return { id: String(v.id || d.id), name: String(v.name || ""), enabled: v.enabled !== false };
+          return { id: String(v.id || d.id), name: String(v.name || ""), username: String(v.username || ""), enabled: v.enabled !== false };
         });
         refreshLoginInfo(user);
         ensureConfigSubscription();
@@ -147,16 +215,16 @@
     if (kind === "home") {
       return `
             <svg viewBox="0 0 24 24" fill="none">
-              <path d="M4 10.5 12 4l8 6.5V20a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20v-9.5Z" stroke="white" stroke-width="1.7" />
-              <path d="M9 21v-7a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v7" stroke="white" stroke-width="1.7" />
+              <path d="M4 10.5 12 4l8 6.5V20a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20v-9.5Z" stroke="currentColor" stroke-width="1.7" />
+              <path d="M9 21v-7a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v7" stroke="currentColor" stroke-width="1.7" />
             </svg>
           `;
     }
     return `
           <svg viewBox="0 0 24 24" fill="none">
-            <path d="M12 21.5c5.247 0 9.5-4.253 9.5-9.5S17.247 2.5 12 2.5 2.5 6.753 2.5 12 6.753 21.5 12 21.5Z" stroke="white" stroke-width="1.7" opacity="0.9"/>
-            <path d="M12 8.2h.01" stroke="white" stroke-width="3.2" stroke-linecap="round"/>
-            <path d="M12 16v-5" stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+            <path d="M12 21.5c5.247 0 9.5-4.253 9.5-9.5S17.247 2.5 12 2.5 2.5 6.753 2.5 12 6.753 21.5 12 21.5Z" stroke="currentColor" stroke-width="1.7" opacity="0.9"/>
+            <path d="M12 8.2h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+            <path d="M12 16v-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
           </svg>
         `;
   }
@@ -545,6 +613,7 @@
       return;
     }
     refreshLoginInfo(user);
+    ensureUrlCommunityKey(user).then(() => refreshLoginInfo(user)).catch(() => {});
     const fallback = document.getElementById("userAvatarFallback");
     if (fallback) fallback.textContent = String(user.email || "U").trim().slice(0, 1).toUpperCase() || "U";
     ensureCommunitiesSubscription(user);

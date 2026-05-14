@@ -71,6 +71,8 @@
     const profileAvatarImg = document.getElementById("profileAvatarImg");
     const profileAvatar = document.getElementById("profileAvatarFallback");
     const headerAvatar = document.getElementById("userAvatarFallback");
+    const headerAvatarImg = document.getElementById("userAvatarImg");
+    const greetingEl = document.getElementById("userGreeting");
 
     const getRoleText = () => {
       const r = String(sessionStorage.getItem("csp_role") || "").trim().toLowerCase();
@@ -85,6 +87,13 @@
       return s ? s.slice(0, 1).toUpperCase() : "U";
     };
 
+    const nameFromEmail = (email) => {
+      const e = String(email || "").trim();
+      if (!e) return "";
+      const part = e.split("@")[0] || "";
+      return String(part || "").trim();
+    };
+
     const showStatus = (msg, isError) => {
       if (!statusEl) return;
       statusEl.textContent = String(msg || "");
@@ -97,7 +106,12 @@
       if (!fb || !fb.firestore) return null;
       const db = fb.firestore();
       try {
-        db.settings({ experimentalAutoDetectLongPolling: true, ignoreUndefinedProperties: true });
+        db.settings({
+          experimentalAutoDetectLongPolling: true,
+          experimentalForceLongPolling: true,
+          useFetchStreams: false,
+          ignoreUndefinedProperties: true,
+        });
       } catch {}
       return db;
     };
@@ -108,26 +122,95 @@
       const initial = pickInitial(user.displayName, user.email);
       if (profileAvatar) profileAvatar.textContent = initial;
       if (headerAvatar) headerAvatar.textContent = initial;
+      if (headerAvatarImg) headerAvatarImg.style.display = "none";
+      if (headerAvatar) headerAvatar.style.display = "";
       if (profileAvatarImg) profileAvatarImg.style.display = "none";
       if (profileAvatar) profileAvatar.style.display = "";
+      if (greetingEl) greetingEl.textContent = "Hi~";
 
       const db = ensureDb();
       let data = {};
       if (db) {
-        const doc = await db.collection("users").doc(String(user.uid)).get();
-        data = doc && doc.exists ? (doc.data() || {}) : {};
+        try {
+          const doc = await db.collection("users").doc(String(user.uid)).get();
+          data = doc && doc.exists ? (doc.data() || {}) : {};
+        } catch {
+          data = {};
+        }
+        if (!data || !Object.keys(data).length) {
+          const email = String(user.email || "").trim();
+          if (email) {
+            try {
+              const snap = await db.collection("users").where("email", "==", email).limit(1).get();
+              const alt = snap && snap.docs && snap.docs[0] ? snap.docs[0] : null;
+              if (alt && alt.exists) data = alt.data() || {};
+            } catch {}
+            if (!data || !Object.keys(data).length) {
+              try {
+                const snap = await db.collection("users").where("username", "==", email).limit(1).get();
+                const alt = snap && snap.docs && snap.docs[0] ? snap.docs[0] : null;
+                if (alt && alt.exists) data = alt.data() || {};
+              } catch {}
+            }
+          }
+        }
       }
-      const displayName = String(data.displayName || user.displayName || "").trim();
+      const displayName = String(
+        data.displayName ||
+        data.name ||
+        data.fullName ||
+        user.displayName ||
+        nameFromEmail(user.email) ||
+        ""
+      ).trim();
       if (nameTextEl) nameTextEl.textContent = displayName || "—";
+      if (greetingEl) greetingEl.textContent = `Hi~${displayName || "—"}`;
       const initial2 = pickInitial(displayName, user.email);
       if (profileAvatar) profileAvatar.textContent = initial2;
       if (headerAvatar) headerAvatar.textContent = initial2;
 
-      const avatarUrl = String(data.avatarDataUrl || user.photoURL || "").trim();
+      const avatarUrl = String(data.avatarDataUrl || data.photoDataUrl || data.photoURL || user.photoURL || "").trim();
       if (avatarUrl && profileAvatarImg) {
         profileAvatarImg.src = avatarUrl;
         profileAvatarImg.style.display = "block";
         if (profileAvatar) profileAvatar.style.display = "none";
+      }
+      if (avatarUrl && headerAvatarImg) {
+        headerAvatarImg.src = avatarUrl;
+        headerAvatarImg.style.display = "block";
+        if (headerAvatar) headerAvatar.style.display = "none";
+      } else {
+        if (headerAvatarImg) headerAvatarImg.style.display = "none";
+        if (headerAvatar) headerAvatar.style.display = "";
+      }
+
+      const communityTextEl = document.getElementById("profileCommunityText");
+      const communityItemEl = document.getElementById("profileCommunityItem");
+      if (communityItemEl && communityTextEl) {
+        let cname = "—";
+        const roleText = getRoleText();
+        if (roleText === "系統管理員") {
+          cname = "系統管理員";
+          communityTextEl.textContent = cname;
+          communityItemEl.hidden = false;
+        } else {
+          const cid = String(data.community || localStorage.getItem("csp_active_community_v1") || "").trim();
+          if (cid && cid !== "default") {
+            try {
+              if (db) {
+                const cdoc = await db.collection("communities").doc(cid).get();
+                if (cdoc.exists) cname = cdoc.data().name || cid;
+                else cname = cid;
+              } else {
+                cname = cid;
+              }
+            } catch { cname = cid; }
+          } else {
+            cname = "—";
+          }
+          communityTextEl.textContent = cname;
+          communityItemEl.hidden = false;
+        }
       }
     };
 
@@ -175,6 +258,25 @@
     if (backdrop) backdrop.addEventListener("click", close);
     if (closeBtn) closeBtn.addEventListener("click", close);
     if (closeBtnFt) closeBtnFt.addEventListener("click", close);
+
+    const fb = window.firebase;
+    const a = fb && fb.auth ? fb.auth() : null;
+    if (a && typeof a.onAuthStateChanged === "function") {
+      let didHydrate = false;
+      try {
+        const u = a.currentUser;
+        if (u) {
+          didHydrate = true;
+          loadProfile(u).catch(() => {});
+        }
+      } catch {}
+      a.onAuthStateChanged((u) => {
+        if (!u) return;
+        if (didHydrate) return;
+        didHydrate = true;
+        loadProfile(u).catch(() => {});
+      });
+    }
   }
 
   function ensureConfirmModal() {
@@ -293,15 +395,26 @@
     banner.addEventListener("click", onClick);
   }
 
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      updateForcePortrait();
-      initProfileModal();
-      window.nwConfirm = confirmDialog;
-      navigator.serviceWorker.register("./sw.js").then((reg) => {
-        reg.update().catch(() => {});
+  function isLocalhost() {
+    try {
+      const h = String(location.hostname || "").trim().toLowerCase();
+      return h === "localhost" || h === "127.0.0.1";
+    } catch {
+      return false;
+    }
+  }
 
-        if (reg.waiting) {
+  window.addEventListener("load", () => {
+    updateForcePortrait();
+    initProfileModal();
+    window.nwConfirm = confirmDialog;
+
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("./sw.js").then((reg) => {
+        const isLocal = isLocalhost();
+        if (!isLocal) reg.update().catch(() => {});
+
+        if (!isLocal && reg.waiting) {
           reg.waiting.postMessage({ type: "SKIP_WAITING" });
         }
 
@@ -310,19 +423,19 @@
           if (!worker) return;
           worker.addEventListener("statechange", () => {
             if (worker.state === "installed" && navigator.serviceWorker.controller) {
-              if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+              if (!isLocalhost() && reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
             }
           });
         });
       }).catch(() => {});
-    });
-  }
+  });
 
   window.addEventListener("resize", () => updateForcePortrait());
   window.addEventListener("orientationchange", () => updateForcePortrait());
 
   let didReloadForSw = false;
   navigator.serviceWorker?.addEventListener?.("controllerchange", () => {
+    if (isLocalhost()) return;
     if (didReloadForSw) return;
     didReloadForSw = true;
     location.reload();

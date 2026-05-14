@@ -57,6 +57,9 @@
   function normalizeRole(input) {
     const r = String(input || "").trim().toLowerCase();
     if (r === "admin" || r === "community" || r === "resident") return r;
+    if (r === "系統管理員" || r === "系統管理者" || r === "系統") return "admin";
+    if (r === "社區") return "community";
+    if (r === "住戶") return "resident";
     return "";
   }
 
@@ -81,6 +84,22 @@
         if (found) return found;
       }
     } catch {}
+
+    if (user && db) {
+      try {
+        const doc = await db.collection("users").doc(String(user.uid)).get();
+        const data = doc && doc.exists ? (doc.data() || {}) : {};
+        const fromDoc = normalizeRole(data.role);
+        if (fromDoc) return fromDoc;
+      } catch {}
+      try {
+        const snap = await db.collection("user_lookup").where("uid", "==", String(user.uid)).limit(1).get();
+        const data = snap && snap.docs && snap.docs[0] ? (snap.docs[0].data() || {}) : {};
+        const fromLookup = normalizeRole(data.role);
+        if (fromLookup) return fromLookup;
+      } catch {}
+    }
+
     return inferRoleFromEmail(emailHint || (user ? user.email : ""));
   }
 
@@ -131,38 +150,74 @@
 
   let didAutoRedirect = false;
 
-  async function resolveEmailForLogin(loginId) {
+  async function resolveLookupForLogin(loginId) {
     const raw = String(loginId || "").trim();
-    if (!raw) return "";
-    if (raw.includes("@")) return raw;
-    if (!db) return "";
+    if (!raw) return { email: "", community: "", communityCode: "", phoneNormalized: "" };
+    if (raw.includes("@")) return { email: raw, community: "", communityCode: "", phoneNormalized: "" };
+    if (!db) return { email: "", community: "", communityCode: "", phoneNormalized: "" };
 
-    const normalized = raw.replace(/\D/g, "");
-    const candidates = [raw];
-    if (normalized && normalized !== raw) candidates.push(normalized);
+    let normalized = raw.replace(/\D/g, "");
+    if (normalized.startsWith("886") && normalized.length === 12) normalized = `0${normalized.slice(3)}`;
+    if (!normalized) return { email: "", community: "", communityCode: "", phoneNormalized: "" };
+    try {
+      const doc = await db.collection("user_lookup").doc(normalized).get();
+      const data = doc && doc.exists ? (doc.data() || {}) : {};
+      const email = String(data.email || "").trim();
+      const community = String(data.community || "").trim();
+      const communityCode = String(data.communityCode || "").trim();
+      if (email) return { email, community, communityCode, phoneNormalized: normalized };
+    } catch {}
+    return { email: "", community: "", communityCode: "", phoneNormalized: normalized };
+  }
 
-    for (const v of candidates) {
-      try {
-        const snap = await db.collection("users").where("phone", "==", v).limit(1).get();
-        if (!snap.empty) {
-          const data = snap.docs[0].data() || {};
-          const email = String(data.email || data.username || "").trim();
-          if (email) return email;
+  async function resolveCommunityKey(communityIdOrCode) {
+    const raw = String(communityIdOrCode || "").trim();
+    if (!raw || raw === "default") return "";
+    if (!db) return raw;
+    try {
+      const byId = await db.collection("communities").doc(raw).get();
+      if (byId && byId.exists) {
+        const data = byId.data() || {};
+        const code = String(data.username || "").trim();
+        return code || raw;
+      }
+    } catch {}
+    try {
+      const snap = await db.collection("communities").where("username", "==", raw).limit(1).get();
+      const doc = snap && snap.docs && snap.docs[0] ? snap.docs[0] : null;
+      if (doc && doc.exists) {
+        const data = doc.data() || {};
+        const code = String(data.username || "").trim();
+        return code || raw;
+      }
+    } catch {}
+    return raw;
+  }
+
+  async function resolveCommunityAndUrl(user, role, defaultUrl) {
+    if (!user || !db || role === "admin") return defaultUrl;
+    try {
+      const doc = await db.collection("users").doc(user.uid).get();
+      if (doc && doc.exists) {
+        const data = doc.data() || {};
+        const cidRaw = String(data.community || "").trim();
+        const cKey = await resolveCommunityKey(cidRaw);
+        if (cKey) {
+          if (role === "community") return `admin.html?c=${cKey}#community/community-dashboard`;
+          return `member.html?c=${cKey}`;
         }
-      } catch {}
-    }
-
-    if (normalized) {
-      try {
-        const snap = await db.collection("users").where("phoneNormalized", "==", normalized).limit(1).get();
-        if (!snap.empty) {
-          const data = snap.docs[0].data() || {};
-          const email = String(data.email || data.username || "").trim();
-          if (email) return email;
-        }
-      } catch {}
-    }
-    return "";
+      }
+    } catch {}
+    try {
+      const snap = await db.collection("user_lookup").where("uid", "==", String(user.uid)).limit(1).get();
+      const d = snap && snap.docs && snap.docs[0] ? snap.docs[0].data() || {} : {};
+      const cKey = String(d.communityCode || "").trim() || String(d.community || "").trim();
+      if (cKey && cKey !== "default") {
+        if (role === "community") return `admin.html?c=${cKey}#community/community-dashboard`;
+        return `member.html?c=${cKey}`;
+      }
+    } catch {}
+    return defaultUrl;
   }
 
   loginForm.addEventListener("submit", async (e) => {
@@ -177,7 +232,10 @@
       const remember = Boolean(rememberEl && rememberEl.checked);
       const persistence = remember ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Persistence.SESSION;
       await auth.setPersistence(persistence);
-      const email = await resolveEmailForLogin(loginId);
+      const lookup = await resolveLookupForLogin(loginId);
+      const email = String(lookup && lookup.email ? lookup.email : "").trim();
+      const lookupCommunity = String(lookup && lookup.community ? lookup.community : "").trim();
+      const lookupCommunityCode = String(lookup && lookup.communityCode ? lookup.communityCode : "").trim();
       if (!email) {
         setStatus(db ? "找不到此手機號碼或電子郵件對應的帳號。" : "目前版本不支援手機號碼登入，請改用電子郵件登入或重新整理更新。", true);
         return;
@@ -194,7 +252,17 @@
         return;
       }
 
-      const url = routes[role] || routes.resident;
+      let url = routes[role] || routes.resident;
+      const cKey = lookupCommunityCode || (lookupCommunity ? await resolveCommunityKey(lookupCommunity) : "");
+      if (cKey) {
+        try {
+          sessionStorage.setItem("csp_last_cid", cKey);
+        } catch {}
+        if (role === "community") url = `admin.html?c=${cKey}#community/community-dashboard`;
+        else if (role === "resident") url = `member.html?c=${cKey}`;
+      } else {
+        url = await resolveCommunityAndUrl(user, role, url);
+      }
       sessionStorage.setItem("csp_role", role);
       setStatus("登入成功，導向中...", false);
       goTo(url);
@@ -223,7 +291,18 @@
         goTo(picked.url);
         return;
       }
-      const url = routes[role] || routes.resident;
+      let url = routes[role] || routes.resident;
+      try {
+        const lastCid = String(sessionStorage.getItem("csp_last_cid") || "").trim();
+        if (lastCid && lastCid !== "default") {
+          if (role === "community") url = `admin.html?c=${lastCid}#community/community-dashboard`;
+          else if (role === "resident") url = `member.html?c=${lastCid}`;
+        } else {
+          url = await resolveCommunityAndUrl(user, role, url);
+        }
+      } catch {
+        url = await resolveCommunityAndUrl(user, role, url);
+      }
       sessionStorage.setItem("csp_role", role);
       goTo(url);
     })();

@@ -75,15 +75,35 @@ html.force-portrait .pwa-install {
 }
 
 .user-avatar {
-  width: 44px;
+  width: auto;
   height: 44px;
   border-radius: 999px;
   border: 1px solid rgba(17, 24, 39, 0.12);
   background: #fff;
-  padding: 0;
-  display: grid;
-  place-items: center;
+  padding: 0 10px 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
+}
+
+.user-greet {
+  font-weight: 900;
+  font-size: 14px;
+  letter-spacing: 0.2px;
+  color: rgba(31, 41, 55, 0.9);
+  max-width: min(180px, 40vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  object-fit: cover;
+  display: none;
 }
 
 .user-avatar-fallback {
@@ -207,6 +227,14 @@ html.force-portrait .pwa-install {
 .profile-item { display: grid; gap: 6px; }
 .profile-label { font-size: 12px; color: rgba(31, 41, 55, 0.65); font-weight: 800; }
 .profile-value { font-weight: 900; color: rgba(31, 41, 55, 0.9); }
+.profile-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+.profile-value.community { color: var(--brand, #d32f2f); }
 .profile-avatar { display: flex; align-items: center; }
 .profile-avatar .user-avatar-fallback { width: 56px; height: 56px; font-size: 18px; }
 #profileModal .modal-body { align-items: center; text-align: center; }
