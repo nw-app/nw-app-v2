@@ -6,6 +6,12 @@
     firebase.initializeApp(firebaseConfig);
   } catch {}
   const auth = firebase.auth();
+  const db = typeof firebase.firestore === "function" ? firebase.firestore() : null;
+  if (db) {
+    try {
+      db.settings({ experimentalAutoDetectLongPolling: true, ignoreUndefinedProperties: true });
+    } catch {}
+  }
 
   const routes = Object.freeze({
     admin: "system.html",
@@ -125,18 +131,57 @@
 
   let didAutoRedirect = false;
 
+  async function resolveEmailForLogin(loginId) {
+    const raw = String(loginId || "").trim();
+    if (!raw) return "";
+    if (raw.includes("@")) return raw;
+    if (!db) return "";
+
+    const normalized = raw.replace(/\D/g, "");
+    const candidates = [raw];
+    if (normalized && normalized !== raw) candidates.push(normalized);
+
+    for (const v of candidates) {
+      try {
+        const snap = await db.collection("users").where("phone", "==", v).limit(1).get();
+        if (!snap.empty) {
+          const data = snap.docs[0].data() || {};
+          const email = String(data.email || data.username || "").trim();
+          if (email) return email;
+        }
+      } catch {}
+    }
+
+    if (normalized) {
+      try {
+        const snap = await db.collection("users").where("phoneNormalized", "==", normalized).limit(1).get();
+        if (!snap.empty) {
+          const data = snap.docs[0].data() || {};
+          const email = String(data.email || data.username || "").trim();
+          if (email) return email;
+        }
+      } catch {}
+    }
+    return "";
+  }
+
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     setBusy(true);
     setStatus("登入中...", false);
 
-    const email = document.getElementById("email").value.trim();
+    const loginId = document.getElementById("email").value.trim();
     const password = document.getElementById("password").value;
 
     try {
       const remember = Boolean(rememberEl && rememberEl.checked);
       const persistence = remember ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Persistence.SESSION;
       await auth.setPersistence(persistence);
+      const email = await resolveEmailForLogin(loginId);
+      if (!email) {
+        setStatus(db ? "找不到此手機號碼或電子郵件對應的帳號。" : "目前版本不支援手機號碼登入，請改用電子郵件登入或重新整理更新。", true);
+        return;
+      }
       const cred = await auth.signInWithEmailAndPassword(email, password);
       const user = cred && cred.user ? cred.user : auth.currentUser;
       const role = await resolveRole(user, email);

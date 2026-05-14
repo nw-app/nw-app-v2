@@ -15,6 +15,9 @@
   const STORAGE_CONFIG = "csp_config_v1";
   const STORAGE_ACCOUNTS = "csp_accounts_v1";
   const STORAGE_ACTIVE_COMMUNITY = "csp_active_community_v1";
+  const STORAGE_LAST_PAGE = "csp_system_page_v1";
+  const STORAGE_AREA_FILTER = "csp_community_area_filter_v1";
+  const PAGES = ["accounts", "community", "links"];
 
   const state = {
     communities: [],
@@ -23,7 +26,25 @@
     unsubConfig: null,
     unsubResidents: null,
     currentPage: "accounts",
+    communityAreaFilter: "全部",
+    accountsRoleView: "resident",
   };
+
+  try {
+    const raw = String(location.hash || "").replace(/^#/, "");
+    const seg = raw ? raw.split(/[/?]/)[0] : "";
+    if (PAGES.includes(seg)) state.currentPage = seg;
+  } catch {}
+  try {
+    if (!state.currentPage || state.currentPage === "accounts") {
+      const savedPage = String(localStorage.getItem(STORAGE_LAST_PAGE) || "");
+      if (PAGES.includes(savedPage)) state.currentPage = savedPage;
+    }
+  } catch {}
+  try {
+    const savedArea = String(localStorage.getItem(STORAGE_AREA_FILTER) || "");
+    if (["全部", "台北", "新北", "桃園"].includes(savedArea)) state.communityAreaFilter = savedArea;
+  } catch {}
 
   const catalogCommunityButtons = [
     { id: "parcel", name: "包裹郵件", defaultUrl: "#community/parcel" },
@@ -193,60 +214,305 @@
     host.appendChild(node);
 
     const communitySelect = document.getElementById("r_community");
+    const accountsCommunityField = document.getElementById("field_accounts_community");
     const statusEl = document.getElementById("acctStatus");
+    const addBtn = document.getElementById("btnAddResident");
+    const modal = document.getElementById("residentModal");
+    const modalTitleEl = document.getElementById("residentModalTitle");
+    const modalRoleNameEl = document.getElementById("residentRoleName");
+    const form = document.getElementById("residentModalForm");
+    const submitBtn = document.getElementById("btnSubmitResidentModal");
+    const modalStatus = document.getElementById("residentModalStatus");
+    const inputCategory = document.getElementById("modal_r_category");
+    const fieldCategory = document.getElementById("field_r_category");
+    const inputCommunity = document.getElementById("modal_r_community");
+    const inputUnit = document.getElementById("modal_r_unit");
+    const inputName = document.getElementById("modal_r_name");
+    const inputEmail = document.getElementById("modal_r_email");
+    const inputPhone = document.getElementById("modal_r_phone");
+    const inputPassword = document.getElementById("modal_r_password");
+    const inputAddress = document.getElementById("modal_r_address");
+    const inputEnabled = document.getElementById("modal_r_enabled");
+    const unitMatchBadge = document.getElementById("unitMatchBadge");
+    const avatarUploader = document.getElementById("residentAvatarUploader");
+    const avatarInput = document.getElementById("residentAvatarInput");
+    const avatarPreview = document.getElementById("residentAvatarPreview");
+    const avatarPlaceholder = document.getElementById("residentAvatarPlaceholder");
+    const rolesWrap = document.getElementById("modal_r_roles");
+    const roleOtherChk = document.getElementById("modal_r_role_other_chk");
+    const roleOtherText = document.getElementById("modal_r_role_other_text");
+    const fieldCommunity = document.getElementById("field_r_community");
+    const fieldUnit = document.getElementById("field_r_unit");
+    const fieldRoles = document.getElementById("field_r_roles");
+    const fieldAddress = document.getElementById("field_r_address");
+    const cancelBtn = document.getElementById("btnCancelResidentModal");
+    const closeBtn = document.getElementById("btnCloseResidentModal");
+    const backdrop = modal ? modal.querySelector("[data-modal-close]") : null;
+    let detachKeydown = () => {};
+    let unitTouched = false;
+    let avatarFile = null;
+    let avatarPreviewData = "";
+    let editUserId = "";
+    let modalRoleView = "resident";
+    let forceCreateUser = false;
 
-    const setOptions = () => {
+    const getCommunityOptions = () => {
+      const area = String(state.communityAreaFilter || "全部");
       const list = state.communities || [];
-      communitySelect.innerHTML = list.map((c) => `<option value="${c.id}">${c.name || c.id}</option>`).join("");
+      return list.filter((c) => area === "全部" ? true : String(c?.area || "") === area);
     };
 
-    setOptions();
-    const initialCommunityId = loadActiveCommunityId({ communities: state.communities });
-    if (initialCommunityId) communitySelect.value = initialCommunityId;
+    const resolveUnits = () => {
+      const cid = normalizeText(inputCommunity ? inputCommunity.value : "") || normalizeText(communitySelect.value || "");
+      const c = (state.communities || []).find((x) => String(x?.id || "") === String(cid || ""));
+      return c && Array.isArray(c.units) ? c.units : [];
+    };
 
-    let currentResidents = [];
+    const updateUnitMatch = () => {
+      if (!unitMatchBadge || !inputUnit) return;
+      if (!unitTouched) {
+        unitMatchBadge.classList.remove("show");
+        unitMatchBadge.hidden = true;
+        unitMatchBadge.style.display = "none";
+        return;
+      }
+      const unit = normalizeText(inputUnit.value);
+      const units = resolveUnits();
+      const ok = Boolean(unit) && units.some((x) => String(x || "").trim() === unit);
+      unitMatchBadge.hidden = !ok;
+      unitMatchBadge.classList.toggle("show", ok);
+      unitMatchBadge.style.display = ok ? "inline-flex" : "none";
+    };
 
-    const renderResidentList = () => {
+    const readResidentRoles = () => {
+      const picked = new Set();
+      if (rolesWrap) {
+        rolesWrap.querySelectorAll("input[type=\"checkbox\"]").forEach((el) => {
+          if (el.checked) picked.add(String(el.value || ""));
+        });
+      }
+      const otherEnabled = roleOtherChk && roleOtherChk.checked;
+      const otherText = normalizeText(roleOtherText ? roleOtherText.value : "");
+      const roles = Array.from(picked).filter(Boolean);
+      const extra = otherEnabled ? otherText : "";
+      return { roles, extra };
+    };
+
+    const syncOtherRoleInput = () => {
+      if (!roleOtherText || !roleOtherChk) return;
+      roleOtherText.hidden = !roleOtherChk.checked;
+      if (!roleOtherChk.checked) roleOtherText.value = "";
+    };
+
+    const sha256Hex = async (text) => {
+      const v = String(text || "");
+      const cryptoObj = window.crypto && window.crypto.subtle ? window.crypto : null;
+      if (!cryptoObj) return "";
+      const data = new TextEncoder().encode(v);
+      const hashBuf = await cryptoObj.subtle.digest("SHA-256", data);
+      const bytes = Array.from(new Uint8Array(hashBuf));
+      return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+    };
+
+    const setAvatarPreview = (dataUrl) => {
+      avatarPreviewData = String(dataUrl || "");
+      if (avatarPreview) {
+        avatarPreview.src = avatarPreviewData || "";
+        avatarPreview.style.display = avatarPreviewData ? "block" : "none";
+      }
+      if (avatarPlaceholder) avatarPlaceholder.style.display = avatarPreviewData ? "none" : "block";
+    };
+
+    const fileToAvatarDataUrl = (file) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("read-failed"));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error("image-decode-failed"));
+        img.onload = () => {
+          const target = 360;
+          const srcW = img.naturalWidth || 0;
+          const srcH = img.naturalHeight || 0;
+          if (!srcW || !srcH) {
+            reject(new Error("bad-image"));
+            return;
+          }
+          const side = Math.min(srcW, srcH);
+          const sx = Math.round((srcW - side) / 2);
+          const sy = Math.round((srcH - side) / 2);
+          const canvas = document.createElement("canvas");
+          canvas.width = target;
+          canvas.height = target;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("no-canvas"));
+            return;
+          }
+          ctx.drawImage(img, sx, sy, side, side, 0, 0, target, target);
+          resolve(canvas.toDataURL("image/jpeg", 0.78));
+        };
+        img.src = String(reader.result || "");
+      };
+      reader.readAsDataURL(file);
+    });
+
+    const setOptions = () => {
+      const list = getCommunityOptions();
+      const html = list.map((c) => `<option value="${c.id}">${c.name || c.id}</option>`).join("");
+      communitySelect.innerHTML = html;
+      if (inputCommunity) {
+        inputCommunity.innerHTML = html;
+      }
+      return list;
+    };
+
+    const optionList = setOptions();
+    const pickedCommunityId = loadActiveCommunityId({ communities: optionList }) || "";
+    if (pickedCommunityId && optionList.some((c) => String(c?.id || "") === String(pickedCommunityId))) {
+      communitySelect.value = pickedCommunityId;
+    } else if (optionList[0]) {
+      communitySelect.value = String(optionList[0].id || "");
+    }
+    if (communitySelect.value) setActiveCommunityId(communitySelect.value);
+
+    let currentUsers = [];
+
+    const matchesRole = (docRole, view) => {
+      const r = String(docRole || "");
+      if (view === "admin") return r === "admin" || r === "系統管理員" || r === "系統";
+      if (view === "community") return r === "community" || r === "社區";
+      if (!r) return true;
+      return r === "resident" || r === "住戶";
+    };
+
+    const viewToRoleValue = (view) => {
+      if (view === "admin") return "admin";
+      if (view === "community") return "community";
+      return "住戶";
+    };
+
+    const roleValueToView = (role) => {
+      const r = String(role || "");
+      if (matchesRole(r, "admin")) return "admin";
+      if (matchesRole(r, "community")) return "community";
+      return "resident";
+    };
+
+    const applyModalMode = (view) => {
+      modalRoleView = viewToRoleValue(view) === "住戶" ? "resident" : view;
+      const isResident = modalRoleView === "resident";
+      const isCommunity = modalRoleView === "community";
+      const isAdmin = modalRoleView === "admin";
+      const setFieldVisible = (el, visible) => {
+        if (!el) return;
+        el.hidden = !visible;
+        el.style.display = visible ? "" : "none";
+      };
+      setFieldVisible(fieldCategory, !isAdmin);
+      setFieldVisible(fieldCommunity, isResident || isCommunity);
+      setFieldVisible(fieldUnit, isResident);
+      setFieldVisible(fieldRoles, isResident);
+      setFieldVisible(fieldAddress, isResident);
+
+      if (inputCategory) inputCategory.required = !isAdmin;
+      if (inputCommunity) inputCommunity.required = Boolean(isResident || isCommunity);
+      if (inputUnit) inputUnit.required = Boolean(isResident);
+      if (unitMatchBadge) {
+        unitMatchBadge.hidden = true;
+        unitMatchBadge.classList.remove("show");
+        unitMatchBadge.style.display = "none";
+      }
+      if (inputCategory) {
+        if (isCommunity) {
+          inputCategory.innerHTML = `
+            <option value="管理員" selected>管理員</option>
+            <option value="總幹事">總幹事</option>
+            <option value="秘書">秘書</option>
+          `.trim();
+        } else {
+          inputCategory.innerHTML = `
+            <option value="住戶" selected>住戶</option>
+            <option value="委員">委員</option>
+          `.trim();
+        }
+      }
+      if (modalRoleNameEl) {
+        const label = modalRoleView === "admin" ? "系統管理員" : modalRoleView === "community" ? "社區" : "住戶";
+        modalRoleNameEl.textContent = label;
+      }
+    };
+
+    const avatarHtml = (u) => {
+      const dataUrl = u && u.avatarDataUrl ? String(u.avatarDataUrl || "") : "";
+      const name = String(u && (u.username || u.name) ? (u.username || u.name) : "U");
+      const initial = name.trim().slice(0, 1).toUpperCase() || "U";
+      return dataUrl ? `<img src="${dataUrl}" alt="">` : `<div class="fallback">${initial}</div>`;
+    };
+
+    const renderUserList = () => {
+      const view = String(state.accountsRoleView || "resident");
       const activeId = communitySelect.value || "";
       const rList = document.getElementById("residentList");
-      const residents = (currentResidents || []).filter((r) => String(r.communityId || "") === String(activeId || ""));
-      rList.innerHTML = residents.map((r) => `
-            <div class="item">
-              <div>
-                <div style="font-weight:900;">${r.unit}｜${r.name}</div>
-                <div class="meta">
-                  <span class="tag ${r.enabled ? "red" : ""}">${r.enabled ? "已開通" : "未開通"}</span>
-                  <span class="tag">帳號：${r.username}</span>
+      const list = view === "admin" ? (currentUsers || []) : (currentUsers || []).filter((r) => String(r.communityId || "") === String(activeId || ""));
+      const title = view === "admin" ? "系統管理員" : view === "community" ? "社區" : "住戶";
+      rList.innerHTML = list.map((r) => {
+        const unitText = String(r.unit || "").trim();
+        const sub = view === "resident" && unitText ? `<div class="account-sub">${unitText}</div>` : "";
+        return `
+            <div class="item account-item">
+              <div class="account-left">
+                <div class="avatar-sm">${avatarHtml(r)}</div>
+                <div class="account-text">
+                  <div class="account-name">${String(r.name || "—")}</div>
+                  ${sub}
+                  <div class="account-meta">
+                    <div class="switch-label">${r.enabled ? "啟用" : "停用"}</div>
+                    <label class="switch">
+                      <input type="checkbox" data-toggle-user="${r.id}" ${r.enabled ? "checked" : ""} ${r.readOnly ? "disabled" : ""} />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
                 </div>
               </div>
-              <button class="btn" type="button" data-toggle-resident="${r.id}">${r.enabled ? "停用" : "啟用"}</button>
+              <div class="account-actions">
+                <button class="icon-btn" type="button" data-edit-user="${r.id}" aria-label="編輯" title="編輯">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-2.8l-.2-.2a2 2 0 0 0-2.8 0L5 17v3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M13.5 6.5 17.5 10.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn danger" type="button" data-delete-user="${r.id}" aria-label="刪除" title="刪除">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M9 4h6l1 2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M6 6h12l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
+              </div>
             </div>
-          `).join("") || `
+          `.trim();
+      }).join("") || `
             <div class="item">
               <div>
-                <div style="font-weight:900;">尚無住戶帳號</div>
+                <div style="font-weight:900;">尚無${title}帳號</div>
                 <div class="meta"><span class="tag">提示</span></div>
               </div>
               <span class="tag">—</span>
             </div>
           `;
 
-      rList.querySelectorAll("[data-toggle-resident]").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const id = btn.getAttribute("data-toggle-resident");
-          const found = (currentResidents || []).find((x) => String(x.id || "") === String(id || ""));
-          if (!id || !found) return;
+      rList.querySelectorAll("[data-toggle-user]").forEach((input) => {
+        input.addEventListener("change", async () => {
+          const id = input.getAttribute("data-toggle-user");
+          const found = (currentUsers || []).find((x) => String(x.id || "") === String(id || ""));
+          if (!id || !found || found.readOnly) return;
           setBusy(true);
           try {
             await db.collection("users").doc(String(id)).set(
-              { enabled: !found.enabled, updatedAt: FieldValue.serverTimestamp() },
+              { enabled: Boolean(input.checked), updatedAt: FieldValue.serverTimestamp() },
               { merge: true }
             );
           } catch {
-            if (statusEl) {
-              statusEl.textContent = "更新失敗，請稍後再試。";
-              statusEl.classList.add("error");
-            }
           } finally {
             setBusy(false);
           }
@@ -254,28 +520,68 @@
       });
     };
 
-    const subscribeResidents = (communityId) => {
+    const subscribeUsers = (communityId) => {
       if (state.unsubResidents) state.unsubResidents();
-      currentResidents = [];
+      currentUsers = [];
       const rList = document.getElementById("residentList");
       if (rList) rList.innerHTML = `<div class="status">讀取中...</div>`;
       const cid = String(communityId || "default");
-      state.unsubResidents = db.collection("users").where("community", "==", cid).onSnapshot(
+      const view = String(state.accountsRoleView || "resident");
+      const base = db.collection("users");
+      const q =
+        view === "admin"
+          ? base.where("role", "in", ["admin", "系統管理員", "系統"])
+          : base.where("community", "==", cid);
+      state.unsubResidents = q.onSnapshot(
         (snap) => {
-          currentResidents = snap.docs.map((d) => {
+          currentUsers = snap.docs.map((d) => {
             const v = d.data() || {};
             const role = String(v.role || "");
-            if (role && role !== "住戶") return null;
+            if (!matchesRole(role, view)) return null;
             return {
               id: d.id,
               communityId: String(v.community || cid),
               unit: String(v.houseNo || v.unit || ""),
               name: String(v.displayName || v.name || ""),
-              username: String(v.username || ""),
+              username: String(v.username || v.email || v.phone || ""),
+              role: String(v.role || ""),
+              email: String(v.email || ""),
+              phone: String(v.phone || ""),
+              address: String(v.address || ""),
+              residentRoles: Array.isArray(v.residentRoles) ? v.residentRoles : [],
+              residentRoleOther: String(v.residentRoleOther || ""),
+              avatarDataUrl: String(v.avatarDataUrl || ""),
               enabled: v.enabled !== false,
+              category: String(v.category || v.residentCategory || ""),
             };
           }).filter(Boolean);
-          renderResidentList();
+          if (view === "admin") {
+            const me = auth && auth.currentUser ? auth.currentUser : null;
+            const email = me && me.email ? String(me.email || "").trim() : "";
+            if (email) {
+              const exists = currentUsers.some((u) => String(u.username || "").toLowerCase() === email.toLowerCase());
+              if (!exists) {
+                currentUsers.unshift({
+                  id: "__auth_admin__",
+                  communityId: "",
+                  unit: "",
+                  name: email,
+                  username: email,
+                  role: "admin",
+                  email,
+                  phone: "",
+                  address: "",
+                  residentRoles: [],
+                  residentRoleOther: "",
+                  avatarDataUrl: "",
+                  enabled: true,
+                  category: "",
+                  readOnly: true,
+                });
+              }
+            }
+          }
+          renderUserList();
         },
         () => {
           if (statusEl) {
@@ -288,58 +594,304 @@
 
     communitySelect.addEventListener("change", () => {
       setActiveCommunityId(communitySelect.value);
-      subscribeResidents(communitySelect.value);
+      subscribeUsers(communitySelect.value);
     });
 
-    document.getElementById("formCreateResident").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const communityId = communitySelect.value;
-      const unit = normalizeText(document.getElementById("r_unit").value);
-      const name = normalizeText(document.getElementById("r_name").value);
-      const username = normalizeText(document.getElementById("r_user").value);
-      const enabled = document.getElementById("r_enabled").value === "true";
-      if (!communityId || !unit || !name || !username) {
-        if (statusEl) {
-          statusEl.textContent = "請填寫所屬社區、戶號、姓名與登入帳號（示意）。";
-          statusEl.classList.add("error");
-        }
-        return;
-      }
+    const clearModalStatus = () => {
+      if (!modalStatus) return;
+      modalStatus.hidden = true;
+      modalStatus.textContent = "";
+      modalStatus.classList.remove("error");
+    };
 
-      setBusy(true);
-      try {
-        const id = db.collection("users").doc().id;
-        await db.collection("users").doc(id).set(
-          {
-            role: "住戶",
-            community: String(communityId || "default"),
-            houseNo: unit,
+    const showModalError = (msg) => {
+      if (!modalStatus) return;
+      modalStatus.hidden = false;
+      modalStatus.textContent = msg;
+      modalStatus.classList.add("error");
+    };
+
+    const closeModal = () => {
+      if (!modal) return;
+      modal.hidden = true;
+      detachKeydown();
+      detachKeydown = () => {};
+      clearModalStatus();
+    };
+
+    const openModal = () => {
+      if (!modal) return;
+      setOptions();
+      const cid = String(communitySelect.value || "");
+      if (inputCommunity && cid) inputCommunity.value = cid;
+      editUserId = "";
+      forceCreateUser = false;
+      applyModalMode(String(state.accountsRoleView || "resident"));
+      if (modalTitleEl) modalTitleEl.setAttribute("data-mode", "create");
+      if (submitBtn) submitBtn.textContent = "建立";
+      if (inputCategory) {
+        if (modalRoleView === "community") inputCategory.value = "管理員";
+        else if (modalRoleView === "admin") inputCategory.value = "";
+        else inputCategory.value = "住戶";
+      }
+      avatarFile = null;
+      setAvatarPreview("");
+      if (inputUnit) inputUnit.value = "";
+      if (inputName) inputName.value = "";
+      if (inputEmail) inputEmail.value = "";
+      if (inputPhone) inputPhone.value = "";
+      if (inputPassword) inputPassword.value = "";
+      if (inputAddress) inputAddress.value = "";
+      if (rolesWrap) rolesWrap.querySelectorAll("input[type=\"checkbox\"]").forEach((el) => (el.checked = false));
+      if (roleOtherText) roleOtherText.value = "";
+      syncOtherRoleInput();
+      if (inputEnabled) inputEnabled.value = "true";
+      clearModalStatus();
+      modal.hidden = false;
+      if (modalRoleView === "resident") {
+        if (inputUnit) inputUnit.focus();
+      } else {
+        if (inputName) inputName.focus();
+      }
+      unitTouched = false;
+      if (unitMatchBadge) {
+        unitMatchBadge.hidden = true;
+        unitMatchBadge.classList.remove("show");
+        unitMatchBadge.style.display = "none";
+      }
+      const onKeydown = (e) => {
+        if (e.key === "Escape") closeModal();
+      };
+      document.addEventListener("keydown", onKeydown);
+      detachKeydown = () => document.removeEventListener("keydown", onKeydown);
+    };
+
+    const openEditModal = (user) => {
+      if (!modal || !user) return;
+      forceCreateUser = Boolean(user.readOnly);
+      editUserId = forceCreateUser ? "" : String(user.id || "");
+      const view = roleValueToView(user.role);
+      applyModalMode(view);
+      if (modalTitleEl) modalTitleEl.setAttribute("data-mode", "edit");
+      if (submitBtn) submitBtn.textContent = "儲存";
+      setOptions();
+
+      if (inputCategory) inputCategory.value = normalizeText(user.category || "住戶") || "住戶";
+      if (inputCommunity && user.communityId) inputCommunity.value = String(user.communityId || "");
+      if (inputUnit) inputUnit.value = normalizeText(user.unit || "");
+      if (inputName) inputName.value = normalizeText(user.name || "");
+      if (inputEmail) inputEmail.value = normalizeText(user.email || "");
+      if (inputPhone) inputPhone.value = normalizeText(user.phone || "");
+      if (inputPassword) inputPassword.value = "";
+      if (inputAddress) inputAddress.value = normalizeText(user.address || "");
+      if (inputEnabled) inputEnabled.value = user.enabled ? "true" : "false";
+      if (rolesWrap) rolesWrap.querySelectorAll("input[type=\"checkbox\"]").forEach((el) => (el.checked = false));
+      if (Array.isArray(user.residentRoles) && rolesWrap) {
+        const set = new Set(user.residentRoles.map((x) => String(x || "")));
+        rolesWrap.querySelectorAll("input[type=\"checkbox\"]").forEach((el) => {
+          const v = String(el.value || "");
+          if (set.has(v)) el.checked = true;
+        });
+      }
+      if (roleOtherText) roleOtherText.value = normalizeText(user.residentRoleOther || "");
+      if (roleOtherChk) roleOtherChk.checked = Boolean(roleOtherText && roleOtherText.value);
+      syncOtherRoleInput();
+
+      avatarFile = null;
+      setAvatarPreview(String(user.avatarDataUrl || ""));
+
+      clearModalStatus();
+      modal.hidden = false;
+      if (inputName) inputName.focus();
+      unitTouched = false;
+      if (unitMatchBadge) {
+        unitMatchBadge.hidden = true;
+        unitMatchBadge.classList.remove("show");
+        unitMatchBadge.style.display = "none";
+      }
+      const onKeydown = (e) => {
+        if (e.key === "Escape") closeModal();
+      };
+      document.addEventListener("keydown", onKeydown);
+      detachKeydown = () => document.removeEventListener("keydown", onKeydown);
+    };
+
+    if (addBtn) addBtn.addEventListener("click", openModal);
+    if (cancelBtn) cancelBtn.addEventListener("click", closeModal);
+    if (closeBtn) closeBtn.addEventListener("click", closeModal);
+    if (backdrop) backdrop.addEventListener("click", closeModal);
+    if (inputUnit) inputUnit.addEventListener("input", () => {
+      unitTouched = true;
+      updateUnitMatch();
+    });
+    if (inputCommunity) inputCommunity.addEventListener("change", () => {
+      if (!unitTouched && unitMatchBadge) {
+        unitMatchBadge.hidden = true;
+        unitMatchBadge.classList.remove("show");
+        unitMatchBadge.style.display = "none";
+      }
+      updateUnitMatch();
+    });
+    if (roleOtherChk) roleOtherChk.addEventListener("change", syncOtherRoleInput);
+    if (avatarUploader && avatarInput) {
+      const openPicker = () => avatarInput.click();
+      avatarUploader.addEventListener("click", openPicker);
+      avatarUploader.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openPicker();
+        }
+      });
+      avatarInput.addEventListener("change", () => {
+        const file = avatarInput.files && avatarInput.files[0];
+        if (!file) return;
+        avatarFile = file;
+        const reader = new FileReader();
+        reader.onload = () => setAvatarPreview(String(reader.result || ""));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    if (form) {
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const category = normalizeText(inputCategory ? inputCategory.value : "住戶") || "住戶";
+        const communityId = normalizeText(inputCommunity ? inputCommunity.value : "") || normalizeText(communitySelect.value || "");
+        const unit = normalizeText(inputUnit ? inputUnit.value : "");
+        const name = normalizeText(inputName ? inputName.value : "");
+        const email = normalizeText(inputEmail ? inputEmail.value : "");
+        const phone = normalizeText(inputPhone ? inputPhone.value : "");
+        const passwordRaw = normalizeText(inputPassword ? inputPassword.value : "");
+        const address = normalizeText(inputAddress ? inputAddress.value : "");
+        const enabled = String(inputEnabled ? inputEnabled.value : "true") === "true";
+        const isResident = modalRoleView === "resident";
+        const isCommunity = modalRoleView === "community";
+        const requiredCommunity = isResident || isCommunity;
+        if (!name) {
+          showModalError("請填寫姓名。");
+          return;
+        }
+        if (requiredCommunity && !communityId) {
+          showModalError("請選擇所屬社區。");
+          return;
+        }
+        if (isResident && !unit) {
+          showModalError("請填寫戶號。");
+          return;
+        }
+        if (!email || !phone) {
+          showModalError("電子郵件與手機號碼皆為必填。");
+          return;
+        }
+        const loginAccount = email;
+        const password = editUserId ? passwordRaw : (passwordRaw || phone);
+        if (!password && !editUserId) {
+          showModalError("未設定預設密碼時，預設會使用手機號碼；請填寫手機號碼或預設密碼。");
+          return;
+        }
+        const { roles, extra } = readResidentRoles();
+        if (isResident) {
+          if (roles.includes("其他") && !extra) {
+            showModalError("已選擇「其他」，請輸入自定義角色。");
+            return;
+          }
+        }
+
+        setBusy(true);
+        try {
+          const isEdit = Boolean(editUserId) && !forceCreateUser;
+          const id = isEdit ? String(editUserId) : db.collection("users").doc().id;
+          const roleValue = viewToRoleValue(modalRoleView);
+          const passwordHash = password ? await sha256Hex(password) : "";
+          const avatarDataUrl = avatarFile ? await fileToAvatarDataUrl(avatarFile) : "";
+          const payload = {
+            role: roleValue,
+            category,
+            community: String((requiredCommunity ? communityId : "default") || "default"),
+            houseNo: isResident ? unit : "",
             displayName: name,
-            username,
+            username: loginAccount,
+            email,
+            phone,
+            phoneNormalized: phone.replace(/\D/g, ""),
+            address,
             enabled: Boolean(enabled),
-            createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-        document.getElementById("r_unit").value = "";
-        document.getElementById("r_name").value = "";
-        document.getElementById("r_user").value = "";
-        if (statusEl) {
-          statusEl.textContent = "已建立住戶帳號（示意）。";
-          statusEl.classList.remove("error");
+          };
+          if (isResident) {
+            payload.residentRoles = roles;
+            payload.residentRoleOther = extra;
+          }
+          if (avatarDataUrl) payload.avatarDataUrl = avatarDataUrl;
+          if (passwordHash) {
+            payload.passwordHash = passwordHash;
+            payload.passwordHashAlg = "SHA-256";
+            payload.passwordUpdatedAt = FieldValue.serverTimestamp();
+          }
+          if (!isEdit) payload.createdAt = FieldValue.serverTimestamp();
+          await db.collection("users").doc(id).set(payload, { merge: true });
+          if (communitySelect.value !== String(communityId || "")) {
+            communitySelect.value = String(communityId || "");
+            setActiveCommunityId(communitySelect.value);
+            subscribeUsers(communitySelect.value);
+          }
+          if (statusEl) {
+            statusEl.textContent = isEdit ? "已更新帳號。" : "已建立帳號。";
+            statusEl.classList.remove("error");
+          }
+          closeModal();
+        } catch {
+          showModalError(isEdit ? "更新失敗，請稍後再試。" : "建立失敗，請稍後再試。");
+        } finally {
+          setBusy(false);
         }
-      } catch {
-        if (statusEl) {
-          statusEl.textContent = "建立失敗，請稍後再試。";
-          statusEl.classList.add("error");
-        }
-      } finally {
-        setBusy(false);
-      }
-    });
+      });
+    }
 
-    subscribeResidents(initialCommunityId || communitySelect.value || "default");
+    const isAdminView = state.accountsRoleView === "admin";
+    if (accountsCommunityField) {
+      if (isAdminView) accountsCommunityField.remove();
+      else accountsCommunityField.hidden = false;
+    }
+    communitySelect.disabled = Boolean(isAdminView);
+    if (inputCommunity) inputCommunity.disabled = Boolean(isAdminView);
+    subscribeUsers(communitySelect.value || "default");
+
+    const rList = document.getElementById("residentList");
+    if (rList) {
+      rList.addEventListener("click", async (e) => {
+        const editBtn = e.target && e.target.closest ? e.target.closest("[data-edit-user]") : null;
+        if (editBtn) {
+          const id = editBtn.getAttribute("data-edit-user");
+          const found = (currentUsers || []).find((x) => String(x.id || "") === String(id || ""));
+          if (!found) return;
+          openEditModal(found);
+          return;
+        }
+        const delBtn = e.target && e.target.closest ? e.target.closest("[data-delete-user]") : null;
+        if (delBtn) {
+          const id = delBtn.getAttribute("data-delete-user");
+          const found = (currentUsers || []).find((x) => String(x.id || "") === String(id || ""));
+          if (!id || !found) return;
+          const ok = await (window.nwConfirm ? window.nwConfirm({
+            title: "確認刪除",
+            message: `確定要刪除此帳號「${String(found.username || found.name || id)}」？此操作無法復原。`,
+            okText: "刪除",
+            cancelText: "取消",
+            danger: true,
+          }) : Promise.resolve(window.confirm("確定要刪除？此操作無法復原。")));
+          if (!ok) return;
+          if (found.readOnly) return;
+          setBusy(true);
+          try {
+            await db.collection("users").doc(String(id)).delete();
+          } catch {
+          } finally {
+            setBusy(false);
+          }
+        }
+      });
+    }
   }
 
   function renderCommunity() {
@@ -356,6 +908,7 @@
     const inputName = document.getElementById("modal_c_name");
     const inputCode = document.getElementById("modal_c_code");
     const inputLevel = document.getElementById("modal_c_level");
+    const inputArea = document.getElementById("modal_c_area");
     const imageInput = document.getElementById("communityImageInput");
     const imagePreview = document.getElementById("communityImagePreview");
     const imagePlaceholder = document.getElementById("communityImagePlaceholder");
@@ -364,11 +917,20 @@
     const cancelBtn = document.getElementById("btnCancelCommunityModal");
     const closeBtn = document.getElementById("btnCloseCommunityModal");
     const backdrop = modal ? modal.querySelector("[data-modal-close]") : null;
+    const unitModal = document.getElementById("unitModal");
+    const unitForm = document.getElementById("unitModalForm");
+    const unitTextarea = document.getElementById("modal_units_text");
+    const unitStatus = document.getElementById("unitModalStatus");
+    const unitCloseBtn = document.getElementById("btnCloseUnitModal");
+    const unitCancelBtn = document.getElementById("btnCancelUnitModal");
+    const unitBackdrop = unitModal ? unitModal.querySelector("[data-modal-close]") : null;
 
     let editCommunityId = "";
     let modalImageData = "";
     let modalImageFile = null;
     let detachKeydown = () => {};
+    let unitCommunityId = "";
+    let detachUnitKeydown = () => {};
 
     const setImagePreview = (dataUrl) => {
       modalImageData = dataUrl || "";
@@ -472,6 +1034,7 @@
       if (inputName) inputName.value = mode === "edit" && community ? String(community.name || "") : "";
       if (inputCode) inputCode.value = mode === "edit" && community ? String(community.username || "") : "";
       if (inputLevel) inputLevel.value = mode === "edit" && community ? String(community.level || "銅") : "銅";
+      if (inputArea) inputArea.value = mode === "edit" && community ? String(community.area || "台北") : "台北";
       modalImageFile = null;
       if (imageInput) imageInput.value = "";
       setImagePreview(mode === "edit" && community ? String(community.imageDataUrl || "") : "");
@@ -505,13 +1068,16 @@
     const renderCommunityList = () => {
       const d = loadAccounts();
       const cList = document.getElementById("communityList");
-      cList.innerHTML = (d.communities || []).map((c) => `
+      const area = String(state.communityAreaFilter || "全部");
+      const list = (d.communities || []).filter((c) => area === "全部" ? true : String(c?.area || "") === area);
+      cList.innerHTML = list.map((c) => `
             <div class="item community-item">
               <div class="community-row1">
                 <div class="community-row1-left">
                   <div class="community-thumb">
                     ${c.imageDataUrl ? `<img src="${c.imageDataUrl}" alt="社區圖片">` : `<div class="fallback">2:1</div>`}
                   </div>
+                  <div class="community-area">${c.area || "台北"}</div>
                   <div class="community-code">${c.username}</div>
                   <div class="community-name">${c.name}</div>
                 </div>
@@ -526,6 +1092,12 @@
                   </label>
                 </div>
                 <div class="community-actions">
+                  <button class="icon-btn" type="button" data-units-community="${c.id}" aria-label="戶號" title="戶號">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M7 7h10M7 12h10M7 17h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                      <path d="M5.2 5.2h13.6v13.6H5.2z" stroke="currentColor" stroke-width="1.7" opacity="0.65"/>
+                    </svg>
+                  </button>
                   <button class="icon-btn" type="button" data-edit-community="${c.id}" aria-label="編輯" title="編輯">
                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                       <path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-2.8l-.2-.2a2 2 0 0 0-2.8 0L5 17v3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
@@ -571,6 +1143,16 @@
         });
       });
 
+      cList.querySelectorAll("[data-units-community]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-units-community");
+          const c = (state.communities || []).find((x) => x && String(x.id || "") === String(id || ""));
+          if (!id || !c) return;
+          setActiveCommunityId(id);
+          openUnitModal(c);
+        });
+      });
+
       cList.querySelectorAll("[data-delete-community]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-delete-community");
@@ -610,6 +1192,86 @@
     if (cancelBtn) cancelBtn.addEventListener("click", closeModal);
     if (closeBtn) closeBtn.addEventListener("click", closeModal);
     if (backdrop) backdrop.addEventListener("click", closeModal);
+
+    const clearUnitStatus = () => {
+      if (!unitStatus) return;
+      unitStatus.hidden = true;
+      unitStatus.textContent = "";
+      unitStatus.classList.remove("error");
+    };
+
+    const showUnitError = (msg) => {
+      if (!unitStatus) return;
+      unitStatus.hidden = false;
+      unitStatus.textContent = String(msg || "");
+      unitStatus.classList.add("error");
+      unitStatus.scrollIntoView({ block: "nearest" });
+    };
+
+    const closeUnitModal = () => {
+      if (!unitModal) return;
+      unitModal.hidden = true;
+      detachUnitKeydown();
+      detachUnitKeydown = () => {};
+      unitCommunityId = "";
+      clearUnitStatus();
+    };
+
+    const openUnitModal = (community) => {
+      if (!unitModal || !unitTextarea) return;
+      unitCommunityId = String(community?.id || "");
+      const list = Array.isArray(community?.units) ? community.units : [];
+      unitTextarea.value = list.map((x) => String(x || "").trim()).filter(Boolean).join("\n");
+      clearUnitStatus();
+      unitModal.hidden = false;
+      unitTextarea.focus();
+      const onKeydown = (e) => {
+        if (e.key === "Escape") closeUnitModal();
+      };
+      document.addEventListener("keydown", onKeydown);
+      detachUnitKeydown = () => document.removeEventListener("keydown", onKeydown);
+    };
+
+    if (unitCancelBtn) unitCancelBtn.addEventListener("click", closeUnitModal);
+    if (unitCloseBtn) unitCloseBtn.addEventListener("click", closeUnitModal);
+    if (unitBackdrop) unitBackdrop.addEventListener("click", closeUnitModal);
+
+    if (unitForm) {
+      unitForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const id = String(unitCommunityId || "");
+        if (!id) {
+          closeUnitModal();
+          return;
+        }
+        const raw = String(unitTextarea ? unitTextarea.value : "");
+        const lines = raw.split(/\r?\n/).map((x) => String(x || "").trim()).filter(Boolean);
+        const uniq = [];
+        const seen = new Set();
+        for (const x of lines) {
+          const k = x;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          uniq.push(k);
+        }
+        if (uniq.length === 0) {
+          showUnitError("請至少輸入 1 個戶號（每行一戶）。");
+          return;
+        }
+        setBusy(true);
+        try {
+          await db.collection("communities").doc(id).set(
+            { units: uniq, updatedAt: FieldValue.serverTimestamp() },
+            { merge: true }
+          );
+          closeUnitModal();
+        } catch {
+          showUnitError("儲存失敗，請稍後再試。");
+        } finally {
+          setBusy(false);
+        }
+      });
+    }
     if (imageUploader && imageInput) {
       const openPicker = () => imageInput.click();
       imageUploader.addEventListener("click", openPicker);
@@ -635,6 +1297,7 @@
         const name = normalizeText(inputName ? inputName.value : "");
         const code = normalizeText(inputCode ? inputCode.value : "");
         const level = normalizeText(inputLevel ? inputLevel.value : "銅") || "銅";
+        const area = normalizeText(inputArea ? inputArea.value : "台北") || "台北";
         if (!name || !code) {
           showModalError("請填寫社區名稱與社區代號。");
           return;
@@ -659,6 +1322,7 @@
             name,
             username: code,
             level,
+            area,
             imageDataUrl,
             updatedAt: FieldValue.serverTimestamp(),
           };
@@ -687,19 +1351,83 @@
     refresh();
   }
 
+  function renderAreaFilterBar() {
+    const bar = document.getElementById("areaFilter");
+    if (!bar) return;
+    const shouldShow = state.currentPage === "community" || state.currentPage === "accounts";
+    bar.hidden = !shouldShow;
+    if (!shouldShow) return;
+
+    const options = ["全部", "台北", "新北", "桃園"];
+    const current = String(state.communityAreaFilter || "全部");
+    const titleArea = document.getElementById("communityAreaName");
+    if (titleArea) {
+      const rv = String(state.accountsRoleView || "resident");
+      if (state.currentPage === "accounts" && rv === "community") titleArea.textContent = "社區";
+      else if (state.currentPage === "accounts" && rv === "admin") titleArea.textContent = "系統管理員";
+      else titleArea.textContent = current;
+    }
+
+    if (state.currentPage === "accounts") {
+      const rv = String(state.accountsRoleView || "resident");
+      bar.innerHTML = `
+        <div class="filter-left">
+          ${options.map((x) => `
+              <button type="button" class="filter-btn ${rv === "resident" && x === current ? "active" : ""}" data-area="${x}" aria-pressed="${rv === "resident" && x === current ? "true" : "false"}">${x}</button>
+            `).join("")}
+        </div>
+        <div class="filter-right">
+          <button type="button" class="filter-btn ${rv === "community" ? "active" : ""}" data-accounts-role="community" aria-pressed="${rv === "community" ? "true" : "false"}">社區</button>
+          <button type="button" class="filter-btn ${rv === "admin" ? "active" : ""}" data-accounts-role="admin" aria-pressed="${rv === "admin" ? "true" : "false"}">系統</button>
+        </div>
+      `.trim();
+    } else {
+      bar.innerHTML = options.map((x) => `
+          <button type="button" class="filter-btn ${x === current ? "active" : ""}" data-area="${x}" aria-pressed="${x === current ? "true" : "false"}">${x}</button>
+        `).join("");
+    }
+
+    if (bar._boundAreaFilter) return;
+    bar._boundAreaFilter = true;
+    bar.addEventListener("click", (e) => {
+      const roleBtn = e.target && e.target.closest ? e.target.closest("[data-accounts-role]") : null;
+      if (roleBtn && state.currentPage === "accounts") {
+        const v = String(roleBtn.getAttribute("data-accounts-role") || "resident");
+        if (v === state.accountsRoleView) return;
+        state.accountsRoleView = v;
+        openPage("accounts");
+        return;
+      }
+
+      const t = e.target && e.target.closest ? e.target.closest("[data-area]") : null;
+      if (!t) return;
+      const v = String(t.getAttribute("data-area") || "全部");
+      if (v === String(state.communityAreaFilter || "全部")) return;
+      state.communityAreaFilter = v;
+      if (state.currentPage === "accounts") state.accountsRoleView = "resident";
+      try {
+        localStorage.setItem(STORAGE_AREA_FILTER, v);
+      } catch {}
+      openPage(state.currentPage);
+    });
+  }
+
   function ensureCommunitiesSubscription() {
     if (state.unsubCommunities) return;
     state.unsubCommunities = db.collection("communities").onSnapshot(
       (snap) => {
         state.communities = snap.docs.map((d) => {
           const v = d.data() || {};
+          const units = Array.isArray(v.units) ? v.units.map((x) => String(x || "").trim()).filter(Boolean) : [];
           return {
             id: String(v.id || d.id),
             name: String(v.name || ""),
             username: String(v.username || ""),
             enabled: v.enabled !== false,
             level: String(v.level || "銅"),
+            area: String(v.area || "台北"),
             imageDataUrl: String(v.imageDataUrl || ""),
+            units,
           };
         });
         openPage(state.currentPage);
@@ -736,23 +1464,35 @@
   }
 
   function openPage(page) {
-    state.currentPage = page;
+    const nextPage = PAGES.includes(String(page || "")) ? String(page || "") : "accounts";
+    state.currentPage = nextPage;
+    try {
+      localStorage.setItem(STORAGE_LAST_PAGE, nextPage);
+    } catch {}
+    try {
+      const nextHash = `#${nextPage}`;
+      if (location.hash !== nextHash) history.replaceState(null, "", nextHash);
+    } catch {}
     const titleEl = document.getElementById("pageTitle");
     const subEl = document.getElementById("pageSubtitle");
-    setNavCurrent(page);
+    setNavCurrent(nextPage);
+    if (subEl) {
+      subEl.hidden = true;
+      subEl.style.display = "none";
+    }
 
-    if (page === "community") {
+    if (nextPage === "community") {
       titleEl.textContent = "社區列表";
       subEl.textContent = "";
-      subEl.style.display = "none";
       renderCommunity();
+      renderAreaFilterBar();
       return;
     }
-    if (page === "accounts") {
+    if (nextPage === "accounts") {
       titleEl.textContent = "帳號開通";
       subEl.textContent = "管理社區與住戶的登入帳號開通狀態（示意）";
-      subEl.style.display = "";
       renderAccounts();
+      renderAreaFilterBar();
       return;
     }
     titleEl.textContent = "連結設定";
@@ -760,9 +1500,9 @@
     const activeId = loadActiveCommunityId(accounts);
     const activeName = accounts.communities.find((c) => c.id === activeId)?.name || activeId;
     subEl.textContent = `設定「社區後台」與「住戶前台」按鈕功能與連結（社區：${activeName}）`;
-    subEl.style.display = "";
     ensureConfigSubscription(activeId);
     renderLinks();
+    renderAreaFilterBar();
   }
 
   const btnReset = document.getElementById("btnReset");
@@ -794,6 +1534,13 @@
   document.addEventListener("DOMContentLoaded", bindSignOut);
 
   document.querySelectorAll("#nav button").forEach((b) => b.addEventListener("click", () => openPage(b.dataset.page)));
+  window.addEventListener("hashchange", () => {
+    const raw = String(location.hash || "").replace(/^#/, "");
+    const seg = raw ? raw.split(/[/?]/)[0] : "";
+    if (!PAGES.includes(seg)) return;
+    if (seg === state.currentPage) return;
+    openPage(seg);
+  });
 
   auth.onAuthStateChanged((user) => {
     const role = sessionStorage.getItem("csp_role");

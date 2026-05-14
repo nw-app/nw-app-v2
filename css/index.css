@@ -247,6 +247,30 @@ input:focus, select:focus {
   gap: 10px;
   margin-top: 4px;
 }
+
+#adminModalBackdrop[hidden] { display: none !important; }
+#adminModalBackdrop.modal-backdrop:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  z-index: 50;
+}
+
+#adminModalBackdrop > .modal {
+  position: relative;
+  inset: auto;
+  width: min(520px, 100%);
+  background: #fff;
+  border-radius: 22px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  box-shadow: 0 28px 80px rgba(17, 24, 39, 0.35);
+  padding: 22px 20px;
+  display: grid;
+  gap: 14px;
+}
 @media (max-width: 420px), (max-height: 740px) {
   .wrap { padding: calc(12px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom)); }
   .mast-inner { gap: 6px; }

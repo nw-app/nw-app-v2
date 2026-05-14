@@ -31,8 +31,9 @@
 
       <div class="frame-midtop" aria-label="頁中上">
         <div class="frame-title">
-          <h1 id="pageTitle">帳號開通</h1>
-          <p id="pageSubtitle">管理社區與住戶的登入帳號開通狀態（示意）</p>
+          <div id="pageTitle" class="page-title" role="heading" aria-level="1" hidden aria-hidden="true">帳號開通</div>
+          <p id="pageSubtitle" hidden aria-hidden="true">管理社區與住戶的登入帳號開通狀態（示意）</p>
+          <div class="area-filter" id="areaFilter" hidden></div>
         </div>
       </div>
 
@@ -115,49 +116,103 @@
         <section class="card">
           <div class="card-hd">
             <div>
-              <h2>住戶帳號開通（示意）</h2>
-              <p>建立/停用住戶登入帳號（使用本機儲存示意）</p>
+              <h2><span class="community-area-label" id="communityAreaName">全部</span><span>帳號列表</span></h2>
             </div>
-            <span class="tag">住戶</span>
+            <button class="btn btn-primary" type="button" id="btnAddResident">新增帳號</button>
           </div>
           <div class="card-bd">
-            <div class="field">
+            <div class="field" id="field_accounts_community">
               <label for="r_community">所屬社區</label>
               <select id="r_community"></select>
             </div>
-            <form class="form" id="formCreateResident" style="margin-top:12px;">
-              <div class="row">
-                <div class="field">
-                  <label for="r_unit">戶號</label>
-                  <input id="r_unit" type="text" placeholder="例：A-1203" />
-                </div>
-                <div class="field">
-                  <label for="r_name">姓名</label>
-                  <input id="r_name" type="text" placeholder="例：林小姐" />
-                </div>
-              </div>
-              <div class="row">
-                <div class="field">
-                  <label for="r_user">登入帳號（示意）</label>
-                  <input id="r_user" type="text" placeholder="例：A1203" />
-                </div>
-                <div class="field">
-                  <label for="r_enabled">狀態</label>
-                  <select id="r_enabled">
-                    <option value="true" selected>啟用</option>
-                    <option value="false">停用</option>
-                  </select>
-                </div>
-              </div>
-              <div style="display:flex; gap:10px; justify-content:flex-end;">
-                <button class="btn btn-primary" type="submit">建立</button>
-              </div>
-            </form>
             <div class="list" id="residentList" style="margin-top:12px;"></div>
+
+            <div class="modal" id="residentModal" hidden>
+              <div class="modal-backdrop" data-modal-close="1"></div>
+              <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="residentModalTitle">
+                <div class="modal-hd">
+                  <h3 class="modal-title" id="residentModalTitle">新增 <span class="community-area-label" id="residentRoleName">住戶</span> 帳號</h3>
+                  <button class="modal-close" type="button" id="btnCloseResidentModal" aria-label="關閉">×</button>
+                </div>
+                <form id="residentModalForm">
+                  <div class="modal-body">
+                    <div class="image-uploader avatar-uploader" id="residentAvatarUploader" role="button" tabindex="0" aria-label="上傳大頭照">
+                      <img class="image-preview avatar-preview" id="residentAvatarPreview" alt="" />
+                      <div class="image-placeholder" id="residentAvatarPlaceholder">上傳大頭照</div>
+                      <input id="residentAvatarInput" type="file" accept="image/*" hidden />
+                    </div>
+                    <div class="field" id="field_r_category">
+                      <label for="modal_r_category">類別</label>
+                      <select id="modal_r_category" required>
+                        <option value="住戶" selected>住戶</option>
+                        <option value="委員">委員</option>
+                      </select>
+                    </div>
+                    <div class="field" id="field_r_community">
+                      <label for="modal_r_community">所屬社區</label>
+                      <select id="modal_r_community" required></select>
+                    </div>
+                    <div class="field" id="field_r_unit">
+                      <label for="modal_r_unit">戶號</label>
+                      <div class="input-wrap">
+                        <input id="modal_r_unit" class="has-suffix" type="text" placeholder="例：A-1203" autocomplete="off" required />
+                        <span class="input-suffix ok" id="unitMatchBadge" hidden aria-hidden="true" style="display:none;">
+                          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M20 6.5 10 17.5 4 12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                          </svg>
+                          <span>有此戶號</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div class="field">
+                      <label for="modal_r_name">姓名</label>
+                      <input id="modal_r_name" type="text" placeholder="例：林小姐" autocomplete="off" required />
+                    </div>
+                    <div class="field">
+                      <label for="modal_r_email">電子郵件（登入帳號）</label>
+                      <input id="modal_r_email" type="email" placeholder="例：a1203@example.com" autocomplete="username" required />
+                    </div>
+                    <div class="field">
+                      <label for="modal_r_phone">手機號碼（登入帳號）</label>
+                      <input id="modal_r_phone" type="tel" placeholder="例：0912345678" autocomplete="tel" required />
+                    </div>
+                    <div class="field">
+                      <label for="modal_r_password">預設密碼（不填則使用手機號碼）</label>
+                      <input id="modal_r_password" type="text" placeholder="例：0912345678" autocomplete="off" />
+                    </div>
+                    <div class="field" id="field_r_address">
+                      <label for="modal_r_address">地址</label>
+                      <input id="modal_r_address" type="text" placeholder="例：台北市..." autocomplete="street-address" />
+                    </div>
+                    <div class="field" id="field_r_roles">
+                      <label>住戶角色</label>
+                      <div class="check-grid" id="modal_r_roles">
+                        <label class="check"><input type="checkbox" value="區權人" />區權人</label>
+                        <label class="check"><input type="checkbox" value="區權人家屬" />區權人家屬</label>
+                        <label class="check"><input type="checkbox" value="承租戶" />承租戶</label>
+                        <label class="check"><input type="checkbox" value="其他" id="modal_r_role_other_chk" />其他</label>
+                      </div>
+                      <input id="modal_r_role_other_text" type="text" placeholder="自定義角色" autocomplete="off" hidden />
+                    </div>
+                    <div class="field">
+                      <label for="modal_r_enabled">狀態</label>
+                      <select id="modal_r_enabled" required>
+                        <option value="true" selected>啟用</option>
+                        <option value="false">停用</option>
+                      </select>
+                    </div>
+                    <div class="status" id="residentModalStatus" hidden></div>
+                  </div>
+                  <div class="modal-ft">
+                    <button class="btn" type="button" id="btnCancelResidentModal">取消</button>
+                    <button class="btn btn-primary" type="submit" id="btnSubmitResidentModal">建立</button>
+                  </div>
+                </form>
+              </div>
+            </div>
           </div>
         </section>
       </div>
-      <div class="status" id="acctStatus" style="margin-top:12px;">提示：此頁面示範「開通/停用」狀態與資料欄位，登入權限示意以角色選擇為主。</div>
     </template>
 
     <template id="tplCommunity">
@@ -165,7 +220,7 @@
         <section class="card">
           <div class="card-hd">
             <div>
-              <h2>新增社區（建立社區帳號）</h2>
+              <h2><span class="community-area-label" id="communityAreaName">全部</span><span>社區列表</span></h2>
             </div>
             <button class="btn btn-primary" type="button" id="btnAddCommunity">新增社區</button>
           </div>
@@ -202,11 +257,42 @@
                         <option value="銅" selected>銅</option>
                       </select>
                     </div>
+                    <div class="field">
+                      <label for="modal_c_area">區域</label>
+                      <select id="modal_c_area" required>
+                        <option value="台北">台北</option>
+                        <option value="新北">新北</option>
+                        <option value="桃園">桃園</option>
+                      </select>
+                    </div>
                     <div class="status" id="communityModalStatus" hidden></div>
                   </div>
                   <div class="modal-ft">
                     <button class="btn" type="button" id="btnCancelCommunityModal">取消</button>
                     <button class="btn btn-primary" type="submit" id="btnSubmitCommunityModal">建立</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <div class="modal" id="unitModal" hidden>
+              <div class="modal-backdrop" data-modal-close="1"></div>
+              <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="unitModalTitle">
+                <div class="modal-hd">
+                  <h3 class="modal-title" id="unitModalTitle">戶號</h3>
+                  <button class="modal-close" type="button" id="btnCloseUnitModal" aria-label="關閉">×</button>
+                </div>
+                <form id="unitModalForm">
+                  <div class="modal-body">
+                    <div class="field">
+                      <label for="modal_units_text">戶號（每行一戶）</label>
+                      <textarea id="modal_units_text" rows="12" placeholder="例：A-1203&#10;A-1205&#10;B-0901" required></textarea>
+                    </div>
+                    <div class="status" id="unitModalStatus" hidden></div>
+                  </div>
+                  <div class="modal-ft">
+                    <button class="btn" type="button" id="btnCancelUnitModal">取消</button>
+                    <button class="btn btn-primary" type="submit" id="btnSubmitUnitModal">儲存</button>
                   </div>
                 </form>
               </div>
@@ -239,12 +325,13 @@
             <div class="profile-item">
               <div class="profile-label">大頭照</div>
               <div class="profile-avatar">
+                <img id="profileAvatarImg" alt="" />
                 <span class="user-avatar-fallback" id="profileAvatarFallback" aria-hidden="true">U</span>
               </div>
             </div>
             <div class="profile-item">
               <div class="profile-label">姓名</div>
-              <input id="profileName" type="text" placeholder="請輸入姓名" autocomplete="off" />
+              <div class="profile-value" id="profileNameText">—</div>
             </div>
             <div class="status" id="profileStatus" hidden></div>
           </div>

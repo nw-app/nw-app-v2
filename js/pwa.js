@@ -66,8 +66,9 @@
     const closeBtn = document.getElementById("btnCloseProfileModal");
     const closeBtnFt = document.getElementById("btnCloseProfileModalFt");
     const roleEl = document.getElementById("profileRole");
-    const nameInput = document.getElementById("profileName");
     const statusEl = document.getElementById("profileStatus");
+    const nameTextEl = document.getElementById("profileNameText");
+    const profileAvatarImg = document.getElementById("profileAvatarImg");
     const profileAvatar = document.getElementById("profileAvatarFallback");
     const headerAvatar = document.getElementById("userAvatarFallback");
 
@@ -107,37 +108,26 @@
       const initial = pickInitial(user.displayName, user.email);
       if (profileAvatar) profileAvatar.textContent = initial;
       if (headerAvatar) headerAvatar.textContent = initial;
+      if (profileAvatarImg) profileAvatarImg.style.display = "none";
+      if (profileAvatar) profileAvatar.style.display = "";
 
       const db = ensureDb();
-      if (!db) return;
-      const doc = await db.collection("users").doc(String(user.uid)).get();
-      const data = doc && doc.exists ? (doc.data() || {}) : {};
+      let data = {};
+      if (db) {
+        const doc = await db.collection("users").doc(String(user.uid)).get();
+        data = doc && doc.exists ? (doc.data() || {}) : {};
+      }
       const displayName = String(data.displayName || user.displayName || "").trim();
-      if (nameInput) nameInput.value = displayName;
+      if (nameTextEl) nameTextEl.textContent = displayName || "—";
       const initial2 = pickInitial(displayName, user.email);
       if (profileAvatar) profileAvatar.textContent = initial2;
       if (headerAvatar) headerAvatar.textContent = initial2;
-    };
 
-    const saveName = async () => {
-      const fb = window.firebase;
-      const user = fb && fb.auth ? fb.auth().currentUser : null;
-      if (!user || !nameInput) return;
-      const name = String(nameInput.value || "").trim();
-      const db = ensureDb();
-      if (!db) return;
-      showStatus("儲存中...", false);
-      try {
-        await db.collection("users").doc(String(user.uid)).set(
-          { displayName: name, updatedAt: fb.firestore.FieldValue.serverTimestamp() },
-          { merge: true }
-        );
-        showStatus("已儲存。", false);
-        const initial = pickInitial(name, user.email);
-        if (profileAvatar) profileAvatar.textContent = initial;
-        if (headerAvatar) headerAvatar.textContent = initial;
-      } catch {
-        showStatus("儲存失敗。", true);
+      const avatarUrl = String(data.avatarDataUrl || user.photoURL || "").trim();
+      if (avatarUrl && profileAvatarImg) {
+        profileAvatarImg.src = avatarUrl;
+        profileAvatarImg.style.display = "block";
+        if (profileAvatar) profileAvatar.style.display = "none";
       }
     };
 
@@ -172,7 +162,7 @@
       detachKeydown = () => document.removeEventListener("keydown", onKeyDown);
 
       requestAnimationFrame(() => {
-        if (nameInput) nameInput.focus();
+        if (closeBtnFt) closeBtnFt.focus();
       });
     };
 
@@ -185,7 +175,6 @@
     if (backdrop) backdrop.addEventListener("click", close);
     if (closeBtn) closeBtn.addEventListener("click", close);
     if (closeBtnFt) closeBtnFt.addEventListener("click", close);
-    if (nameInput) nameInput.addEventListener("blur", () => saveName());
   }
 
   function ensureConfirmModal() {

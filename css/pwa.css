@@ -193,7 +193,8 @@ html.force-portrait .pwa-install {
 }
 .modal-close:hover { background: rgba(17, 24, 39, 0.06); }
 .modal-dialog form { min-height: 0; display: grid; grid-template-rows: 1fr auto; }
-.modal-body { padding: 12px 12px; overflow: auto; min-height: 0; display: grid; gap: 16px; align-content: start; }
+.modal-body { padding: 12px 12px; overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 16px; }
+.modal-body .image-uploader { flex: 0 0 auto; }
 .modal-ft {
   padding: 12px 12px;
   border-top: 1px solid rgba(17, 24, 39, 0.1);
@@ -208,6 +209,19 @@ html.force-portrait .pwa-install {
 .profile-value { font-weight: 900; color: rgba(31, 41, 55, 0.9); }
 .profile-avatar { display: flex; align-items: center; }
 .profile-avatar .user-avatar-fallback { width: 56px; height: 56px; font-size: 18px; }
+#profileModal .modal-body { align-items: center; text-align: center; }
+#profileModal .profile-item { justify-items: center; width: 100%; }
+#profileModal .profile-avatar { justify-content: center; width: 100%; }
+#profileModal #profileAvatarImg {
+  width: 120px;
+  height: 120px;
+  border-radius: 999px;
+  object-fit: cover;
+  display: none;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: rgba(17, 24, 39, 0.04);
+}
+#profileModal .profile-avatar .user-avatar-fallback { width: 120px; height: 120px; font-size: 34px; }
 .modal-body input[type="text"] {
   height: 44px;
   padding: 0 12px;
