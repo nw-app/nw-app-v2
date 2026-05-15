@@ -370,7 +370,7 @@
     return null;
   }
 
-  function openVisitorPassModal80({ cid, communityName, visitorId, name, unit, purpose, phone, plate, email, inAt, outAt }) {
+  function openVisitorPassModal80({ cid, communityName, visitorId, name, unit, purpose, phone, plate, email, partySize, createdAt, inAt, outAt }) {
     const modal = ensureVisitorPassModal();
     let detach = () => {};
     detach = bindModalClose(modal, () => detach());
@@ -387,7 +387,7 @@
     else if (titleEl) titleEl.textContent = "訪客證";
     if (communityEl) communityEl.textContent = String(communityName || "—").trim() || "—";
 
-    const inText = formatYmdHms(toDateAny(inAt));
+    const inText = formatYmdHms(toDateAny(inAt) || toDateAny(createdAt));
     const outText = formatYmdHms(toDateAny(outAt));
     if (timesEl) {
       timesEl.innerHTML = `
@@ -395,7 +395,9 @@
         <span class="time-pill out">離開：${escapeHtml(outText || "—")}</span>
       `.trim();
     }
+    const party = Number.isFinite(Number(partySize)) && Number(partySize) >= 1 ? String(Math.floor(Number(partySize))) : "1";
     const rows = [
+      ["訪客人數", party],
       ["訪客", name || "—"],
       ["拜訪戶號", unit || "—"],
       ["到訪事由", purpose || "—"],
@@ -417,6 +419,7 @@
       `【${String(communityName || "").trim() || "社區"}｜訪客證】`,
       `來訪：${inText || "—"}`,
       `離開：${outText || "—"}`,
+      `訪客人數：${party}`,
       `訪客：${name || "—"}`,
       `拜訪戶號：${unit || "—"}`,
       `到訪事由：${purpose || "—"}`,
@@ -459,6 +462,7 @@
             <div style="margin-top:10px;color:#374151;">
               <div>來訪：${escapeHtml(inText || "—")}</div>
               <div>離開：${escapeHtml(outText || "—")}</div>
+              <div>訪客人數：${escapeHtml(party)}</div>
               <div>訪客：${escapeHtml(name || "—")}</div>
               <div>拜訪戶號：${escapeHtml(unit || "—")}</div>
               <div>到訪事由：${escapeHtml(purpose || "—")}</div>
@@ -496,6 +500,15 @@
       e.preventDefault();
       try {
         if (navigator && typeof navigator.share === "function") {
+          try {
+            const resp = await fetch(qrSrc, { cache: "no-store" });
+            const blob = await resp.blob();
+            const file = new File([blob], "visitor-pass-qr.png", { type: blob.type || "image/png" });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({ title: "訪客證", text: shareText, files: [file] });
+              return;
+            }
+          } catch {}
           await navigator.share({ title: "訪客證", text: shareText });
           return;
         }
@@ -545,6 +558,10 @@
         </div>
         <form id="visitorScanModalForm">
           <div class="modal-body">
+            <div class="field">
+              <label for="visitorScanPartySize">來訪人數</label>
+              <input id="visitorScanPartySize" type="number" min="1" step="1" value="1" inputmode="numeric" />
+            </div>
             <div class="scan-stage">
               <video id="visitorScanVideo" class="scan-video" playsinline></video>
               <div class="scan-overlay" aria-hidden="true">
@@ -628,6 +645,8 @@
 
   function openVisitorScanModal80({ cid, onApplied }) {
     const modal = ensureVisitorScanModal();
+    const partySizeEl = modal.querySelector("#visitorScanPartySize");
+    const stageEl = modal.querySelector(".scan-stage");
     const video = modal.querySelector("#visitorScanVideo");
     const statusEl = modal.querySelector("#visitorScanStatus");
     const hintEl = modal.querySelector("#visitorScanHint");
@@ -678,6 +697,7 @@
     const start = async () => {
       setStatus("", false);
       if (hintEl) hintEl.textContent = "請將訪客證 QR code 對準框線。";
+      if (stageEl) stageEl.hidden = false;
 
       if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
         setStatus("此瀏覽器不支援相機功能。", true);
@@ -717,36 +737,76 @@
           setStatus("無法辨識訪客 ID。", true);
           return;
         }
+        const partySizeRaw = partySizeEl ? Number(partySizeEl.value) : 1;
+        const partySize = Number.isFinite(partySizeRaw) && partySizeRaw >= 1 ? Math.floor(partySizeRaw) : 1;
         const nowDate = new Date();
         const Timestamp = firebase.firestore.Timestamp;
         try {
           const docRef = db.collection("communities").doc(String(cid || "default")).collection("visitors").doc(String(vid));
-          const snap = await docRef.get();
-          if (!snap || !snap.exists) {
+          const res = await db.runTransaction(async (tx) => {
+            const snap = await tx.get(docRef);
+            if (!snap || !snap.exists) return { kind: "missing" };
+            const data = snap.data() || {};
+            const hasIn = Boolean(data.inAt);
+            const hasOut = Boolean(data.outAt);
+            const invalidated = Boolean(data.qrInvalidated);
+            if (invalidated || hasOut) return { kind: "invalid" };
+
+            if (!hasIn) {
+              const inAt = Timestamp.fromDate(nowDate);
+              tx.set(
+                docRef,
+                {
+                  inAt,
+                  partySize,
+                  updatedAt: FieldValue.serverTimestamp(),
+                },
+                { merge: true }
+              );
+              return { kind: "in", inAt };
+            }
+
+            const outAt = Timestamp.fromDate(nowDate);
+            tx.set(
+              docRef,
+              {
+                outAt,
+                qrInvalidated: true,
+                qrInvalidatedAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+            return { kind: "out", outAt };
+          });
+
+          if (res.kind === "missing") {
             setStatus("找不到此訪客資料。", true);
             return;
           }
-          const data = snap.data() || {};
-          const hasIn = Boolean(data.inAt);
-          const hasOut = Boolean(data.outAt);
-
-          if (!hasIn) {
-            const inAt = Timestamp.fromDate(nowDate);
-            await docRef.set({ inAt, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-            if (typeof onApplied === "function") onApplied(vid, { inAt });
+          if (res.kind === "invalid") {
+            stop();
+            if (stageEl) stageEl.hidden = true;
+            setStatus("此 QR code 已失效，不能再重複使用。", true);
+            if (hintEl) hintEl.textContent = "請關閉視窗。";
+            return;
+          }
+          if (res.kind === "in") {
+            stop();
+            if (stageEl) stageEl.hidden = true;
+            if (typeof onApplied === "function") onApplied(vid, { inAt: res.inAt, partySize });
             setStatus(`來訪時間：${formatYmdHms(nowDate)}`, false);
-            if (hintEl) hintEl.textContent = "請再掃描一次登記離開時間（請先移開 QR code 再掃）。";
+            if (hintEl) hintEl.textContent = "已完成來訪登記。離開時請再次按「掃碼登記」並掃描同一張訪客證。";
             return;
           }
-          if (!hasOut) {
-            const outAt = Timestamp.fromDate(nowDate);
-            await docRef.set({ outAt, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-            if (typeof onApplied === "function") onApplied(vid, { outAt });
+          if (res.kind === "out") {
+            stop();
+            if (stageEl) stageEl.hidden = true;
+            if (typeof onApplied === "function") onApplied(vid, { outAt: res.outAt, qrInvalidated: true });
             setStatus(`離開時間：${formatYmdHms(nowDate)}`, false);
-            if (hintEl) hintEl.textContent = "已完成離開登記。";
+            if (hintEl) hintEl.textContent = "已完成離開登記。此 QR code 已失效。";
             return;
           }
-          setStatus("此訪客已完成來訪/離開登記。", true);
         } catch (err) {
           const code = String(err && err.code ? err.code : "");
           setStatus(code.includes("permission-denied") ? "沒有權限執行此操作。" : "更新失敗，請稍後再試。", true);
@@ -1999,7 +2059,7 @@
     const formatDt = (v) => {
       const d = toDate(v);
       if (!d) return "";
-      return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
     };
 
     let visitors = [];
@@ -2032,7 +2092,7 @@
           const phone = String(v.phone || "").trim();
           const plate = String(v.plate || "").trim();
           const purpose = String(v.purpose || "").trim();
-          const inText = formatDt(v.inAt);
+          const inText = formatDt(v.inAt || v.createdAt);
           const outText = formatDt(v.outAt);
           const subParts = [unit, plate, phone, purpose].filter(Boolean);
           return `
@@ -2083,8 +2143,8 @@
       const cur = visitors[idx] || {};
       visitors[idx] = { ...cur, ...patch };
       visitors.sort((a, b) => {
-        const at = (toDate(a.inAt) || new Date(0)).getTime();
-        const bt = (toDate(b.inAt) || new Date(0)).getTime();
+        const at = (toDate(a.inAt) || toDate(a.createdAt) || new Date(0)).getTime();
+        const bt = (toDate(b.inAt) || toDate(b.createdAt) || new Date(0)).getTime();
         return bt - at;
       });
       renderList();
@@ -2112,6 +2172,8 @@
             note: String(v.note || ""),
             inAt: v.inAt || v.inTime || v.createdAt || null,
             outAt: v.outAt || v.outTime || null,
+            partySize: v.partySize != null ? Number(v.partySize) : null,
+            qrInvalidated: Boolean(v.qrInvalidated),
             keep: v.keep || null,
             createdAt: v.createdAt || null,
             updatedAt: v.updatedAt || null,
@@ -2314,6 +2376,7 @@
           }
           await docRef.set(payload, { merge: true });
 
+          const clientCreatedAt = Timestamp.fromDate(new Date());
           const nextItem = {
             id,
             qrToken: id,
@@ -2328,15 +2391,17 @@
             note,
             inAt: payload.inAt,
             outAt: payload.outAt,
+            partySize: !isEdit ? 1 : (data.partySize != null ? Number(data.partySize) : null),
             keep,
+            createdAt: !isEdit ? clientCreatedAt : (data.createdAt || null),
           };
           const idx = visitors.findIndex((x) => String(x.id || "") === id);
           if (idx >= 0) visitors[idx] = { ...(visitors[idx] || {}), ...nextItem };
           else visitors.unshift(nextItem);
 
           visitors.sort((a, b) => {
-            const at = (toDate(a.inAt) || new Date(0)).getTime();
-            const bt = (toDate(b.inAt) || new Date(0)).getTime();
+            const at = (toDate(a.inAt) || toDate(a.createdAt) || new Date(0)).getTime();
+            const bt = (toDate(b.inAt) || toDate(b.createdAt) || new Date(0)).getTime();
             return bt - at;
           });
           renderList();
@@ -2352,6 +2417,8 @@
               phone,
               plate,
               email,
+              partySize: 1,
+              createdAt: clientCreatedAt,
               inAt: null,
               outAt: null,
             });
@@ -2418,6 +2485,8 @@
             phone: String(v.phone || ""),
             plate: String(v.plate || ""),
             email: String(v.email || ""),
+            partySize: v.partySize != null ? Number(v.partySize) : 1,
+            createdAt: v.createdAt || null,
             inAt: v.inAt || null,
             outAt: v.outAt || null,
           });
