@@ -709,7 +709,7 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 8px 18px rgba(17, 24, 39, 0.18);
   transition: transform 140ms ease;
 }
-.switch input:checked + .slider { background: rgba(211, 47, 47, 0.65); }
+.switch input:checked + .slider { background: rgba(46, 125, 50, 0.65); }
 .switch input:checked + .slider::before { transform: translateX(20px); }
 .modal-ft {
   padding: 12px 12px;

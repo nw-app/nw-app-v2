@@ -561,13 +561,17 @@
           const id = input.getAttribute("data-toggle-user");
           const found = (currentUsers || []).find((x) => String(x.id || "") === String(id || ""));
           if (!id || !found || found.readOnly) return;
+          const prev = Boolean(found.enabled);
           setBusy(true);
           try {
             await db.collection("users").doc(String(id)).set(
               { enabled: Boolean(input.checked), updatedAt: FieldValue.serverTimestamp() },
               { merge: true }
             );
+            found.enabled = Boolean(input.checked);
+            renderUserList();
           } catch {
+            input.checked = prev;
           } finally {
             setBusy(false);
           }
@@ -936,6 +940,41 @@
           const c = (state.communities || []).find((x) => String(x && x.id ? x.id : "") === String(payload.community || ""));
           const communityCode = c ? String(c.username || "") : "";
           await upsertUserLookup({ phoneNormalized, email, phone, uid: id, community: payload.community, communityCode, role: payload.role });
+
+          const existingIdx = (currentUsers || []).findIndex((x) => String(x && x.id ? x.id : "") === String(id));
+          const existing = existingIdx >= 0 ? (currentUsers[existingIdx] || null) : null;
+          const resolvedAvatarDataUrl = avatarDataUrl ? avatarDataUrl : String(existing && existing.avatarDataUrl ? existing.avatarDataUrl : "");
+          const nextItem = {
+            id: String(id),
+            communityId: String(payload.community || "default"),
+            unit: String(payload.houseNo || ""),
+            name: String(payload.displayName || ""),
+            username: String(payload.username || payload.email || payload.phone || ""),
+            role: String(payload.role || ""),
+            email: String(payload.email || ""),
+            phone: String(payload.phone || ""),
+            address: String(payload.address || ""),
+            residentRoles: Array.isArray(payload.residentRoles) ? payload.residentRoles : [],
+            residentRoleOther: String(payload.residentRoleOther || ""),
+            avatarDataUrl: resolvedAvatarDataUrl,
+            enabled: payload.enabled !== false,
+            category: String(payload.category || ""),
+          };
+          if (existingIdx >= 0) {
+            currentUsers[existingIdx] = { ...(currentUsers[existingIdx] || {}), ...nextItem };
+          } else {
+            currentUsers.unshift(nextItem);
+          }
+          if (String(state.accountsRoleView || "resident") === "admin") {
+            const me = auth && auth.currentUser ? auth.currentUser : null;
+            const myEmail = me && me.email ? String(me.email || "").trim().toLowerCase() : "";
+            if (myEmail) {
+              const hasReal = currentUsers.some((u) => String(u && (u.username || u.email) ? (u.username || u.email) : "").trim().toLowerCase() === myEmail && String(u.id || "") !== "__auth_admin__");
+              if (hasReal) currentUsers = currentUsers.filter((u) => String(u && u.id ? u.id : "") !== "__auth_admin__");
+            }
+          }
+          renderUserList();
+
           if (communitySelect.value !== String(communityId || "")) {
             communitySelect.value = String(communityId || "");
             setActiveCommunityId(communitySelect.value);
@@ -1001,6 +1040,35 @@
           setBusy(true);
           try {
             await db.collection("users").doc(String(id)).delete();
+            currentUsers = (currentUsers || []).filter((x) => String(x && x.id ? x.id : "") !== String(id));
+            if (String(state.accountsRoleView || "resident") === "admin") {
+              const me = auth && auth.currentUser ? auth.currentUser : null;
+              const myEmail = me && me.email ? String(me.email || "").trim().toLowerCase() : "";
+              const deletedEmail = String(found.username || found.email || "").trim().toLowerCase();
+              if (myEmail && deletedEmail && myEmail === deletedEmail) {
+                const exists = currentUsers.some((u) => String(u && (u.username || u.email) ? (u.username || u.email) : "").trim().toLowerCase() === myEmail);
+                if (!exists) {
+                  currentUsers.unshift({
+                    id: "__auth_admin__",
+                    communityId: "",
+                    unit: "",
+                    name: String(me.email || "—"),
+                    username: String(me.email || ""),
+                    role: "系統管理員",
+                    email: String(me.email || ""),
+                    phone: "",
+                    address: "",
+                    residentRoles: [],
+                    residentRoleOther: "",
+                    avatarDataUrl: "",
+                    enabled: true,
+                    category: "",
+                    readOnly: true,
+                  });
+                }
+              }
+            }
+            renderUserList();
           } catch {
           } finally {
             setBusy(false);

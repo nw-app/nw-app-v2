@@ -73,6 +73,58 @@
     return "resident";
   }
 
+  function isAdminRole(role) {
+    return String(role || "").trim().toLowerCase() === "admin";
+  }
+
+  async function resolveCommunityEnabled(communityIdOrCode) {
+    const raw = String(communityIdOrCode || "").trim();
+    if (!db || !raw || raw === "default") return true;
+    try {
+      const doc = await db.collection("communities").doc(raw).get();
+      if (doc && doc.exists) {
+        const data = doc.data() || {};
+        return data.enabled !== false;
+      }
+    } catch {}
+    try {
+      const snap = await db.collection("communities").where("username", "==", raw).limit(1).get();
+      const doc = snap && snap.docs && snap.docs[0] ? snap.docs[0] : null;
+      if (doc && doc.exists) {
+        const data = doc.data() || {};
+        return data.enabled !== false;
+      }
+    } catch {}
+    return true;
+  }
+
+  async function enforceLoginEnabled(user, role, lookupCommunityIdOrCode) {
+    if (!user || !db) return { ok: true };
+    let data = null;
+    try {
+      const doc = await db.collection("users").doc(String(user.uid)).get();
+      data = doc && doc.exists ? (doc.data() || {}) : null;
+    } catch {}
+
+    if (data && data.enabled === false) {
+      try { await auth.signOut(); } catch {}
+      try { sessionStorage.removeItem("csp_role"); } catch {}
+      return { ok: false, message: "目前您的帳號已停用" };
+    }
+
+    if (isAdminRole(role)) return { ok: true };
+
+    const communityKey = String((data && data.community ? data.community : "") || lookupCommunityIdOrCode || "").trim();
+    if (!communityKey || communityKey === "default") return { ok: true };
+    const enabled = await resolveCommunityEnabled(communityKey);
+    if (!enabled) {
+      try { await auth.signOut(); } catch {}
+      try { sessionStorage.removeItem("csp_role"); } catch {}
+      return { ok: false, message: "目前您的社區APP服務已停用" };
+    }
+    return { ok: true };
+  }
+
   async function resolveRole(user, emailHint) {
     try {
       const token = await user.getIdTokenResult();
@@ -243,6 +295,11 @@
       const cred = await auth.signInWithEmailAndPassword(email, password);
       const user = cred && cred.user ? cred.user : auth.currentUser;
       const role = await resolveRole(user, email);
+      const gate = await enforceLoginEnabled(user, role, lookupCommunityCode || lookupCommunity);
+      if (!gate.ok) {
+        setStatus(gate.message, true);
+        return;
+      }
 
       if (role === "admin") {
         const picked = await showAdminDestinationModal();
@@ -285,6 +342,12 @@
     didAutoRedirect = true;
     (async () => {
       const role = await resolveRole(user, user.email);
+      const gate = await enforceLoginEnabled(user, role, "");
+      if (!gate.ok) {
+        setStatus(gate.message, true);
+        didAutoRedirect = false;
+        return;
+      }
       if (role === "admin") {
         const picked = await showAdminDestinationModal();
         sessionStorage.setItem("csp_role", picked.role);
