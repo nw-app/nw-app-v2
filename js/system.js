@@ -1105,6 +1105,7 @@
     const unitForm = document.getElementById("unitModalForm");
     const unitTextarea = document.getElementById("modal_units_text");
     const unitStatus = document.getElementById("unitModalStatus");
+    const unitCountEl = document.getElementById("unitModalCount");
     const unitCloseBtn = document.getElementById("btnCloseUnitModal");
     const unitCancelBtn = document.getElementById("btnCancelUnitModal");
     const unitBackdrop = unitModal ? unitModal.querySelector("[data-modal-close]") : null;
@@ -1399,13 +1400,23 @@
       detachUnitKeydown = () => {};
       unitCommunityId = "";
       clearUnitStatus();
+      if (unitCountEl) unitCountEl.textContent = "總戶數：—";
     };
 
     const openUnitModal = (community) => {
       if (!unitModal || !unitTextarea) return;
       unitCommunityId = String(community?.id || "");
       const list = Array.isArray(community?.units) ? community.units : [];
-      unitTextarea.value = list.map((x) => String(x || "").trim()).filter(Boolean).join("\n");
+      const cleaned = list.map((x) => String(x || "").trim()).filter(Boolean);
+      const uniq = [];
+      const seen = new Set();
+      for (const x of cleaned) {
+        if (seen.has(x)) continue;
+        seen.add(x);
+        uniq.push(x);
+      }
+      unitTextarea.value = uniq.join("\n");
+      if (unitCountEl) unitCountEl.textContent = `總戶數：${uniq.length}`;
       clearUnitStatus();
       unitModal.hidden = false;
       unitTextarea.focus();

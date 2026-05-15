@@ -459,6 +459,7 @@ input:focus, select:focus, textarea:focus {
   min-height: 52px;
 }
 .modal-title { margin: 0; font-size: 16px; font-weight: 900; letter-spacing: 0.2px; }
+.unit-modal-count { margin-left: 10px; color: var(--brand, #d32f2f); font-size: 12px; font-weight: 900; white-space: nowrap; }
 .modal-close {
   width: 40px;
   height: 40px;

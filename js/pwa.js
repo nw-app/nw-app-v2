@@ -3,7 +3,11 @@
   const DISMISS_DAYS = 30;
   const shouldSuppressFirestoreAbort = (err) => {
     const msg = String((err && (err.message || err.reason?.message)) || err || "");
-    return msg.includes("net::ERR_ABORTED") && msg.includes("google.firestore.v1.Firestore/Listen/channel");
+    if (!msg.includes("net::ERR_ABORTED")) return false;
+    return (
+      msg.includes("google.firestore.v1.Firestore/Listen/channel") ||
+      msg.includes("firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel")
+    );
   };
 
   window.addEventListener("unhandledrejection", (e) => {
@@ -11,7 +15,8 @@
   });
 
   window.addEventListener("error", (e) => {
-    if (shouldSuppressFirestoreAbort(e && e.error)) e.preventDefault();
+    const msg = String((e && (e.error || e.message)) || "");
+    if (shouldSuppressFirestoreAbort(msg)) e.preventDefault();
   });
 
   function updateForcePortrait() {

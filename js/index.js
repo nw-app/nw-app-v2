@@ -37,7 +37,10 @@
   }
 
   function goTo(url) {
-    window.location.href = String(url || "index.html");
+    const target = String(url || "index.html");
+    if (window.__nw_redirecting) return;
+    window.__nw_redirecting = target;
+    window.location.replace(target);
   }
 
   if (btnApply) {
@@ -305,6 +308,7 @@
         const picked = await showAdminDestinationModal();
         sessionStorage.setItem("csp_role", picked.role);
         setStatus("登入成功，導向中...", false);
+        didAutoRedirect = true;
         goTo(picked.url);
         return;
       }
@@ -322,6 +326,7 @@
       }
       sessionStorage.setItem("csp_role", role);
       setStatus("登入成功，導向中...", false);
+      didAutoRedirect = true;
       goTo(url);
     } catch (err) {
       const code = String(err && err.code ? err.code : "");
@@ -346,6 +351,7 @@
       if (!gate.ok) {
         setStatus(gate.message, true);
         didAutoRedirect = false;
+        try { window.__nw_redirecting = ""; } catch {}
         return;
       }
       if (role === "admin") {

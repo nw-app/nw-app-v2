@@ -129,6 +129,15 @@ service cloud.firestore {
         );
       }
 
+      match /visitors/{visitorId} {
+        allow read, list: if request.auth != null && (
+          isAdmin() || (isCommunityStaff() && slug == getUserData().community)
+        );
+        allow create, update, delete: if request.auth != null && (
+          isAdmin() || (isCommunityStaff() && slug == getUserData().community)
+        );
+      }
+
       match /points_logs/{logId} {
         allow read: if request.auth != null && (
           isAdmin() || 
@@ -183,6 +192,11 @@ service cloud.firestore {
         isAdmin() || 
         (isCommunityStaff() && resource.data.community == getUserData().community)
       );
+    }
+
+    match /mail/{mailId} {
+      allow create: if request.auth != null && (isAdmin() || isCommunityStaff());
+      allow read, update, delete: if isAdmin();
     }
 
     match /{document=**} {

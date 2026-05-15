@@ -263,6 +263,7 @@ html.force-portrait .pwa-install {
 .community-picker-item .btn { width: 100%; }
 #profileModal .modal-body { align-items: center; text-align: center; }
 #profileModal .profile-item { justify-items: center; width: 100%; }
+#profileModal .profile-label { display: none; }
 #profileModal .profile-avatar { justify-content: center; width: 100%; }
 #profileModal #profileAvatarImg {
   width: 120px;

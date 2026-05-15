@@ -201,7 +201,7 @@ input:focus, select:focus {
   background: rgba(17, 24, 39, 0.03);
   border: 1px solid rgba(17, 24, 39, 0.06);
   color: #6b7280;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.6;
   min-height: 44px;
 }

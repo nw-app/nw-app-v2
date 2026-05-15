@@ -20,6 +20,7 @@
   const STORAGE_CONFIG = "csp_config_v1";
   const STORAGE_ACCOUNTS = "csp_accounts_v1";
   const STORAGE_ACTIVE_COMMUNITY = "csp_active_community_v1";
+  const STORAGE_ADMIN_ORDER_PREFIX = "csp_admin_module_order_v1:";
 
   const state = {
     communities: [],
@@ -37,6 +38,8 @@
     { id: "checkin-vote", name: "報到投票", desc: "活動報到、投票與統計結果（示意）", badge: "活動", page: "#community/checkin-vote" },
     { id: "assignments", name: "交辦事項", desc: "派工、追蹤進度、回報與結案（示意）", badge: "待辦", page: "#community/assignments" },
     { id: "duty", name: "勤務管理", desc: "排班、值勤紀錄與交接（示意）", badge: "管理", page: "#community/duty" },
+    { id: "care", name: "關懷救護", desc: "緊急聯絡、救護資訊與關懷通報（示意）", badge: "關懷", page: "#community/care" },
+    { id: "life", name: "生活服務", desc: "管家/修繕/代收代送與便民服務（示意）", badge: "服務", page: "#community/life" },
   ];
 
   const toastEl = document.getElementById("toast");
@@ -212,6 +215,48 @@
     return { enabled: true, url: u };
   }
 
+  function loadModuleOrder(communityId) {
+    const cid = String(communityId || "default");
+    try {
+      const raw = localStorage.getItem(`${STORAGE_ADMIN_ORDER_PREFIX}${cid}`) || "";
+      const parsed = raw ? JSON.parse(raw) : null;
+      return Array.isArray(parsed) ? parsed.map((x) => String(x || "").trim()).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveModuleOrder(communityId, ids) {
+    const cid = String(communityId || "default");
+    const list = Array.isArray(ids) ? ids.map((x) => String(x || "").trim()).filter(Boolean) : [];
+    try {
+      localStorage.setItem(`${STORAGE_ADMIN_ORDER_PREFIX}${cid}`, JSON.stringify(list));
+    } catch {}
+  }
+
+  function orderedModules() {
+    const cid = resolveActiveCommunityId();
+    const order = loadModuleOrder(cid);
+    const map = new Map(moduleCatalog.map((m) => [String(m.id), m]));
+    const used = new Set();
+    const out = [];
+    for (const id of order) {
+      const key = String(id || "").trim();
+      if (!key || used.has(key)) continue;
+      const m = map.get(key);
+      if (!m) continue;
+      used.add(key);
+      out.push(m);
+    }
+    for (const m of moduleCatalog) {
+      const key = String(m.id);
+      if (used.has(key)) continue;
+      used.add(key);
+      out.push(m);
+    }
+    return out;
+  }
+
   function iconSvg(id) {
     if (id === "parcel") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 8.5 12 13 3 8.5 12 4l9 4.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M21 8.5V17a2 2 0 0 1-1.1 1.8L12 22l-7.9-3.2A2 2 0 0 1 3 17V8.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 13v9" stroke="currentColor" stroke-width="1.7"/></svg>`;
     if (id === "visitor") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z" stroke="currentColor" stroke-width="1.7"/><path d="M4 20a8 8 0 0 1 16 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
@@ -222,12 +267,584 @@
     if (id === "checkin-vote") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 10.5 10 13.5 17 6.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 4.5h11A2 2 0 0 1 19.5 6.5v11a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`;
     if (id === "assignments") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 6.5h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8 11h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8 15.5h5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M9.2 4.5h5.6a1 1 0 0 1 1 1V7H8.2V5.5a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7 7h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`;
     if (id === "duty") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21.2c4.8 0 8.7-3.9 8.7-8.7S16.8 3.8 12 3.8 3.3 7.7 3.3 12.5 7.2 21.2 12 21.2Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.6v5.1l3.2 1.9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    if (id === "care") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21.2c4.8 0 8.7-3.9 8.7-8.7S16.8 3.8 12 3.8 3.3 7.7 3.3 12.5 7.2 21.2 12 21.2Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.6v9.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M7.1 12.5h9.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
+    if (id === "life") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4.8a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4Z" stroke="currentColor" stroke-width="1.7"/><path d="M7 12.2a5 5 0 0 1 10 0v2.1l1.2 1.4H5.8L7 14.3v-2.1Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10.2 18.2a1.8 1.8 0 0 0 3.6 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M5 19.2h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "parking") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 16.5 7.4 11.8A2.5 2.5 0 0 1 9.8 10h4.4a2.5 2.5 0 0 1 2.4 1.8L18 16.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M6 16.5h12v2a1.5 1.5 0 0 1-1.5 1.5H7.5A1.5 1.5 0 0 1 6 18.5v-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8.2 10.4 9.2 7.8A2 2 0 0 1 11.1 6.5h1.8a2 2 0 0 1 1.9 1.3l1 2.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M9 18.2h.01M15 18.2h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>`;
     return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21.5c5.247 0 9.5-4.253 9.5-9.5S17.247 2.5 12 2.5 2.5 6.753 2.5 12 6.753 21.5 12 21.5Z" stroke="currentColor" stroke-width="1.7" opacity="0.9"/></svg>`;
   }
 
+  function homeSvg() {
+    return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20v-9.5Z" stroke="currentColor" stroke-width="1.7"/><path d="M9 21v-7a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v7" stroke="currentColor" stroke-width="1.7"/></svg>`;
+  }
+
+  function renderFooterNav() {
+    const nav = document.querySelector(".frame-ft .nav");
+    if (!nav) return;
+
+    const mods = orderedModules();
+    const items = [
+      { id: "community-dashboard", label: "總覽", url: "admin.html#community/community-dashboard", icon: homeSvg() },
+      ...mods.map((m) => {
+        const cfg = resolveUrl(m.id);
+        const url = cfg && cfg.enabled && cfg.url ? cfg.url : `#community/${m.id}`;
+        const label =
+          m.id === "residents" ? "住戶" :
+          m.id === "facility" ? "預約" :
+          m.id === "bulletin" ? "公告" :
+          m.id === "parking" ? "停車" :
+          m.id === "finance" ? "收支" :
+          m.id === "checkin-vote" ? "投票" :
+          m.id === "assignments" ? "交辦" :
+          m.id === "duty" ? "勤務" :
+          m.id === "care" ? "救護" :
+          m.id === "life" ? "生活" :
+          m.id === "visitor" ? "訪客" :
+          m.id === "parcel" ? "包裹" :
+          String(m.name || "").trim().slice(0, 2) || String(m.id);
+        return { id: String(m.id), label, url, icon: iconSvg(m.id) };
+      }),
+    ];
+
+    nav.innerHTML = items.map((x) => `
+      <a href="${String(x.url)}" data-nav="${String(x.id)}">
+        ${x.icon}
+        <span class="label">${String(x.label)}</span>
+      </a>
+    `.trim()).join("");
+  }
+
   function normalizeText(v) {
     return String(v || "").trim();
+  }
+
+  function escapeHtml(input) {
+    return String(input || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function ensureVisitorPassModal() {
+    let modal = document.getElementById("visitorPassModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "visitorPassModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="visitorPassModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="visitorPassModalTitle"><span class="pass-community" id="visitorPassCommunity">—</span><span class="pass-title">訪客證</span></h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="visitorPassModalForm">
+          <div class="modal-body">
+            <div class="pass-grid">
+              <div class="pass-qr" id="visitorPassQrWrap"></div>
+              <div class="pass-details" id="visitorPassDetails"></div>
+            </div>
+            <div class="pass-times" id="visitorPassTimes"></div>
+            <div class="pass-hint" id="visitorPassHint"></div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" id="btnShareVisitorPassEmail">Email</button>
+            <button class="btn" type="button" id="btnShareVisitorPassLine">LINE</button>
+            <button class="btn" type="button" data-modal-close="1">關閉</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function toDateAny(v) {
+    if (!v) return null;
+    if (v instanceof Date) return v;
+    if (typeof v.toDate === "function") {
+      try { return v.toDate(); } catch {}
+    }
+    return null;
+  }
+
+  function openVisitorPassModal80({ cid, communityName, visitorId, name, unit, purpose, phone, plate, email, inAt, outAt }) {
+    const modal = ensureVisitorPassModal();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const titleEl = modal.querySelector("#visitorPassModalTitle");
+    const passTitleEl = modal.querySelector("#visitorPassModalTitle .pass-title");
+    const communityEl = modal.querySelector("#visitorPassCommunity");
+    const qrWrap = modal.querySelector("#visitorPassQrWrap");
+    const detailsEl = modal.querySelector("#visitorPassDetails");
+    const timesEl = modal.querySelector("#visitorPassTimes");
+    const hintEl = modal.querySelector("#visitorPassHint");
+
+    if (passTitleEl) passTitleEl.textContent = "訪客證";
+    else if (titleEl) titleEl.textContent = "訪客證";
+    if (communityEl) communityEl.textContent = String(communityName || "—").trim() || "—";
+
+    const inText = formatYmdHms(toDateAny(inAt));
+    const outText = formatYmdHms(toDateAny(outAt));
+    if (timesEl) {
+      timesEl.innerHTML = `
+        <span class="time-pill in">來訪：${escapeHtml(inText || "—")}</span>
+        <span class="time-pill out">離開：${escapeHtml(outText || "—")}</span>
+      `.trim();
+    }
+    const rows = [
+      ["訪客", name || "—"],
+      ["拜訪戶號", unit || "—"],
+      ["到訪事由", purpose || "—"],
+      ["手機", phone || "—"],
+      ["車牌", plate || "—"],
+      ["Email", email || "—"],
+    ];
+
+    if (detailsEl) {
+      detailsEl.innerHTML = rows
+        .map(([k, v]) => `<div class="pass-row"><div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(v)}</div></div>`)
+        .join("");
+    }
+
+    const qrData = `nwapp://visitor-pass?cid=${String(cid || "")}&vid=${String(visitorId || "")}&t=${String(visitorId || "")}`;
+    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=360x360&data=${encodeURIComponent(qrData)}`;
+
+    const shareText = [
+      `【${String(communityName || "").trim() || "社區"}｜訪客證】`,
+      `來訪：${inText || "—"}`,
+      `離開：${outText || "—"}`,
+      `訪客：${name || "—"}`,
+      `拜訪戶號：${unit || "—"}`,
+      `到訪事由：${purpose || "—"}`,
+      `手機：${phone || "—"}`,
+      `車牌：${plate || "—"}`,
+      `Email：${email || "—"}`,
+      "",
+      `QR Code：${qrSrc}`,
+    ].join("\n");
+
+    if (qrWrap) {
+      qrWrap.innerHTML = "";
+      const img = document.createElement("img");
+      img.alt = "QR Code";
+      img.src = qrSrc;
+      img.decoding = "async";
+      img.loading = "eager";
+      img.addEventListener("error", () => {
+        try { qrWrap.textContent = "QR code 產生失敗"; } catch {}
+      });
+      qrWrap.appendChild(img);
+    }
+
+    if (hintEl) hintEl.textContent = "請出示此 QR code 作為訪客證。";
+
+    const btnEmail = modal.querySelector("#btnShareVisitorPassEmail");
+    const btnLine = modal.querySelector("#btnShareVisitorPassLine");
+
+    const onShareEmail = async (e) => {
+      e.preventDefault();
+      const to = String(email || "").trim();
+      if (!to) return;
+      const subject = `訪客證 QR code（${String(name || "訪客")}）`;
+      if (btnEmail) btnEmail.disabled = true;
+      if (hintEl) hintEl.textContent = "Email 寄送中...";
+      try {
+        const html = `
+          <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,Noto Sans TC,PingFang TC,Microsoft JhengHei,sans-serif;">
+            <div style="font-weight:900;font-size:16px;">${escapeHtml(String(communityName || "").trim() || "社區")}｜訪客證</div>
+            <div style="margin-top:10px;color:#374151;">
+              <div>來訪：${escapeHtml(inText || "—")}</div>
+              <div>離開：${escapeHtml(outText || "—")}</div>
+              <div>訪客：${escapeHtml(name || "—")}</div>
+              <div>拜訪戶號：${escapeHtml(unit || "—")}</div>
+              <div>到訪事由：${escapeHtml(purpose || "—")}</div>
+              <div>手機：${escapeHtml(phone || "—")}</div>
+              <div>車牌：${escapeHtml(plate || "—")}</div>
+            </div>
+            <div style="margin-top:14px;">
+              <img alt="QR Code" src="${escapeHtml(qrSrc)}" style="width:280px;height:280px;max-width:100%;" />
+            </div>
+          </div>
+        `.trim();
+        await db.collection("mail").add({
+          to: [to],
+          message: { subject, text: shareText, html },
+          meta: {
+            type: "visitor-pass",
+            cid: String(cid || ""),
+            visitorId: String(visitorId || ""),
+            communityName: String(communityName || ""),
+          },
+          createdAt: FieldValue.serverTimestamp(),
+        });
+        toast("已送出 Email");
+        if (hintEl) hintEl.textContent = "Email 已送出。";
+      } catch (err) {
+        const code = String(err && err.code ? err.code : "");
+        toast(code.includes("permission-denied") ? "沒有權限發送 Email" : "Email 寄送失敗");
+        if (hintEl) hintEl.textContent = "Email 寄送失敗。";
+      } finally {
+        if (btnEmail) btnEmail.disabled = !Boolean(String(email || "").trim());
+      }
+    };
+
+    const onShareLine = async (e) => {
+      e.preventDefault();
+      try {
+        if (navigator && typeof navigator.share === "function") {
+          await navigator.share({ title: "訪客證", text: shareText });
+          return;
+        }
+      } catch {}
+      const url = `https://social-plugins.line.me/lineit/share?text=${encodeURIComponent(shareText)}`;
+      try { window.open(url, "_blank", "noopener,noreferrer"); } catch { location.href = url; }
+    };
+
+    if (btnLine) btnLine.classList.add("btn-line");
+    if (btnEmail) {
+      btnEmail.classList.add("btn-email");
+      const hasEmail = Boolean(String(email || "").trim());
+      btnEmail.disabled = !hasEmail;
+      btnEmail.classList.toggle("disabled", !hasEmail);
+      btnEmail.setAttribute("aria-disabled", hasEmail ? "false" : "true");
+    }
+
+    if (btnEmail) btnEmail.addEventListener("click", onShareEmail);
+    if (btnLine) btnLine.addEventListener("click", onShareLine);
+    const oldDetach = detach;
+    detach = () => {
+      try { if (btnEmail) btnEmail.removeEventListener("click", onShareEmail); } catch {}
+      try { if (btnLine) btnLine.removeEventListener("click", onShareLine); } catch {}
+      oldDetach();
+    };
+
+    modal.hidden = false;
+    requestAnimationFrame(() => {
+      const closeBtn = modal.querySelector(".modal-close");
+      if (closeBtn && closeBtn.focus) closeBtn.focus();
+    });
+  }
+
+  function ensureVisitorScanModal() {
+    let modal = document.getElementById("visitorScanModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "visitorScanModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="visitorScanModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="visitorScanModalTitle">掃碼登記</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="visitorScanModalForm">
+          <div class="modal-body">
+            <div class="scan-stage">
+              <video id="visitorScanVideo" class="scan-video" playsinline></video>
+              <div class="scan-overlay" aria-hidden="true">
+                <div class="scan-frame"></div>
+              </div>
+            </div>
+            <div class="status" id="visitorScanStatus" hidden></div>
+            <div class="scan-hint" id="visitorScanHint">請將訪客證 QR code 對準框線。</div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">關閉</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function parseVisitorQrText(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return null;
+    const pick = (u) => {
+      const cid = String(u.searchParams.get("cid") || "").trim();
+      const vid = String(u.searchParams.get("vid") || "").trim();
+      if (!cid || !vid) return null;
+      return { cid, vid };
+    };
+    try {
+      if (raw.startsWith("nwapp://")) {
+        const u = new URL(raw);
+        return pick(u);
+      }
+    } catch {}
+    try {
+      if (raw.includes("visitor-pass?")) {
+        const u = new URL(raw.replace(/^nwapp:\/\//, "https://"));
+        return pick(u);
+      }
+    } catch {}
+    const mCid = raw.match(/[?&]cid=([^&]+)/i);
+    const mVid = raw.match(/[?&]vid=([^&]+)/i);
+    if (!mCid || !mVid) return null;
+    const cid = decodeURIComponent(String(mCid[1] || "").trim());
+    const vid = decodeURIComponent(String(mVid[1] || "").trim());
+    if (!cid || !vid) return null;
+    return { cid, vid };
+  }
+
+  function formatYmdHms(d) {
+    if (!(d instanceof Date) || !Number.isFinite(d.getTime())) return "";
+    const pad2 = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  }
+
+  let _jsQrLoader = null;
+  function loadJsQr() {
+    if (typeof window.jsQR === "function") return Promise.resolve(window.jsQR);
+    if (_jsQrLoader) return _jsQrLoader;
+    _jsQrLoader = new Promise((resolve) => {
+      const existing = document.querySelector('script[data-jsqr="1"]');
+      if (existing) {
+        const t = window.setTimeout(() => resolve(typeof window.jsQR === "function" ? window.jsQR : null), 8000);
+        existing.addEventListener("load", () => { window.clearTimeout(t); resolve(typeof window.jsQR === "function" ? window.jsQR : null); }, { once: true });
+        existing.addEventListener("error", () => { window.clearTimeout(t); resolve(null); }, { once: true });
+        return;
+      }
+
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
+      s.async = true;
+      s.defer = true;
+      s.setAttribute("data-jsqr", "1");
+      const t = window.setTimeout(() => resolve(null), 8000);
+      s.addEventListener("load", () => { window.clearTimeout(t); resolve(typeof window.jsQR === "function" ? window.jsQR : null); }, { once: true });
+      s.addEventListener("error", () => { window.clearTimeout(t); resolve(null); }, { once: true });
+      document.head.appendChild(s);
+    });
+    return _jsQrLoader;
+  }
+
+  function openVisitorScanModal80({ cid, onApplied }) {
+    const modal = ensureVisitorScanModal();
+    const video = modal.querySelector("#visitorScanVideo");
+    const statusEl = modal.querySelector("#visitorScanStatus");
+    const hintEl = modal.querySelector("#visitorScanHint");
+
+    let running = false;
+    let stream = null;
+    let loopTimer = 0;
+    let ignoreUntil = 0;
+    let lastValue = "";
+    let lastValueAt = 0;
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    const stop = () => {
+      running = false;
+      if (loopTimer) window.clearTimeout(loopTimer);
+      loopTimer = 0;
+      try {
+        if (video) {
+          video.pause();
+          video.srcObject = null;
+        }
+      } catch {}
+      try {
+        if (stream && stream.getTracks) {
+          stream.getTracks().forEach((t) => {
+            try { t.stop(); } catch {}
+          });
+        }
+      } catch {}
+      stream = null;
+    };
+
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+    const oldDetach = detach;
+    detach = () => {
+      stop();
+      oldDetach();
+    };
+
+    const start = async () => {
+      setStatus("", false);
+      if (hintEl) hintEl.textContent = "請將訪客證 QR code 對準框線。";
+
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+        setStatus("此瀏覽器不支援相機功能。", true);
+        return;
+      }
+
+      running = true;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false,
+        });
+        if (!running) return;
+        if (video) {
+          video.srcObject = stream;
+          try { await video.play(); } catch {}
+        }
+      } catch {
+        setStatus("無法開啟相機，請確認已允許相機權限。", true);
+        running = false;
+        stop();
+        return;
+      }
+
+      const handleScan = async (rawValue) => {
+        const parsed = parseVisitorQrText(rawValue);
+        if (!parsed) {
+          setStatus("無法辨識此 QR code。", true);
+          return;
+        }
+        if (String(parsed.cid || "") !== String(cid || "")) {
+          setStatus("此 QR code 不屬於目前社區。", true);
+          return;
+        }
+        const vid = String(parsed.vid || "").trim();
+        if (!vid) {
+          setStatus("無法辨識訪客 ID。", true);
+          return;
+        }
+        const nowDate = new Date();
+        const Timestamp = firebase.firestore.Timestamp;
+        try {
+          const docRef = db.collection("communities").doc(String(cid || "default")).collection("visitors").doc(String(vid));
+          const snap = await docRef.get();
+          if (!snap || !snap.exists) {
+            setStatus("找不到此訪客資料。", true);
+            return;
+          }
+          const data = snap.data() || {};
+          const hasIn = Boolean(data.inAt);
+          const hasOut = Boolean(data.outAt);
+
+          if (!hasIn) {
+            const inAt = Timestamp.fromDate(nowDate);
+            await docRef.set({ inAt, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+            if (typeof onApplied === "function") onApplied(vid, { inAt });
+            setStatus(`來訪時間：${formatYmdHms(nowDate)}`, false);
+            if (hintEl) hintEl.textContent = "請再掃描一次登記離開時間（請先移開 QR code 再掃）。";
+            return;
+          }
+          if (!hasOut) {
+            const outAt = Timestamp.fromDate(nowDate);
+            await docRef.set({ outAt, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+            if (typeof onApplied === "function") onApplied(vid, { outAt });
+            setStatus(`離開時間：${formatYmdHms(nowDate)}`, false);
+            if (hintEl) hintEl.textContent = "已完成離開登記。";
+            return;
+          }
+          setStatus("此訪客已完成來訪/離開登記。", true);
+        } catch (err) {
+          const code = String(err && err.code ? err.code : "");
+          setStatus(code.includes("permission-denied") ? "沒有權限執行此操作。" : "更新失敗，請稍後再試。", true);
+        }
+      };
+
+      const schedule = (fn) => {
+        loopTimer = window.setTimeout(fn, 180);
+      };
+
+      const createBarcodeDetector = async () => {
+        const Ctor = window.BarcodeDetector;
+        if (!Ctor) return null;
+        try {
+          if (typeof Ctor.getSupportedFormats === "function") {
+            const supported = await Ctor.getSupportedFormats();
+            if (Array.isArray(supported) && supported.length && !supported.includes("qr_code")) return null;
+          }
+        } catch {}
+        try { return new Ctor({ formats: ["qr_code"] }); } catch {}
+        try { return new Ctor(); } catch {}
+        return null;
+      };
+
+      const detector = await createBarcodeDetector();
+      if (detector) {
+        const scanOnce = async () => {
+          if (!running) return;
+          const now = Date.now();
+          if (now < ignoreUntil) return schedule(scanOnce);
+          try {
+            const codes = await detector.detect(video);
+            if (Array.isArray(codes) && codes.length) {
+              const rawValue = String(codes[0] && codes[0].rawValue ? codes[0].rawValue : "").trim();
+              if (rawValue) {
+                const isDup = rawValue === lastValue && (now - lastValueAt) < 4000;
+                if (!isDup) {
+                  lastValue = rawValue;
+                  lastValueAt = now;
+                  ignoreUntil = now + 2500;
+                  await handleScan(rawValue);
+                }
+              }
+            }
+          } catch {}
+          schedule(scanOnce);
+        };
+        return scanOnce();
+      }
+
+      const jsqr = await loadJsQr();
+      if (typeof jsqr !== "function") {
+        setStatus("此瀏覽器不支援 QR code 掃描。", true);
+        return;
+      }
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      const scanOnce = async () => {
+        if (!running) return;
+        const now = Date.now();
+        if (now < ignoreUntil) return schedule(scanOnce);
+        try {
+          const vw = video && video.videoWidth ? Number(video.videoWidth) : 0;
+          const vh = video && video.videoHeight ? Number(video.videoHeight) : 0;
+          if (!vw || !vh || !ctx) return schedule(scanOnce);
+
+          const maxW = 640;
+          const scale = vw > maxW ? (maxW / vw) : 1;
+          const w = Math.max(240, Math.floor(vw * scale));
+          const h = Math.max(240, Math.floor(vh * scale));
+          canvas.width = w;
+          canvas.height = h;
+          ctx.drawImage(video, 0, 0, w, h);
+          const img = ctx.getImageData(0, 0, w, h);
+          const code = jsqr(img.data, w, h, { inversionAttempts: "dontInvert" });
+          const rawValue = code && code.data ? String(code.data).trim() : "";
+          if (rawValue) {
+            const isDup = rawValue === lastValue && (now - lastValueAt) < 4000;
+            if (!isDup) {
+              lastValue = rawValue;
+              lastValueAt = now;
+              ignoreUntil = now + 2500;
+              await handleScan(rawValue);
+            }
+          }
+        } catch {}
+        schedule(scanOnce);
+      };
+      scanOnce();
+    };
+
+    modal.hidden = false;
+    requestAnimationFrame(() => {
+      const closeBtn = modal.querySelector(".modal-close");
+      if (closeBtn && closeBtn.focus) closeBtn.focus();
+    });
+    start();
   }
 
   function normalizePhoneDigits(input) {
@@ -289,6 +906,7 @@
   }
 
   function updateFooterActiveNav() {
+    renderFooterNav();
     const nav = document.querySelector(".frame-ft .nav");
     if (!nav) return;
     const links = Array.from(nav.querySelectorAll("a[href]"));
@@ -323,53 +941,91 @@
   }
 
   function ensureResidentEditorModal() {
-    let modal = document.getElementById("residentEditorModal");
+    let modal = document.getElementById("residentModal");
     if (modal) return modal;
     modal = document.createElement("div");
     modal.className = "modal";
-    modal.id = "residentEditorModal";
+    modal.id = "residentModal";
     modal.hidden = true;
     modal.innerHTML = `
       <div class="modal-backdrop" data-modal-close="1"></div>
-      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="residentEditorModalTitle">
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="residentModalTitle">
         <div class="modal-hd">
-          <h3 class="modal-title" id="residentEditorModalTitle">新增住戶</h3>
-          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          <h3 class="modal-title" id="residentModalTitle">新增 <span class="community-area-label" id="residentRoleName">住戶</span> 帳號</h3>
+          <button class="modal-close" type="button" id="btnCloseResidentModal" aria-label="關閉">×</button>
         </div>
-        <form id="residentEditorForm">
+        <form id="residentModalForm">
           <div class="modal-body">
-            <div class="status" id="residentEditorStatus" hidden></div>
-            <div class="profile-item">
-              <div class="profile-label">戶號</div>
-              <input type="text" id="residentHouseNo" autocomplete="off" placeholder="例如：A1101" />
+            <div class="image-uploader avatar-uploader" id="residentAvatarUploader" role="button" tabindex="0" aria-label="上傳大頭照">
+              <img class="image-preview avatar-preview" id="residentAvatarPreview" alt="" />
+              <div class="image-placeholder" id="residentAvatarPlaceholder">上傳大頭照</div>
+              <input id="residentAvatarInput" type="file" accept="image/*" hidden />
             </div>
-            <div class="profile-item">
-              <div class="profile-label">姓名</div>
-              <input type="text" id="residentName" autocomplete="off" placeholder="例如：王小明" />
+            <div class="field" id="field_r_category">
+              <label for="modal_r_category">類別</label>
+              <select id="modal_r_category" required>
+                <option value="住戶" selected>住戶</option>
+                <option value="委員">委員</option>
+              </select>
             </div>
-            <div class="profile-item">
-              <div class="profile-label">電子郵件（登入帳號）</div>
-              <input type="text" id="residentEmail" autocomplete="off" placeholder="例如：user@example.com" />
+            <div class="field" id="field_r_community">
+              <label for="modal_r_community">所屬社區</label>
+              <select id="modal_r_community" required></select>
             </div>
-            <div class="profile-item">
-              <div class="profile-label">手機號碼（預設密碼）</div>
-              <input type="text" id="residentPhone" autocomplete="off" placeholder="例如：0912345678" />
+            <div class="field" id="field_r_unit">
+              <label for="modal_r_unit">戶號</label>
+              <div class="input-wrap">
+                <input id="modal_r_unit" class="has-suffix" type="text" placeholder="例：A-1203" autocomplete="off" required />
+                <span class="input-suffix ok" id="unitMatchBadge" hidden aria-hidden="true" style="display:none;">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M20 6.5 10 17.5 4 12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <span>有此戶號</span>
+                </span>
+              </div>
             </div>
-            <div class="profile-item">
-              <div class="profile-label">地址</div>
-              <input type="text" id="residentAddress" autocomplete="off" placeholder="（選填）" />
+            <div class="field">
+              <label for="modal_r_name">姓名</label>
+              <input id="modal_r_name" type="text" placeholder="例：林小姐" autocomplete="off" required />
             </div>
-            <div class="profile-item">
-              <div class="profile-label">狀態</div>
-              <select class="role-select" id="residentEnabled">
-                <option value="true">啟用</option>
+            <div class="field">
+              <label for="modal_r_email">電子郵件（登入帳號）</label>
+              <input id="modal_r_email" type="email" placeholder="例：a1203@example.com" autocomplete="username" required />
+            </div>
+            <div class="field">
+              <label for="modal_r_phone">手機號碼（登入帳號）</label>
+              <input id="modal_r_phone" type="tel" placeholder="例：0912345678" autocomplete="tel" required />
+            </div>
+            <div class="field">
+              <label for="modal_r_password">預設密碼（不填則使用手機號碼）</label>
+              <input id="modal_r_password" type="text" placeholder="例：0912345678" autocomplete="off" />
+            </div>
+            <div class="field" id="field_r_address">
+              <label for="modal_r_address">地址</label>
+              <input id="modal_r_address" type="text" placeholder="例：台北市..." autocomplete="street-address" />
+            </div>
+            <div class="field" id="field_r_roles">
+              <label>住戶角色</label>
+              <div class="check-grid" id="modal_r_roles">
+                <label class="check"><input type="checkbox" value="區權人" />區權人</label>
+                <label class="check"><input type="checkbox" value="區權人家屬" />區權人家屬</label>
+                <label class="check"><input type="checkbox" value="承租戶" />承租戶</label>
+                <label class="check"><input type="checkbox" value="其他" id="modal_r_role_other_chk" />其他</label>
+              </div>
+              <input id="modal_r_role_other_text" type="text" placeholder="自定義角色" autocomplete="off" hidden />
+            </div>
+            <div class="field">
+              <label for="modal_r_enabled">狀態</label>
+              <select id="modal_r_enabled" required>
+                <option value="true" selected>啟用</option>
                 <option value="false">停用</option>
               </select>
             </div>
+            <div class="status" id="residentModalStatus" hidden></div>
           </div>
           <div class="modal-ft">
-            <button class="btn" type="button" data-modal-close="1">取消</button>
-            <button class="btn btn-primary" type="submit" id="btnSaveResident">儲存</button>
+            <button class="btn" type="button" id="btnCancelResidentModal">取消</button>
+            <button class="btn btn-primary" type="submit" id="btnSubmitResidentModal">建立</button>
           </div>
         </form>
       </div>
@@ -389,14 +1045,14 @@
       <div class="modal-backdrop" data-modal-close="1"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="unitsModalTitle">
         <div class="modal-hd">
-          <h3 class="modal-title" id="unitsModalTitle">戶號管理</h3>
+          <h3 class="modal-title" id="unitsModalTitle">戶號列表 <span class="unit-modal-count" id="unitsModalCount">總戶數：—</span></h3>
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <form id="unitsForm">
           <div class="modal-body">
             <div class="status" id="unitsStatus" hidden></div>
             <div class="profile-item">
-              <div class="profile-label">戶號清單（每行一戶）</div>
+              <div class="profile-label">戶號列表（每行一戶）</div>
               <textarea id="unitsText" class="units-text" placeholder="例如：&#10;A1101&#10;A1102"></textarea>
             </div>
           </div>
@@ -472,11 +1128,17 @@
               <p>${cname || "—"}</p>
             </div>
           </div>
-          <button class="btn btn-primary" type="button" id="btnAddResident">新增住戶</button>
+          <div class="resident-page-actions">
+            <button class="btn" type="button" id="btnUnits">戶號列表</button>
+            <button class="btn btn-primary" type="button" id="btnAddResident">新增帳號</button>
+          </div>
         </div>
         <div class="card-bd">
           <div class="resident-toolbar">
-            <div class="resident-total" id="residentTotal">總人數：—</div>
+            <div class="resident-total" id="residentTotal">
+              <div class="unit-total" id="unitTotal">總戶數：—</div>
+              <div class="people-total" id="peopleTotal">總人數：—</div>
+            </div>
             <div class="search resident-search">
               <input id="residentSearch" type="text" placeholder="搜尋 戶號 / 姓名 / 手機 / Email" autocomplete="off" />
             </div>
@@ -491,7 +1153,9 @@
     const statusEl = document.getElementById("residentStatus");
     const searchEl = document.getElementById("residentSearch");
     const addBtn = document.getElementById("btnAddResident");
-    const totalEl = document.getElementById("residentTotal");
+    const unitsBtn = document.getElementById("btnUnits");
+    const unitTotalEl = document.getElementById("unitTotal");
+    const peopleTotalEl = document.getElementById("peopleTotal");
 
     const setStatus = (msg, isError) => {
       if (!statusEl) return;
@@ -502,6 +1166,26 @@
     };
 
     let residents = [];
+    let communityUnits = Array.isArray(c && c.units) ? c.units : [];
+
+    const normalizeUnitList = (list) => {
+      const raw = Array.isArray(list) ? list : [];
+      const uniq = [];
+      const seen = new Set();
+      for (const x of raw) {
+        const v = String(x || "").trim();
+        if (!v) continue;
+        if (seen.has(v)) continue;
+        seen.add(v);
+        uniq.push(v);
+      }
+      return uniq;
+    };
+
+    const refreshUnitTotals = () => {
+      const unitCount = normalizeUnitList(communityUnits).length;
+      if (unitTotalEl) unitTotalEl.textContent = `總戶數：${unitCount}`;
+    };
 
     const avatarHtml = (r) => {
       const name = String(r.displayName || r.name || r.email || "U").trim();
@@ -524,7 +1208,8 @@
         : residents;
 
       if (!listEl) return;
-      if (totalEl) totalEl.textContent = `總人數：${residents.length}`;
+      refreshUnitTotals();
+      if (peopleTotalEl) peopleTotalEl.textContent = `總人數：${residents.length}`;
       if (!filtered.length) {
         listEl.innerHTML = `<div class="status">尚無住戶資料。</div>`;
         return;
@@ -615,16 +1300,30 @@
       const modal = ensureResidentEditorModal();
       let detach = () => {};
       detach = bindModalClose(modal, () => detach());
-      const titleEl = modal.querySelector("#residentEditorModalTitle");
-      const form = modal.querySelector("#residentEditorForm");
-      const st = modal.querySelector("#residentEditorStatus");
-      const inputHouse = modal.querySelector("#residentHouseNo");
-      const inputName = modal.querySelector("#residentName");
-      const inputEmail = modal.querySelector("#residentEmail");
-      const inputPhone = modal.querySelector("#residentPhone");
-      const inputAddr = modal.querySelector("#residentAddress");
-      const inputEnabled = modal.querySelector("#residentEnabled");
-      const btnSave = modal.querySelector("#btnSaveResident");
+      const titleEl = modal.querySelector("#residentModalTitle");
+      const form = modal.querySelector("#residentModalForm");
+      const st = modal.querySelector("#residentModalStatus");
+      const roleNameEl = modal.querySelector("#residentRoleName");
+      const inputCategory = modal.querySelector("#modal_r_category");
+      const inputCommunity = modal.querySelector("#modal_r_community");
+      const inputUnit = modal.querySelector("#modal_r_unit");
+      const inputName = modal.querySelector("#modal_r_name");
+      const inputEmail = modal.querySelector("#modal_r_email");
+      const inputPhone = modal.querySelector("#modal_r_phone");
+      const inputPassword = modal.querySelector("#modal_r_password");
+      const inputAddr = modal.querySelector("#modal_r_address");
+      const inputEnabled = modal.querySelector("#modal_r_enabled");
+      const unitMatchBadge = modal.querySelector("#unitMatchBadge");
+      const avatarUploader = modal.querySelector("#residentAvatarUploader");
+      const avatarInput = modal.querySelector("#residentAvatarInput");
+      const avatarPreview = modal.querySelector("#residentAvatarPreview");
+      const avatarPlaceholder = modal.querySelector("#residentAvatarPlaceholder");
+      const rolesWrap = modal.querySelector("#modal_r_roles");
+      const roleOtherChk = modal.querySelector("#modal_r_role_other_chk");
+      const roleOtherText = modal.querySelector("#modal_r_role_other_text");
+      const cancelBtn = modal.querySelector("#btnCancelResidentModal");
+      const closeBtn = modal.querySelector("#btnCloseResidentModal");
+      const submitBtn = modal.querySelector("#btnSubmitResidentModal");
 
       const setModalStatus = (msg, isError) => {
         if (!st) return;
@@ -636,58 +1335,248 @@
 
       const isEdit = mode === "edit";
       const data = resident || {};
-      if (titleEl) titleEl.textContent = isEdit ? "編輯住戶" : "新增住戶";
-      if (inputHouse) inputHouse.value = isEdit ? String(data.houseNo || "") : "";
+      if (titleEl && titleEl.childNodes && titleEl.childNodes.length >= 3) {
+        titleEl.childNodes[0].nodeValue = isEdit ? "編輯 " : "新增 ";
+        titleEl.childNodes[2].nodeValue = " 帳號";
+      }
+      if (roleNameEl) roleNameEl.textContent = "住戶";
+      if (inputCategory) inputCategory.value = isEdit ? String(data.category || "住戶") : "住戶";
+      if (inputCommunity) {
+        inputCommunity.innerHTML = `<option value="${String(cid || "default")}">${String(cname || cid || "—")}</option>`;
+        inputCommunity.value = String(cid || "default");
+        inputCommunity.disabled = true;
+      }
+      if (inputUnit) inputUnit.value = isEdit ? String(data.houseNo || "") : "";
       if (inputName) inputName.value = isEdit ? String(data.displayName || "") : "";
       if (inputEmail) inputEmail.value = isEdit ? String(data.email || "") : "";
       if (inputPhone) inputPhone.value = isEdit ? String(data.phone || "") : "";
       if (inputAddr) inputAddr.value = isEdit ? String(data.address || "") : "";
       if (inputEnabled) inputEnabled.value = String((isEdit ? data.enabled !== false : true) ? "true" : "false");
+      if (inputPassword) inputPassword.value = "";
       if (inputEmail) inputEmail.disabled = Boolean(isEdit);
+      if (submitBtn) submitBtn.textContent = isEdit ? "更新" : "建立";
       setModalStatus("", false);
       modal.hidden = false;
       requestAnimationFrame(() => {
-        if (inputHouse) inputHouse.focus();
+        if (inputUnit) inputUnit.focus();
       });
+
+      let unitTouched = false;
+      let avatarFile = null;
+      let avatarPreviewData = "";
+
+      const setAvatarPreview = (dataUrl) => {
+        avatarPreviewData = String(dataUrl || "");
+        if (avatarPreview) {
+          avatarPreview.src = avatarPreviewData || "";
+          avatarPreview.style.display = avatarPreviewData ? "block" : "none";
+        }
+        if (avatarPlaceholder) avatarPlaceholder.style.display = avatarPreviewData ? "none" : "block";
+      };
+
+      const syncOtherRoleInput = () => {
+        if (!roleOtherText || !roleOtherChk) return;
+        roleOtherText.hidden = !roleOtherChk.checked;
+        if (!roleOtherChk.checked) roleOtherText.value = "";
+      };
+
+      const readResidentRoles = () => {
+        const picked = new Set();
+        if (rolesWrap) {
+          rolesWrap.querySelectorAll("input[type=\"checkbox\"]").forEach((el) => {
+            if (el.checked) picked.add(String(el.value || ""));
+          });
+        }
+        const otherEnabled = roleOtherChk && roleOtherChk.checked;
+        const otherText = normalizeText(roleOtherText ? roleOtherText.value : "");
+        const roles = Array.from(picked).filter(Boolean);
+        const extra = otherEnabled ? otherText : "";
+        return { roles, extra };
+      };
+
+      const updateUnitMatch = () => {
+        if (!unitMatchBadge || !inputUnit) return;
+        if (!unitTouched) {
+          unitMatchBadge.classList.remove("show");
+          unitMatchBadge.hidden = true;
+          unitMatchBadge.style.display = "none";
+          return;
+        }
+        const unit = normalizeText(inputUnit.value);
+        const ok = Boolean(unit) && normalizeUnitList(communityUnits).some((x) => x === unit);
+        unitMatchBadge.hidden = !ok;
+        unitMatchBadge.classList.toggle("show", ok);
+        unitMatchBadge.style.display = ok ? "inline-flex" : "none";
+      };
+
+      const sha256Hex = async (text) => {
+        const v = String(text || "");
+        const cryptoObj = window.crypto && window.crypto.subtle ? window.crypto : null;
+        if (!cryptoObj) return "";
+        const data = new TextEncoder().encode(v);
+        const hashBuf = await cryptoObj.subtle.digest("SHA-256", data);
+        const bytes = Array.from(new Uint8Array(hashBuf));
+        return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+      };
+
+      const fileToAvatarDataUrl = (file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("read-failed"));
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = () => reject(new Error("image-decode-failed"));
+          img.onload = () => {
+            const target = 360;
+            const srcW = img.naturalWidth || 0;
+            const srcH = img.naturalHeight || 0;
+            if (!srcW || !srcH) {
+              reject(new Error("bad-image"));
+              return;
+            }
+            const side = Math.min(srcW, srcH);
+            const sx = Math.round((srcW - side) / 2);
+            const sy = Math.round((srcH - side) / 2);
+            const canvas = document.createElement("canvas");
+            canvas.width = target;
+            canvas.height = target;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+              reject(new Error("no-canvas"));
+              return;
+            }
+            ctx.drawImage(img, sx, sy, side, side, 0, 0, target, target);
+            resolve(canvas.toDataURL("image/jpeg", 0.78));
+          };
+          img.src = String(reader.result || "");
+        };
+        reader.readAsDataURL(file);
+      });
+
+      if (rolesWrap) {
+        rolesWrap.querySelectorAll("input[type=\"checkbox\"]").forEach((el) => (el.checked = false));
+      }
+      if (roleOtherChk) roleOtherChk.checked = false;
+      if (roleOtherText) roleOtherText.value = "";
+      syncOtherRoleInput();
+      if (isEdit && Array.isArray(data.residentRoles) && rolesWrap) {
+        const set = new Set(data.residentRoles.map((x) => String(x || "")));
+        rolesWrap.querySelectorAll("input[type=\"checkbox\"]").forEach((el) => {
+          el.checked = set.has(String(el.value || ""));
+        });
+        const extra = normalizeText(data.residentRoleOther || "");
+        if (extra && roleOtherChk) {
+          roleOtherChk.checked = true;
+          if (roleOtherText) roleOtherText.value = extra;
+        }
+        syncOtherRoleInput();
+      }
+
+      if (isEdit) {
+        setAvatarPreview(String(data.avatarDataUrl || ""));
+      } else {
+        setAvatarPreview("");
+      }
+
+      const openPicker = () => {
+        if (avatarInput) avatarInput.click();
+      };
+
+      const onUploaderClick = () => openPicker();
+      const onUploaderKeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openPicker();
+        }
+      };
+      const onAvatarChange = () => {
+        const file = avatarInput && avatarInput.files && avatarInput.files[0] ? avatarInput.files[0] : null;
+        if (!file) return;
+        avatarFile = file;
+        const reader = new FileReader();
+        reader.onload = () => setAvatarPreview(String(reader.result || ""));
+        reader.readAsDataURL(file);
+      };
+
+      if (avatarUploader) avatarUploader.addEventListener("click", onUploaderClick);
+      if (avatarUploader) avatarUploader.addEventListener("keydown", onUploaderKeydown);
+      if (avatarInput) avatarInput.addEventListener("change", onAvatarChange);
+
+      const onUnitInput = () => {
+        unitTouched = true;
+        updateUnitMatch();
+      };
+      if (inputUnit) inputUnit.addEventListener("input", onUnitInput);
+
+      const onOtherChk = () => syncOtherRoleInput();
+      if (roleOtherChk) roleOtherChk.addEventListener("change", onOtherChk);
+
+      const onCancel = (e) => {
+        e.preventDefault();
+        modal.hidden = true;
+        detach();
+      };
+      if (cancelBtn) cancelBtn.addEventListener("click", onCancel);
+      if (closeBtn) closeBtn.addEventListener("click", onCancel);
+      const backdrop = modal.querySelector("[data-modal-close]");
+      if (backdrop) backdrop.addEventListener("click", onCancel);
 
       const onSubmit = async (e) => {
         e.preventDefault();
-        if (btnSave) btnSave.disabled = true;
+        if (submitBtn) submitBtn.disabled = true;
         setModalStatus("儲存中...", false);
 
-        const houseNo = normalizeText(inputHouse ? inputHouse.value : "");
+        const category = normalizeText(inputCategory ? inputCategory.value : "住戶") || "住戶";
+        const unit = normalizeText(inputUnit ? inputUnit.value : "");
         const name = normalizeText(inputName ? inputName.value : "");
         const email = normalizeText(inputEmail ? inputEmail.value : "");
         const phone = normalizeText(inputPhone ? inputPhone.value : "");
+        const passwordRaw = normalizeText(inputPassword ? inputPassword.value : "");
         const address = normalizeText(inputAddr ? inputAddr.value : "");
         const enabled = String(inputEnabled ? inputEnabled.value : "true") === "true";
 
-        if (!houseNo) {
-          setModalStatus("請填寫戶號。", true);
-          if (btnSave) btnSave.disabled = false;
-          return;
-        }
         if (!name) {
           setModalStatus("請填寫姓名。", true);
-          if (btnSave) btnSave.disabled = false;
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+        if (!unit) {
+          setModalStatus("請填寫戶號。", true);
+          if (submitBtn) submitBtn.disabled = false;
           return;
         }
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           setModalStatus("電子郵件格式不正確。", true);
-          if (btnSave) btnSave.disabled = false;
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+        if (!phone) {
+          setModalStatus("電子郵件與手機號碼皆為必填。", true);
+          if (submitBtn) submitBtn.disabled = false;
           return;
         }
         const phoneNormalized = normalizePhoneDigits(phone);
         if (!phoneNormalized) {
           setModalStatus("手機號碼格式不正確。", true);
-          if (btnSave) btnSave.disabled = false;
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+        const password = isEdit ? passwordRaw : (passwordRaw || phone);
+        if (!password && !isEdit) {
+          setModalStatus("未設定預設密碼時，預設會使用手機號碼；請填寫手機號碼或預設密碼。", true);
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+        const { roles, extra } = readResidentRoles();
+        if (roles.includes("其他") && !extra) {
+          setModalStatus("已選擇「其他」，請輸入自定義角色。", true);
+          if (submitBtn) submitBtn.disabled = false;
           return;
         }
 
         let createdAuth = null;
         try {
           if (!isEdit) {
-            createdAuth = await createAuthUser(email, phoneNormalized);
+            createdAuth = await createAuthUser(email, password || phoneNormalized);
           }
           const id = isEdit ? String(data.id || "") : String(createdAuth && createdAuth.uid ? createdAuth.uid : "");
           if (!id) throw new Error("no-id");
@@ -696,7 +1585,7 @@
           const payload = {
             role: "住戶",
             community: String(cid || "default"),
-            houseNo,
+            houseNo: unit,
             displayName: name,
             username: email,
             email,
@@ -704,9 +1593,20 @@
             phoneNormalized,
             address,
             enabled: Boolean(enabled),
+            category,
+            residentRoles: roles,
+            residentRoleOther: extra,
             updatedAt: FieldValue.serverTimestamp(),
           };
           if (!isEdit) payload.createdAt = FieldValue.serverTimestamp();
+          const passwordHash = password ? await sha256Hex(password) : "";
+          if (passwordHash) {
+            payload.passwordHash = passwordHash;
+            payload.passwordHashAlg = "SHA-256";
+            payload.passwordUpdatedAt = FieldValue.serverTimestamp();
+          }
+          const avatarDataUrl = avatarFile ? await fileToAvatarDataUrl(avatarFile) : "";
+          if (avatarDataUrl) payload.avatarDataUrl = avatarDataUrl;
           await db.collection("users").doc(id).set(payload, { merge: true });
           await upsertUserLookup({ phoneNormalized, email, phone: phoneNormalized, uid: id, community: payload.community, communityCode, role: payload.role });
 
@@ -728,7 +1628,7 @@
               await createdAuth.auth.signOut();
             } catch {}
           }
-          if (btnSave) btnSave.disabled = false;
+          if (submitBtn) submitBtn.disabled = false;
         }
       };
 
@@ -737,6 +1637,16 @@
       const detach2 = () => {
         try {
           form.removeEventListener("submit", onSubmit);
+        } catch {}
+        try {
+          if (avatarUploader) avatarUploader.removeEventListener("click", onUploaderClick);
+          if (avatarUploader) avatarUploader.removeEventListener("keydown", onUploaderKeydown);
+          if (avatarInput) avatarInput.removeEventListener("change", onAvatarChange);
+          if (inputUnit) inputUnit.removeEventListener("input", onUnitInput);
+          if (roleOtherChk) roleOtherChk.removeEventListener("change", onOtherChk);
+          if (cancelBtn) cancelBtn.removeEventListener("click", onCancel);
+          if (closeBtn) closeBtn.removeEventListener("click", onCancel);
+          if (backdrop) backdrop.removeEventListener("click", onCancel);
         } catch {}
         oldDetach();
       };
@@ -750,6 +1660,7 @@
       const form = modal.querySelector("#unitsForm");
       const ta = modal.querySelector("#unitsText");
       const st = modal.querySelector("#unitsStatus");
+      const countEl = modal.querySelector("#unitsModalCount");
 
       const setModalStatus = (msg, isError) => {
         if (!st) return;
@@ -764,11 +1675,15 @@
       try {
         const doc = await db.collection("communities").doc(String(cid || "default")).get();
         const v = doc && doc.exists ? (doc.data() || {}) : {};
-        const units = Array.isArray(v.units) ? v.units : [];
-        if (ta) ta.value = units.map((x) => String(x || "").trim()).filter(Boolean).join("\n");
+        const units = normalizeUnitList(v.units);
+        communityUnits = units;
+        refreshUnitTotals();
+        if (countEl) countEl.textContent = `總戶數：${units.length}`;
+        if (ta) ta.value = units.join("\n");
         setModalStatus("", false);
       } catch {
         if (ta) ta.value = "";
+        if (countEl) countEl.textContent = "總戶數：—";
         setModalStatus("讀取失敗，請稍後再試。", true);
       }
 
@@ -793,6 +1708,9 @@
             { units: uniq, updatedAt: FieldValue.serverTimestamp() },
             { merge: true }
           );
+          const clean = normalizeUnitList(uniq);
+          communityUnits = clean;
+          refreshUnitTotals();
           modal.hidden = true;
           detach();
         } catch (err) {
@@ -813,6 +1731,7 @@
 
     if (searchEl) searchEl.addEventListener("input", renderList);
     if (addBtn) addBtn.addEventListener("click", () => openResidentEditor("create"));
+    if (unitsBtn) unitsBtn.addEventListener("click", openUnitsEditor);
 
     if (listEl) {
       listEl.addEventListener("click", async (e) => {
@@ -877,7 +1796,817 @@
     }
 
     loadResidents();
+    (async () => {
+      try {
+        const doc = await db.collection("communities").doc(String(cid || "default")).get();
+        const v = doc && doc.exists ? (doc.data() || {}) : {};
+        communityUnits = normalizeUnitList(v.units);
+        refreshUnitTotals();
+      } catch {}
+    })();
     updateFooterActiveNav();
+  }
+
+  function ensureVisitorModal() {
+    let modal = document.getElementById("visitorModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "visitorModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="visitorModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="visitorModalTitle">新增訪客</h3>
+          <button class="modal-close" type="button" id="btnCloseVisitorModal" aria-label="關閉">×</button>
+        </div>
+        <form id="visitorModalForm">
+          <div class="modal-body">
+            <div class="field">
+              <label for="modal_v_name">訪客姓名</label>
+              <input id="modal_v_name" type="text" autocomplete="off" required />
+            </div>
+            <div class="field">
+              <label for="modal_v_email">電子郵件</label>
+              <input id="modal_v_email" type="email" autocomplete="email" />
+            </div>
+            <div class="field">
+              <label for="modal_v_phone">手機號碼</label>
+              <input id="modal_v_phone" type="tel" autocomplete="tel" />
+            </div>
+            <div class="field">
+              <label for="modal_v_unit">拜訪戶號</label>
+              <input id="modal_v_unit" type="text" autocomplete="off" list="visitorUnitOptions" />
+              <datalist id="visitorUnitOptions"></datalist>
+            </div>
+            <div class="field">
+              <label for="modal_v_plate">車牌</label>
+              <input id="modal_v_plate" type="text" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="modal_v_purposeType">到訪事由</label>
+              <select id="modal_v_purposeType">
+                <option value="親友拜訪">親友拜訪</option>
+                <option value="施工修繕">施工修繕</option>
+                <option value="快遞外送">快遞外送</option>
+                <option value="其他">其他</option>
+              </select>
+            </div>
+            <div class="field" id="modal_v_purposeOtherField" hidden>
+              <label for="modal_v_purposeOther">其他（自定義）</label>
+              <input id="modal_v_purposeOther" type="text" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="modal_v_note">備註</label>
+              <textarea id="modal_v_note" rows="4"></textarea>
+            </div>
+            <div class="field">
+              <div class="deposit-title">留存</div>
+              <div class="deposit-grid">
+                <label class="check">
+                  <input type="checkbox" id="modal_v_keep_cert" />
+                  <span>證件</span>
+                </label>
+                <select id="modal_v_keep_cert_type" disabled>
+                  <option value="身分證">身分證</option>
+                  <option value="健保卡">健保卡</option>
+                  <option value="駕照">駕照</option>
+                </select>
+
+                <label class="check">
+                  <input type="checkbox" id="modal_v_keep_card" />
+                  <span>名片</span>
+                </label>
+                <span></span>
+
+                <label class="check">
+                  <input type="checkbox" id="modal_v_keep_cash" />
+                  <span>現金</span>
+                </label>
+                <input id="modal_v_keep_cash_amount" type="number" inputmode="decimal" min="0" step="1" placeholder="金額" disabled />
+
+                <label class="check">
+                  <input type="checkbox" id="modal_v_keep_key" />
+                  <span>鑰匙</span>
+                </label>
+                <span></span>
+              </div>
+            </div>
+            <div class="status" id="visitorModalStatus" hidden></div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" id="btnCancelVisitorModal">取消</button>
+            <button class="btn btn-primary" type="submit" id="btnSubmitVisitorModal">建立</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function renderVisitorModule() {
+    if (!Array.isArray(state.communities) || state.communities.length === 0) {
+      contentEl.innerHTML = `
+        <section class="card">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("visitor")}</div>
+              <div style="min-width:0;">
+                <h2>訪客登記</h2>
+                <p>讀取社區資料中...</p>
+              </div>
+            </div>
+            <span class="tag red">安全</span>
+          </div>
+          <div class="card-bd">
+            <div class="status">讀取中...</div>
+          </div>
+        </section>
+      `.trim();
+      updateFooterActiveNav();
+      return;
+    }
+
+    const cid = resolveActiveCommunityId();
+    const accounts = loadAccounts();
+    const c = (accounts.communities || []).find((x) => x && String(x.id || "") === String(cid || "")) || null;
+    const cname = c ? String(c.name || "").trim() : "";
+
+    contentEl.innerHTML = `
+      <section class="card visitor-page">
+        <div class="card-hd">
+          <div class="left">
+            <div class="chip" aria-hidden="true">${iconSvg("visitor")}</div>
+            <div style="min-width:0;">
+              <h2>訪客登記</h2>
+              <p>${cname || "—"}</p>
+            </div>
+          </div>
+          <div class="resident-page-actions">
+            <button class="btn" type="button" id="btnScanVisitor">掃碼登記</button>
+            <button class="btn btn-primary" type="button" id="btnAddVisitor">新增訪客</button>
+          </div>
+        </div>
+        <div class="card-bd" id="visitorPanel">
+          <div class="visitor-toolbar">
+            <div class="visitor-total" id="visitorTotal">總筆數：—</div>
+            <div class="search visitor-search">
+              <input id="visitorSearch" type="text" placeholder="搜尋 姓名 / 手機 / 車牌 / 事由" autocomplete="off" />
+            </div>
+          </div>
+          <div class="status" id="visitorStatus" hidden></div>
+          <div class="visitor-list" id="visitorList"></div>
+        </div>
+      </section>
+    `.trim();
+
+    const panelEl = document.getElementById("visitorPanel");
+    const listEl = document.getElementById("visitorList");
+    const statusEl = document.getElementById("visitorStatus");
+    const searchEl = document.getElementById("visitorSearch");
+    const scanBtn = document.getElementById("btnScanVisitor");
+    const addBtn = document.getElementById("btnAddVisitor");
+    const totalEl = document.getElementById("visitorTotal");
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    const pad2 = (n) => String(n).padStart(2, "0");
+    const toLocalInputValue = (d) => {
+      if (!(d instanceof Date) || !Number.isFinite(d.getTime())) return "";
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    };
+    const parseLocalInputValue = (v) => {
+      const raw = String(v || "").trim();
+      if (!raw) return null;
+      const d = new Date(raw);
+      if (!Number.isFinite(d.getTime())) return null;
+      return d;
+    };
+    const toDate = (v) => {
+      if (!v) return null;
+      if (v instanceof Date) return v;
+      if (typeof v.toDate === "function") return v.toDate();
+      return null;
+    };
+    const formatDt = (v) => {
+      const d = toDate(v);
+      if (!d) return "";
+      return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    };
+
+    let visitors = [];
+
+    const renderList = () => {
+      const q = String(searchEl ? searchEl.value : "").trim().toLowerCase();
+      const filtered = q
+        ? visitors.filter((x) => {
+            const n = String(x.name || "").toLowerCase();
+            const p = String(x.phone || "").toLowerCase();
+            const em = String(x.email || "").toLowerCase();
+            const unit = String(x.unit || "").toLowerCase();
+            const plate = String(x.plate || "").toLowerCase();
+            const purpose = String(x.purpose || "").toLowerCase();
+            return n.includes(q) || p.includes(q) || em.includes(q) || unit.includes(q) || plate.includes(q) || purpose.includes(q);
+          })
+        : visitors;
+
+      if (totalEl) totalEl.textContent = `總筆數：${visitors.length}`;
+      if (!listEl) return;
+      if (!filtered.length) {
+        listEl.innerHTML = `<div class="status">尚無訪客登記。</div>`;
+        return;
+      }
+
+      listEl.innerHTML = filtered
+        .map((v) => {
+          const name = String(v.name || "—");
+          const unit = String(v.unit || "").trim();
+          const phone = String(v.phone || "").trim();
+          const plate = String(v.plate || "").trim();
+          const purpose = String(v.purpose || "").trim();
+          const inText = formatDt(v.inAt);
+          const outText = formatDt(v.outAt);
+          const subParts = [unit, plate, phone, purpose].filter(Boolean);
+          return `
+            <div class="visitor-item" data-id="${String(v.id || "")}">
+              <div class="visitor-left">
+                <div class="visitor-text">
+                  <div class="visitor-name">${name}</div>
+                  <div class="visitor-sub">${subParts.join("｜")}</div>
+                  <div class="visitor-meta">
+                    <span class="time-pill in">來訪：${inText || "—"}</span>
+                    <span class="time-pill out">離開：${outText || "—"}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="visitor-actions">
+                <button class="icon-btn" type="button" data-pass aria-label="訪客證" title="訪客證">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M6.5 4.8h11A2.2 2.2 0 0 1 19.7 7v10A2.2 2.2 0 0 1 17.5 19.2h-11A2.2 2.2 0 0 1 4.3 17V7A2.2 2.2 0 0 1 6.5 4.8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M8 9.2h2.2M13.8 9.2H16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M8 12h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M8 14.8h5.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M15.4 14.2a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0Z" stroke="currentColor" stroke-width="1.7"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" type="button" data-edit aria-label="編輯" title="編輯">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-2.8l-.2-.2a2 2 0 0 0-2.8 0L5 17v3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M13.5 6.5 17.5 10.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn danger" type="button" data-delete aria-label="刪除" title="刪除">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M9 4h6l1 2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M6 6h12l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          `.trim();
+        })
+        .join("");
+    };
+
+    const applyLocalVisitorPatch = (id, patch) => {
+      const idx = visitors.findIndex((x) => String(x.id || "") === String(id || ""));
+      if (idx < 0) return;
+      const cur = visitors[idx] || {};
+      visitors[idx] = { ...cur, ...patch };
+      visitors.sort((a, b) => {
+        const at = (toDate(a.inAt) || new Date(0)).getTime();
+        const bt = (toDate(b.inAt) || new Date(0)).getTime();
+        return bt - at;
+      });
+      renderList();
+    };
+
+    const collRef = () => db.collection("communities").doc(String(cid || "default")).collection("visitors");
+
+    const loadVisitors = async () => {
+      setStatus("讀取中...", false);
+      try {
+        const snap = await collRef().orderBy("inAt", "desc").limit(200).get();
+        const list = (snap && snap.docs ? snap.docs : []).map((d) => {
+          const v = d.data() || {};
+          return {
+            id: d.id,
+            qrToken: String(v.qrToken || ""),
+            name: String(v.name || v.visitorName || ""),
+            email: String(v.email || ""),
+            phone: String(v.phone || ""),
+            unit: String(v.unit || v.visitUnit || ""),
+            plate: String(v.plate || v.carPlate || ""),
+            purpose: String(v.purpose || ""),
+            purposeType: String(v.purposeType || ""),
+            purposeOther: String(v.purposeOther || ""),
+            note: String(v.note || ""),
+            inAt: v.inAt || v.inTime || v.createdAt || null,
+            outAt: v.outAt || v.outTime || null,
+            keep: v.keep || null,
+            createdAt: v.createdAt || null,
+            updatedAt: v.updatedAt || null,
+          };
+        });
+        visitors = list;
+        setStatus("", false);
+        renderList();
+      } catch (err) {
+        const code = String(err && err.code ? err.code : "");
+        setStatus(code.includes("permission-denied") ? "沒有權限讀取訪客資料。" : "讀取失敗，請稍後再試。", true);
+        visitors = [];
+        renderList();
+      }
+    };
+
+    let communityUnits = [];
+    const loadCommunityUnits = async () => {
+      try {
+        const doc = await db.collection("communities").doc(String(cid || "default")).get();
+        const v = doc && doc.exists ? (doc.data() || {}) : {};
+        communityUnits = normalizeUnitList(v.units);
+      } catch {
+        communityUnits = [];
+      }
+    };
+
+    const openVisitorEditor = async (mode, item) => {
+      await loadCommunityUnits();
+      const modal = ensureVisitorModal();
+      let detach = () => {};
+      detach = bindModalClose(modal, () => detach());
+
+      const titleEl = modal.querySelector("#visitorModalTitle");
+      const form = modal.querySelector("#visitorModalForm");
+      const st = modal.querySelector("#visitorModalStatus");
+      const inputName = modal.querySelector("#modal_v_name");
+      const inputEmail = modal.querySelector("#modal_v_email");
+      const inputPhone = modal.querySelector("#modal_v_phone");
+      const inputUnit = modal.querySelector("#modal_v_unit");
+      const unitDatalist = modal.querySelector("#visitorUnitOptions");
+      const inputPlate = modal.querySelector("#modal_v_plate");
+      const purposeTypeEl = modal.querySelector("#modal_v_purposeType");
+      const purposeOtherField = modal.querySelector("#modal_v_purposeOtherField");
+      const purposeOtherEl = modal.querySelector("#modal_v_purposeOther");
+      const inputNote = modal.querySelector("#modal_v_note");
+      const keepCertEl = modal.querySelector("#modal_v_keep_cert");
+      const keepCertTypeEl = modal.querySelector("#modal_v_keep_cert_type");
+      const keepCardEl = modal.querySelector("#modal_v_keep_card");
+      const keepCashEl = modal.querySelector("#modal_v_keep_cash");
+      const keepCashAmountEl = modal.querySelector("#modal_v_keep_cash_amount");
+      const keepKeyEl = modal.querySelector("#modal_v_keep_key");
+      const cancelBtn = modal.querySelector("#btnCancelVisitorModal");
+      const closeBtn = modal.querySelector("#btnCloseVisitorModal");
+      const submitBtn = modal.querySelector("#btnSubmitVisitorModal");
+
+      const setModalStatus = (msg, isError) => {
+        if (!st) return;
+        const t = String(msg || "").trim();
+        st.textContent = t;
+        st.hidden = !t;
+        st.classList.toggle("error", Boolean(isError));
+      };
+
+      const isEdit = mode === "edit";
+      const data = item || {};
+      if (titleEl) titleEl.textContent = isEdit ? "編輯訪客" : "新增訪客";
+      if (submitBtn) submitBtn.textContent = isEdit ? "更新" : "建立";
+      if (inputName) inputName.value = isEdit ? String(data.name || "") : "";
+      if (inputEmail) inputEmail.value = isEdit ? String(data.email || "") : "";
+      if (inputPhone) inputPhone.value = isEdit ? String(data.phone || "") : "";
+      if (inputUnit) inputUnit.value = isEdit ? String(data.unit || "") : "";
+      if (inputPlate) inputPlate.value = isEdit ? String(data.plate || "") : "";
+      if (inputNote) inputNote.value = isEdit ? String(data.note || "") : "";
+
+      const normalizePurposeType = (raw) => {
+        const v = String(raw || "").trim();
+        const known = ["親友拜訪", "施工修繕", "快遞外送", "其他"];
+        if (known.includes(v)) return v;
+        if (!v) return "親友拜訪";
+        return "其他";
+      };
+      const existingPurpose = String(data.purpose || "");
+      const existingPurposeType = normalizePurposeType(String(data.purposeType || existingPurpose));
+      const existingOther = existingPurposeType === "其他" ? String(data.purposeOther || (existingPurposeType === existingPurpose ? "" : existingPurpose) || "") : "";
+      if (purposeTypeEl) purposeTypeEl.value = existingPurposeType;
+      if (purposeOtherEl) purposeOtherEl.value = existingOther;
+
+      const setPurposeOtherVisible = () => {
+        const isOther = purposeTypeEl && String(purposeTypeEl.value || "") === "其他";
+        if (purposeOtherField) purposeOtherField.hidden = !isOther;
+      };
+      setPurposeOtherVisible();
+      setModalStatus("", false);
+
+      if (unitDatalist) {
+        unitDatalist.innerHTML = communityUnits.map((u) => `<option value="${String(u).replace(/"/g, "&quot;")}"></option>`).join("");
+      }
+
+      const applyKeepState = () => {
+        const keepCert = Boolean(keepCertEl && keepCertEl.checked);
+        const keepCash = Boolean(keepCashEl && keepCashEl.checked);
+        if (keepCertTypeEl) keepCertTypeEl.disabled = !keepCert;
+        if (keepCashAmountEl) keepCashAmountEl.disabled = !keepCash;
+        if (!keepCert && keepCertTypeEl) keepCertTypeEl.value = "身分證";
+        if (!keepCash && keepCashAmountEl) keepCashAmountEl.value = "";
+      };
+
+      const loadKeepFromData = () => {
+        const keep = (data && data.keep) || {};
+        const cert = keep && keep.certificate ? keep.certificate : {};
+        const cash = keep && keep.cash ? keep.cash : {};
+        if (keepCertEl) keepCertEl.checked = Boolean(cert && cert.enabled);
+        if (keepCertTypeEl) keepCertTypeEl.value = String((cert && cert.type) || "身分證");
+        if (keepCardEl) keepCardEl.checked = Boolean(keep && keep.businessCard);
+        if (keepCashEl) keepCashEl.checked = Boolean(cash && cash.enabled);
+        if (keepCashAmountEl) keepCashAmountEl.value = cash && cash.amount != null ? String(cash.amount) : "";
+        if (keepKeyEl) keepKeyEl.checked = Boolean(keep && keep.key);
+        applyKeepState();
+      };
+      loadKeepFromData();
+
+      const onCancel = (e) => {
+        e.preventDefault();
+        modal.hidden = true;
+        detach();
+      };
+      if (cancelBtn) cancelBtn.addEventListener("click", onCancel);
+      if (closeBtn) closeBtn.addEventListener("click", onCancel);
+      if (purposeTypeEl) purposeTypeEl.addEventListener("change", setPurposeOtherVisible);
+      if (keepCertEl) keepCertEl.addEventListener("change", applyKeepState);
+      if (keepCashEl) keepCashEl.addEventListener("change", applyKeepState);
+
+      const onSubmit = async (e) => {
+        e.preventDefault();
+        if (submitBtn) submitBtn.disabled = true;
+        setModalStatus("儲存中...", false);
+
+        const name = normalizeText(inputName ? inputName.value : "");
+        const email = normalizeText(inputEmail ? inputEmail.value : "");
+        const phone = normalizeText(inputPhone ? inputPhone.value : "");
+        const unit = normalizeText(inputUnit ? inputUnit.value : "");
+        const plate = normalizeText(inputPlate ? inputPlate.value : "");
+        const purposeType = normalizeText(purposeTypeEl ? purposeTypeEl.value : "");
+        const purposeOther = normalizeText(purposeOtherEl ? purposeOtherEl.value : "");
+        const purpose = purposeType === "其他" ? purposeOther : purposeType;
+        const note = normalizeText(inputNote ? inputNote.value : "");
+        const inDate = isEdit ? (toDate(data.inAt) || new Date()) : new Date();
+        const outDate = isEdit ? toDate(data.outAt) : null;
+
+        if (!name) {
+          setModalStatus("請填寫訪客姓名。", true);
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+        if (purposeType === "其他" && !purposeOther) {
+          setModalStatus("請填寫到訪事由。", true);
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+
+        const keep = {
+          certificate: {
+            enabled: Boolean(keepCertEl && keepCertEl.checked),
+            type: String(keepCertTypeEl ? keepCertTypeEl.value : "身分證"),
+          },
+          businessCard: Boolean(keepCardEl && keepCardEl.checked),
+          cash: {
+            enabled: Boolean(keepCashEl && keepCashEl.checked),
+            amount: keepCashEl && keepCashEl.checked ? Number(keepCashAmountEl ? keepCashAmountEl.value : "") : null,
+          },
+          key: Boolean(keepKeyEl && keepKeyEl.checked),
+        };
+        if (!Number.isFinite(keep.cash.amount)) keep.cash.amount = null;
+
+        const Timestamp = firebase.firestore.Timestamp;
+        try {
+          const docRef = isEdit ? collRef().doc(String(data.id || "")) : collRef().doc();
+          const id = String(docRef.id || "");
+          const payload = {
+            qrToken: id,
+            name,
+            email,
+            phone,
+            unit,
+            plate,
+            purpose,
+            purposeType: purposeType === "其他" ? "其他" : purposeType,
+            purposeOther: purposeType === "其他" ? purposeOther : "",
+            note,
+            inAt: isEdit ? Timestamp.fromDate(inDate) : null,
+            outAt: isEdit && outDate ? Timestamp.fromDate(outDate) : null,
+            keep,
+            updatedAt: FieldValue.serverTimestamp(),
+          };
+          if (!isEdit) {
+            payload.createdAt = FieldValue.serverTimestamp();
+            payload.createdBy = String((auth.currentUser && auth.currentUser.uid) || "");
+            payload.qrIssuedAt = FieldValue.serverTimestamp();
+          }
+          await docRef.set(payload, { merge: true });
+
+          const nextItem = {
+            id,
+            qrToken: id,
+            name,
+            email,
+            phone,
+            unit,
+            plate,
+            purpose,
+            purposeType: payload.purposeType,
+            purposeOther: payload.purposeOther,
+            note,
+            inAt: payload.inAt,
+            outAt: payload.outAt,
+            keep,
+          };
+          const idx = visitors.findIndex((x) => String(x.id || "") === id);
+          if (idx >= 0) visitors[idx] = { ...(visitors[idx] || {}), ...nextItem };
+          else visitors.unshift(nextItem);
+
+          visitors.sort((a, b) => {
+            const at = (toDate(a.inAt) || new Date(0)).getTime();
+            const bt = (toDate(b.inAt) || new Date(0)).getTime();
+            return bt - at;
+          });
+          renderList();
+
+          if (!isEdit) {
+            openVisitorPassModal80({
+              cid,
+              communityName: cname,
+              visitorId: id,
+              name,
+              unit,
+              purpose,
+              phone,
+              plate,
+              email,
+              inAt: null,
+              outAt: null,
+            });
+          }
+
+          modal.hidden = true;
+          detach();
+        } catch (err) {
+          const code = String(err && err.code ? err.code : "");
+          setModalStatus(code.includes("permission-denied") ? "沒有權限執行此操作。" : "儲存失敗，請稍後再試。", true);
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      };
+
+      form.addEventListener("submit", onSubmit);
+      const oldDetach = detach;
+      detach = () => {
+        try { form.removeEventListener("submit", onSubmit); } catch {}
+        try {
+          if (cancelBtn) cancelBtn.removeEventListener("click", onCancel);
+          if (closeBtn) closeBtn.removeEventListener("click", onCancel);
+        } catch {}
+        try {
+          if (purposeTypeEl) purposeTypeEl.removeEventListener("change", setPurposeOtherVisible);
+          if (keepCertEl) keepCertEl.removeEventListener("change", applyKeepState);
+          if (keepCashEl) keepCashEl.removeEventListener("change", applyKeepState);
+        } catch {}
+        oldDetach();
+      };
+
+      modal.hidden = false;
+      requestAnimationFrame(() => {
+        if (inputName) inputName.focus();
+      });
+    };
+
+    if (searchEl) searchEl.addEventListener("input", renderList);
+    if (addBtn) addBtn.addEventListener("click", () => openVisitorEditor("create"));
+    if (scanBtn) scanBtn.addEventListener("click", () => openVisitorScanModal80({ cid, onApplied: applyLocalVisitorPatch }));
+
+    if (listEl) {
+      listEl.addEventListener("click", async (e) => {
+        const row = e.target && e.target.closest ? e.target.closest(".visitor-item") : null;
+        if (!row) return;
+        const id = row.getAttribute("data-id");
+        const v = visitors.find((x) => String(x.id || "") === String(id || "")) || null;
+        if (!id || !v) return;
+
+        const editBtn = e.target.closest("[data-edit]");
+        if (editBtn) {
+          openVisitorEditor("edit", v);
+          return;
+        }
+        const passBtn = e.target.closest("[data-pass]");
+        if (passBtn) {
+          openVisitorPassModal80({
+            cid,
+            communityName: cname,
+            visitorId: id,
+            name: String(v.name || ""),
+            unit: String(v.unit || ""),
+            purpose: String(v.purpose || ""),
+            phone: String(v.phone || ""),
+            plate: String(v.plate || ""),
+            email: String(v.email || ""),
+            inAt: v.inAt || null,
+            outAt: v.outAt || null,
+          });
+          return;
+        }
+        const delBtn = e.target.closest("[data-delete]");
+        if (delBtn) {
+          const ok = await (window.nwConfirm ? window.nwConfirm({
+            title: "確認刪除",
+            message: `確定要刪除訪客「${String(v.name || id)}」的登記？`,
+            okText: "刪除",
+            cancelText: "取消",
+            danger: true,
+          }) : Promise.resolve(window.confirm("確定要刪除？")));
+          if (!ok) return;
+          delBtn.disabled = true;
+          try {
+            await collRef().doc(String(id)).delete();
+            visitors = visitors.filter((x) => String(x.id || "") !== String(id));
+            renderList();
+          } catch {
+            toast("刪除失敗");
+          } finally {
+            delBtn.disabled = false;
+          }
+        }
+      });
+    }
+
+    loadVisitors();
+    updateFooterActiveNav();
+  }
+
+  function setupDashboardReorder(grid) {
+    if (!grid || grid._reorderBound) return;
+    grid._reorderBound = true;
+
+    let pressTimer = 0;
+    let dragging = false;
+    let draggingEl = null;
+    let pressedEl = null;
+    let placeholderEl = null;
+    let ghostEl = null;
+    let didDrag = false;
+    let lastPointerId = null;
+    let offsetX = 0;
+    let offsetY = 0;
+    let startX = 0;
+    let startY = 0;
+    let detachDocListeners = () => {};
+
+    const clearPressTimer = () => {
+      if (pressTimer) window.clearTimeout(pressTimer);
+      pressTimer = 0;
+    };
+
+    const stopDragging = () => {
+      clearPressTimer();
+      detachDocListeners();
+      detachDocListeners = () => {};
+      if (!dragging) return;
+      dragging = false;
+      if (ghostEl && ghostEl.parentNode) ghostEl.parentNode.removeChild(ghostEl);
+      ghostEl = null;
+      if (placeholderEl && placeholderEl.parentNode && draggingEl) {
+        try {
+          placeholderEl.parentNode.insertBefore(draggingEl, placeholderEl);
+        } catch {}
+        placeholderEl.parentNode.removeChild(placeholderEl);
+      }
+      placeholderEl = null;
+      if (draggingEl) draggingEl.style.display = "";
+      if (draggingEl) draggingEl.classList.remove("dragging");
+      if (draggingEl) draggingEl.classList.remove("pressing");
+      draggingEl = null;
+      if (pressedEl) pressedEl.classList.remove("pressing");
+      pressedEl = null;
+      grid.classList.remove("reorder-mode");
+      const cid = resolveActiveCommunityId();
+      const ids = Array.from(grid.querySelectorAll(".card[data-id]"))
+        .map((el) => String(el.getAttribute("data-id") || "").trim())
+        .filter(Boolean);
+      saveModuleOrder(cid, ids);
+      updateFooterActiveNav();
+    };
+
+    const updateGhostPosition = (e) => {
+      if (!ghostEl) return;
+      const x = Math.round(e.clientX - offsetX);
+      const y = Math.round(e.clientY - offsetY);
+      ghostEl.style.left = `${x}px`;
+      ghostEl.style.top = `${y}px`;
+    };
+
+    const movePlaceholder = (clientX, clientY) => {
+      if (!placeholderEl) return;
+      const el = document.elementFromPoint(clientX, clientY);
+      const over = el && el.closest ? el.closest(".card[data-id]") : null;
+      if (!over || !grid.contains(over)) return;
+      if (over === placeholderEl) return;
+      if (draggingEl && over === draggingEl) return;
+      const rect = over.getBoundingClientRect();
+      const before = clientY < rect.top + rect.height / 2;
+      if (before) {
+        if (over.previousElementSibling !== placeholderEl) grid.insertBefore(placeholderEl, over);
+      } else {
+        if (over.nextElementSibling !== placeholderEl) grid.insertBefore(placeholderEl, over.nextElementSibling);
+      }
+    };
+
+    grid.addEventListener("pointerdown", (e) => {
+      const card = e.target && e.target.closest ? e.target.closest(".card[data-id]") : null;
+      if (!card || !grid.contains(card)) return;
+      if (e.target && e.target.closest && e.target.closest("button,a,input,textarea,select,label")) return;
+      didDrag = false;
+      lastPointerId = e.pointerId;
+      startX = e.clientX;
+      startY = e.clientY;
+      if (pressedEl && pressedEl !== card) pressedEl.classList.remove("pressing");
+      pressedEl = card;
+      card.classList.add("pressing");
+      clearPressTimer();
+      pressTimer = window.setTimeout(() => {
+        dragging = true;
+        didDrag = true;
+        draggingEl = card;
+        grid.classList.add("reorder-mode");
+        card.classList.add("dragging");
+        card.classList.remove("pressing");
+
+        const rect = card.getBoundingClientRect();
+        offsetX = startX - rect.left;
+        offsetY = startY - rect.top;
+
+        placeholderEl = document.createElement("div");
+        placeholderEl.className = "card placeholder";
+        placeholderEl.style.height = `${Math.round(rect.height)}px`;
+        placeholderEl.style.width = `${Math.round(rect.width)}px`;
+        grid.insertBefore(placeholderEl, card);
+
+        ghostEl = card.cloneNode(true);
+        ghostEl.classList.add("drag-ghost");
+        ghostEl.style.display = "";
+        ghostEl.style.width = `${Math.round(rect.width)}px`;
+        ghostEl.style.height = `${Math.round(rect.height)}px`;
+        ghostEl.style.left = `${Math.round(rect.left)}px`;
+        ghostEl.style.top = `${Math.round(rect.top)}px`;
+        document.body.appendChild(ghostEl);
+        card.style.display = "none";
+
+        const onMove = (ev) => {
+          if (!dragging) return;
+          updateGhostPosition(ev);
+          movePlaceholder(ev.clientX, ev.clientY);
+          ev.preventDefault();
+        };
+        const onUp = () => stopDragging();
+        document.addEventListener("pointermove", onMove, { passive: false });
+        document.addEventListener("pointerup", onUp);
+        document.addEventListener("pointercancel", onUp);
+        detachDocListeners = () => {
+          document.removeEventListener("pointermove", onMove);
+          document.removeEventListener("pointerup", onUp);
+          document.removeEventListener("pointercancel", onUp);
+        };
+
+        updateGhostPosition({ clientX: startX, clientY: startY });
+        movePlaceholder(startX, startY);
+      }, 380);
+    });
+
+    grid.addEventListener("pointerup", () => {
+      clearPressTimer();
+      if (pressedEl) pressedEl.classList.remove("pressing");
+      pressedEl = null;
+    });
+    grid.addEventListener("pointercancel", () => {
+      clearPressTimer();
+      if (pressedEl) pressedEl.classList.remove("pressing");
+      pressedEl = null;
+      stopDragging();
+    });
+
+    grid.addEventListener("click", (e) => {
+      if (!didDrag) return;
+      e.preventDefault();
+      e.stopPropagation();
+      didDrag = false;
+    }, true);
   }
 
   function renderDashboard() {
@@ -885,7 +2614,7 @@
       <div class="grid" id="moduleGrid"></div>
     `;
     const grid = document.getElementById("moduleGrid");
-    grid.innerHTML = moduleCatalog.map((m) => {
+    grid.innerHTML = orderedModules().map((m) => {
       const cfg = resolveUrl(m.id);
       const disabled = !cfg.enabled || !cfg.url;
       return `
@@ -923,11 +2652,16 @@
       });
     });
     updateFooterActiveNav();
+    setupDashboardReorder(grid);
   }
 
   function renderModule(moduleId) {
     if (moduleId === "residents") {
       renderResidentsModule();
+      return;
+    }
+    if (moduleId === "visitor") {
+      renderVisitorModule();
       return;
     }
     const m = moduleCatalog.find((x) => x && x.id === moduleId) || null;
