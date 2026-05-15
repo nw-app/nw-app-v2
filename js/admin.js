@@ -25,6 +25,7 @@
   const state = {
     communities: [],
     config: null,
+    unsubVisitors: null,
   };
 
   const moduleCatalog = [
@@ -326,6 +327,13 @@
       .replace(/'/g, "&#39;");
   }
 
+  function stopVisitorsSubscription() {
+    if (state.unsubVisitors) {
+      try { state.unsubVisitors(); } catch {}
+      state.unsubVisitors = null;
+    }
+  }
+
   function ensureVisitorPassModal() {
     let modal = document.getElementById("visitorPassModal");
     if (modal) return modal;
@@ -558,10 +566,6 @@
         </div>
         <form id="visitorScanModalForm">
           <div class="modal-body">
-            <div class="field">
-              <label for="visitorScanPartySize">來訪人數</label>
-              <input id="visitorScanPartySize" type="number" min="1" step="1" value="1" inputmode="numeric" />
-            </div>
             <div class="scan-stage">
               <video id="visitorScanVideo" class="scan-video" playsinline></video>
               <div class="scan-overlay" aria-hidden="true">
@@ -645,7 +649,6 @@
 
   function openVisitorScanModal80({ cid, onApplied }) {
     const modal = ensureVisitorScanModal();
-    const partySizeEl = modal.querySelector("#visitorScanPartySize");
     const stageEl = modal.querySelector(".scan-stage");
     const video = modal.querySelector("#visitorScanVideo");
     const statusEl = modal.querySelector("#visitorScanStatus");
@@ -664,6 +667,30 @@
       statusEl.textContent = t;
       statusEl.hidden = !t;
       statusEl.classList.toggle("error", Boolean(isError));
+      statusEl.classList.remove("scan-result", "scan-in", "scan-out");
+    };
+
+    const speak = (text) => {
+      const raw = String(text || "").trim();
+      if (!raw) return;
+      try {
+        if (!("speechSynthesis" in window)) return;
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(raw);
+        u.lang = "zh-TW";
+        window.speechSynthesis.speak(u);
+      } catch {}
+    };
+
+    const showScanResult = (kind, timeText) => {
+      if (!statusEl) return;
+      const t = String(timeText || "").trim();
+      const label = kind === "out" ? "離開時間" : "來訪時間";
+      const colorClass = kind === "out" ? "scan-out" : "scan-in";
+      statusEl.hidden = false;
+      statusEl.classList.remove("error");
+      statusEl.classList.add("scan-result", colorClass);
+      statusEl.textContent = `${label}：${t}`;
     };
 
     const stop = () => {
@@ -725,20 +752,21 @@
       const handleScan = async (rawValue) => {
         const parsed = parseVisitorQrText(rawValue);
         if (!parsed) {
-          setStatus("無法辨識此 QR code。", true);
+          setStatus("無法辨識", true);
+          speak("無法辨識QR code");
           return;
         }
         if (String(parsed.cid || "") !== String(cid || "")) {
-          setStatus("此 QR code 不屬於目前社區。", true);
+          setStatus("無法辨識", true);
+          speak("無法辨識QR code");
           return;
         }
         const vid = String(parsed.vid || "").trim();
         if (!vid) {
-          setStatus("無法辨識訪客 ID。", true);
+          setStatus("無法辨識", true);
+          speak("無法辨識QR code");
           return;
         }
-        const partySizeRaw = partySizeEl ? Number(partySizeEl.value) : 1;
-        const partySize = Number.isFinite(partySizeRaw) && partySizeRaw >= 1 ? Math.floor(partySizeRaw) : 1;
         const nowDate = new Date();
         const Timestamp = firebase.firestore.Timestamp;
         try {
@@ -758,7 +786,6 @@
                 docRef,
                 {
                   inAt,
-                  partySize,
                   updatedAt: FieldValue.serverTimestamp(),
                 },
                 { merge: true }
@@ -781,7 +808,8 @@
           });
 
           if (res.kind === "missing") {
-            setStatus("找不到此訪客資料。", true);
+            setStatus("無法辨識", true);
+            speak("無法辨識QR code");
             return;
           }
           if (res.kind === "invalid") {
@@ -794,8 +822,10 @@
           if (res.kind === "in") {
             stop();
             if (stageEl) stageEl.hidden = true;
-            if (typeof onApplied === "function") onApplied(vid, { inAt: res.inAt, partySize });
-            setStatus(`來訪時間：${formatYmdHms(nowDate)}`, false);
+            if (typeof onApplied === "function") onApplied(vid, { inAt: res.inAt });
+            const tt = formatYmdHms(nowDate);
+            showScanResult("in", tt);
+            speak("訪客登記成功，歡迎光臨");
             if (hintEl) hintEl.textContent = "已完成來訪登記。離開時請再次按「掃碼登記」並掃描同一張訪客證。";
             return;
           }
@@ -803,7 +833,9 @@
             stop();
             if (stageEl) stageEl.hidden = true;
             if (typeof onApplied === "function") onApplied(vid, { outAt: res.outAt, qrInvalidated: true });
-            setStatus(`離開時間：${formatYmdHms(nowDate)}`, false);
+            const tt = formatYmdHms(nowDate);
+            showScanResult("out", tt);
+            speak("訪客登記成功，期待您再次光臨");
             if (hintEl) hintEl.textContent = "已完成離開登記。此 QR code 已失效。";
             return;
           }
@@ -1901,8 +1933,8 @@
               <datalist id="visitorUnitOptions"></datalist>
             </div>
             <div class="field">
-              <label for="modal_v_plate">車牌</label>
-              <input id="modal_v_plate" type="text" autocomplete="off" />
+              <label for="modal_v_partySize">來訪人數</label>
+              <input id="modal_v_partySize" type="number" min="1" step="1" value="1" inputmode="numeric" />
             </div>
             <div class="field">
               <label for="modal_v_purposeType">到訪事由</label>
@@ -1918,8 +1950,22 @@
               <input id="modal_v_purposeOther" type="text" autocomplete="off" />
             </div>
             <div class="field">
+              <label for="modal_v_plate">車牌</label>
+              <input id="modal_v_plate" type="text" autocomplete="off" />
+            </div>
+            <div class="field">
               <label for="modal_v_note">備註</label>
               <textarea id="modal_v_note" rows="4"></textarea>
+            </div>
+            <div class="row" id="modal_v_times_row" hidden>
+              <div class="field">
+                <label for="modal_v_inAt">來訪時間</label>
+                <input id="modal_v_inAt" type="datetime-local" />
+              </div>
+              <div class="field">
+                <label for="modal_v_outAt">離開時間</label>
+                <input id="modal_v_outAt" type="datetime-local" />
+              </div>
             </div>
             <div class="field">
               <div class="deposit-title">留存</div>
@@ -1967,6 +2013,7 @@
   }
 
   function renderVisitorModule() {
+    stopVisitorsSubscription();
     if (!Array.isArray(state.communities) || state.communities.length === 0) {
       contentEl.innerHTML = `
         <section class="card">
@@ -2152,41 +2199,50 @@
 
     const collRef = () => db.collection("communities").doc(String(cid || "default")).collection("visitors");
 
-    const loadVisitors = async () => {
+    const subscribeVisitors = () => {
       setStatus("讀取中...", false);
       try {
-        const snap = await collRef().orderBy("inAt", "desc").limit(200).get();
-        const list = (snap && snap.docs ? snap.docs : []).map((d) => {
-          const v = d.data() || {};
-          return {
-            id: d.id,
-            qrToken: String(v.qrToken || ""),
-            name: String(v.name || v.visitorName || ""),
-            email: String(v.email || ""),
-            phone: String(v.phone || ""),
-            unit: String(v.unit || v.visitUnit || ""),
-            plate: String(v.plate || v.carPlate || ""),
-            purpose: String(v.purpose || ""),
-            purposeType: String(v.purposeType || ""),
-            purposeOther: String(v.purposeOther || ""),
-            note: String(v.note || ""),
-            inAt: v.inAt || v.inTime || v.createdAt || null,
-            outAt: v.outAt || v.outTime || null,
-            partySize: v.partySize != null ? Number(v.partySize) : null,
-            qrInvalidated: Boolean(v.qrInvalidated),
-            keep: v.keep || null,
-            createdAt: v.createdAt || null,
-            updatedAt: v.updatedAt || null,
-          };
-        });
-        visitors = list;
-        setStatus("", false);
-        renderList();
-      } catch (err) {
-        const code = String(err && err.code ? err.code : "");
-        setStatus(code.includes("permission-denied") ? "沒有權限讀取訪客資料。" : "讀取失敗，請稍後再試。", true);
-        visitors = [];
-        renderList();
+        state.unsubVisitors = collRef()
+          .orderBy("createdAt", "desc")
+          .limit(200)
+          .onSnapshot(
+            (snap) => {
+              const list = (snap && snap.docs ? snap.docs : []).map((d) => {
+                const v = d.data() || {};
+                return {
+                  id: d.id,
+                  qrToken: String(v.qrToken || ""),
+                  name: String(v.name || v.visitorName || ""),
+                  email: String(v.email || ""),
+                  phone: String(v.phone || ""),
+                  unit: String(v.unit || v.visitUnit || ""),
+                  plate: String(v.plate || v.carPlate || ""),
+                  purpose: String(v.purpose || ""),
+                  purposeType: String(v.purposeType || ""),
+                  purposeOther: String(v.purposeOther || ""),
+                  note: String(v.note || ""),
+                  inAt: v.inAt || v.inTime || null,
+                  outAt: v.outAt || v.outTime || null,
+                  partySize: v.partySize != null ? Number(v.partySize) : null,
+                  qrInvalidated: Boolean(v.qrInvalidated),
+                  keep: v.keep || null,
+                  createdAt: v.createdAt || null,
+                  updatedAt: v.updatedAt || null,
+                };
+              });
+              visitors = list;
+              setStatus("", false);
+              renderList();
+            },
+            (err) => {
+              const code = String(err && err.code ? err.code : "");
+              setStatus(code.includes("permission-denied") ? "沒有權限讀取訪客資料。" : "讀取失敗，請稍後再試。", true);
+              visitors = [];
+              renderList();
+            }
+          );
+      } catch {
+        setStatus("讀取失敗，請稍後再試。", true);
       }
     };
 
@@ -2215,11 +2271,15 @@
       const inputPhone = modal.querySelector("#modal_v_phone");
       const inputUnit = modal.querySelector("#modal_v_unit");
       const unitDatalist = modal.querySelector("#visitorUnitOptions");
+      const inputPartySize = modal.querySelector("#modal_v_partySize");
       const inputPlate = modal.querySelector("#modal_v_plate");
       const purposeTypeEl = modal.querySelector("#modal_v_purposeType");
       const purposeOtherField = modal.querySelector("#modal_v_purposeOtherField");
       const purposeOtherEl = modal.querySelector("#modal_v_purposeOther");
       const inputNote = modal.querySelector("#modal_v_note");
+      const timesRow = modal.querySelector("#modal_v_times_row");
+      const inputInAt = modal.querySelector("#modal_v_inAt");
+      const inputOutAt = modal.querySelector("#modal_v_outAt");
       const keepCertEl = modal.querySelector("#modal_v_keep_cert");
       const keepCertTypeEl = modal.querySelector("#modal_v_keep_cert_type");
       const keepCardEl = modal.querySelector("#modal_v_keep_card");
@@ -2246,8 +2306,12 @@
       if (inputEmail) inputEmail.value = isEdit ? String(data.email || "") : "";
       if (inputPhone) inputPhone.value = isEdit ? String(data.phone || "") : "";
       if (inputUnit) inputUnit.value = isEdit ? String(data.unit || "") : "";
+      if (inputPartySize) inputPartySize.value = String(isEdit && data.partySize != null ? Number(data.partySize) : 1);
       if (inputPlate) inputPlate.value = isEdit ? String(data.plate || "") : "";
       if (inputNote) inputNote.value = isEdit ? String(data.note || "") : "";
+      if (timesRow) timesRow.hidden = !isEdit;
+      if (inputInAt) inputInAt.value = isEdit ? toLocalInputValue(toDate(data.inAt) || toDate(data.createdAt) || new Date()) : "";
+      if (inputOutAt) inputOutAt.value = isEdit ? toLocalInputValue(toDate(data.outAt)) : "";
 
       const normalizePurposeType = (raw) => {
         const v = String(raw || "").trim();
@@ -2316,13 +2380,15 @@
         const email = normalizeText(inputEmail ? inputEmail.value : "");
         const phone = normalizeText(inputPhone ? inputPhone.value : "");
         const unit = normalizeText(inputUnit ? inputUnit.value : "");
+        const partySizeRaw = inputPartySize ? Number(inputPartySize.value) : 1;
+        const partySize = Number.isFinite(partySizeRaw) && partySizeRaw >= 1 ? Math.floor(partySizeRaw) : 1;
         const plate = normalizeText(inputPlate ? inputPlate.value : "");
         const purposeType = normalizeText(purposeTypeEl ? purposeTypeEl.value : "");
         const purposeOther = normalizeText(purposeOtherEl ? purposeOtherEl.value : "");
         const purpose = purposeType === "其他" ? purposeOther : purposeType;
         const note = normalizeText(inputNote ? inputNote.value : "");
-        const inDate = isEdit ? (toDate(data.inAt) || new Date()) : new Date();
-        const outDate = isEdit ? toDate(data.outAt) : null;
+        const inDate = isEdit ? (parseLocalInputValue(inputInAt ? inputInAt.value : "") || toDate(data.inAt) || toDate(data.createdAt) || new Date()) : null;
+        const outDate = isEdit ? (parseLocalInputValue(inputOutAt ? inputOutAt.value : "") || null) : null;
 
         if (!name) {
           setModalStatus("請填寫訪客姓名。", true);
@@ -2359,12 +2425,13 @@
             email,
             phone,
             unit,
+            partySize,
             plate,
             purpose,
             purposeType: purposeType === "其他" ? "其他" : purposeType,
             purposeOther: purposeType === "其他" ? purposeOther : "",
             note,
-            inAt: isEdit ? Timestamp.fromDate(inDate) : null,
+            inAt: isEdit && inDate ? Timestamp.fromDate(inDate) : null,
             outAt: isEdit && outDate ? Timestamp.fromDate(outDate) : null,
             keep,
             updatedAt: FieldValue.serverTimestamp(),
@@ -2391,7 +2458,7 @@
             note,
             inAt: payload.inAt,
             outAt: payload.outAt,
-            partySize: !isEdit ? 1 : (data.partySize != null ? Number(data.partySize) : null),
+            partySize,
             keep,
             createdAt: !isEdit ? clientCreatedAt : (data.createdAt || null),
           };
@@ -2417,7 +2484,7 @@
               phone,
               plate,
               email,
-              partySize: 1,
+              partySize,
               createdAt: clientCreatedAt,
               inAt: null,
               outAt: null,
@@ -2516,7 +2583,7 @@
       });
     }
 
-    loadVisitors();
+    subscribeVisitors();
     updateFooterActiveNav();
   }
 
@@ -2679,6 +2746,7 @@
   }
 
   function renderDashboard() {
+    stopVisitorsSubscription();
     contentEl.innerHTML = `
       <div class="grid" id="moduleGrid"></div>
     `;
@@ -2725,6 +2793,7 @@
   }
 
   function renderModule(moduleId) {
+    if (moduleId !== "visitor") stopVisitorsSubscription();
     if (moduleId === "residents") {
       renderResidentsModule();
       return;
