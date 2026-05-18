@@ -721,4 +721,31 @@ input:focus, select:focus, textarea:focus {
   align-items: center;
   min-height: 52px;
 }
+.unit-tabs {
+  display: inline-flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: rgba(17, 24, 39, 0.03);
+  margin-bottom: 12px;
+}
+.modal-hd .unit-tabs { margin-bottom: 0; }
+.unit-tab-btn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(31, 41, 55, 0.78);
+  font-weight: 900;
+  cursor: pointer;
+}
+.unit-tab-btn[aria-selected="true"] {
+  background: #fff;
+  border-color: rgba(17, 24, 39, 0.12);
+  color: rgba(31, 41, 55, 0.92);
+  box-shadow: 0 10px 22px rgba(17, 24, 39, 0.06);
+}
+.unit-tab-panel[hidden] { display: none; }
 .sidebar, .main { display: none; }

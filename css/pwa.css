@@ -249,9 +249,27 @@ html.force-portrait .pwa-install {
   margin-right: auto;
   justify-content: flex-start;
 }
+#profileModal .profile-switch .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 14px;
+  line-height: 1;
+  font-weight: 900;
+  color: rgba(31, 41, 55, 0.92);
+  background: #fff;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  border-radius: 14px;
+  cursor: pointer;
+}
+#profileModal .profile-switch .btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(17, 24, 39, 0.12);
+}
 .profile-avatar { display: flex; align-items: center; }
 .profile-avatar .user-avatar-fallback { width: 56px; height: 56px; font-size: 18px; }
-#communityNameSub.clickable { cursor: pointer; }
+#communityNameSub.clickable { cursor: pointer; text-decoration: none; }
 .community-picker-list { display: grid; gap: 10px; width: 100%; }
 .community-picker-item {
   width: 100%;

@@ -1106,6 +1106,8 @@
     const unitTextarea = document.getElementById("modal_units_text");
     const unitStatus = document.getElementById("unitModalStatus");
     const unitCountEl = document.getElementById("unitModalCount");
+    const unitTitleTextEl = document.getElementById("unitModalTitleText");
+    const unitFeatureList = document.getElementById("unitFeatureList");
     const unitCloseBtn = document.getElementById("btnCloseUnitModal");
     const unitCancelBtn = document.getElementById("btnCancelUnitModal");
     const unitBackdrop = unitModal ? unitModal.querySelector("[data-modal-close]") : null;
@@ -1116,6 +1118,25 @@
     let detachKeydown = () => {};
     let unitCommunityId = "";
     let detachUnitKeydown = () => {};
+    let unitActiveTab = "units";
+    let unitConfigCache = null;
+
+    const adminModules = [
+      { id: "parcel", name: "包裹郵件" },
+      { id: "visitor", name: "訪客登記" },
+      { id: "residents", name: "住戶造冊" },
+      { id: "facility", name: "設施預約" },
+      { id: "bulletin", name: "公告系統" },
+      { id: "parking", name: "綠色停車" },
+      { id: "company-support", name: "公司支援" },
+      { id: "meter-reading", name: "抄表紀錄" },
+      { id: "finance", name: "收支報表" },
+      { id: "checkin-vote", name: "報到投票" },
+      { id: "assignments", name: "交辦事項" },
+      { id: "duty", name: "勤務管理" },
+      { id: "care", name: "關懷救護" },
+      { id: "life", name: "生活服務" },
+    ];
 
     const setImagePreview = (dataUrl) => {
       modalImageData = dataUrl || "";
@@ -1277,10 +1298,23 @@
                   </label>
                 </div>
                 <div class="community-actions">
-                  <button class="icon-btn" type="button" data-units-community="${c.id}" aria-label="戶號" title="戶號">
+                  <button class="icon-btn" type="button" data-go-admin="${c.id}" aria-label="前往社區後台" title="前往社區後台">
                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M7 7h10M7 12h10M7 17h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                      <path d="M5.2 5.2h13.6v13.6H5.2z" stroke="currentColor" stroke-width="1.7" opacity="0.65"/>
+                      <path d="M4.5 10.3 12 5.7l7.5 4.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M6.2 10.3V19h11.6v-8.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M9 19v-5.3h6V19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                  <button class="icon-btn" type="button" data-go-member="${c.id}" aria-label="前往住戶前台" title="前往住戶前台">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z" stroke="currentColor" stroke-width="1.7"/>
+                      <path d="M4 20a8 8 0 0 1 16 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                  <button class="icon-btn" type="button" data-units-community="${c.id}" aria-label="設定" title="設定">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.7"/>
+                      <path d="M19.2 12a7.2 7.2 0 0 0-.1-1.1l2-1.6-1.8-3.1-2.5 1a7.2 7.2 0 0 0-1.9-1.1l-.4-2.7H9.5l-.4 2.7a7.2 7.2 0 0 0-1.9 1.1l-2.5-1-1.8 3.1 2 1.6A7.2 7.2 0 0 0 4.8 12c0 .4 0 .7.1 1.1l-2 1.6 1.8 3.1 2.5-1a7.2 7.2 0 0 0 1.9 1.1l.4 2.7h5l.4-2.7a7.2 7.2 0 0 0 1.9-1.1l2.5 1 1.8-3.1-2-1.6c.1-.4.1-.7.1-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" opacity="0.8"/>
                     </svg>
                   </button>
                   <button class="icon-btn" type="button" data-edit-community="${c.id}" aria-label="編輯" title="編輯">
@@ -1335,6 +1369,34 @@
           if (!id || !c) return;
           setActiveCommunityId(id);
           openUnitModal(c);
+        });
+      });
+
+      cList.querySelectorAll("[data-go-admin]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-go-admin");
+          const c = (state.communities || []).find((x) => x && String(x.id || "") === String(id || ""));
+          if (!id || !c) return;
+          const key = String(c.username || c.id || "").trim();
+          if (!key) return;
+          try { sessionStorage.setItem("csp_last_cid", key); } catch {}
+          try { sessionStorage.setItem("csp_role", "community"); } catch {}
+          try { sessionStorage.setItem("csp_sysadmin", "1"); } catch {}
+          location.href = `admin.html?c=${encodeURIComponent(key)}#community/community-dashboard`;
+        });
+      });
+
+      cList.querySelectorAll("[data-go-member]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-go-member");
+          const c = (state.communities || []).find((x) => x && String(x.id || "") === String(id || ""));
+          if (!id || !c) return;
+          const key = String(c.username || c.id || "").trim();
+          if (!key) return;
+          try { sessionStorage.setItem("csp_last_cid", key); } catch {}
+          try { sessionStorage.setItem("csp_role", "resident"); } catch {}
+          try { sessionStorage.setItem("csp_sysadmin", "1"); } catch {}
+          location.href = `member.html?c=${encodeURIComponent(key)}`;
         });
       });
 
@@ -1393,12 +1455,79 @@
       unitStatus.scrollIntoView({ block: "nearest" });
     };
 
+    const setActiveUnitTab = (tabId) => {
+      const next = tabId === "features" ? "features" : "units";
+      unitActiveTab = next;
+      if (!unitModal) return;
+      const btns = unitModal.querySelectorAll("[data-unit-tab]");
+      btns.forEach((b) => {
+        const id = String(b.getAttribute("data-unit-tab") || "");
+        b.setAttribute("aria-selected", id === next ? "true" : "false");
+      });
+      const panels = unitModal.querySelectorAll("[data-unit-panel]");
+      panels.forEach((p) => {
+        const id = String(p.getAttribute("data-unit-panel") || "");
+        p.hidden = id !== next;
+      });
+      if (next === "features") {
+        if (unitTitleTextEl) unitTitleTextEl.textContent = "功能列表";
+      } else {
+        if (unitTitleTextEl) unitTitleTextEl.textContent = "戶號列表";
+      }
+      updateUnitHeaderCounts();
+    };
+
+    const updateUnitHeaderCounts = () => {
+      if (!unitCountEl) return;
+      if (unitActiveTab === "features") {
+        const total = adminModules.length;
+        const enabled = unitFeatureList
+          ? Array.from(unitFeatureList.querySelectorAll("[data-feature-id]")).filter((x) => x && x.checked).length
+          : total;
+        const disabled = Math.max(0, total - enabled);
+        unitCountEl.textContent = `功能：總${total}｜使用${enabled}｜未使用${disabled}`;
+        return;
+      }
+      const raw = String(unitTextarea ? unitTextarea.value : "");
+      const lines = raw.split(/\r?\n/).map((x) => String(x || "").trim()).filter(Boolean);
+      const seen = new Set();
+      const uniq = [];
+      for (const x of lines) {
+        if (seen.has(x)) continue;
+        seen.add(x);
+        uniq.push(x);
+      }
+      unitCountEl.textContent = `總戶數：${uniq.length}`;
+    };
+
+    const loadUnitConfig = async (communityId) => {
+      try {
+        const doc = await configDocRef(communityId).get();
+        return doc && doc.exists ? (doc.data() || {}) : {};
+      } catch {
+        return {};
+      }
+    };
+
+    const renderUnitFeatureList = (cfg) => {
+      if (!unitFeatureList) return;
+      const cbtn = cfg && cfg.communityButtons ? cfg.communityButtons : {};
+      unitFeatureList.innerHTML = adminModules.map((m) => {
+        const v = cbtn && cbtn[m.id] ? cbtn[m.id] : null;
+        const checked = !v || v.enabled !== false;
+        return `<label class="check"><input type="checkbox" data-feature-id="${m.id}" ${checked ? "checked" : ""} />${m.name}</label>`;
+      }).join("");
+      updateUnitHeaderCounts();
+    };
+
     const closeUnitModal = () => {
       if (!unitModal) return;
       unitModal.hidden = true;
       detachUnitKeydown();
       detachUnitKeydown = () => {};
       unitCommunityId = "";
+      unitConfigCache = null;
+      setActiveUnitTab("units");
       clearUnitStatus();
       if (unitCountEl) unitCountEl.textContent = "總戶數：—";
     };
@@ -1416,9 +1545,20 @@
         uniq.push(x);
       }
       unitTextarea.value = uniq.join("\n");
-      if (unitCountEl) unitCountEl.textContent = `總戶數：${uniq.length}`;
       clearUnitStatus();
       unitModal.hidden = false;
+      setActiveUnitTab("units");
+      updateUnitHeaderCounts();
+      const cid = String(unitCommunityId || "");
+      if (cid) {
+        loadUnitConfig(cid).then((cfg) => {
+          unitConfigCache = cfg || {};
+          renderUnitFeatureList(unitConfigCache);
+        }).catch(() => {
+          unitConfigCache = {};
+          renderUnitFeatureList(unitConfigCache);
+        });
+      }
       unitTextarea.focus();
       const onKeydown = (e) => {
         if (e.key === "Escape") closeUnitModal();
@@ -1430,6 +1570,20 @@
     if (unitCancelBtn) unitCancelBtn.addEventListener("click", closeUnitModal);
     if (unitCloseBtn) unitCloseBtn.addEventListener("click", closeUnitModal);
     if (unitBackdrop) unitBackdrop.addEventListener("click", closeUnitModal);
+
+    if (unitModal && !unitModal._boundTabs) {
+      unitModal._boundTabs = true;
+      unitModal.addEventListener("click", (e) => {
+        const t = e.target && e.target.closest ? e.target.closest("[data-unit-tab]") : null;
+        if (!t) return;
+        e.preventDefault();
+        setActiveUnitTab(String(t.getAttribute("data-unit-tab") || "units"));
+      });
+    }
+    if (unitFeatureList && !unitFeatureList._boundChange) {
+      unitFeatureList._boundChange = true;
+      unitFeatureList.addEventListener("change", () => updateUnitHeaderCounts());
+    }
 
     if (unitForm) {
       unitForm.addEventListener("submit", async (e) => {
@@ -1455,10 +1609,33 @@
         }
         setBusy(true);
         try {
-          await db.collection("communities").doc(id).set(
-            { units: uniq, updatedAt: FieldValue.serverTimestamp() },
-            { merge: true }
-          );
+          const featureButtons = (() => {
+            const base = unitConfigCache && unitConfigCache.communityButtons ? unitConfigCache.communityButtons : {};
+            const next = { ...base };
+            if (!unitFeatureList) return next;
+            const selected = new Set(
+              Array.from(unitFeatureList.querySelectorAll("[data-feature-id]"))
+                .filter((x) => x && x.checked)
+                .map((x) => String(x.getAttribute("data-feature-id") || "").trim())
+                .filter(Boolean)
+            );
+            adminModules.forEach((m) => {
+              const prev = next[m.id] && typeof next[m.id] === "object" ? next[m.id] : {};
+              next[m.id] = { ...prev, enabled: selected.has(m.id) };
+            });
+            return next;
+          })();
+
+          await Promise.all([
+            db.collection("communities").doc(id).set(
+              { units: uniq, updatedAt: FieldValue.serverTimestamp() },
+              { merge: true }
+            ),
+            configDocRef(id).set(
+              { communityButtons: featureButtons, updatedAt: FieldValue.serverTimestamp() },
+              { merge: true }
+            ),
+          ]);
           closeUnitModal();
         } catch {
           showUnitError("儲存失敗，請稍後再試。");
@@ -1724,6 +1901,7 @@
       setBusy(true);
       try {
         sessionStorage.removeItem("csp_role");
+        sessionStorage.removeItem("csp_sysadmin");
         await auth.signOut();
         location.href = "index.html";
       } catch {

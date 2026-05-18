@@ -1,12 +1,33 @@
 (() => {
+  const statusEl = document.getElementById("status");
+  const setStatus = (text, isError) => {
+    if (!statusEl) return;
+    statusEl.textContent = String(text || "");
+    statusEl.classList.toggle("error", Boolean(isError));
+  };
+
   const firebaseConfig = window.FIREBASE_CONFIG;
-  if (!firebaseConfig) throw new Error("Missing FIREBASE_CONFIG");
+  if (!firebaseConfig) {
+    setStatus("系統初始化失敗：缺少 FIREBASE_CONFIG。", true);
+    return;
+  }
+  if (typeof firebase === "undefined") {
+    setStatus("系統初始化失敗：無法載入 Firebase。請確認網路或關閉擋廣告/防火牆設定後重整。", true);
+    return;
+  }
 
   try {
     firebase.initializeApp(firebaseConfig);
   } catch {}
-  const auth = firebase.auth();
-  const db = typeof firebase.firestore === "function" ? firebase.firestore() : null;
+  let auth = null;
+  let db = null;
+  try {
+    auth = firebase.auth();
+    db = typeof firebase.firestore === "function" ? firebase.firestore() : null;
+  } catch {
+    setStatus("系統初始化失敗：Firebase Auth/Firestore 無法啟動。", true);
+    return;
+  }
   if (db) {
     try {
       db.settings({ experimentalAutoDetectLongPolling: true, ignoreUndefinedProperties: true });
@@ -20,17 +41,11 @@
   });
   const ADMIN_EMAILS = new Set(["nwapp.eason@gmail.com"]);
 
-  const statusEl = document.getElementById("status");
   const loginForm = document.getElementById("loginForm");
   const btnLogin = document.getElementById("btnLogin");
   const rememberEl = document.getElementById("rememberMe");
   const btnApply = document.getElementById("btnApply");
   const btnTogglePassword = document.getElementById("btnTogglePassword");
-
-  function setStatus(text, isError) {
-    statusEl.textContent = text;
-    statusEl.classList.toggle("error", Boolean(isError));
-  }
 
   function setBusy(isBusy) {
     btnLogin.disabled = Boolean(isBusy);
@@ -307,6 +322,7 @@
       if (role === "admin") {
         const picked = await showAdminDestinationModal();
         sessionStorage.setItem("csp_role", picked.role);
+        sessionStorage.setItem("csp_sysadmin", "1");
         setStatus("登入成功，導向中...", false);
         didAutoRedirect = true;
         goTo(picked.url);
@@ -325,6 +341,7 @@
         url = await resolveCommunityAndUrl(user, role, url);
       }
       sessionStorage.setItem("csp_role", role);
+      try { sessionStorage.removeItem("csp_sysadmin"); } catch {}
       setStatus("登入成功，導向中...", false);
       didAutoRedirect = true;
       goTo(url);
@@ -357,6 +374,7 @@
       if (role === "admin") {
         const picked = await showAdminDestinationModal();
         sessionStorage.setItem("csp_role", picked.role);
+        sessionStorage.setItem("csp_sysadmin", "1");
         goTo(picked.url);
         return;
       }
@@ -373,6 +391,7 @@
         url = await resolveCommunityAndUrl(user, role, url);
       }
       sessionStorage.setItem("csp_role", role);
+      try { sessionStorage.removeItem("csp_sysadmin"); } catch {}
       goTo(url);
     })();
   });

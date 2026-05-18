@@ -589,6 +589,7 @@
     btn.addEventListener("click", async () => {
       try {
         sessionStorage.removeItem("csp_role");
+        sessionStorage.removeItem("csp_sysadmin");
         await auth.signOut();
       } catch {}
       location.href = "index.html";

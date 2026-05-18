@@ -25,6 +25,7 @@
   const state = {
     communities: [],
     config: null,
+    unsubConfig: null,
     unsubVisitors: null,
   };
 
@@ -35,6 +36,8 @@
     { id: "facility", name: "設施預約", desc: "時段控管、名額與審核流程", badge: "熱門", page: "#community/facility" },
     { id: "bulletin", name: "公告系統", desc: "分類公告、置頂、閱讀回覆", badge: "通知", page: "#community/bulletin" },
     { id: "parking", name: "綠色停車", desc: "電動車/節能車位管理與登記", badge: "綠能", page: "#community/parking" },
+    { id: "company-support", name: "公司支援", desc: "回報需求、聯絡紀錄與處理進度（示意）", badge: "支援", page: "#community/company-support" },
+    { id: "meter-reading", name: "抄表紀錄", desc: "水電瓦斯抄表、拍照與歷史紀錄（示意）", badge: "抄表", page: "#community/meter-reading" },
     { id: "finance", name: "收支報表", desc: "收入/支出彙總、分類與月份查詢（示意）", badge: "財務", page: "#community/finance" },
     { id: "checkin-vote", name: "報到投票", desc: "活動報到、投票與統計結果（示意）", badge: "活動", page: "#community/checkin-vote" },
     { id: "assignments", name: "交辦事項", desc: "派工、追蹤進度、回報與結案（示意）", badge: "待辦", page: "#community/assignments" },
@@ -167,16 +170,35 @@
   }
 
   function ensureConfigSubscription() {
+    if (state.unsubConfig) {
+      try { state.unsubConfig(); } catch {}
+      state.unsubConfig = null;
+    }
     const cid = resolveActiveCommunityId();
-    configDocRef(cid).get().then((doc) => {
-      state.config = doc && doc.exists ? (doc.data() || null) : null;
-      if (handleHashRoute()) return;
-      renderDashboard();
-    }).catch(() => {
+    try {
+      state.unsubConfig = configDocRef(cid).onSnapshot(
+        (doc) => {
+          state.config = doc && doc.exists ? (doc.data() || null) : null;
+          if (handleHashRoute()) {
+            updateFooterActiveNav();
+            return;
+          }
+          renderDashboard();
+        },
+        () => {
+          state.config = null;
+          if (handleHashRoute()) {
+            updateFooterActiveNav();
+            return;
+          }
+          renderDashboard();
+        }
+      );
+    } catch {
       state.config = null;
       if (handleHashRoute()) return;
       renderDashboard();
-    });
+    }
   }
 
   function ensureCommunitiesSubscription(user) {
@@ -241,17 +263,27 @@
     const map = new Map(moduleCatalog.map((m) => [String(m.id), m]));
     const used = new Set();
     const out = [];
+    const isEnabled = (moduleId) => {
+      try {
+        const cfg = getButtonConfig(moduleId);
+        return cfg && cfg.enabled !== false;
+      } catch {
+        return true;
+      }
+    };
     for (const id of order) {
       const key = String(id || "").trim();
       if (!key || used.has(key)) continue;
       const m = map.get(key);
       if (!m) continue;
+      if (!isEnabled(key)) continue;
       used.add(key);
       out.push(m);
     }
     for (const m of moduleCatalog) {
       const key = String(m.id);
       if (used.has(key)) continue;
+      if (!isEnabled(key)) continue;
       used.add(key);
       out.push(m);
     }
@@ -264,6 +296,8 @@
     if (id === "residents") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 11.2a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7"/><path d="M16.5 11a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z" stroke="currentColor" stroke-width="1.7"/><path d="M3.8 20a6.2 6.2 0 0 1 10.4 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M14.4 20a5.2 5.2 0 0 1 6.2 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "facility") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 4v2M17 4v2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M5 7.5h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6 6.5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 11.2h.01M12 11.2h.01M15 11.2h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>`;
     if (id === "bulletin") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.5 11.2V8.8A2.3 2.3 0 0 1 6.8 6.5h2.9l7.2-2.7a.9.9 0 0 1 1.2.8v14.8a.9.9 0 0 1-1.2.8l-7.2-2.7H6.8A2.3 2.3 0 0 1 4.5 15v-2.4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M20.2 9.2a4.2 4.2 0 0 1 0 5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6.8 17.5v2.2a1.8 1.8 0 0 0 3.6 0v-1.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
+    if (id === "company-support") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7.2 20h9.6A2.2 2.2 0 0 0 19 17.8V8.2A2.2 2.2 0 0 0 16.8 6H7.2A2.2 2.2 0 0 0 5 8.2v9.6A2.2 2.2 0 0 0 7.2 20Z" stroke="currentColor" stroke-width="1.7"/><path d="M8 10.2h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8 13.2h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8 16.2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
+    if (id === "meter-reading") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7.5 20.5h9A2.5 2.5 0 0 0 19 18V6A2.5 2.5 0 0 0 16.5 3.5h-9A2.5 2.5 0 0 0 5 6v12a2.5 2.5 0 0 0 2.5 2.5Z" stroke="currentColor" stroke-width="1.7"/><path d="M8.2 8.2h7.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8.2 11.6h7.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8.2 15h4.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "finance") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 19.5h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M7.2 18.8V11.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 18.8V8.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M16.8 18.8V13.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M7.2 10.3 10 7.8l2.6 2.4L16.8 6.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     if (id === "checkin-vote") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 10.5 10 13.5 17 6.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 4.5h11A2 2 0 0 1 19.5 6.5v11a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`;
     if (id === "assignments") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 6.5h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8 11h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8 15.5h5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M9.2 4.5h5.6a1 1 0 0 1 1 1V7H8.2V5.5a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7 7h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`;
@@ -293,6 +327,8 @@
           m.id === "facility" ? "預約" :
           m.id === "bulletin" ? "公告" :
           m.id === "parking" ? "停車" :
+          m.id === "company-support" ? "支援" :
+          m.id === "meter-reading" ? "抄表" :
           m.id === "finance" ? "收支" :
           m.id === "checkin-vote" ? "投票" :
           m.id === "assignments" ? "交辦" :
@@ -2794,6 +2830,12 @@
 
   function renderModule(moduleId) {
     if (moduleId !== "visitor") stopVisitorsSubscription();
+    const gate = getButtonConfig(moduleId);
+    if (gate && gate.enabled === false) {
+      toast("此功能未開放（示意）");
+      renderDashboard();
+      return;
+    }
     if (moduleId === "residents") {
       renderResidentsModule();
       return;
@@ -2877,6 +2919,7 @@
     btn.addEventListener("click", async () => {
       try {
         sessionStorage.removeItem("csp_role");
+        sessionStorage.removeItem("csp_sysadmin");
         await auth.signOut();
       } catch {}
       location.href = "index.html";

@@ -19,39 +19,16 @@
     if (shouldSuppressFirestoreAbort(msg)) e.preventDefault();
   });
 
-  function isPhoneLike() {
-    const hasTouch = typeof navigator !== "undefined" && Number(navigator.maxTouchPoints || 0) > 0;
-    if (!hasTouch) return false;
-    const shortest = Math.min(Number(window.innerWidth || 0), Number(window.innerHeight || 0));
-    return shortest > 0 && shortest <= 600;
-  }
-
   function updateForcePortrait() {
+    const hasTouch = typeof navigator !== "undefined" && Number(navigator.maxTouchPoints || 0) > 0;
+    const smallScreen = Math.min(window.innerWidth, window.innerHeight) <= 900;
+    const isMobileLike = hasTouch && smallScreen;
     const isLandscape = window.innerWidth > window.innerHeight;
-    document.documentElement.classList.toggle("force-portrait", Boolean(isPhoneLike() && isLandscape));
+    document.documentElement.classList.toggle("force-portrait", Boolean(isMobileLike && isLandscape));
   }
 
   function isStandalone() {
     return window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
-  }
-
-  async function updateOrientationLock() {
-    if (!isStandalone()) return;
-    const o = window.screen && window.screen.orientation;
-    if (!o || typeof o.lock !== "function") return;
-
-    if (isPhoneLike()) {
-      try {
-        await o.lock("portrait-primary");
-      } catch {}
-      return;
-    }
-
-    if (typeof o.unlock === "function") {
-      try {
-        o.unlock();
-      } catch {}
-    }
   }
 
   function shouldShow() {
@@ -142,10 +119,43 @@
       const email = String((data && (data.email || data.username)) || (user && user.email) || "").trim().toLowerCase();
       return email === "nwapp.eason@gmail.com";
     };
+    const isSystemAdminFlag = () => {
+      try {
+        return String(sessionStorage.getItem("csp_sysadmin") || "") === "1";
+      } catch {
+        return false;
+      }
+    };
+    const getSessionRole = () => {
+      try {
+        const r = String(sessionStorage.getItem("csp_role") || "").trim().toLowerCase();
+        if (r === "admin" || r === "community" || r === "resident") return r;
+        if (r === "系統管理員" || r === "系統管理者" || r === "系統") return "admin";
+        if (r === "社區") return "community";
+        if (r === "住戶") return "resident";
+        return "";
+      } catch {
+        return "";
+      }
+    };
+    const markSystemAdminSession = (user, isAdmin) => {
+      try {
+        if (isAdmin && user && user.uid) sessionStorage.setItem("csp_system_admin_uid", String(user.uid));
+        else sessionStorage.removeItem("csp_system_admin_uid");
+      } catch {}
+    };
+    const isSystemAdminSession = (user) => {
+      try {
+        if (!user || !user.uid) return false;
+        return String(sessionStorage.getItem("csp_system_admin_uid") || "") === String(user.uid);
+      } catch {
+        return false;
+      }
+    };
 
     const isCommunityPickerSupportedPage = () => {
       const page = String(location.pathname || "").split("/").pop().toLowerCase();
-      return page === "admin.html" || page === "member.html";
+      return page === "admin.html" || page === "member.html" || page === "system.html" || page === "system";
     };
 
     const ensureCommunityPickerModal = () => {
@@ -291,9 +301,9 @@
 
     const resolveSwitchTargets = () => {
       const page = String(location.pathname || "").split("/").pop().toLowerCase();
-      if (page === "system.html") return ["admin", "member"];
-      if (page === "admin.html") return ["system", "member"];
-      if (page === "member.html") return ["system", "admin"];
+      if (page === "system.html" || page === "system") return ["admin", "member"];
+      if (page === "admin.html" || page === "admin") return ["system", "member"];
+      if (page === "member.html" || page === "member") return ["system", "admin"];
       return [];
     };
 
@@ -324,7 +334,19 @@
       if (!switchEl) return;
       const fb = window.firebase;
       const user = fb && fb.auth ? fb.auth().currentUser : null;
-      if (!isSystemAdminAccount(user, switchEl._profileData || {})) {
+      const sessionRole = getSessionRole();
+      const page = String(location.pathname || "").split("/").pop().toLowerCase();
+      const isSystemPage = page === "system.html" || page === "system";
+      if (sessionRole === "admin") markSystemAdminSession(user, true);
+      const canSwitch = Boolean(
+        isSystemAdminAccount(user, switchEl._profileData || {}) ||
+        switchEl._isSystemAdmin ||
+        isSystemAdminSession(user) ||
+        isSystemAdminFlag() ||
+        sessionRole === "admin" ||
+        isSystemPage
+      );
+      if (!canSwitch) {
         switchEl.hidden = true;
         switchEl.innerHTML = "";
         return;
@@ -337,6 +359,74 @@
       }
       switchEl.hidden = false;
       switchEl.innerHTML = targets.map((t) => `<button class="btn" type="button" data-profile-switch="${t}">${labelForTarget(t)}</button>`).join("");
+    };
+    const bindCommunityNameSubPicker = () => {
+      if (!communityNameSub) return;
+      const page = String(location.pathname || "").split("/").pop().toLowerCase();
+      const isSystemPage = page === "system.html" || page === "system";
+      const sessionRole = getSessionRole();
+      const fb = window.firebase;
+      const user = fb && fb.auth ? fb.auth().currentUser : null;
+      const hintClickable = Boolean(isSystemPage || sessionRole === "admin" || isSystemAdminFlag() || isSystemAdminSession(user));
+      communityNameSub.classList.toggle("clickable", hintClickable);
+      if (communityNameSub._pickerHandler) return;
+      communityNameSub._pickerHandler = async (e) => {
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch {}
+        const fb2 = window.firebase;
+        const u = fb2 && fb2.auth ? fb2.auth().currentUser : null;
+        let ok = Boolean(isSystemAdminFlag() || isSystemAdminSession(u));
+        if (!ok) {
+          const p = String(location.pathname || "").split("/").pop().toLowerCase();
+          if (p === "system.html" || p === "system") ok = true;
+        }
+        if (!ok) {
+          const r = getSessionRole();
+          if (r === "admin") ok = true;
+        }
+        if (!ok && u) {
+          try {
+            const token = await u.getIdTokenResult();
+            const claimRole = String(token && token.claims ? token.claims.role || "" : "").trim();
+            const claimRoles = token && token.claims ? token.claims.roles : null;
+            const normalized = String(claimRole || "").trim().toLowerCase();
+            if (normalized === "admin" || claimRole === "系統管理員" || claimRole === "系統管理者" || claimRole === "系統") ok = true;
+            else if (Array.isArray(claimRoles)) {
+              ok = claimRoles.map((x) => String(x || "").trim().toLowerCase()).some((x) => x === "admin" || x === "系統管理員" || x === "系統管理者" || x === "系統");
+            }
+          } catch {}
+        }
+        if (!ok && u) {
+          const email = String(u.email || "").trim().toLowerCase();
+          if (email === "nwapp.eason@gmail.com") ok = true;
+        }
+        if (!ok) return;
+        const p = String(location.pathname || "").split("/").pop().toLowerCase();
+        const target = p === "member.html" || p === "member" ? "member" : "admin";
+        openCommunityPicker(
+          ensureDb(),
+          target,
+          new URLSearchParams(location.search).get("c") || sessionStorage.getItem("csp_last_cid") || localStorage.getItem("csp_active_community_v1") || ""
+        );
+      };
+      communityNameSub.addEventListener("click", communityNameSub._pickerHandler, true);
+      communityNameSub._pickerKeyHandler = (e) => {
+        if (!e) return;
+        const k = String(e.key || "");
+        if (k !== "Enter" && k !== " ") return;
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch {}
+        communityNameSub._pickerHandler(e);
+      };
+      communityNameSub.addEventListener("keydown", communityNameSub._pickerKeyHandler, true);
+      try {
+        if (!communityNameSub.hasAttribute("tabindex")) communityNameSub.setAttribute("tabindex", "0");
+        if (!communityNameSub.getAttribute("role")) communityNameSub.setAttribute("role", "button");
+      } catch {}
     };
 
     const loadProfile = async (user) => {
@@ -378,24 +468,29 @@
           }
         }
       }
-      if (switchEl) switchEl._profileData = data || {};
-      updateSwitchButtons();
-      const sysAdmin = isSystemAdminAccount(user, data || {});
-      if (communityNameSub) {
-        if (sysAdmin && isCommunityPickerSupportedPage()) {
-          communityNameSub.classList.add("clickable");
-          if (!communityNameSub._boundPicker) {
-            communityNameSub._boundPicker = true;
-            communityNameSub.addEventListener("click", () => {
-              const page = String(location.pathname || "").split("/").pop().toLowerCase();
-              const target = page === "admin.html" ? "admin" : "member";
-              openCommunityPicker(ensureDb(), target, new URLSearchParams(location.search).get("c") || sessionStorage.getItem("csp_last_cid") || localStorage.getItem("csp_active_community_v1") || "");
-            });
+      let sysAdmin = isSystemAdminAccount(user, data || {});
+      if (!sysAdmin && user && typeof user.getIdTokenResult === "function") {
+        try {
+          const token = await user.getIdTokenResult();
+          const claimRole = String(token && token.claims ? token.claims.role || "" : "").trim().toLowerCase();
+          const claimRoles = token && token.claims ? token.claims.roles : null;
+          if (claimRole === "admin" || claimRole === "系統管理員" || claimRole === "系統管理者" || claimRole === "系統") {
+            sysAdmin = true;
+          } else if (Array.isArray(claimRoles)) {
+            sysAdmin = claimRoles.map((x) => String(x || "").trim().toLowerCase()).some((x) => x === "admin" || x === "系統管理員" || x === "系統管理者" || x === "系統");
           }
-        } else {
-          communityNameSub.classList.remove("clickable");
-        }
+        } catch {}
       }
+      const sessionRole = getSessionRole();
+      const page = String(location.pathname || "").split("/").pop().toLowerCase();
+      if (sessionRole === "admin" || page === "system.html" || page === "system" || isSystemAdminSession(user) || isSystemAdminFlag()) sysAdmin = true;
+      if (switchEl) {
+        switchEl._profileData = data || {};
+        switchEl._isSystemAdmin = sysAdmin;
+      }
+      markSystemAdminSession(user, sysAdmin);
+      updateSwitchButtons();
+      bindCommunityNameSubPicker();
       const displayName = String(
         data.displayName ||
         data.name ||
@@ -504,6 +599,8 @@
       e.stopPropagation();
       open();
     });
+
+    bindCommunityNameSubPicker();
 
     if (switchEl && !switchEl._boundSwitch) {
       switchEl._boundSwitch = true;
@@ -672,11 +769,34 @@
 
   window.addEventListener("load", () => {
     updateForcePortrait();
-    updateOrientationLock();
     initProfileModal();
     window.nwConfirm = confirmDialog;
 
     if (!("serviceWorker" in navigator)) return;
+    if (isLocalhost()) {
+      Promise.all([
+        navigator.serviceWorker.getRegistrations().catch(() => []),
+        "caches" in window ? caches.keys().catch(() => []) : Promise.resolve([]),
+      ]).then(([regs, keys]) => {
+        const hasSw = Array.isArray(regs) && regs.length > 0;
+        const hasCache = Array.isArray(keys) && keys.length > 0;
+        if (!hasSw && !hasCache) return;
+        const params = new URLSearchParams(location.search || "");
+        if (params.get("swreset") === "1") return;
+        Promise.all([
+          hasSw ? Promise.all(regs.map((r) => r.unregister().catch(() => false))) : Promise.resolve([]),
+          hasCache && "caches" in window ? Promise.all(keys.map((k) => caches.delete(k))).catch(() => []) : Promise.resolve([]),
+        ]).finally(() => {
+          try {
+            params.set("swreset", "1");
+            const u = new URL(location.href);
+            u.search = params.toString() ? `?${params.toString()}` : "";
+            location.replace(u.toString());
+          } catch {}
+        });
+      });
+      return;
+    }
     navigator.serviceWorker.register("./sw.js").then((reg) => {
         const isLocal = isLocalhost();
         if (!isLocal) reg.update().catch(() => {});
@@ -697,14 +817,8 @@
       }).catch(() => {});
   });
 
-  window.addEventListener("resize", () => {
-    updateForcePortrait();
-    updateOrientationLock();
-  });
-  window.addEventListener("orientationchange", () => {
-    updateForcePortrait();
-    updateOrientationLock();
-  });
+  window.addEventListener("resize", () => updateForcePortrait());
+  window.addEventListener("orientationchange", () => updateForcePortrait());
 
   let didReloadForSw = false;
   navigator.serviceWorker?.addEventListener?.("controllerchange", () => {
