@@ -6,7 +6,6 @@
   "scope": "./",
   "display": "standalone",
   "display_override": ["standalone"],
-  "orientation": "portrait-primary",
   "background_color": "#ffffff",
   "theme_color": "#d32f2f",
   "prefer_related_applications": false,
