@@ -19,16 +19,39 @@
     if (shouldSuppressFirestoreAbort(msg)) e.preventDefault();
   });
 
-  function updateForcePortrait() {
+  function isPhoneLike() {
     const hasTouch = typeof navigator !== "undefined" && Number(navigator.maxTouchPoints || 0) > 0;
-    const smallScreen = Math.min(window.innerWidth, window.innerHeight) <= 900;
-    const isMobileLike = hasTouch && smallScreen;
+    if (!hasTouch) return false;
+    const shortest = Math.min(Number(window.innerWidth || 0), Number(window.innerHeight || 0));
+    return shortest > 0 && shortest <= 600;
+  }
+
+  function updateForcePortrait() {
     const isLandscape = window.innerWidth > window.innerHeight;
-    document.documentElement.classList.toggle("force-portrait", Boolean(isMobileLike && isLandscape));
+    document.documentElement.classList.toggle("force-portrait", Boolean(isPhoneLike() && isLandscape));
   }
 
   function isStandalone() {
     return window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
+  }
+
+  async function updateOrientationLock() {
+    if (!isStandalone()) return;
+    const o = window.screen && window.screen.orientation;
+    if (!o || typeof o.lock !== "function") return;
+
+    if (isPhoneLike()) {
+      try {
+        await o.lock("portrait-primary");
+      } catch {}
+      return;
+    }
+
+    if (typeof o.unlock === "function") {
+      try {
+        o.unlock();
+      } catch {}
+    }
   }
 
   function shouldShow() {
@@ -649,6 +672,7 @@
 
   window.addEventListener("load", () => {
     updateForcePortrait();
+    updateOrientationLock();
     initProfileModal();
     window.nwConfirm = confirmDialog;
 
@@ -673,8 +697,14 @@
       }).catch(() => {});
   });
 
-  window.addEventListener("resize", () => updateForcePortrait());
-  window.addEventListener("orientationchange", () => updateForcePortrait());
+  window.addEventListener("resize", () => {
+    updateForcePortrait();
+    updateOrientationLock();
+  });
+  window.addEventListener("orientationchange", () => {
+    updateForcePortrait();
+    updateOrientationLock();
+  });
 
   let didReloadForSw = false;
   navigator.serviceWorker?.addEventListener?.("controllerchange", () => {
