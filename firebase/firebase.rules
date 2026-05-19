@@ -27,6 +27,63 @@ service cloud.firestore {
          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') != "停用";
     }
 
+    function isVisitorSelfCreate(visitorId) {
+      return request.auth != null
+        && request.resource.data.keys().hasOnly([
+          "qrToken",
+          "name",
+          "email",
+          "phone",
+          "unit",
+          "partySize",
+          "plate",
+          "purpose",
+          "purposeType",
+          "purposeOther",
+          "note",
+          "inAt",
+          "outAt",
+          "keep",
+          "source",
+          "createdAt",
+          "updatedAt",
+          "createdBy",
+          "createdByName"
+        ])
+        && request.resource.data.source == "self"
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdByName == "訪客自填"
+        && request.resource.data.qrToken == visitorId
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 1
+        && request.resource.data.name.size() <= 60
+        && request.resource.data.unit is string
+        && request.resource.data.unit.size() >= 1
+        && request.resource.data.unit.size() <= 20
+        && request.resource.data.phone is string
+        && request.resource.data.phone.size() <= 20
+        && request.resource.data.plate is string
+        && request.resource.data.plate.size() <= 20
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 80
+        && request.resource.data.partySize is int
+        && request.resource.data.partySize >= 1
+        && request.resource.data.partySize <= 20
+        && request.resource.data.purposeType is string
+        && request.resource.data.purposeType.size() <= 20
+        && request.resource.data.purposeOther is string
+        && request.resource.data.purposeOther.size() <= 40
+        && request.resource.data.purpose is string
+        && request.resource.data.purpose.size() <= 60
+        && request.resource.data.note is string
+        && request.resource.data.note.size() <= 200
+        && request.resource.data.keep == null
+        && request.resource.data.inAt == null
+        && request.resource.data.outAt == null
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+    }
+
     match /users/{uid} {
       allow read: if request.auth != null && (
         request.auth.uid == uid || 
@@ -146,7 +203,19 @@ service cloud.firestore {
             )
           )
         );
-        allow create, update, delete: if request.auth != null && (
+        allow create: if request.auth != null && (
+          isAdmin()
+          || (
+            isCommunityStaff()
+            && (
+              slug == getUserData().community
+              || get(/databases/$(database)/documents/communities/$(slug)).data.get('username', '') == getUserData().community
+              || get(/databases/$(database)/documents/communities/$(slug)).data.get('id', '') == getUserData().community
+            )
+          )
+          || isVisitorSelfCreate(visitorId)
+        );
+        allow update, delete: if request.auth != null && (
           isAdmin()
           || (
             isCommunityStaff()

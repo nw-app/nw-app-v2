@@ -498,6 +498,136 @@
     return modal;
   }
 
+  function ensureVisitorQrModal80() {
+    let modal = document.getElementById("visitorQrModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "visitorQrModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="visitorQrModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="visitorQrModalTitle">訪客自填連結</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label for="visitorQrUrl">頁面網址</label>
+            <input id="visitorQrUrl" type="text" autocomplete="off" readonly />
+          </div>
+          <div class="visitor-qr-box">
+            <div class="visitor-qr-img" id="visitorQrImgWrap"></div>
+          </div>
+          <div class="status" id="visitorQrStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" id="btnCopyVisitorQrUrl">複製</button>
+          <button class="btn" type="button" id="btnOpenVisitorQrUrl">開啟</button>
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openVisitorQrModal80({ communityId, communityName }) {
+    const modal = ensureVisitorQrModal80();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const titleEl = modal.querySelector("#visitorQrModalTitle");
+    const inputEl = modal.querySelector("#visitorQrUrl");
+    const imgWrap = modal.querySelector("#visitorQrImgWrap");
+    const statusEl = modal.querySelector("#visitorQrStatus");
+    const btnCopy = modal.querySelector("#btnCopyVisitorQrUrl");
+    const btnOpen = modal.querySelector("#btnOpenVisitorQrUrl");
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    if (titleEl) titleEl.textContent = `訪客自填連結｜${String(communityName || "").trim() || "—"}`;
+    const cid = String(communityId || "default").trim() || "default";
+    const key = (() => {
+      const byUsername = (Array.isArray(state.communities) ? state.communities : []).find((x) => x && String(x.id || "") === cid) || null;
+      return String((byUsername && byUsername.username) || cid).trim() || cid;
+    })();
+    const u = new URL("visitor.html", location.href);
+    u.searchParams.set("c", key);
+    const fixedUrl = u.toString();
+    if (inputEl) inputEl.value = fixedUrl;
+
+    const renderQr = () => {
+      const url = String(inputEl ? inputEl.value : "").trim();
+      if (!imgWrap) return;
+      imgWrap.innerHTML = "";
+      if (!url) {
+        imgWrap.innerHTML = `<div class="status">尚未設定頁面網址。</div>`;
+        return;
+      }
+      const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(url)}`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.title = "點擊開啟網址";
+      const img = document.createElement("img");
+      img.alt = "QR Code";
+      img.src = qrSrc;
+      img.decoding = "async";
+      img.loading = "eager";
+      img.addEventListener("error", () => {
+        try { imgWrap.innerHTML = `<div class="status error">QR code 產生失敗</div>`; } catch {}
+      });
+      a.appendChild(img);
+      imgWrap.appendChild(a);
+    };
+    renderQr();
+    setStatus("提示：此網址為固定產生（依社區）。", false);
+
+    const onCopy = async () => {
+      const url = String(inputEl ? inputEl.value : "").trim();
+      if (!url) return;
+      try {
+        if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+          await navigator.clipboard.writeText(url);
+          toast("已複製");
+          return;
+        }
+      } catch {}
+      try {
+        window.prompt("複製此網址", url);
+      } catch {}
+    };
+
+    const onOpen = () => {
+      const url = String(inputEl ? inputEl.value : "").trim();
+      if (!url) return;
+      try { window.open(url, "_blank", "noopener,noreferrer"); } catch { location.href = url; }
+    };
+
+    if (btnCopy) btnCopy.addEventListener("click", onCopy);
+    if (btnOpen) btnOpen.addEventListener("click", onOpen);
+    const oldDetach = detach;
+    detach = () => {
+      try { if (btnCopy) btnCopy.removeEventListener("click", onCopy); } catch {}
+      try { if (btnOpen) btnOpen.removeEventListener("click", onOpen); } catch {}
+      oldDetach();
+    };
+
+    modal.hidden = false;
+    requestAnimationFrame(() => {
+      if (inputEl && inputEl.focus) inputEl.focus();
+    });
+  }
+
   function toDateAny(v) {
     if (!v) return null;
     if (v instanceof Date) return v;
@@ -2408,6 +2538,7 @@
             </div>
           </div>
           <div class="resident-page-actions">
+            <button class="btn" type="button" id="btnVisitorQr">訪客QR Code</button>
             <button class="btn" type="button" id="btnScanVisitor">掃碼登記</button>
             <button class="btn btn-primary" type="button" id="btnAddVisitor">新增訪客</button>
           </div>
@@ -2429,6 +2560,7 @@
     const listEl = document.getElementById("visitorList");
     const statusEl = document.getElementById("visitorStatus");
     const searchEl = document.getElementById("visitorSearch");
+    const visitorQrBtn = document.getElementById("btnVisitorQr");
     const scanBtn = document.getElementById("btnScanVisitor");
     const addBtn = document.getElementById("btnAddVisitor");
     const totalEl = document.getElementById("visitorTotal");
@@ -2976,6 +3108,7 @@
     if (searchEl) searchEl.addEventListener("input", renderList);
     if (addBtn) addBtn.addEventListener("click", () => openVisitorEditor("create"));
     if (scanBtn) scanBtn.addEventListener("click", () => openVisitorScanModal80({ cid: visitorCommunitySlug, onApplied: applyLocalVisitorPatch }));
+    if (visitorQrBtn) visitorQrBtn.addEventListener("click", () => openVisitorQrModal80({ communityId: cid, communityName: cname }));
 
     if (listEl && !listEl._timePillBound) {
       listEl._timePillBound = true;

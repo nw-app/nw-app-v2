@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>訪客登記</title>
+    <link rel="stylesheet" href="./css/index.css" />
+    <link rel="stylesheet" href="./css/pwa.css" />
+    <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script defer src="./js/firebase-config.js"></script>
+    <script defer src="./js/pwa.js"></script>
+    <script defer src="./js/visitor.js"></script>
+    <style>
+      .card { width: min(620px, 100%); }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+      @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
+      textarea { min-height: 92px; padding: 12px 16px; border-radius: 16px; border: 2px solid rgba(17, 24, 39, 0.08); background: #fff; outline: none; resize: vertical; font: inherit; }
+      textarea:focus { border-color: rgba(211, 47, 47, 0.42); box-shadow: 0 0 0 4px rgba(211, 47, 47, 0.14); }
+      .qr-box { display: grid; justify-items: center; gap: 10px; padding: 14px; border-radius: 18px; background: rgba(17, 24, 39, 0.03); border: 1px dashed rgba(17, 24, 39, 0.22); }
+      .qr-box img { width: 240px; height: 240px; }
+      .hint { color: var(--muted); font-size: 13px; line-height: 1.6; }
+      .title-row { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+      .pill { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 12px; background: rgba(211, 47, 47, 0.10); color: #b91c1c; border: 1px solid rgba(211, 47, 47, 0.22); white-space: nowrap; }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <div class="card">
+        <div class="title-row">
+          <div>
+            <h2>訪客登記</h2>
+            <p id="communityLine">社區：—</p>
+          </div>
+          <div class="pill" id="authPill" hidden>連線中…</div>
+        </div>
+
+        <div class="status" id="statusBox" hidden></div>
+
+        <form class="form" id="visitorForm">
+          <div class="grid2">
+            <div class="field">
+              <label for="v_name">訪客姓名</label>
+              <input id="v_name" type="text" autocomplete="name" required />
+            </div>
+            <div class="field">
+              <label for="v_party">拜訪人數</label>
+              <input id="v_party" type="text" inputmode="numeric" autocomplete="off" value="1" />
+            </div>
+          </div>
+
+          <div class="grid2">
+            <div class="field">
+              <label for="v_unit">拜訪戶號</label>
+              <input id="v_unit" type="text" autocomplete="off" list="unitList" required />
+              <datalist id="unitList"></datalist>
+            </div>
+            <div class="field">
+              <label for="v_phone">手機</label>
+              <input id="v_phone" type="text" inputmode="tel" autocomplete="tel" />
+            </div>
+          </div>
+
+          <div class="grid2">
+            <div class="field">
+              <label for="v_plate">車牌</label>
+              <input id="v_plate" type="text" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="v_email">電子郵件</label>
+              <input id="v_email" type="email" autocomplete="email" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="v_purposeType">到訪事由</label>
+            <select id="v_purposeType">
+              <option value="親友拜訪">親友拜訪</option>
+              <option value="廠商施工">廠商施工</option>
+              <option value="外送">外送</option>
+              <option value="看房">看房</option>
+              <option value="其他">其他</option>
+            </select>
+          </div>
+
+          <div class="field" id="purposeOtherField" hidden>
+            <label for="v_purposeOther">其他事由</label>
+            <input id="v_purposeOther" type="text" autocomplete="off" />
+          </div>
+
+          <div class="field">
+            <label for="v_note">備註</label>
+            <textarea id="v_note"></textarea>
+          </div>
+
+          <div class="actions">
+            <button class="btn btn-primary" type="submit" id="btnSubmit">送出登記</button>
+          </div>
+          <p class="hint">送出後會產生訪客 QR Code，請到社區現場出示。</p>
+        </form>
+
+        <div id="resultBox" hidden>
+          <div class="qr-box">
+            <img id="passQrImg" alt="QR Code" />
+            <div class="hint" id="passHint">請出示此 QR code 作為訪客證。</div>
+            <div class="hint" id="passUrl"></div>
+          </div>
+          <div class="actions" style="margin-top:12px">
+            <button class="btn" type="button" id="btnNew">新增另一筆</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>
