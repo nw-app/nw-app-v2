@@ -874,8 +874,10 @@
     const label = kind === "out" ? "離開時間" : "來訪時間";
     if (titleEl) titleEl.textContent = `設定${label}`;
     if (labelEl) labelEl.textContent = label;
-    if (inputEl) inputEl.value = toLocalInputValue(initialDate);
-    setStatus("", false);
+    const now = new Date();
+    const preset = initialDate instanceof Date && Number.isFinite(initialDate.getTime()) ? initialDate : now;
+    if (inputEl) inputEl.value = toLocalInputValue(preset);
+    setStatus(`目前：${formatYmdHms(now) || ""}`, false);
     modal.hidden = false;
 
     const form = modal.querySelector("#visitorTimeModalForm");
@@ -2512,6 +2514,7 @@
           const email = String(v.email || "").trim();
           const party = v.partySize != null && Number.isFinite(Number(v.partySize)) && Number(v.partySize) >= 1 ? String(Math.floor(Number(v.partySize))) : "1";
           const keepText = formatKeepText80(v.keep);
+          const plateText = plate || "—";
           const inText = formatDt(v.inAt);
           const outText = formatDt(v.outAt);
           const createdText = formatDt(v.createdAt);
@@ -2520,21 +2523,28 @@
             createdByUid && state.creatorLabelByUid.has(createdByUid)
               ? String(state.creatorLabelByUid.get(createdByUid) || "").trim()
               : String(v.createdByName || "").trim();
-          const subParts = [unit, phone, purpose].filter(Boolean);
-          const sub2Parts = [`拜訪人數：${party}`, `電子郵件：${email || "—"}`].filter(Boolean);
+          const subHtml = [
+            `<span class="field-k">拜訪戶號：</span>${escapeHtml(unit || "—")}`,
+            `<span class="field-k">手機：</span>${escapeHtml(phone || "—")}`,
+            `<span class="field-k">到訪事由：</span>${escapeHtml(purpose || "—")}`,
+          ].join("｜");
+          const sub2Html = [
+            `<span class="field-k">拜訪人數：</span>${escapeHtml(party)}`,
+            `<span class="field-k">電子郵件：</span>${escapeHtml(email || "—")}`,
+          ].join("｜");
           return `
             <div class="visitor-item" data-id="${String(v.id || "")}">
               <div class="visitor-left">
                 <div class="visitor-text">
                   <div class="visitor-name">${name}</div>
-                  <div class="visitor-sub">${subParts.join("｜")}</div>
-                  <div class="visitor-sub2">${sub2Parts.join("｜")}</div>
+                  <div class="visitor-sub">${subHtml}</div>
+                  <div class="visitor-sub2">${sub2Html}</div>
+                  <div class="visitor-keep"><span class="field-k">車牌：</span>${escapeHtml(plateText)}｜<span class="field-k">留存：</span>${escapeHtml(keepText || "無")}</div>
+                  <div class="visitor-created"><span class="field-k">建立：</span>${escapeHtml(createdText || "—")}｜<span class="field-k">建立者：</span>${escapeHtml(createdByName || "—")}</div>
                   <div class="visitor-meta">
                     <span class="time-pill in" role="button" tabindex="0" data-time-kind="in">來訪：${inText || "—"}</span>
                     <span class="time-pill out" role="button" tabindex="0" data-time-kind="out">離開：${outText || "—"}</span>
                   </div>
-                  <div class="visitor-created">建立：${createdText || "—"}｜建立者：${escapeHtml(createdByName || "—")}</div>
-                  <div class="visitor-keep">留存：${escapeHtml(keepText || "無")}</div>
                 </div>
               </div>
               <div class="visitor-actions">

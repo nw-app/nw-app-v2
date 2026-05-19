@@ -356,7 +356,9 @@ a { color: inherit; text-decoration: none; }
 .visitor-text { min-width: 0; }
 .visitor-name { font-weight: 900; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .visitor-sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.visitor-sub .field-k { font-weight: 900; color: rgba(31, 41, 55, 0.85); }
 .visitor-sub2 { margin-top: 2px; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.visitor-sub2 .field-k { font-weight: 900; color: rgba(31, 41, 55, 0.85); }
 .visitor-meta { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
 .visitor-meta .time-pill {
   height: 26px;
@@ -375,7 +377,9 @@ a { color: inherit; text-decoration: none; }
 .visitor-meta .time-pill.out { background: rgba(46, 125, 50, 0.12); border-color: rgba(46, 125, 50, 0.22); color: #1b5e20; }
 .visitor-meta .time-pill:focus-visible { outline: 3px solid rgba(211, 47, 47, 0.22); outline-offset: 2px; }
 .visitor-created { margin-top: 6px; font-size: 12px; color: rgba(31, 41, 55, 0.72); }
+.visitor-created .field-k { font-weight: 900; color: rgba(31, 41, 55, 0.85); }
 .visitor-keep { margin-top: 4px; font-size: 12px; color: rgba(31, 41, 55, 0.72); }
+.visitor-keep .field-k { font-weight: 900; color: rgba(31, 41, 55, 0.85); }
 .visitor-actions { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
 .collapse-btn svg { transition: transform 140ms ease; }
 .collapse-btn.open svg { transform: rotate(180deg); }
