@@ -25,10 +25,7 @@
     config: null,
   };
   const catalogResidentButtons = [
-    { id: "resident-bulletin", name: "公告", defaultUrl: "#resident/resident-bulletin", hint: "通知" },
-    { id: "resident-parcel", name: "包裹通知", defaultUrl: "#resident/resident-parcel", hint: "收發" },
-    { id: "resident-facility", name: "設施預約", defaultUrl: "#resident/resident-facility", hint: "預約" },
-    { id: "resident-parking", name: "綠色停車", defaultUrl: "#resident/resident-parking", hint: "車位" },
+    { id: "resident-bulletin", name: "通知", defaultUrl: "#resident/resident-bulletin", hint: "", icon: "bell" },
   ];
 
   const navEl = document.getElementById("nav");
@@ -130,7 +127,11 @@
     try {
       const parsed = state.config && typeof state.config === "object" ? state.config : {};
       const d = defaultConfig();
-      return { residentButtons: { ...d.residentButtons, ...(parsed.residentButtons || {}) } };
+      return { 
+        residentButtons: { ...d.residentButtons, ...(parsed.residentButtons || {}) },
+        rowAImages: parsed.rowAImages || [],
+        rowAInterval: parsed.rowAInterval || 5
+      };
     } catch {
       return defaultConfig();
     }
@@ -215,6 +216,14 @@
             </svg>
           `;
     }
+    if (kind === "bell") {
+      return `
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+            </svg>
+          `;
+    }
     return `
           <svg viewBox="0 0 24 24" fill="none">
             <path d="M12 21.5c5.247 0 9.5-4.253 9.5-9.5S17.247 2.5 12 2.5 2.5 6.753 2.5 12 6.753 21.5 12 21.5Z" stroke="currentColor" stroke-width="1.7" opacity="0.9"/>
@@ -228,351 +237,128 @@
     navEl.querySelectorAll("a").forEach((a) => a.setAttribute("aria-current", a.dataset.id === moduleId ? "page" : "false"));
 
     if (moduleId === "resident-bulletin") {
-      pageTitleEl.textContent = "公告";
-      pageSubtitleEl.textContent = "最新公告與重要通知（示意）";
-      contentEl.innerHTML = bulletinView();
+      pageTitleEl.textContent = "";
+      pageSubtitleEl.textContent = "";
+      contentEl.innerHTML = "";
       return;
     }
-    if (moduleId === "resident-parcel") {
-      pageTitleEl.textContent = "包裹通知";
-      pageSubtitleEl.textContent = "待領取包裹提醒（示意）";
-      contentEl.innerHTML = parcelView();
-      return;
-    }
-    if (moduleId === "resident-facility") {
-      pageTitleEl.textContent = "設施預約";
-      pageSubtitleEl.textContent = "查看時段與我的預約（示意）";
-      contentEl.innerHTML = facilityView();
-      return;
-    }
-    if (moduleId === "resident-parking") {
-      pageTitleEl.textContent = "綠色停車";
-      pageSubtitleEl.textContent = "我的車位與充電資訊（示意）";
-      contentEl.innerHTML = parkingView();
-      return;
-    }
-    pageTitleEl.textContent = "首頁";
-    pageSubtitleEl.textContent = "住戶前台頁面後續再規劃設計（示意）";
+    pageTitleEl.textContent = "";
+    pageSubtitleEl.textContent = "";
     contentEl.innerHTML = homeView();
+    if (moduleId === "home") {
+      renderRowACarousel();
+    }
   }
 
   function homeView() {
+    return `
+      <div class="home-grid">
+        <section class="row-a" id="rowACarousel">
+          <div class="carousel-container">
+            <div class="carousel-track" id="carouselTrack"></div>
+            <div class="carousel-dots" id="carouselDots"></div>
+          </div>
+        </section>
+        <section class="row-b">SOS</section>
+        <section class="row-c">社區服務</section>
+        <section class="row-d">社區服務按鈕</section>
+        <section class="row-e">生活服務</section>
+        <section class="row-f">生活服務按鈕</section>
+      </div>
+    `;
+  }
+
+  function renderRowACarousel() {
     const cfg = loadConfig();
-    const enabled = catalogResidentButtons
-      .map((x) => ({ ...x, ...cfg.residentButtons[x.id] }))
-      .filter((x) => x.enabled);
+    const images = (cfg.rowAImages || []).filter(img => img.url || img.data);
+    const track = document.getElementById("carouselTrack");
+    const dotsContainer = document.getElementById("carouselDots");
+    if (!track || images.length === 0) return;
 
-    return `
-          <div class="grid">
-            <section class="card">
-              <div class="card-hd">
-                <div>
-                  <h2>快速入口</h2>
-                  <p>此處按鈕可由系統管理員設定啟用/連結</p>
-                </div>
-                <span class="tag red">入口</span>
-              </div>
-              <div class="card-bd">
-                <div class="list">
-                  ${enabled.map((b) => `
-                    <div class="item">
-                      <div>
-                        <div style="font-weight:900;">${b.name}</div>
-                        <div class="meta">
-                          <span class="tag red">啟用</span>
-                          <span class="tag">${b.url || b.defaultUrl}</span>
-                        </div>
-                      </div>
-                      <button class="btn btn-primary" type="button" data-open="${b.id}">開啟</button>
-                    </div>
-                  `).join("")}
-                </div>
-              </div>
-            </section>
+    track.innerHTML = images.map(img => `
+      <div class="carousel-slide">
+        <img src="${img.data || img.url}" alt="" />
+      </div>
+    `).join("");
 
-            <section class="card">
-              <div class="card-hd">
-                <div>
-                  <h2>住戶資訊（示意）</h2>
-                  <p>後續可串接住戶資料、通知、我的預約</p>
-                </div>
-                <span class="tag">預留</span>
-              </div>
-              <div class="card-bd">
-                <div class="list">
-                  <div class="item">
-                    <div>
-                      <div style="font-weight:900;">未讀公告</div>
-                      <div class="muted" style="margin-top:6px;">2 則</div>
-                    </div>
-                    <span class="tag red">提醒</span>
-                  </div>
-                  <div class="item">
-                    <div>
-                      <div style="font-weight:900;">待領取包裹</div>
-                      <div class="muted" style="margin-top:6px;">1 件</div>
-                    </div>
-                    <span class="tag">通知</span>
-                  </div>
-                  <div class="item">
-                    <div>
-                      <div style="font-weight:900;">我的預約</div>
-                      <div class="muted" style="margin-top:6px;">今晚 19:00 健身房</div>
-                    </div>
-                    <span class="tag">行程</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-        `;
-  }
+    dotsContainer.innerHTML = images.map((_, i) => `
+      <div class="carousel-dot ${i === 0 ? "active" : ""}" data-index="${i}"></div>
+    `).join("");
 
-  function bulletinView() {
-    return `
-          <div class="grid">
-            <section class="card">
-              <div class="card-hd">
-                <div>
-                  <h2>公告列表</h2>
-                  <p>分類與置頂（示意）</p>
-                </div>
-                <span class="tag red">通知</span>
-              </div>
-              <div class="card-bd">
-                <div class="list">
-                  ${[
-                    { title: "【置頂】電梯年度保養通知", meta: ["重要通知", "2026/05/07"], tag: "置頂" },
-                    { title: "游泳池清潔消毒時間調整", meta: ["設備維護", "2026/05/06"], tag: "更新" },
-                    { title: "端午節社區活動報名", meta: ["活動訊息", "2026/05/05"], tag: "活動" },
-                  ].map((x) => `
-                    <div class="item">
-                      <div>
-                        <div style="font-weight:900;">${x.title}</div>
-                        <div class="meta">
-                          <span class="tag red">${x.tag}</span>
-                          <span class="tag">${x.meta[0]}</span>
-                          <span class="tag">${x.meta[1]}</span>
-                        </div>
-                      </div>
-                      <button class="btn" type="button" data-read>閱讀</button>
-                    </div>
-                  `).join("")}
-                </div>
-              </div>
-            </section>
+    let currentIndex = 0;
+    const total = images.length;
+    const intervalTime = (cfg.rowAInterval || 5) * 1000;
+    let timer = null;
 
-            <section class="card">
-              <div class="card-hd">
-                <div>
-                  <h2>閱讀狀態（預留）</h2>
-                  <p>後續可加入未讀提醒、收藏、回覆</p>
-                </div>
-                <span class="tag">預留</span>
-              </div>
-              <div class="card-bd">
-                <div class="list">
-                  <div class="item">
-                    <div>
-                      <div style="font-weight:900;">未讀</div>
-                      <div class="muted" style="margin-top:6px;">2 則</div>
-                    </div>
-                    <span class="tag red">提醒</span>
-                  </div>
-                  <div class="item">
-                    <div>
-                      <div style="font-weight:900;">已讀</div>
-                      <div class="muted" style="margin-top:6px;">15 則</div>
-                    </div>
-                    <span class="tag">統計</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-        `;
-  }
-
-  function parcelView() {
-    return `
-          <div class="grid">
-            <section class="card">
-              <div class="card-hd">
-                <div>
-                  <h2>待領取</h2>
-                  <p>由社區後台登記後推送（示意）</p>
-                </div>
-                <span class="tag red">提醒</span>
-              </div>
-              <div class="card-bd">
-                <div class="list">
-                  ${[
-                    { title: "A-1203｜宅配", meta: ["17:10 到貨", "狀態：待領取"] },
-                    { title: "A-1203｜郵局掛號", meta: ["15:42 到貨", "狀態：待領取"] },
-                  ].map((x) => `
-                    <div class="item">
-                      <div>
-                        <div style="font-weight:900;">${x.title}</div>
-                        <div class="meta">
-                          <span class="tag">${x.meta[0]}</span>
-                          <span class="tag red">${x.meta[1]}</span>
-                        </div>
-                      </div>
-                      <button class="btn" type="button">確認</button>
-                    </div>
-                  `).join("")}
-                </div>
-              </div>
-            </section>
-
-            <section class="card">
-              <div class="card-hd">
-                <div>
-                  <h2>領取紀錄（預留）</h2>
-                  <p>後續可串接簽收、QR Code</p>
-                </div>
-                <span class="tag">預留</span>
-              </div>
-              <div class="card-bd">
-                <div class="list">
-                  <div class="item">
-                    <div>
-                      <div style="font-weight:900;">最近領取</div>
-                      <div class="muted" style="margin-top:6px;">2026/05/06 19:20</div>
-                    </div>
-                    <span class="tag">紀錄</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-        `;
-  }
-
-  function facilityView() {
-    return `
-          <div class="grid">
-            <section class="card">
-              <div class="card-hd">
-                <div>
-                  <h2>可預約時段（示意）</h2>
-                  <p>後續可加入規則、名額、付款等</p>
-                </div>
-                <span class="tag red">預約</span>
-              </div>
-              <div class="card-bd">
-                <div class="list">
-                  ${[
-                    { title: "健身房｜19:00–20:00", meta: ["剩餘：3", "狀態：可預約"] },
-                    { title: "交誼廳｜20:00–22:00", meta: ["剩餘：1", "狀態：可預約"] },
-                  ].map((x) => `
-                    <div class="item">
-                      <div>
-                        <div style="font-weight:900;">${x.title}</div>
-                        <div class="meta">
-                          <span class="tag">${x.meta[0]}</span>
-                          <span class="tag red">${x.meta[1]}</span>
-                        </div>
-                      </div>
-                      <button class="btn btn-primary" type="button">預約</button>
-                    </div>
-                  `).join("")}
-                </div>
-              </div>
-            </section>
-
-            <section class="card">
-              <div class="card-hd">
-                <div>
-                  <h2>我的預約（示意）</h2>
-                  <p>後續可加入取消、改期與審核</p>
-                </div>
-                <span class="tag">行程</span>
-              </div>
-              <div class="card-bd">
-                <div class="list">
-                  <div class="item">
-                    <div>
-                      <div style="font-weight:900;">健身房｜今晚 19:00–20:00</div>
-                      <div class="meta">
-                        <span class="tag red">已確認</span>
-                        <span class="tag">人數：3</span>
-                      </div>
-                    </div>
-                    <button class="btn" type="button">取消</button>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-        `;
-  }
-
-  function parkingView() {
-    return `
-          <div class="grid">
-            <section class="card">
-              <div class="card-hd">
-                <div>
-                  <h2>我的車位（示意）</h2>
-                  <p>後續可串接充電樁狀態、費率</p>
-                </div>
-                <span class="tag red">綠能</span>
-              </div>
-              <div class="card-bd">
-                <div class="list">
-                  <div class="item">
-                    <div>
-                      <div style="font-weight:900;">B1-086｜EV</div>
-                      <div class="meta">
-                        <span class="tag red">充電樁：私人</span>
-                        <span class="tag">狀態：正常</span>
-                      </div>
-                    </div>
-                    <button class="btn" type="button">詳情</button>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section class="card">
-              <div class="card-hd">
-                <div>
-                  <h2>使用規範（預留）</h2>
-                  <p>可加入違規提醒、申請流程</p>
-                </div>
-                <span class="tag">預留</span>
-              </div>
-              <div class="card-bd">
-                <div class="list">
-                  <div class="item">
-                    <div>
-                      <div style="font-weight:900;">停車規範</div>
-                      <div class="muted" style="margin-top:6px;">示意文字</div>
-                    </div>
-                    <span class="tag">公告</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-        `;
-  }
-
-  function hydrateHomeButtons() {
-    contentEl.querySelectorAll("[data-open]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-open");
-        location.hash = `#resident/${id}`;
+    const update = () => {
+      track.style.transform = `translateX(-${currentIndex * 100}%)`;
+      dotsContainer.querySelectorAll(".carousel-dot").forEach((dot, i) => {
+        dot.classList.toggle("active", i === currentIndex);
       });
+    };
+
+    const next = () => {
+      currentIndex = (currentIndex + 1) % total;
+      update();
+    };
+
+    const startTimer = () => {
+      if (timer) clearInterval(timer);
+      if (total > 1) {
+        timer = setInterval(next, intervalTime);
+      }
+    };
+
+    // Touch support
+    let startX = 0;
+    let isDragging = false;
+    const container = document.querySelector(".carousel-container");
+
+    container.addEventListener("touchstart", (e) => {
+      startX = e.touches[0].clientX;
+      isDragging = true;
+      clearInterval(timer);
     });
+
+    container.addEventListener("touchmove", (e) => {
+      if (!isDragging) return;
+      const x = e.touches[0].clientX;
+      const diff = startX - x;
+      if (Math.abs(diff) > 5) {
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    container.addEventListener("touchend", (e) => {
+      if (!isDragging) return;
+      const endX = e.changedTouches[0].clientX;
+      const diff = startX - endX;
+      if (diff > 50) {
+        currentIndex = (currentIndex + 1) % total;
+      } else if (diff < -50) {
+        currentIndex = (currentIndex - 1 + total) % total;
+      }
+      update();
+      isDragging = false;
+      startTimer();
+    });
+
+    // Click dots
+    dotsContainer.addEventListener("click", (e) => {
+      if (e.target.classList.contains("carousel-dot")) {
+        currentIndex = parseInt(e.target.dataset.index);
+        update();
+        startTimer();
+      }
+    });
+
+    startTimer();
   }
 
   function render() {
+    const route = parseRoute();
     buildNav();
-    const r = parseRoute();
-    setActive(r.moduleId);
-    if (r.moduleId === "home") hydrateHomeButtons();
+    setActive(route.moduleId);
   }
 
   const btnGoCommunity = document.getElementById("btnGoCommunity");

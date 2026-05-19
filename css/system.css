@@ -253,6 +253,56 @@ input:focus, select:focus, textarea:focus {
   line-height: 1.6;
 }
 .status.error { color: #9f1c1c; border-color: rgba(211, 47, 47, 0.24); background: rgba(211, 47, 47, 0.08); }
+
+.image-settings-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 12px;
+}
+.image-slot {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+}
+.slot-preview {
+  width: 80px;
+  height: 40px;
+  border-radius: 4px;
+  background: #eee;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+}
+.slot-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.slot-inputs {
+  display: grid;
+  gap: 8px;
+}
+.slot-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.slot-actions input[type="text"] {
+  flex: 1;
+  height: 36px;
+  font-size: 13px;
+}
+.slot-actions .btn-sm {
+  height: 36px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
 @media (max-width: 1024px), (max-height: 520px) {
   .layout { grid-template-columns: 76px 1fr; }
   .sidebar .brand-title, .sidebar .brand-sub, .sidebar .nav .label, .sidebar .nav .hint, .sidebar .side-foot { display: none; }

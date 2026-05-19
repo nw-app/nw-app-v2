@@ -1458,7 +1458,8 @@
     };
 
     const setActiveUnitTab = (tabId) => {
-      const next = tabId === "features" ? "features" : "units";
+      const validTabs = ["units", "features", "row-a", "row-b", "row-d", "row-f"];
+      const next = validTabs.includes(tabId) ? tabId : "units";
       unitActiveTab = next;
       if (!unitModal) return;
       const btns = unitModal.querySelectorAll("[data-unit-tab]");
@@ -1473,6 +1474,14 @@
       });
       if (next === "features") {
         if (unitTitleTextEl) unitTitleTextEl.textContent = "功能列表";
+      } else if (next === "row-a") {
+        if (unitTitleTextEl) unitTitleTextEl.textContent = "圖覽設定";
+      } else if (next === "row-b") {
+        if (unitTitleTextEl) unitTitleTextEl.textContent = "呼叫設定";
+      } else if (next === "row-d") {
+        if (unitTitleTextEl) unitTitleTextEl.textContent = "社紐設定";
+      } else if (next === "row-f") {
+        if (unitTitleTextEl) unitTitleTextEl.textContent = "生紐設定";
       } else {
         if (unitTitleTextEl) unitTitleTextEl.textContent = "戶號列表";
       }
@@ -1480,14 +1489,7 @@
     };
 
     const updateUnitHeaderCounts = () => {
-      if (!unitCountEl) return;
       if (unitActiveTab === "features") {
-        const total = adminModules.length;
-        const enabled = unitFeatureList
-          ? Array.from(unitFeatureList.querySelectorAll("[data-feature-id]")).filter((x) => x && x.checked).length
-          : total;
-        const disabled = Math.max(0, total - enabled);
-        unitCountEl.textContent = `功能：總${total}｜使用${enabled}｜未使用${disabled}`;
         return;
       }
       const raw = String(unitTextarea ? unitTextarea.value : "");
@@ -1499,7 +1501,6 @@
         seen.add(x);
         uniq.push(x);
       }
-      unitCountEl.textContent = `總戶數：${uniq.length}`;
     };
 
     const getFeatureOrderFromDom = () => {
@@ -1570,6 +1571,82 @@
       updateUnitSelectAllState();
     };
 
+    const renderRowAImageSettings = (cfg) => {
+      const container = document.getElementById("rowAImageList");
+      if (!container) return;
+      const images = Array.isArray(cfg && cfg.rowAImages) ? cfg.rowAImages : [];
+      const intervalInput = document.getElementById("modal_rowa_interval");
+      if (intervalInput) intervalInput.value = cfg && cfg.rowAInterval ? cfg.rowAInterval : 5;
+
+      let html = "";
+      for (let i = 0; i < 8; i++) {
+        const v = images[i] || { url: "", data: "" };
+        html += `
+          <div class="image-slot" data-slot-index="${i}">
+            <div class="slot-preview" id="slot_preview_${i}">
+              ${v.data || v.url ? `<img src="${v.data || v.url}" />` : "<span>8:3</span>"}
+            </div>
+            <div class="slot-inputs">
+              <div class="slot-actions">
+                <input type="text" placeholder="輸入圖片網址" value="${v.url || ""}" data-slot-url="${i}" />
+                <button class="btn btn-sm" type="button" data-slot-upload="${i}">上傳</button>
+                <input type="file" accept="image/*" hidden data-slot-file="${i}" />
+                <button class="btn btn-sm danger" type="button" data-slot-clear="${i}">清除</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      container.innerHTML = html;
+
+      // Bind events
+      container.querySelectorAll("[data-slot-upload]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const idx = btn.getAttribute("data-slot-upload");
+          container.querySelector(`[data-slot-file="${idx}"]`).click();
+        });
+      });
+
+      container.querySelectorAll("[data-slot-file]").forEach(input => {
+        input.addEventListener("change", async () => {
+          const idx = input.getAttribute("data-slot-file");
+          const file = input.files[0];
+          if (!file) return;
+          try {
+            const dataUrl = await fileToCompressedDataUrl(file);
+            const preview = document.getElementById(`slot_preview_${idx}`);
+            preview.innerHTML = `<img src="${dataUrl}" />`;
+            preview.setAttribute("data-slot-data", dataUrl);
+          } catch (err) {
+            console.error(err);
+          }
+        });
+      });
+
+      container.querySelectorAll("[data-slot-clear]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const idx = btn.getAttribute("data-slot-clear");
+          const preview = document.getElementById(`slot_preview_${idx}`);
+          preview.innerHTML = "<span>8:3</span>";
+          preview.removeAttribute("data-slot-data");
+          container.querySelector(`[data-slot-url="${idx}"]`).value = "";
+        });
+      });
+      
+      container.querySelectorAll("[data-slot-url]").forEach(input => {
+        input.addEventListener("input", () => {
+          const idx = input.getAttribute("data-slot-url");
+          const url = input.value.trim();
+          const preview = document.getElementById(`slot_preview_${idx}`);
+          if (url) {
+            preview.innerHTML = `<img src="${url}" />`;
+          } else if (!preview.hasAttribute("data-slot-data")) {
+            preview.innerHTML = "<span>8:3</span>";
+          }
+        });
+      });
+    };
+
     const closeUnitModal = () => {
       if (!unitModal) return;
       unitModal.hidden = true;
@@ -1604,9 +1681,11 @@
         loadUnitConfig(cid).then((cfg) => {
           unitConfigCache = cfg || {};
           renderUnitFeatureList(unitConfigCache);
+          renderRowAImageSettings(unitConfigCache);
         }).catch(() => {
           unitConfigCache = {};
           renderUnitFeatureList(unitConfigCache);
+          renderRowAImageSettings(unitConfigCache);
         });
       }
       unitTextarea.focus();
@@ -1763,13 +1842,32 @@
           })();
           const featureOrder = getFeatureOrderFromDom();
 
+          const rowAImages = [];
+          for (let i = 0; i < 8; i++) {
+            const url = document.querySelector(`[data-slot-url="${i}"]`)?.value || "";
+            const data = document.getElementById(`slot_preview_${i}`)?.getAttribute("data-slot-data") || "";
+            const existing = Array.isArray(unitConfigCache.rowAImages) ? unitConfigCache.rowAImages[i] : null;
+            if (url || data) {
+              rowAImages.push({ url, data: data || (existing ? existing.data : "") });
+            } else {
+              rowAImages.push({ url: "", data: "" });
+            }
+          }
+          const rowAInterval = parseInt(document.getElementById("modal_rowa_interval")?.value) || 5;
+
           await Promise.all([
             db.collection("communities").doc(id).set(
               { units: uniq, updatedAt: FieldValue.serverTimestamp() },
               { merge: true }
             ),
             configDocRef(id).set(
-              { communityButtons: featureButtons, communityButtonsOrder: featureOrder, updatedAt: FieldValue.serverTimestamp() },
+              { 
+                communityButtons: featureButtons, 
+                communityButtonsOrder: featureOrder, 
+                rowAImages,
+                rowAInterval,
+                updatedAt: FieldValue.serverTimestamp() 
+              },
               { merge: true }
             ),
           ]);

@@ -285,12 +285,16 @@
                   <div class="unit-tabs" role="tablist" aria-label="社區設定">
                     <button class="unit-tab-btn" type="button" data-unit-tab="units" role="tab" aria-selected="true">戶號</button>
                     <button class="unit-tab-btn" type="button" data-unit-tab="features" role="tab" aria-selected="false">功能</button>
+                    <button class="unit-tab-btn" type="button" data-unit-tab="row-a" role="tab" aria-selected="false">圖覽</button>
+                    <button class="unit-tab-btn" type="button" data-unit-tab="row-b" role="tab" aria-selected="false">呼叫</button>
+                    <button class="unit-tab-btn" type="button" data-unit-tab="row-d" role="tab" aria-selected="false">社紐</button>
+                    <button class="unit-tab-btn" type="button" data-unit-tab="row-f" role="tab" aria-selected="false">生紐</button>
                   </div>
                   <button class="modal-close" type="button" id="btnCloseUnitModal" aria-label="關閉">×</button>
                 </div>
                 <form id="unitModalForm">
                   <div class="modal-body">
-                    <h3 class="modal-title" id="unitModalTitle"><span id="unitModalTitleText">戶號列表</span> <span class="unit-modal-count" id="unitModalCount">總戶數：—</span></h3>
+                    <h3 class="modal-title" id="unitModalTitle"><span id="unitModalTitleText">戶號列表</span></h3>
                     <div class="unit-tab-panel" data-unit-panel="units" role="tabpanel">
                       <div class="field">
                         <label for="modal_units_text">戶號列表（每行一戶）</label>
@@ -305,6 +309,39 @@
                           <label class="check check-all"><input type="checkbox" id="unitFeatureAll" />全選</label>
                         </div>
                         <div class="check-grid" id="unitFeatureList"></div>
+                      </div>
+                    </div>
+
+                    <div class="unit-tab-panel" data-unit-panel="row-a" role="tabpanel" hidden>
+                      <div class="field">
+                        <label>圖片瀏覽設定</label>
+                        <div class="carousel-settings">
+                          <div class="field">
+                            <label for="modal_rowa_interval">輪播時間 (秒)</label>
+                            <input id="modal_rowa_interval" type="number" min="1" max="60" placeholder="預設 5" />
+                          </div>
+                          <div id="rowAImageList" class="image-settings-list">
+                            <!-- JS will generate 8 image slots here -->
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="unit-tab-panel" data-unit-panel="row-b" role="tabpanel" hidden>
+                      <div class="field">
+                        <label>SOS按鈕設定</label>
+                        <p class="muted">設定緊急求助按鈕的對應窗口與功能（示意）</p>
+                      </div>
+                    </div>
+                    <div class="unit-tab-panel" data-unit-panel="row-d" role="tabpanel" hidden>
+                      <div class="field">
+                        <label>社區服務按鈕設定 (8個)</label>
+                        <p class="muted">設定 2 列 4 欄共 8 個社區服務快捷按鈕（示意）</p>
+                      </div>
+                    </div>
+                    <div class="unit-tab-panel" data-unit-panel="row-f" role="tabpanel" hidden>
+                      <div class="field">
+                        <label>生活服務按鈕設定 (8個)</label>
+                        <p class="muted">設定 2 列 4 欄共 8 個生活服務快捷按鈕（示意）</p>
                       </div>
                     </div>
                     <div class="status" id="unitModalStatus" hidden></div>
