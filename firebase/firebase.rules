@@ -7,13 +7,18 @@ service cloud.firestore {
     }
     
     function isAdmin() {
-      return (request.auth != null && request.auth.token.email == "nwapp.eason@gmail.com")
-        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
-            && (
-              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == "系統管理員"
-              || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == "系統管理者"
-            )
-          );
+      return request.auth != null
+        && (
+          request.auth.token.email == "nwapp.eason@gmail.com"
+          || request.auth.token.role == "admin"
+          || request.auth.token.role == "系統管理員"
+          || request.auth.token.role == "系統管理者"
+          || request.auth.token.role == "系統"
+          || (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') in ["admin", "系統管理員", "系統管理者", "系統"]
+          )
+        );
     }
 
     function isCommunityStaff() {
@@ -131,10 +136,26 @@ service cloud.firestore {
 
       match /visitors/{visitorId} {
         allow read, list: if request.auth != null && (
-          isAdmin() || (isCommunityStaff() && slug == getUserData().community)
+          isAdmin()
+          || (
+            isCommunityStaff()
+            && (
+              slug == getUserData().community
+              || get(/databases/$(database)/documents/communities/$(slug)).data.get('username', '') == getUserData().community
+              || get(/databases/$(database)/documents/communities/$(slug)).data.get('id', '') == getUserData().community
+            )
+          )
         );
         allow create, update, delete: if request.auth != null && (
-          isAdmin() || (isCommunityStaff() && slug == getUserData().community)
+          isAdmin()
+          || (
+            isCommunityStaff()
+            && (
+              slug == getUserData().community
+              || get(/databases/$(database)/documents/communities/$(slug)).data.get('username', '') == getUserData().community
+              || get(/databases/$(database)/documents/communities/$(slug)).data.get('id', '') == getUserData().community
+            )
+          )
         );
       }
 

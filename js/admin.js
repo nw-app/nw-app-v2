@@ -27,6 +27,8 @@
     config: null,
     unsubConfig: null,
     unsubVisitors: null,
+    creatorLabelByUid: new Map(),
+    creatorFetches: new Map(),
   };
 
   const moduleCatalog = [
@@ -180,6 +182,7 @@
         (doc) => {
           state.config = doc && doc.exists ? (doc.data() || null) : null;
           if (handleHashRoute()) {
+            renderFooterNav();
             updateFooterActiveNav();
             return;
           }
@@ -188,6 +191,7 @@
         () => {
           state.config = null;
           if (handleHashRoute()) {
+            renderFooterNav();
             updateFooterActiveNav();
             return;
           }
@@ -249,17 +253,31 @@
     }
   }
 
+  function loadConfigModuleOrder(communityId) {
+    const cid = String(communityId || "default");
+    const cfg = loadConfig(cid);
+    const raw = cfg && Array.isArray(cfg.communityButtonsOrder) ? cfg.communityButtonsOrder : [];
+    return Array.isArray(raw) ? raw.map((x) => String(x || "").trim()).filter(Boolean) : [];
+  }
+
   function saveModuleOrder(communityId, ids) {
     const cid = String(communityId || "default");
     const list = Array.isArray(ids) ? ids.map((x) => String(x || "").trim()).filter(Boolean) : [];
     try {
       localStorage.setItem(`${STORAGE_ADMIN_ORDER_PREFIX}${cid}`, JSON.stringify(list));
     } catch {}
+    try {
+      configDocRef(cid).set(
+        { communityButtonsOrder: list, updatedAt: FieldValue.serverTimestamp() },
+        { merge: true }
+      ).catch(() => {});
+    } catch {}
   }
 
   function orderedModules() {
     const cid = resolveActiveCommunityId();
-    const order = loadModuleOrder(cid);
+    const order = loadConfigModuleOrder(cid);
+    const fallbackOrder = order.length ? [] : loadModuleOrder(cid);
     const map = new Map(moduleCatalog.map((m) => [String(m.id), m]));
     const used = new Set();
     const out = [];
@@ -271,7 +289,7 @@
         return true;
       }
     };
-    for (const id of order) {
+    for (const id of (order.length ? order : fallbackOrder)) {
       const key = String(id || "").trim();
       if (!key || used.has(key)) continue;
       const m = map.get(key);
@@ -296,7 +314,7 @@
     if (id === "residents") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 11.2a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7"/><path d="M16.5 11a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z" stroke="currentColor" stroke-width="1.7"/><path d="M3.8 20a6.2 6.2 0 0 1 10.4 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M14.4 20a5.2 5.2 0 0 1 6.2 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "facility") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 4v2M17 4v2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M5 7.5h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6 6.5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 11.2h.01M12 11.2h.01M15 11.2h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>`;
     if (id === "bulletin") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.5 11.2V8.8A2.3 2.3 0 0 1 6.8 6.5h2.9l7.2-2.7a.9.9 0 0 1 1.2.8v14.8a.9.9 0 0 1-1.2.8l-7.2-2.7H6.8A2.3 2.3 0 0 1 4.5 15v-2.4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M20.2 9.2a4.2 4.2 0 0 1 0 5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6.8 17.5v2.2a1.8 1.8 0 0 0 3.6 0v-1.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
-    if (id === "company-support") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 0 1 15 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6 13v4.8A2.2 2.2 0 0 0 8.2 20H10v-9H8.2A2.2 2.2 0 0 0 6 13Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M18 13v4.8A2.2 2.2 0 0 1 15.8 20H14v-9h1.8A2.2 2.2 0 0 1 18 13Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 20h1.6a2.4 2.4 0 0 0 2.4-2.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
+    if (id === "company-support") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 3.5V8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 16v4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M3.5 12H8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M16 12h4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "meter-reading") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 20h10a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 10l1.6-1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8.5 16.5h7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "finance") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 19.5h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M7.2 18.8V11.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 18.8V8.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M16.8 18.8V13.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M7.2 10.3 10 7.8l2.6 2.4L16.8 6.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     if (id === "checkin-vote") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 10.5 10 13.5 17 6.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 4.5h11A2 2 0 0 1 19.5 6.5v11a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`;
@@ -352,6 +370,81 @@
 
   function normalizeText(v) {
     return String(v || "").trim();
+  }
+
+  function inferUserName(user) {
+    const u = user || {};
+    const dn = String(u.displayName || "").trim();
+    if (dn) return dn;
+    const email = String(u.email || "").trim();
+    if (email && email.includes("@")) return String(email.split("@")[0] || "").trim() || email;
+    return email || "—";
+  }
+
+  function normalizeRoleText(input) {
+    const r = String(input || "").trim().toLowerCase();
+    if (r === "admin" || r === "系統管理員" || r === "系統管理者" || r === "系統") return "admin";
+    if (r === "community" || r === "社區") return "community";
+    if (r === "resident" || r === "住戶") return "resident";
+    return "";
+  }
+
+  function creatorLabelFromUserData(data) {
+    const d = data && typeof data === "object" ? data : {};
+    const role = normalizeRoleText(d.role);
+    if (role === "admin") return "系統管理員";
+    if (role === "community") {
+      const category = String(d.category || "").trim();
+      return category || "社區";
+    }
+    if (role === "resident") {
+      const houseNo = String(d.houseNo || d.unit || "").trim();
+      return houseNo || "—";
+    }
+    return "—";
+  }
+
+  async function getCreatorLabel80(uid) {
+    const id = String(uid || "").trim();
+    if (!id) return "";
+    if (state.creatorLabelByUid.has(id)) return String(state.creatorLabelByUid.get(id) || "");
+    if (state.creatorFetches.has(id)) {
+      try {
+        const v = await state.creatorFetches.get(id);
+        return String(v || "");
+      } catch {
+        return "";
+      }
+    }
+    const p = db.collection("users").doc(id).get().then((doc) => {
+      const data = doc && doc.exists ? (doc.data() || {}) : null;
+      const label = creatorLabelFromUserData(data);
+      try { state.creatorLabelByUid.set(id, label); } catch {}
+      return label;
+    }).catch(() => "");
+    state.creatorFetches.set(id, p);
+    try {
+      const label = await p;
+      return String(label || "");
+    } finally {
+      try { state.creatorFetches.delete(id); } catch {}
+    }
+  }
+
+  function formatKeepText80(keep) {
+    const k = keep && typeof keep === "object" ? keep : {};
+    const cert = k.certificate && typeof k.certificate === "object" ? k.certificate : {};
+    const cash = k.cash && typeof k.cash === "object" ? k.cash : {};
+    const parts = [];
+    if (cert.enabled) parts.push(String(cert.type || "證件").trim() || "證件");
+    if (k.businessCard) parts.push("名片");
+    if (cash.enabled) {
+      const amt = Number(cash.amount);
+      const text = Number.isFinite(amt) && amt > 0 ? `現金${Math.floor(amt)}` : "現金";
+      parts.push(text);
+    }
+    if (k.key) parts.push("鑰匙");
+    return parts.length ? parts.join("、") : "無";
   }
 
   function escapeHtml(input) {
@@ -414,7 +507,23 @@
     return null;
   }
 
-  function openVisitorPassModal80({ cid, communityName, visitorId, name, unit, purpose, phone, plate, email, partySize, createdAt, inAt, outAt }) {
+  async function sendVisitorPassEmail80({ to, subject, html, text, cid, visitorId, communityName }) {
+    const emailTo = String(to || "").trim();
+    if (!emailTo) return;
+    await db.collection("mail").add({
+      to: [emailTo],
+      message: { subject, text, html },
+      meta: {
+        type: "visitor-pass",
+        cid: String(cid || ""),
+        visitorId: String(visitorId || ""),
+        communityName: String(communityName || ""),
+      },
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  }
+
+  function openVisitorPassModal80({ cid, communityName, visitorId, name, unit, purpose, phone, plate, email, partySize, keep, createdAt, createdByName, inAt, outAt, autoSendEmail }) {
     const modal = ensureVisitorPassModal();
     let detach = () => {};
     detach = bindModalClose(modal, () => detach());
@@ -431,23 +540,36 @@
     else if (titleEl) titleEl.textContent = "訪客證";
     if (communityEl) communityEl.textContent = String(communityName || "—").trim() || "—";
 
-    const inText = formatYmdHms(toDateAny(inAt) || toDateAny(createdAt));
-    const outText = formatYmdHms(toDateAny(outAt));
+    const inDate = toDateAny(inAt);
+    const outDate = toDateAny(outAt);
+    const createdDate = toDateAny(createdAt);
+    const inText = formatYmdHms(inDate);
+    const outText = formatYmdHms(outDate);
+    const createdText = formatYmdHms(createdDate);
+    modal.dataset.cid = String(cid || "");
+    modal.dataset.visitorId = String(visitorId || "");
+    modal.dataset.inMs = inDate ? String(inDate.getTime()) : "";
+    modal.dataset.outMs = outDate ? String(outDate.getTime()) : "";
+
     if (timesEl) {
       timesEl.innerHTML = `
-        <span class="time-pill in">來訪：${escapeHtml(inText || "—")}</span>
-        <span class="time-pill out">離開：${escapeHtml(outText || "—")}</span>
+        <span class="time-pill in" role="button" tabindex="0" data-time-kind="in" data-visitor-id="${escapeHtml(String(visitorId || ""))}">來訪：${escapeHtml(inText || "—")}</span>
+        <span class="time-pill out" role="button" tabindex="0" data-time-kind="out" data-visitor-id="${escapeHtml(String(visitorId || ""))}">離開：${escapeHtml(outText || "—")}</span>
       `.trim();
     }
     const party = Number.isFinite(Number(partySize)) && Number(partySize) >= 1 ? String(Math.floor(Number(partySize))) : "1";
+    const keepText = formatKeepText80(keep);
     const rows = [
-      ["訪客人數", party],
-      ["訪客", name || "—"],
+      ["訪客姓名", name || "—"],
       ["拜訪戶號", unit || "—"],
       ["到訪事由", purpose || "—"],
+      ["拜訪人數", party],
       ["手機", phone || "—"],
       ["車牌", plate || "—"],
-      ["Email", email || "—"],
+      ["電子郵件", email || "—"],
+      ["留存", keepText || "無"],
+      ["建立", createdText || "—"],
+      ["建立者", String(createdByName || "").trim() || "—"],
     ];
 
     if (detailsEl) {
@@ -457,7 +579,7 @@
     }
 
     const qrData = `nwapp://visitor-pass?cid=${String(cid || "")}&vid=${String(visitorId || "")}&t=${String(visitorId || "")}`;
-    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=360x360&data=${encodeURIComponent(qrData)}`;
+    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(qrData)}`;
 
     const shareText = [
       `【${String(communityName || "").trim() || "社區"}｜訪客證】`,
@@ -492,6 +614,40 @@
     const btnEmail = modal.querySelector("#btnShareVisitorPassEmail");
     const btnLine = modal.querySelector("#btnShareVisitorPassLine");
 
+    if (!modal._timePillBound) {
+      modal._timePillBound = true;
+      const handle = (target) => {
+        const pill = target && target.closest ? target.closest(".time-pill[data-time-kind]") : null;
+        if (!pill || !modal.contains(pill)) return;
+        const kind = String(pill.getAttribute("data-time-kind") || "").trim() === "out" ? "out" : "in";
+        const vid = String(pill.getAttribute("data-visitor-id") || modal.dataset.visitorId || "").trim();
+        const ccid = String(modal.dataset.cid || "").trim();
+        if (!vid || !ccid) return;
+        const ms = kind === "out" ? Number(modal.dataset.outMs || 0) : Number(modal.dataset.inMs || 0);
+        const initialDate = Number.isFinite(ms) && ms > 0 ? new Date(ms) : null;
+        openVisitorTimeModal80({
+          cid: ccid,
+          visitorId: vid,
+          kind,
+          initialDate,
+          onUpdatedText: (d) => {
+            const t = formatYmdHms(d);
+            pill.textContent = `${kind === "out" ? "離開" : "來訪"}：${t || "—"}`;
+            if (kind === "out") modal.dataset.outMs = d ? String(d.getTime()) : "";
+            else modal.dataset.inMs = d ? String(d.getTime()) : "";
+          },
+        });
+      };
+      modal.addEventListener("click", (e) => handle(e.target));
+      modal.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        const pill = e.target && e.target.closest ? e.target.closest(".time-pill[data-time-kind]") : null;
+        if (!pill) return;
+        e.preventDefault();
+        handle(pill);
+      });
+    }
+
     const onShareEmail = async (e) => {
       e.preventDefault();
       const to = String(email || "").trim();
@@ -518,17 +674,7 @@
             </div>
           </div>
         `.trim();
-        await db.collection("mail").add({
-          to: [to],
-          message: { subject, text: shareText, html },
-          meta: {
-            type: "visitor-pass",
-            cid: String(cid || ""),
-            visitorId: String(visitorId || ""),
-            communityName: String(communityName || ""),
-          },
-          createdAt: FieldValue.serverTimestamp(),
-        });
+        await sendVisitorPassEmail80({ to, subject, html, text: shareText, cid, visitorId, communityName });
         toast("已送出 Email");
         if (hintEl) hintEl.textContent = "Email 已送出。";
       } catch (err) {
@@ -584,6 +730,45 @@
       const closeBtn = modal.querySelector(".modal-close");
       if (closeBtn && closeBtn.focus) closeBtn.focus();
     });
+
+    const shouldAuto = Boolean(autoSendEmail) && Boolean(String(email || "").trim());
+    if (shouldAuto) {
+      if (hintEl) hintEl.textContent = "Email 寄送中...";
+      const to = String(email || "").trim();
+      const subject = `訪客證 QR code（${String(name || "訪客")}）`;
+      const html = `
+        <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,Noto Sans TC,PingFang TC,Microsoft JhengHei,sans-serif;">
+          <div style="font-weight:900;font-size:16px;">${escapeHtml(String(communityName || "").trim() || "社區")}｜訪客證</div>
+          <div style="margin-top:10px;color:#374151;">
+            <div>來訪：${escapeHtml(inText || "—")}</div>
+            <div>離開：${escapeHtml(outText || "—")}</div>
+            <div>訪客人數：${escapeHtml(party)}</div>
+            <div>訪客：${escapeHtml(name || "—")}</div>
+            <div>拜訪戶號：${escapeHtml(unit || "—")}</div>
+            <div>到訪事由：${escapeHtml(purpose || "—")}</div>
+            <div>手機：${escapeHtml(phone || "—")}</div>
+            <div>車牌：${escapeHtml(plate || "—")}</div>
+          </div>
+          <div style="margin-top:14px;">
+            <img alt="QR Code" src="${escapeHtml(qrSrc)}" style="width:280px;height:280px;max-width:100%;" />
+          </div>
+        </div>
+      `.trim();
+      Promise.resolve()
+        .then(() => sendVisitorPassEmail80({ to, subject, html, text: shareText, cid, visitorId, communityName }))
+        .then(() => {
+          toast("已送出 Email");
+          if (hintEl) hintEl.textContent = "Email 已送出。";
+        })
+        .catch((err) => {
+          const code = String(err && err.code ? err.code : "");
+          toast(code.includes("permission-denied") ? "沒有權限發送 Email" : "Email 寄送失敗");
+          if (hintEl) hintEl.textContent = "Email 寄送失敗。";
+        })
+        .finally(() => {
+          if (btnEmail) btnEmail.disabled = !Boolean(String(email || "").trim());
+        });
+    }
   }
 
   function ensureVisitorScanModal() {
@@ -619,6 +804,121 @@
     `.trim();
     document.body.appendChild(modal);
     return modal;
+  }
+
+  function ensureVisitorTimeModal() {
+    let modal = document.getElementById("visitorTimeModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "visitorTimeModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="visitorTimeModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="visitorTimeModalTitle">設定時間</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="visitorTimeModalForm">
+          <div class="modal-body">
+            <div class="field">
+              <label id="visitorTimeLabel" for="visitorTimeInput">時間</label>
+              <input id="visitorTimeInput" type="datetime-local" />
+            </div>
+            <div class="status" id="visitorTimeStatus" hidden></div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">取消</button>
+            <button class="btn btn-primary" type="submit" id="btnSaveVisitorTime">儲存</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openVisitorTimeModal80({ cid, visitorId, kind, initialDate, onApplied, onUpdatedText }) {
+    const modal = ensureVisitorTimeModal();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const titleEl = modal.querySelector("#visitorTimeModalTitle");
+    const labelEl = modal.querySelector("#visitorTimeLabel");
+    const inputEl = modal.querySelector("#visitorTimeInput");
+    const statusEl = modal.querySelector("#visitorTimeStatus");
+    const submitBtn = modal.querySelector("#btnSaveVisitorTime");
+
+    const pad2 = (n) => String(n).padStart(2, "0");
+    const toLocalInputValue = (d) => {
+      if (!(d instanceof Date) || !Number.isFinite(d.getTime())) return "";
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    };
+    const parseLocalInputValue = (v) => {
+      const raw = String(v || "").trim();
+      if (!raw) return null;
+      const d = new Date(raw);
+      if (!Number.isFinite(d.getTime())) return null;
+      return d;
+    };
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    const label = kind === "out" ? "離開時間" : "來訪時間";
+    if (titleEl) titleEl.textContent = `設定${label}`;
+    if (labelEl) labelEl.textContent = label;
+    if (inputEl) inputEl.value = toLocalInputValue(initialDate);
+    setStatus("", false);
+    modal.hidden = false;
+
+    const form = modal.querySelector("#visitorTimeModalForm");
+    if (form && form._visitorTimeSubmit) {
+      try { form.removeEventListener("submit", form._visitorTimeSubmit); } catch {}
+      form._visitorTimeSubmit = null;
+    }
+    const onSubmit = async (e) => {
+      e.preventDefault();
+      const id = String(visitorId || "").trim();
+      const communityId = String(cid || "default").trim() || "default";
+      if (!id) return;
+      const d = parseLocalInputValue(inputEl ? inputEl.value : "");
+      const Timestamp = firebase.firestore.Timestamp;
+      const field = kind === "out" ? "outAt" : "inAt";
+      const stamp = d ? Timestamp.fromDate(d) : null;
+      const payload = { [field]: stamp, updatedAt: FieldValue.serverTimestamp() };
+      const localPatch = { [field]: stamp };
+      if (kind === "out") {
+        payload.qrInvalidated = Boolean(d);
+        payload.qrInvalidatedAt = d ? FieldValue.serverTimestamp() : null;
+        localPatch.qrInvalidated = Boolean(d);
+      }
+
+      if (submitBtn) submitBtn.disabled = true;
+      setStatus("儲存中...", false);
+      try {
+        await db.collection("communities").doc(communityId).collection("visitors").doc(id).set(payload, { merge: true });
+        setStatus("", false);
+        if (typeof onApplied === "function") onApplied(id, localPatch);
+        if (typeof onUpdatedText === "function") onUpdatedText(d);
+        modal.hidden = true;
+        detach();
+      } catch {
+        setStatus("儲存失敗，請稍後再試。", true);
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    };
+    if (form) {
+      form._visitorTimeSubmit = onSubmit;
+      form.addEventListener("submit", onSubmit);
+    }
   }
 
   function parseVisitorQrText(text) {
@@ -2073,9 +2373,27 @@
     }
 
     const cid = resolveActiveCommunityId();
-    const accounts = loadAccounts();
-    const c = (accounts.communities || []).find((x) => x && String(x.id || "") === String(cid || "")) || null;
-    const cname = c ? String(c.name || "").trim() : "";
+    const urlCommunityKey = readUrlCommunityKey();
+    const activeCommunity = (Array.isArray(state.communities) ? state.communities : []).find((x) => x && String(x.id || "") === String(cid || "")) || null;
+    const cname = activeCommunity ? String(activeCommunity.name || "").trim() : "";
+    const creatorName = inferUserName(auth.currentUser);
+    let visitorCommunitySlug = String(cid || "").trim() || "default";
+    const buildVisitorCommunityCandidates = () => {
+      const out = [];
+      const add = (v) => {
+        const s = String(v || "").trim();
+        if (!s || out.includes(s)) return;
+        out.push(s);
+      };
+      add(visitorCommunitySlug);
+      add(activeCommunity ? activeCommunity.username : "");
+      add(urlCommunityKey);
+      try { add(sessionStorage.getItem("csp_last_cid")); } catch {}
+      return out.filter((x) => x && x !== "default");
+    };
+    const visitorCommunityCandidates = buildVisitorCommunityCandidates();
+    let visitorCommunityTryIndex = 0;
+    const visitorDesc = (moduleCatalog.find((m) => m && m.id === "visitor") || {}).desc || "到訪資訊、車牌、進出時間管理";
 
     contentEl.innerHTML = `
       <section class="card visitor-page">
@@ -2084,7 +2402,7 @@
             <div class="chip" aria-hidden="true">${iconSvg("visitor")}</div>
             <div style="min-width:0;">
               <h2>訪客登記</h2>
-              <p>${cname || "—"}</p>
+              <p>${visitorDesc}</p>
             </div>
           </div>
           <div class="resident-page-actions">
@@ -2146,6 +2464,22 @@
     };
 
     let visitors = [];
+    const hydrateCreatorLabels = async (list) => {
+      const ids = Array.from(
+        new Set(
+          (Array.isArray(list) ? list : [])
+            .map((x) => String(x && x.createdBy ? x.createdBy : "").trim())
+            .filter(Boolean)
+        )
+      ).filter((x) => !state.creatorLabelByUid.has(x));
+      if (!ids.length) return;
+      const batchSize = 16;
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const chunk = ids.slice(i, i + batchSize);
+        await Promise.all(chunk.map((id) => getCreatorLabel80(id).catch(() => "")));
+      }
+      renderList();
+    };
 
     const renderList = () => {
       const q = String(searchEl ? searchEl.value : "").trim().toLowerCase();
@@ -2175,19 +2509,32 @@
           const phone = String(v.phone || "").trim();
           const plate = String(v.plate || "").trim();
           const purpose = String(v.purpose || "").trim();
-          const inText = formatDt(v.inAt || v.createdAt);
+          const email = String(v.email || "").trim();
+          const party = v.partySize != null && Number.isFinite(Number(v.partySize)) && Number(v.partySize) >= 1 ? String(Math.floor(Number(v.partySize))) : "1";
+          const keepText = formatKeepText80(v.keep);
+          const inText = formatDt(v.inAt);
           const outText = formatDt(v.outAt);
-          const subParts = [unit, plate, phone, purpose].filter(Boolean);
+          const createdText = formatDt(v.createdAt);
+          const createdByUid = String(v.createdBy || "").trim();
+          const createdByName =
+            createdByUid && state.creatorLabelByUid.has(createdByUid)
+              ? String(state.creatorLabelByUid.get(createdByUid) || "").trim()
+              : String(v.createdByName || "").trim();
+          const subParts = [unit, phone, purpose].filter(Boolean);
+          const sub2Parts = [`拜訪人數：${party}`, `電子郵件：${email || "—"}`].filter(Boolean);
           return `
             <div class="visitor-item" data-id="${String(v.id || "")}">
               <div class="visitor-left">
                 <div class="visitor-text">
                   <div class="visitor-name">${name}</div>
                   <div class="visitor-sub">${subParts.join("｜")}</div>
+                  <div class="visitor-sub2">${sub2Parts.join("｜")}</div>
                   <div class="visitor-meta">
-                    <span class="time-pill in">來訪：${inText || "—"}</span>
-                    <span class="time-pill out">離開：${outText || "—"}</span>
+                    <span class="time-pill in" role="button" tabindex="0" data-time-kind="in">來訪：${inText || "—"}</span>
+                    <span class="time-pill out" role="button" tabindex="0" data-time-kind="out">離開：${outText || "—"}</span>
                   </div>
+                  <div class="visitor-created">建立：${createdText || "—"}｜建立者：${escapeHtml(createdByName || "—")}</div>
+                  <div class="visitor-keep">留存：${escapeHtml(keepText || "無")}</div>
                 </div>
               </div>
               <div class="visitor-actions">
@@ -2233,15 +2580,29 @@
       renderList();
     };
 
-    const collRef = () => db.collection("communities").doc(String(cid || "default")).collection("visitors");
+    const openTimeEditorFromPill = (pillEl) => {
+      if (!pillEl) return;
+      const itemEl = pillEl.closest ? pillEl.closest(".visitor-item[data-id]") : null;
+      const vid = itemEl ? String(itemEl.getAttribute("data-id") || "").trim() : "";
+      if (!vid) return;
+      const kind = String(pillEl.getAttribute("data-time-kind") || "").trim() === "out" ? "out" : "in";
+      const v = visitors.find((x) => String(x.id || "") === vid) || null;
+      const initialDate = v ? (kind === "out" ? toDate(v.outAt) : toDate(v.inAt)) : null;
+      openVisitorTimeModal80({ cid: visitorCommunitySlug, visitorId: vid, kind, initialDate, onApplied: applyLocalVisitorPatch });
+    };
+
+    const collRef = () => db.collection("communities").doc(String(visitorCommunitySlug || "default")).collection("visitors");
 
     const subscribeVisitors = () => {
       setStatus("讀取中...", false);
       try {
-        state.unsubVisitors = collRef()
-          .orderBy("createdAt", "desc")
-          .limit(200)
-          .onSnapshot(
+        const startAt = (slug) => {
+          stopVisitorsSubscription();
+          visitorCommunitySlug = String(slug || "").trim() || visitorCommunitySlug || "default";
+          state.unsubVisitors = collRef()
+            .orderBy("createdAt", "desc")
+            .limit(200)
+            .onSnapshot(
             (snap) => {
               const list = (snap && snap.docs ? snap.docs : []).map((d) => {
                 const v = d.data() || {};
@@ -2262,6 +2623,8 @@
                   partySize: v.partySize != null ? Number(v.partySize) : null,
                   qrInvalidated: Boolean(v.qrInvalidated),
                   keep: v.keep || null,
+                  createdBy: String(v.createdBy || ""),
+                  createdByName: String(v.createdByName || ""),
                   createdAt: v.createdAt || null,
                   updatedAt: v.updatedAt || null,
                 };
@@ -2269,14 +2632,24 @@
               visitors = list;
               setStatus("", false);
               renderList();
+              hydrateCreatorLabels(list).catch(() => {});
             },
             (err) => {
               const code = String(err && err.code ? err.code : "");
+              if (code.includes("permission-denied") && visitorCommunityTryIndex + 1 < visitorCommunityCandidates.length) {
+                visitorCommunityTryIndex += 1;
+                setStatus("讀取中...", false);
+                startAt(visitorCommunityCandidates[visitorCommunityTryIndex]);
+                return;
+              }
               setStatus(code.includes("permission-denied") ? "沒有權限讀取訪客資料。" : "讀取失敗，請稍後再試。", true);
               visitors = [];
               renderList();
             }
-          );
+            );
+        };
+        const first = visitorCommunityCandidates[0] || String(cid || "default");
+        startAt(first);
       } catch {
         setStatus("讀取失敗，請稍後再試。", true);
       }
@@ -2284,13 +2657,27 @@
 
     let communityUnits = [];
     const loadCommunityUnits = async () => {
-      try {
-        const doc = await db.collection("communities").doc(String(cid || "default")).get();
-        const v = doc && doc.exists ? (doc.data() || {}) : {};
-        communityUnits = normalizeUnitList(v.units);
-      } catch {
-        communityUnits = [];
+      const candidates = [];
+      const add = (v) => {
+        const s = String(v || "").trim();
+        if (!s || candidates.includes(s)) return;
+        candidates.push(s);
+      };
+      add(visitorCommunitySlug);
+      add(cid);
+      add(urlCommunityKey);
+      try { add(sessionStorage.getItem("csp_last_cid")); } catch {}
+      for (const slug of candidates) {
+        try {
+          const doc = await db.collection("communities").doc(String(slug)).get();
+          if (doc && doc.exists) {
+            const v = doc.data() || {};
+            communityUnits = normalizeUnitList(v.units);
+            return;
+          }
+        } catch {}
       }
+      communityUnits = [];
     };
 
     const openVisitorEditor = async (mode, item) => {
@@ -2346,7 +2733,7 @@
       if (inputPlate) inputPlate.value = isEdit ? String(data.plate || "") : "";
       if (inputNote) inputNote.value = isEdit ? String(data.note || "") : "";
       if (timesRow) timesRow.hidden = !isEdit;
-      if (inputInAt) inputInAt.value = isEdit ? toLocalInputValue(toDate(data.inAt) || toDate(data.createdAt) || new Date()) : "";
+      if (inputInAt) inputInAt.value = isEdit ? toLocalInputValue(toDate(data.inAt)) : "";
       if (inputOutAt) inputOutAt.value = isEdit ? toLocalInputValue(toDate(data.outAt)) : "";
 
       const normalizePurposeType = (raw) => {
@@ -2423,7 +2810,7 @@
         const purposeOther = normalizeText(purposeOtherEl ? purposeOtherEl.value : "");
         const purpose = purposeType === "其他" ? purposeOther : purposeType;
         const note = normalizeText(inputNote ? inputNote.value : "");
-        const inDate = isEdit ? (parseLocalInputValue(inputInAt ? inputInAt.value : "") || toDate(data.inAt) || toDate(data.createdAt) || new Date()) : null;
+        const inDate = isEdit ? (parseLocalInputValue(inputInAt ? inputInAt.value : "") || toDate(data.inAt) || null) : null;
         const outDate = isEdit ? (parseLocalInputValue(inputOutAt ? inputOutAt.value : "") || null) : null;
 
         if (!name) {
@@ -2452,34 +2839,46 @@
         if (!Number.isFinite(keep.cash.amount)) keep.cash.amount = null;
 
         const Timestamp = firebase.firestore.Timestamp;
+        const docRef = isEdit ? collRef().doc(String(data.id || "")) : collRef().doc();
+        const id = String(docRef.id || "");
+      const creatorLabel = !isEdit ? (await getCreatorLabel80(String((auth.currentUser && auth.currentUser.uid) || "")).catch(() => "") || creatorName) : "";
+        const payload = {
+          qrToken: id,
+          name,
+          email,
+          phone,
+          unit,
+          partySize,
+          plate,
+          purpose,
+          purposeType: purposeType === "其他" ? "其他" : purposeType,
+          purposeOther: purposeType === "其他" ? purposeOther : "",
+          note,
+          inAt: isEdit && inDate ? Timestamp.fromDate(inDate) : null,
+          outAt: isEdit && outDate ? Timestamp.fromDate(outDate) : null,
+          keep,
+          updatedAt: FieldValue.serverTimestamp(),
+        };
+        if (!isEdit) {
+          payload.createdAt = FieldValue.serverTimestamp();
+          payload.createdBy = String((auth.currentUser && auth.currentUser.uid) || "");
+        payload.createdByName = String(creatorLabel || "").trim();
+          payload.qrIssuedAt = FieldValue.serverTimestamp();
+        }
         try {
-          const docRef = isEdit ? collRef().doc(String(data.id || "")) : collRef().doc();
-          const id = String(docRef.id || "");
-          const payload = {
-            qrToken: id,
-            name,
-            email,
-            phone,
-            unit,
-            partySize,
-            plate,
-            purpose,
-            purposeType: purposeType === "其他" ? "其他" : purposeType,
-            purposeOther: purposeType === "其他" ? purposeOther : "",
-            note,
-            inAt: isEdit && inDate ? Timestamp.fromDate(inDate) : null,
-            outAt: isEdit && outDate ? Timestamp.fromDate(outDate) : null,
-            keep,
-            updatedAt: FieldValue.serverTimestamp(),
-          };
-          if (!isEdit) {
-            payload.createdAt = FieldValue.serverTimestamp();
-            payload.createdBy = String((auth.currentUser && auth.currentUser.uid) || "");
-            payload.qrIssuedAt = FieldValue.serverTimestamp();
-          }
           await docRef.set(payload, { merge: true });
+        } catch (err) {
+          const code = String(err && err.code ? err.code : "");
+          setModalStatus(code.includes("permission-denied") ? "沒有權限執行此操作。" : "儲存失敗，請稍後再試。", true);
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
 
-          const clientCreatedAt = Timestamp.fromDate(new Date());
+        modal.hidden = true;
+        detach();
+
+        const clientCreatedAt = Timestamp.fromDate(new Date());
+        try {
           const nextItem = {
             id,
             qrToken: id,
@@ -2496,6 +2895,8 @@
             outAt: payload.outAt,
             partySize,
             keep,
+            createdBy: !isEdit ? String((auth.currentUser && auth.currentUser.uid) || "") : String(data.createdBy || ""),
+            createdByName: !isEdit ? String(creatorLabel || "").trim() : String(data.createdByName || ""),
             createdAt: !isEdit ? clientCreatedAt : (data.createdAt || null),
           };
           const idx = visitors.findIndex((x) => String(x.id || "") === id);
@@ -2508,10 +2909,14 @@
             return bt - at;
           });
           renderList();
+        } catch {
+          toast("已儲存，但畫面更新失敗");
+        }
 
-          if (!isEdit) {
+        if (!isEdit) {
+          try {
             openVisitorPassModal80({
-              cid,
+              cid: visitorCommunitySlug,
               communityName: cname,
               visitorId: id,
               name,
@@ -2521,20 +2926,19 @@
               plate,
               email,
               partySize,
+              keep,
               createdAt: clientCreatedAt,
+              createdByName: String(creatorName || "").trim(),
               inAt: null,
               outAt: null,
+              autoSendEmail: true,
             });
+          } catch {
+            toast("已儲存，但無法開啟訪客證");
           }
-
-          modal.hidden = true;
-          detach();
-        } catch (err) {
-          const code = String(err && err.code ? err.code : "");
-          setModalStatus(code.includes("permission-denied") ? "沒有權限執行此操作。" : "儲存失敗，請稍後再試。", true);
-        } finally {
-          if (submitBtn) submitBtn.disabled = false;
         }
+
+        if (submitBtn) submitBtn.disabled = false;
       };
 
       form.addEventListener("submit", onSubmit);
@@ -2561,7 +2965,24 @@
 
     if (searchEl) searchEl.addEventListener("input", renderList);
     if (addBtn) addBtn.addEventListener("click", () => openVisitorEditor("create"));
-    if (scanBtn) scanBtn.addEventListener("click", () => openVisitorScanModal80({ cid, onApplied: applyLocalVisitorPatch }));
+    if (scanBtn) scanBtn.addEventListener("click", () => openVisitorScanModal80({ cid: visitorCommunitySlug, onApplied: applyLocalVisitorPatch }));
+
+    if (listEl && !listEl._timePillBound) {
+      listEl._timePillBound = true;
+      listEl.addEventListener("click", (e) => {
+        const pill = e.target && e.target.closest ? e.target.closest(".time-pill[data-time-kind]") : null;
+        if (!pill || !listEl.contains(pill)) return;
+        e.preventDefault();
+        openTimeEditorFromPill(pill);
+      });
+      listEl.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        const pill = e.target && e.target.closest ? e.target.closest(".time-pill[data-time-kind]") : null;
+        if (!pill || !listEl.contains(pill)) return;
+        e.preventDefault();
+        openTimeEditorFromPill(pill);
+      });
+    }
 
     if (listEl) {
       listEl.addEventListener("click", async (e) => {
@@ -2578,8 +2999,13 @@
         }
         const passBtn = e.target.closest("[data-pass]");
         if (passBtn) {
+          let createdByLabel = String(v.createdByName || "").trim();
+          if (v.createdBy) {
+            const resolved = await getCreatorLabel80(String(v.createdBy || "")).catch(() => "");
+            if (String(resolved || "").trim()) createdByLabel = String(resolved || "").trim();
+          }
           openVisitorPassModal80({
-            cid,
+            cid: visitorCommunitySlug,
             communityName: cname,
             visitorId: id,
             name: String(v.name || ""),
@@ -2589,7 +3015,9 @@
             plate: String(v.plate || ""),
             email: String(v.email || ""),
             partySize: v.partySize != null ? Number(v.partySize) : 1,
+            keep: v.keep || null,
             createdAt: v.createdAt || null,
+            createdByName: createdByLabel,
             inAt: v.inAt || null,
             outAt: v.outAt || null,
           });
@@ -2673,6 +3101,7 @@
         .map((el) => String(el.getAttribute("data-id") || "").trim())
         .filter(Boolean);
       saveModuleOrder(cid, ids);
+      renderFooterNav();
       updateFooterActiveNav();
     };
 

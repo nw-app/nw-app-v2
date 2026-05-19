@@ -530,6 +530,16 @@ input:focus, select:focus, textarea:focus {
   color: rgba(31, 41, 55, 0.85);
 }
 .check input { width: 18px; height: 18px; accent-color: #d32f2f; }
+.feature-head { margin: 8px 0 10px; }
+.check.check-all { color: rgba(31, 41, 55, 0.95); }
+.check-grid.reordering .check { cursor: grabbing; }
+.check[data-feature-row] { cursor: grab; user-select: none; }
+.check.dragging {
+  opacity: 0.9;
+  background: rgba(211, 47, 47, 0.08);
+  border-radius: 12px;
+  padding: 6px 10px;
+}
 .image-uploader {
   width: 100%;
   aspect-ratio: 2 / 1;

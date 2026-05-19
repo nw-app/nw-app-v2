@@ -52,7 +52,18 @@
   }
 
   function goTo(url) {
-    const target = String(url || "index.html");
+    const raw = String(url || "").trim();
+    const cleaned = raw ? raw.replace(/\/+$/, "") : "";
+    const lower = cleaned.toLowerCase();
+    const target =
+      !cleaned ? "index.html" :
+      cleaned.startsWith("http://") || cleaned.startsWith("https://") ? cleaned :
+      lower === "/" || lower === "/index" || lower === "index" ? "index.html" :
+      lower === "system" || lower === "/system" || lower === "system.html" || lower === "/system.html" ? routes.admin :
+      lower === "community" || lower === "/community" || lower === "admin" || lower === "/admin" ? routes.community :
+      lower === "member" || lower === "/member" || lower === "resident" || lower === "/resident" ? routes.resident :
+      cleaned.startsWith("/") ? cleaned.slice(1) :
+      cleaned;
     if (window.__nw_redirecting) return;
     window.__nw_redirecting = target;
     window.location.replace(target);

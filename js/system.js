@@ -1108,6 +1108,7 @@
     const unitCountEl = document.getElementById("unitModalCount");
     const unitTitleTextEl = document.getElementById("unitModalTitleText");
     const unitFeatureList = document.getElementById("unitFeatureList");
+    const unitFeatureAll = document.getElementById("unitFeatureAll");
     const unitCloseBtn = document.getElementById("btnCloseUnitModal");
     const unitCancelBtn = document.getElementById("btnCancelUnitModal");
     const unitBackdrop = unitModal ? unitModal.querySelector("[data-modal-close]") : null;
@@ -1120,6 +1121,7 @@
     let detachUnitKeydown = () => {};
     let unitActiveTab = "units";
     let unitConfigCache = null;
+    let unitDrag = null;
 
     const adminModules = [
       { id: "parcel", name: "包裹郵件" },
@@ -1500,6 +1502,36 @@
       unitCountEl.textContent = `總戶數：${uniq.length}`;
     };
 
+    const getFeatureOrderFromDom = () => {
+      if (!unitFeatureList) return adminModules.map((m) => m.id);
+      const ids = Array.from(unitFeatureList.querySelectorAll("label.check[data-feature-row] input[data-feature-id]"))
+        .map((el) => String(el.getAttribute("data-feature-id") || "").trim())
+        .filter(Boolean);
+      const used = new Set();
+      const out = [];
+      ids.forEach((id) => {
+        if (used.has(id)) return;
+        used.add(id);
+        out.push(id);
+      });
+      adminModules.forEach((m) => {
+        if (used.has(m.id)) return;
+        used.add(m.id);
+        out.push(m.id);
+      });
+      return out;
+    };
+
+    const updateUnitSelectAllState = () => {
+      if (!unitFeatureAll || !unitFeatureList) return;
+      const boxes = Array.from(unitFeatureList.querySelectorAll("input[data-feature-id]"));
+      const total = boxes.length;
+      const checked = boxes.filter((x) => x && x.checked).length;
+      if (!total) return;
+      unitFeatureAll.indeterminate = checked > 0 && checked < total;
+      unitFeatureAll.checked = checked === total;
+    };
+
     const loadUnitConfig = async (communityId) => {
       try {
         const doc = await configDocRef(communityId).get();
@@ -1512,12 +1544,30 @@
     const renderUnitFeatureList = (cfg) => {
       if (!unitFeatureList) return;
       const cbtn = cfg && cfg.communityButtons ? cfg.communityButtons : {};
-      unitFeatureList.innerHTML = adminModules.map((m) => {
+      const savedOrder = Array.isArray(cfg && cfg.communityButtonsOrder) ? cfg.communityButtonsOrder : [];
+      const map = new Map(adminModules.map((m) => [String(m.id), m]));
+      const used = new Set();
+      const ordered = [];
+      savedOrder.forEach((id) => {
+        const key = String(id || "").trim();
+        if (!key || used.has(key)) return;
+        const m = map.get(key);
+        if (!m) return;
+        used.add(key);
+        ordered.push(m);
+      });
+      adminModules.forEach((m) => {
+        if (used.has(m.id)) return;
+        used.add(m.id);
+        ordered.push(m);
+      });
+      unitFeatureList.innerHTML = ordered.map((m) => {
         const v = cbtn && cbtn[m.id] ? cbtn[m.id] : null;
         const checked = !v || v.enabled !== false;
-        return `<label class="check"><input type="checkbox" data-feature-id="${m.id}" ${checked ? "checked" : ""} />${m.name}</label>`;
+        return `<label class="check" data-feature-row="1"><input type="checkbox" data-feature-id="${m.id}" ${checked ? "checked" : ""} />${m.name}</label>`;
       }).join("");
       updateUnitHeaderCounts();
+      updateUnitSelectAllState();
     };
 
     const closeUnitModal = () => {
@@ -1584,6 +1634,92 @@
       unitFeatureList._boundChange = true;
       unitFeatureList.addEventListener("change", () => updateUnitHeaderCounts());
     }
+    if (unitFeatureList && !unitFeatureList._boundReorder) {
+      unitFeatureList._boundReorder = true;
+      unitDrag = {
+        active: false,
+        timer: null,
+        pointerId: null,
+        dragEl: null,
+      };
+
+      const clearTimer = () => {
+        if (!unitDrag || !unitDrag.timer) return;
+        clearTimeout(unitDrag.timer);
+        unitDrag.timer = null;
+      };
+
+      const stopDrag = () => {
+        if (!unitDrag || !unitDrag.active) return;
+        unitDrag.active = false;
+        if (unitDrag.dragEl) unitDrag.dragEl.classList.remove("dragging");
+        unitFeatureList.classList.remove("reordering");
+        unitDrag.dragEl = null;
+        unitDrag.pointerId = null;
+        if (unitConfigCache && typeof unitConfigCache === "object") {
+          unitConfigCache.communityButtonsOrder = getFeatureOrderFromDom();
+        }
+      };
+
+      unitFeatureList.addEventListener("pointerdown", (e) => {
+        const row = e.target && e.target.closest ? e.target.closest('label.check[data-feature-row]') : null;
+        if (!row) return;
+        if (unitDrag.active) return;
+        clearTimer();
+        unitDrag.pointerId = e.pointerId;
+        unitDrag.timer = setTimeout(() => {
+          unitDrag.active = true;
+          unitDrag.dragEl = row;
+          unitFeatureList.classList.add("reordering");
+          row.classList.add("dragging");
+          try { row.setPointerCapture(e.pointerId); } catch {}
+        }, 350);
+      });
+
+      unitFeatureList.addEventListener("pointermove", (e) => {
+        if (!unitDrag || !unitDrag.active) return;
+        e.preventDefault();
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const over = el && el.closest ? el.closest('label.check[data-feature-row]') : null;
+        if (!over || over === unitDrag.dragEl) return;
+        if (!unitFeatureList.contains(over)) return;
+        const rect = over.getBoundingClientRect();
+        const before = e.clientY < rect.top + rect.height / 2;
+        if (before) {
+          unitFeatureList.insertBefore(unitDrag.dragEl, over);
+        } else {
+          unitFeatureList.insertBefore(unitDrag.dragEl, over.nextSibling);
+        }
+      }, { passive: false });
+
+      unitFeatureList.addEventListener("pointerup", () => {
+        clearTimer();
+        stopDrag();
+      });
+      unitFeatureList.addEventListener("pointercancel", () => {
+        clearTimer();
+        stopDrag();
+      });
+      unitFeatureList.addEventListener("click", () => {
+        clearTimer();
+      }, true);
+    }
+    if (unitFeatureAll && !unitFeatureAll._boundAll) {
+      unitFeatureAll._boundAll = true;
+      unitFeatureAll.addEventListener("change", () => {
+        if (!unitFeatureList) return;
+        const next = Boolean(unitFeatureAll.checked);
+        unitFeatureList.querySelectorAll("input[data-feature-id]").forEach((x) => {
+          x.checked = next;
+        });
+        updateUnitHeaderCounts();
+        updateUnitSelectAllState();
+      });
+    }
+    if (unitFeatureList && !unitFeatureList._boundSelectAllSync) {
+      unitFeatureList._boundSelectAllSync = true;
+      unitFeatureList.addEventListener("change", () => updateUnitSelectAllState());
+    }
 
     if (unitForm) {
       unitForm.addEventListener("submit", async (e) => {
@@ -1625,6 +1761,7 @@
             });
             return next;
           })();
+          const featureOrder = getFeatureOrderFromDom();
 
           await Promise.all([
             db.collection("communities").doc(id).set(
@@ -1632,7 +1769,7 @@
               { merge: true }
             ),
             configDocRef(id).set(
-              { communityButtons: featureButtons, updatedAt: FieldValue.serverTimestamp() },
+              { communityButtons: featureButtons, communityButtonsOrder: featureOrder, updatedAt: FieldValue.serverTimestamp() },
               { merge: true }
             ),
           ]);

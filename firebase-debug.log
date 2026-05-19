@@ -1,0 +1,56 @@
+[debug] [2026-05-19T03:19:13.811Z] ----------------------------------------------------------------------
+[debug] [2026-05-19T03:19:13.813Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Eason S NB\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules
+[debug] [2026-05-19T03:19:13.813Z] CLI Version:   15.18.0
+[debug] [2026-05-19T03:19:13.813Z] Platform:      win32
+[debug] [2026-05-19T03:19:13.813Z] Node Version:  v22.19.0
+[debug] [2026-05-19T03:19:13.814Z] Time:          Tue May 19 2026 11:19:13 GMT+0800 (GMT+08:00)
+[debug] [2026-05-19T03:19:13.814Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-05-19T03:19:17.555Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-19T03:19:17.555Z] > authorizing via signed-in user (istage.eason@gmail.com)
+[debug] [2026-05-19T03:19:17.555Z] [iam] checking project nw20250001 for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-05-19T03:19:17.556Z] Checked if tokens are valid: true, expires at: 1779162622948
+[debug] [2026-05-19T03:19:17.556Z] Checked if tokens are valid: true, expires at: 1779162622948
+[debug] [2026-05-19T03:19:17.557Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/nw20250001:testIamPermissions [none]
+[debug] [2026-05-19T03:19:17.557Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/nw20250001:testIamPermissions  x-goog-user-project=nw20250001
+[debug] [2026-05-19T03:19:17.557Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/nw20250001:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-05-19T03:19:18.528Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/nw20250001:testIamPermissions 200
+[debug] [2026-05-19T03:19:18.528Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/nw20250001:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[info] 
+[info] === Deploying to 'nw20250001'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-05-19T03:19:18.532Z] Checked if tokens are valid: true, expires at: 1779162622948
+[debug] [2026-05-19T03:19:18.532Z] Checked if tokens are valid: true, expires at: 1779162622948
+[debug] [2026-05-19T03:19:18.532Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/nw20250001/services/firestore.googleapis.com [none]
+[debug] [2026-05-19T03:19:18.532Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/nw20250001/services/firestore.googleapis.com  x-goog-user-project=nw20250001
+[debug] [2026-05-19T03:19:19.791Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/nw20250001/services/firestore.googleapis.com 200
+[debug] [2026-05-19T03:19:19.791Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/nw20250001/services/firestore.googleapis.com [omitted]
+[info] +  firestore: required API firestore.googleapis.com is enabled 
+[debug] [2026-05-19T03:19:19.889Z] Error: EPERM: operation not permitted, open 'C:\Users\Eason S NB\.config\configstore\firebase-tools.json.3847128884'
+    at Object.openSync (node:fs:561:18)
+    at Function.writeFileSync [as sync] (C:\Users\Eason S NB\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\write-file-atomic\index.js:205:13)
+    at set all (C:\Users\Eason S NB\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\configstore\index.js:61:20)
+    at Configstore.set (C:\Users\Eason S NB\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\configstore\index.js:91:12)
+    at cacheEnabledAPI (C:\Users\Eason S NB\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\firebase-tools\lib\ensureApiEnabled.js:141:31)
+    at check (C:\Users\Eason S NB\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\firebase-tools\lib\ensureApiEnabled.js:38:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async ensure (C:\Users\Eason S NB\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\firebase-tools\lib\ensureApiEnabled.js:110:23)
+    at async default_1 (C:\Users\Eason S NB\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\firebase-tools\lib\deploy\firestore\prepare.js:93:5)
+    at async chain (C:\Users\Eason S NB\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\firebase-tools\lib\deploy\index.js:45:9)
+[error] 
+[error] Error: An unexpected error has occurred.
+[debug] [2026-05-19T03:19:20.691Z] Error: EPERM: operation not permitted, open 'C:\Users\Eason S NB\.config\configstore\firebase-tools.json.2413216064'
+    at Object.openSync (node:fs:561:18)
+    at Function.writeFileSync [as sync] (C:\Users\Eason S NB\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\write-file-atomic\index.js:205:13)
+    at set all (C:\Users\Eason S NB\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\configstore\index.js:61:20)
+    at Configstore.delete (C:\Users\Eason S NB\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\configstore\index.js:101:12)
+    at process.<anonymous> (C:\Users\Eason S NB\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\firebase-tools\lib\bin\cli.js:65:45)
+    at process.emit (node:events:531:35)
+    at process.exit (node:internal/process/per_thread:240:15)
+    at Timeout._onTimeout (C:\Users\Eason S NB\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\firebase-tools\lib\errorOut.js:20:17)
+    at listOnTimeout (node:internal/timers:588:17)
+    at process.processTimers (node:internal/timers:523:7)
+[error] 
+[error] Error: An unexpected error has occurred.
