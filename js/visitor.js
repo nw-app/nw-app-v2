@@ -47,7 +47,12 @@
       return res && res.user ? res.user : auth.currentUser;
     } catch (err) {
       if (pill) { pill.textContent = "無法連線"; show(pill, true); }
-      setStatus("無法建立連線，請稍後再試。", true);
+      const code = String(err && err.code ? err.code : "");
+      if (code.includes("auth/unauthorized-domain") || code.includes("unauthorized-domain")) {
+        setStatus("無法連線：網域未授權。請使用官方網址開啟。", true);
+      } else {
+        setStatus("無法建立連線，請稍後再試。", true);
+      }
       throw err;
     }
   };
@@ -131,7 +136,15 @@
 
     const updatePurposeOther = () => {
       const v = String(purposeTypeEl ? purposeTypeEl.value : "").trim();
-      show(purposeOtherField, v === "其他");
+      const isOther = v === "其他";
+      if (purposeOtherField) {
+        purposeOtherField.hidden = !isOther;
+        purposeOtherField.style.display = isOther ? "" : "none";
+      }
+      if (!isOther) {
+        const otherEl = qs("#v_purposeOther");
+        if (otherEl) otherEl.value = "";
+      }
     };
     if (purposeTypeEl) purposeTypeEl.addEventListener("change", updatePurposeOther);
     updatePurposeOther();

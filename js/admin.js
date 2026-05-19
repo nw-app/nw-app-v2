@@ -559,7 +559,15 @@
       const byUsername = (Array.isArray(state.communities) ? state.communities : []).find((x) => x && String(x.id || "") === cid) || null;
       return String((byUsername && byUsername.username) || cid).trim() || cid;
     })();
-    const u = new URL("visitor.html", location.href);
+    const publicBase = (() => {
+      try {
+        const cfg = window.FIREBASE_CONFIG || null;
+        const pid = cfg && typeof cfg.projectId === "string" ? String(cfg.projectId || "").trim() : "";
+        if (pid) return `https://${pid}.web.app/`;
+      } catch {}
+      return `${location.origin}/`;
+    })();
+    const u = new URL("visitor.html", publicBase);
     u.searchParams.set("c", key);
     const fixedUrl = u.toString();
     if (inputEl) inputEl.value = fixedUrl;
