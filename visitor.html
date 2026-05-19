@@ -13,32 +13,44 @@
     <script defer src="./js/pwa.js"></script>
     <script defer src="./js/visitor.js"></script>
     <style>
-      .card { width: min(620px, 100%); }
+      body { background: var(--bg); }
+      .wrap { min-height: 100dvh; padding: 0; grid-template-rows: none; }
+      .v-page { height: 100dvh; display: grid; grid-template-rows: 8fr 84fr 8fr; }
+      .v-hd { padding: calc(10px + env(safe-area-inset-top)) 16px 10px; display: grid; gap: 6px; align-content: center; border-bottom: 1px solid rgba(17, 24, 39, 0.08); background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(10px); }
+      .v-brand { display: flex; align-items: center; gap: 10px; font-weight: 900; }
+      .v-brand img { width: 28px; height: 28px; display: block; }
+      .v-title { font-size: 14px; font-weight: 900; color: rgba(31, 41, 55, 0.92); }
+      .v-main { display: grid; place-items: center; padding: 14px 16px; overflow: auto; }
+      .v-card { width: min(620px, 100%); background: var(--panel); border-radius: 20px; border: 1px solid rgba(17, 24, 39, 0.08); box-shadow: 0 14px 36px rgba(17, 24, 39, 0.10); padding: 16px; display: grid; gap: 14px; }
       .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
       @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
       textarea { min-height: 92px; padding: 12px 16px; border-radius: 16px; border: 2px solid rgba(17, 24, 39, 0.08); background: #fff; outline: none; resize: vertical; font: inherit; }
       textarea:focus { border-color: rgba(211, 47, 47, 0.42); box-shadow: 0 0 0 4px rgba(211, 47, 47, 0.14); }
       .qr-box { display: grid; justify-items: center; gap: 10px; padding: 14px; border-radius: 18px; background: rgba(17, 24, 39, 0.03); border: 1px dashed rgba(17, 24, 39, 0.22); }
-      .qr-box img { width: 240px; height: 240px; }
-      .hint { color: var(--muted); font-size: 13px; line-height: 1.6; }
-      .title-row { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-      .pill { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 12px; background: rgba(211, 47, 47, 0.10); color: #b91c1c; border: 1px solid rgba(211, 47, 47, 0.22); white-space: nowrap; }
+      .qr-box img { width: 220px; height: 220px; }
+      .hint { color: var(--muted); font-size: 13px; line-height: 1.6; text-align: center; }
+      .pill { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 12px; background: rgba(211, 47, 47, 0.10); color: #b91c1c; border: 1px solid rgba(211, 47, 47, 0.22); white-space: nowrap; justify-self: end; }
+      .v-ft { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-content: center; border-top: 1px solid rgba(17, 24, 39, 0.08); background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(10px); }
+      .v-ft .btn { height: 52px; border-radius: 16px; }
     </style>
   </head>
   <body>
     <main class="wrap">
-      <div class="card">
-        <div class="title-row">
-          <div>
-            <h2>訪客登記</h2>
-            <p id="communityLine">社區：—</p>
+      <div class="v-page">
+        <header class="v-hd">
+          <div class="v-brand">
+            <img src="./logo.svg" alt="LOGO" />
+            <div>西北守護星</div>
+            <div class="pill" id="authPill" hidden>連線中…</div>
           </div>
-          <div class="pill" id="authPill" hidden>連線中…</div>
-        </div>
+          <div class="v-title" id="pageTitle">訪客登記-—</div>
+        </header>
 
-        <div class="status" id="statusBox" hidden></div>
+        <section class="v-main">
+          <div class="v-card">
+            <div class="status" id="statusBox" hidden></div>
 
-        <form class="form" id="visitorForm">
+            <form class="form" id="visitorForm">
           <div class="grid2">
             <div class="field">
               <label for="v_name">訪客姓名</label>
@@ -93,23 +105,23 @@
             <label for="v_note">備註</label>
             <textarea id="v_note"></textarea>
           </div>
-
-          <div class="actions">
-            <button class="btn btn-primary" type="submit" id="btnSubmit">送出登記</button>
-          </div>
-          <p class="hint">送出後會產生訪客 QR Code，請到社區現場出示。</p>
         </form>
 
-        <div id="resultBox" hidden>
-          <div class="qr-box">
-            <img id="passQrImg" alt="QR Code" />
-            <div class="hint" id="passHint">請出示此 QR code 作為訪客證。</div>
-            <div class="hint" id="passUrl"></div>
+            <div id="resultBox" hidden>
+              <div class="hint" id="resultMsg">已送出登記，等待授權。</div>
+              <div class="qr-box" id="passBox" hidden>
+                <img id="passQrImg" alt="QR Code" />
+                <div class="hint" id="passHint">請出示此 QR code 作為訪客證。</div>
+                <div class="hint" id="passUrl"></div>
+              </div>
+            </div>
           </div>
-          <div class="actions" style="margin-top:12px">
-            <button class="btn" type="button" id="btnNew">新增另一筆</button>
-          </div>
-        </div>
+        </section>
+
+        <footer class="v-ft">
+          <button class="btn btn-primary" type="submit" form="visitorForm" id="btnFooterSubmit">送出登記</button>
+          <button class="btn" type="button" id="btnFooterPass" disabled>訪客證</button>
+        </footer>
       </div>
     </main>
   </body>

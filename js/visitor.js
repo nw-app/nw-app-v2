@@ -39,14 +39,14 @@
     if (pill) { pill.textContent = "連線中…"; show(pill, true); }
     try {
       if (auth.currentUser) {
-        if (pill) { pill.textContent = "已連線"; }
+        if (pill) { pill.textContent = "已連線"; show(pill, false); }
         return auth.currentUser;
       }
       const res = await auth.signInAnonymously();
-      if (pill) { pill.textContent = "已連線"; }
+      if (pill) { pill.textContent = "已連線"; show(pill, false); }
       return res && res.user ? res.user : auth.currentUser;
     } catch (err) {
-      if (pill) { pill.textContent = "無法連線"; }
+      if (pill) { pill.textContent = "無法連線"; show(pill, true); }
       setStatus("無法建立連線，請稍後再試。", true);
       throw err;
     }
@@ -64,7 +64,19 @@
       setStatus("缺少社區代碼。", true);
       return;
     }
-    if (!window.firebase || !firebase.apps || !firebase.apps.length) {
+    if (!window.firebase || !firebase.apps) {
+      setStatus("系統初始化失敗。", true);
+      return;
+    }
+    try {
+      if (!firebase.apps.length) {
+        if (!window.FIREBASE_CONFIG) {
+          setStatus("系統初始化失敗。", true);
+          return;
+        }
+        firebase.initializeApp(window.FIREBASE_CONFIG);
+      }
+    } catch {
       setStatus("系統初始化失敗。", true);
       return;
     }
@@ -73,9 +85,11 @@
 
     const form = qs("#visitorForm");
     const resultBox = qs("#resultBox");
-    const btnSubmit = qs("#btnSubmit");
-    const btnNew = qs("#btnNew");
-    const communityLine = qs("#communityLine");
+    const btnFooterSubmit = qs("#btnFooterSubmit");
+    const btnFooterPass = qs("#btnFooterPass");
+    const pageTitle = qs("#pageTitle");
+    const resultMsg = qs("#resultMsg");
+    const passBox = qs("#passBox");
 
     const purposeTypeEl = qs("#v_purposeType");
     const purposeOtherField = qs("#purposeOtherField");
@@ -106,7 +120,7 @@
     }
     const cid = community.id;
     const cname = String((community.data && community.data.name) || "").trim() || "—";
-    if (communityLine) communityLine.textContent = `社區：${cname}`;
+    if (pageTitle) pageTitle.textContent = `訪客登記-${cname}`;
     fillUnitList(community.data && Array.isArray(community.data.units) ? community.data.units : []);
 
     try {
@@ -122,34 +136,78 @@
     if (purposeTypeEl) purposeTypeEl.addEventListener("change", updatePurposeOther);
     updatePurposeOther();
 
-    const showResult = ({ deep, qr }) => {
+    const showPass = ({ deep, qr }) => {
       const img = qs("#passQrImg");
       const hint = qs("#passHint");
       const urlEl = qs("#passUrl");
       if (img) img.src = qr;
       if (hint) hint.textContent = "請出示此 QR code 作為訪客證。";
       if (urlEl) urlEl.textContent = deep;
-      show(form, false);
-      show(resultBox, true);
+      show(passBox, true);
     };
 
-    if (btnNew) {
-      btnNew.addEventListener("click", () => {
-        show(resultBox, false);
-        show(form, true);
+    const setPassReady = (ready) => {
+      if (!btnFooterPass) return;
+      btnFooterPass.disabled = !ready;
+    };
+
+    if (!form) return;
+    let current = {
+      cid,
+      cname,
+      vid: "",
+      docRef: null,
+      unsub: null,
+      passAuthorized: false,
+    };
+
+    const detachDoc = () => {
+      try { if (current.unsub) current.unsub(); } catch {}
+      current.unsub = null;
+    };
+
+    const attachDoc = (docRef) => {
+      detachDoc();
+      current.docRef = docRef;
+      current.unsub = docRef.onSnapshot(
+        (snap) => {
+          const data = snap && snap.exists ? (snap.data() || {}) : null;
+          const authorized = Boolean(data && (data.passAuthorized === true || data.status === "approved"));
+          current.passAuthorized = authorized;
+          setPassReady(authorized);
+          if (resultMsg) {
+            resultMsg.textContent = authorized ? "已授權，可查看訪客證。" : "已送出登記，等待授權。";
+          }
+        },
+        () => {
+          setPassReady(false);
+        }
+      );
+    };
+
+    setPassReady(false);
+    if (btnFooterPass) {
+      btnFooterPass.addEventListener("click", async () => {
+        if (!current.docRef || !current.vid) {
+          setStatus("請先送出登記。", true);
+          return;
+        }
+        if (!current.passAuthorized) {
+          setStatus("尚未授權，請稍後再試。", true);
+          return;
+        }
         setStatus("", false);
-        try { form && form.reset(); } catch {}
-        updatePurposeOther();
-        const party = qs("#v_party");
-        if (party) party.value = "1";
+        const pass = buildPassPayload({ cid: current.cid, vid: current.vid });
+        show(form, false);
+        show(resultBox, true);
+        showPass(pass);
       });
     }
 
-    if (!form) return;
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       setStatus("", false);
-      if (btnSubmit) btnSubmit.disabled = true;
+      if (btnFooterSubmit) btnFooterSubmit.disabled = true;
 
       const name = String(qs("#v_name") ? qs("#v_name").value : "").trim();
       const unit = String(qs("#v_unit") ? qs("#v_unit").value : "").trim();
@@ -176,6 +234,7 @@
 
       const docRef = db.collection("communities").doc(cid).collection("visitors").doc();
       const vid = docRef.id;
+      const nowTs = firebase.firestore.Timestamp.now();
       const payload = {
         qrToken: vid,
         name,
@@ -192,22 +251,31 @@
         outAt: null,
         keep: null,
         source: "self",
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        status: "pending",
+        passAuthorized: false,
+        passAuthorizedAt: null,
+        createdAt: nowTs,
+        updatedAt: nowTs,
         createdBy: user.uid,
         createdByName: "訪客自填",
       };
 
       try {
         await docRef.set(payload, { merge: true });
-        const pass = buildPassPayload({ cid, vid });
-        showResult(pass);
+        current.vid = vid;
+        current.passAuthorized = false;
+        setPassReady(false);
+        attachDoc(docRef);
+        show(form, false);
+        show(resultBox, true);
+        show(passBox, false);
+        if (resultMsg) resultMsg.textContent = "已送出登記，等待授權。";
         setStatus("", false);
       } catch (err) {
         const code = String(err && err.code ? err.code : "");
         setStatus(code.includes("permission-denied") ? "沒有權限送出，請聯繫管理員。": "送出失敗，請稍後再試。", true);
       } finally {
-        if (btnSubmit) btnSubmit.disabled = false;
+        if (btnFooterSubmit) btnFooterSubmit.disabled = false;
       }
     });
   };

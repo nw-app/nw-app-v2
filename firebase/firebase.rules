@@ -45,12 +45,16 @@ service cloud.firestore {
           "outAt",
           "keep",
           "source",
+          "status",
+          "passAuthorized",
+          "passAuthorizedAt",
           "createdAt",
           "updatedAt",
           "createdBy",
           "createdByName"
         ])
         && request.resource.data.source == "self"
+        && request.resource.data.status == "pending"
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.createdByName == "訪客自填"
         && request.resource.data.qrToken == visitorId
@@ -80,8 +84,16 @@ service cloud.firestore {
         && request.resource.data.keep == null
         && request.resource.data.inAt == null
         && request.resource.data.outAt == null
+        && request.resource.data.passAuthorized == false
+        && request.resource.data.passAuthorizedAt == null
         && request.resource.data.createdAt is timestamp
         && request.resource.data.updatedAt is timestamp;
+    }
+
+    function isVisitorSelfGet() {
+      return request.auth != null
+        && resource.data.get('source', '') == "self"
+        && resource.data.get('createdBy', '') == request.auth.uid;
     }
 
     match /users/{uid} {
@@ -192,7 +204,19 @@ service cloud.firestore {
       }
 
       match /visitors/{visitorId} {
-        allow read, list: if request.auth != null && (
+        allow get: if request.auth != null && (
+          isAdmin()
+          || (
+            isCommunityStaff()
+            && (
+              slug == getUserData().community
+              || get(/databases/$(database)/documents/communities/$(slug)).data.get('username', '') == getUserData().community
+              || get(/databases/$(database)/documents/communities/$(slug)).data.get('id', '') == getUserData().community
+            )
+          )
+          || isVisitorSelfGet()
+        );
+        allow list: if request.auth != null && (
           isAdmin()
           || (
             isCommunityStaff()

@@ -1,10 +1,11 @@
-const CACHE_VERSION = "nwapp-v104";
+const CACHE_VERSION = "nwapp-v105";
 const PRECACHE = [
   "./",
   "./index.html",
   "./system.html",
   "./admin.html",
   "./member.html",
+  "./visitor.html",
   "./css/index.css",
   "./css/system.css",
   "./css/admin.css",
@@ -13,6 +14,7 @@ const PRECACHE = [
   "./js/system.js",
   "./js/admin.js",
   "./js/member.js",
+  "./js/visitor.js",
   "./js/pwa.js",
   "./css/pwa.css",
   "./js/firebase-config.js",
