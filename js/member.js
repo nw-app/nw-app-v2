@@ -57,7 +57,14 @@
 
   function defaultConfig() {
     const toButton = (x) => ({ enabled: true, url: x.defaultUrl });
-    return { residentButtons: Object.fromEntries(catalogResidentButtons.map((x) => [x.id, toButton(x)])) };
+    return { 
+      residentButtons: Object.fromEntries(catalogResidentButtons.map((x) => [x.id, toButton(x)])),
+      rowAImages: [],
+      rowAInterval: 5,
+      rowDButtons: defaultRowDButtons.map(b => ({ ...b })),
+      rowFButtons: defaultRowFButtons.map(b => ({ ...b })),
+      serviceUrl: ""
+    };
   }
 
   function loadAccounts() {
@@ -149,12 +156,39 @@
     try {
       const parsed = state.config && typeof state.config === "object" ? state.config : {};
       const d = defaultConfig();
+      
+      const mergeButtons = (saved, defaults) => {
+        const result = defaults.map(b => ({ ...b }));
+        if (Array.isArray(saved)) {
+          saved.forEach((b, i) => {
+            if (i < result.length && b) {
+              if (b.name) result[i].name = b.name;
+              if (b.url) result[i].url = b.url;
+              if (b.data) result[i].data = b.data;
+              if (b.icon) result[i].icon = b.icon;
+            }
+          });
+        }
+        return result;
+      };
+
+      const rowAImages = (() => {
+        const defaults = [
+          { url: "photo/b01.png", data: "" },
+          { url: "photo/b02.png", data: "" }
+        ];
+        if (!Array.isArray(parsed.rowAImages)) return defaults;
+        const configured = parsed.rowAImages.filter(img => img && (img.url || img.data));
+        return configured.length > 0 ? configured : defaults;
+      })();
+
       return { 
         residentButtons: { ...d.residentButtons, ...(parsed.residentButtons || {}) },
-        rowAImages: parsed.rowAImages || [],
+        rowAImages: rowAImages,
         rowAInterval: parsed.rowAInterval || 5,
-        rowDButtons: Array.isArray(parsed.rowDButtons) && parsed.rowDButtons.length > 0 ? parsed.rowDButtons : defaultRowDButtons,
-        rowFButtons: Array.isArray(parsed.rowFButtons) && parsed.rowFButtons.length > 0 ? parsed.rowFButtons : defaultRowFButtons
+        rowDButtons: mergeButtons(parsed.rowDButtons, defaultRowDButtons),
+        rowFButtons: mergeButtons(parsed.rowFButtons, defaultRowFButtons),
+        serviceUrl: parsed.serviceUrl || ""
       };
     } catch {
       return defaultConfig();
@@ -174,10 +208,11 @@
 
   function ensureConfigSubscription() {
     const cid = resolveActiveCommunityId();
-    configDocRef(cid).get().then((doc) => {
+    if (state._configUnsub) state._configUnsub();
+    state._configUnsub = configDocRef(cid).onSnapshot((doc) => {
       state.config = doc && doc.exists ? (doc.data() || null) : null;
       render();
-    }).catch(() => {
+    }, () => {
       state.config = null;
       render();
     });
@@ -226,6 +261,17 @@
     navEl.querySelectorAll("a").forEach((a) => {
       a.addEventListener("click", (e) => {
         e.preventDefault();
+        const moduleId = a.getAttribute("data-id");
+        if (moduleId === "resident-service") {
+          const cfg = loadConfig();
+          const serviceModal = document.getElementById("serviceModal");
+          const serviceIframe = document.getElementById("serviceIframe");
+          if (serviceModal && serviceIframe) {
+            serviceIframe.src = cfg.serviceUrl || "";
+            serviceModal.hidden = false;
+          }
+          return;
+        }
         location.hash = a.getAttribute("href");
       });
     });
@@ -446,6 +492,24 @@
   }
   if (btnNotificationModalBackdrop) {
     btnNotificationModalBackdrop.addEventListener("click", closeNotificationModal);
+  }
+
+  // Service Modal Logic
+  const serviceModal = document.getElementById("serviceModal");
+  const btnCloseServiceModal = document.getElementById("btnCloseServiceModal");
+  const btnServiceModalBackdrop = document.getElementById("btnServiceModalBackdrop");
+  const serviceIframe = document.getElementById("serviceIframe");
+
+  const closeServiceModal = () => {
+    if (serviceModal) serviceModal.hidden = true;
+    if (serviceIframe) serviceIframe.src = "";
+  };
+
+  if (btnCloseServiceModal) {
+    btnCloseServiceModal.addEventListener("click", closeServiceModal);
+  }
+  if (btnServiceModalBackdrop) {
+    btnServiceModalBackdrop.addEventListener("click", closeServiceModal);
   }
 
   const bindSignOut = () => {

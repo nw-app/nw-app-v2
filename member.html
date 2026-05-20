@@ -56,13 +56,6 @@
       </footer>
     </div>
 
-    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-    <script src="js/firebase-config.js"></script>
-    <script src="js/member.js"></script>
-    <script src="js/pwa.js"></script>
-
     <div class="modal" id="notificationModal" hidden>
       <div class="modal-backdrop" id="btnNotificationModalBackdrop"></div>
       <div class="modal-dialog large" role="dialog" aria-modal="true" aria-labelledby="notificationModalTitle">
@@ -74,6 +67,19 @@
           <div style="display: flex; align-items: center; justify-content: center; height: 100%; font-size: 24px; color: #999;">
             開發中
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="serviceModal" hidden>
+      <div class="modal-backdrop" id="btnServiceModalBackdrop"></div>
+      <div class="modal-dialog full" role="dialog" aria-modal="true" aria-labelledby="serviceModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="serviceModalTitle">客服中心</h3>
+          <button class="modal-close" type="button" id="btnCloseServiceModal" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body no-padding">
+          <iframe id="serviceIframe" src="" frameborder="0" style="width: 100%; height: 100%; display: block;"></iframe>
         </div>
       </div>
     </div>
@@ -111,5 +117,12 @@
         </form>
       </div>
     </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/member.js"></script>
+    <script src="js/pwa.js"></script>
   </body>
 </html>

@@ -12,6 +12,10 @@
   --tap: 48px;
   --sidebar-w: 260px;
 }
+a, button {
+  cursor: pointer !important;
+}
+
 * { 
   box-sizing: border-box; 
   -ms-overflow-style: none;  /* IE and Edge */
@@ -427,6 +431,7 @@ a { color: inherit; text-decoration: none; }
   text-decoration: none;
   color: var(--text);
   padding: 4px;
+  cursor: pointer !important;
 }
 .grid-btn-icon {
   width: 32px;
@@ -474,7 +479,7 @@ a { color: inherit; text-decoration: none; }
   border: 0;
   background: transparent;
   color: var(--text);
-  cursor: pointer;
+  cursor: pointer !important;
   transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
   min-width: 0;
 }

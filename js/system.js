@@ -1483,7 +1483,7 @@
     };
 
     const setActiveUnitTab = (tabId) => {
-      const validTabs = ["units", "features", "row-a", "row-b", "row-d", "row-f"];
+      const validTabs = ["units", "features", "row-a", "row-b", "row-d", "row-f", "service"];
       const next = validTabs.includes(tabId) ? tabId : "units";
       unitActiveTab = next;
       if (!unitModal) return;
@@ -1501,18 +1501,14 @@
         if (unitTitleTextEl) unitTitleTextEl.textContent = "功能列表";
       } else if (next === "row-a") {
         if (unitTitleTextEl) unitTitleTextEl.textContent = "圖覽設定";
-      } else if (next === "row-d") {
-        if (unitTitleTextEl) unitTitleTextEl.textContent = "社紐設定";
-        renderRowButtonSettings("rowDButtonList", "rowDButtons", defaultRowDButtons);
-      } else if (next === "row-f") {
-        if (unitTitleTextEl) unitTitleTextEl.textContent = "生紐設定";
-        renderRowButtonSettings("rowFButtonList", "rowFButtons", defaultRowFButtons);
       } else if (next === "row-b") {
         if (unitTitleTextEl) unitTitleTextEl.textContent = "呼叫設定";
       } else if (next === "row-d") {
         if (unitTitleTextEl) unitTitleTextEl.textContent = "社紐設定";
       } else if (next === "row-f") {
         if (unitTitleTextEl) unitTitleTextEl.textContent = "生紐設定";
+      } else if (next === "service") {
+        if (unitTitleTextEl) unitTitleTextEl.textContent = "客服設定";
       } else {
         if (unitTitleTextEl) unitTitleTextEl.textContent = "戶號列表";
       }
@@ -1765,6 +1761,13 @@
       });
     };
 
+    const renderServiceSettings = (cfg) => {
+      const input = document.getElementById("modal_service_url");
+      if (input) {
+        input.value = cfg && cfg.serviceUrl ? cfg.serviceUrl : "";
+      }
+    };
+
     const closeUnitModal = () => {
       if (!unitModal) return;
       unitModal.hidden = true;
@@ -1800,10 +1803,16 @@
           unitConfigCache = cfg || {};
           renderUnitFeatureList(unitConfigCache);
           renderRowAImageSettings(unitConfigCache);
+          renderRowButtonSettings("rowDButtonList", "rowDButtons", defaultRowDButtons);
+          renderRowButtonSettings("rowFButtonList", "rowFButtons", defaultRowFButtons);
+          renderServiceSettings(unitConfigCache);
         }).catch(() => {
           unitConfigCache = {};
           renderUnitFeatureList(unitConfigCache);
           renderRowAImageSettings(unitConfigCache);
+          renderRowButtonSettings("rowDButtonList", "rowDButtons", defaultRowDButtons);
+          renderRowButtonSettings("rowFButtonList", "rowFButtons", defaultRowFButtons);
+          renderServiceSettings(unitConfigCache);
         });
       }
       unitTextarea.focus();
@@ -1995,6 +2004,7 @@
 
           const rowDButtons = getButtonsFromDom("rowDButtonList", defaultRowDButtons) || (unitConfigCache.rowDButtons || defaultRowDButtons.map(b => ({ ...b })));
           const rowFButtons = getButtonsFromDom("rowFButtonList", defaultRowFButtons) || (unitConfigCache.rowFButtons || defaultRowFButtons.map(b => ({ ...b })));
+          const serviceUrl = document.getElementById("modal_service_url")?.value || "";
 
           await Promise.all([
             db.collection("communities").doc(id).set(
@@ -2009,6 +2019,7 @@
                 rowAInterval,
                 rowDButtons,
                 rowFButtons,
+                serviceUrl,
                 updatedAt: FieldValue.serverTimestamp() 
               },
               { merge: true }
