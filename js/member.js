@@ -20,12 +20,34 @@
   const STORAGE_ACCOUNTS = "csp_accounts_v1";
   const STORAGE_ACTIVE_COMMUNITY = "csp_active_community_v1";
 
+  const defaultRowDButtons = [
+    { name: "AI對話", icon: "photo/b01.png", url: "#" },
+    { name: "郵件包裹", icon: "photo/b02.png", url: "#" },
+    { name: "監視系統", icon: "photo/b03.png", url: "#" },
+    { name: "財務報表", icon: "photo/b04.png", url: "#" },
+    { name: "社區園地", icon: "photo/b05.png", url: "#" },
+    { name: "區大直播", icon: "photo/b06.png", url: "#" },
+    { name: "設施預約", icon: "photo/b07.png", url: "#" },
+    { name: "會議記錄", icon: "photo/b08.png", url: "#" },
+  ];
+
+  const defaultRowFButtons = [
+    { name: "福利通", icon: "photo/b09.png", url: "#" },
+    { name: "銀髮族", icon: "photo/b10.png", url: "#" },
+    { name: "美食街", icon: "photo/b11.png", url: "#" },
+    { name: "購物樂", icon: "photo/b12.png", url: "#" },
+    { name: "聽音樂", icon: "photo/b13.png", url: "#" },
+    { name: "影視台", icon: "photo/b14.png", url: "#" },
+    { name: "電子書", icon: "photo/b15.png", url: "#" },
+    { name: "遊戲網", icon: "photo/b16.png", url: "#" },
+  ];
+
   const state = {
     communities: [],
     config: null,
   };
   const catalogResidentButtons = [
-    { id: "resident-bulletin", name: "通知", defaultUrl: "#resident/resident-bulletin", hint: "", icon: "bell" },
+    { id: "resident-service", name: "客服", defaultUrl: "#resident/resident-service", hint: "", icon: "headset" },
   ];
 
   const navEl = document.getElementById("nav");
@@ -130,7 +152,9 @@
       return { 
         residentButtons: { ...d.residentButtons, ...(parsed.residentButtons || {}) },
         rowAImages: parsed.rowAImages || [],
-        rowAInterval: parsed.rowAInterval || 5
+        rowAInterval: parsed.rowAInterval || 5,
+        rowDButtons: Array.isArray(parsed.rowDButtons) && parsed.rowDButtons.length > 0 ? parsed.rowDButtons : defaultRowDButtons,
+        rowFButtons: Array.isArray(parsed.rowFButtons) && parsed.rowFButtons.length > 0 ? parsed.rowFButtons : defaultRowFButtons
       };
     } catch {
       return defaultConfig();
@@ -224,6 +248,16 @@
             </svg>
           `;
     }
+    if (kind === "headset") {
+      return `
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M4 14V11a8 8 0 1 1 16 0v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M18 14h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M4 14h2a2 2 0 0 0 2 2v2a2 2 0 0 0-2 2H4a2 2 0 0 0-2-2v-2a2 2 0 0 0 2-2z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M20 18v2a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          `;
+    }
     return `
           <svg viewBox="0 0 24 24" fill="none">
             <path d="M12 21.5c5.247 0 9.5-4.253 9.5-9.5S17.247 2.5 12 2.5 2.5 6.753 2.5 12 6.753 21.5 12 21.5Z" stroke="currentColor" stroke-width="1.7" opacity="0.9"/>
@@ -236,9 +270,9 @@
   function setActive(moduleId) {
     navEl.querySelectorAll("a").forEach((a) => a.setAttribute("aria-current", a.dataset.id === moduleId ? "page" : "false"));
 
-    if (moduleId === "resident-bulletin") {
-      pageTitleEl.textContent = "";
-      pageSubtitleEl.textContent = "";
+    if (moduleId === "resident-service") {
+      pageTitleEl.textContent = "客服中心";
+      pageSubtitleEl.textContent = "聯繫社區管理處或系統客服（開發中）";
       contentEl.innerHTML = "";
       return;
     }
@@ -251,6 +285,23 @@
   }
 
   function homeView() {
+    const cfg = loadConfig();
+    const renderButtonGrid = (buttons) => {
+      if (!buttons || buttons.length === 0) return "";
+      return `
+        <div class="button-grid">
+          ${buttons.map(b => `
+            <a href="${b.url || "#"}" class="grid-btn">
+              <div class="grid-btn-icon">
+                <img src="${b.data || b.icon || "photo/logo.png"}" alt="${b.name}" />
+              </div>
+              <div class="grid-btn-label">${b.name}</div>
+            </a>
+          `).join("")}
+        </div>
+      `;
+    };
+
     return `
       <div class="home-grid">
         <section class="row-a" id="rowACarousel">
@@ -259,11 +310,17 @@
             <div class="carousel-dots" id="carouselDots"></div>
           </div>
         </section>
-        <section class="row-b">SOS</section>
+        <section class="row-b">
+          <button class="btn-sos" type="button" onclick="alert('SOS 呼叫已發出')">SOS</button>
+        </section>
         <section class="row-c">社區服務</section>
-        <section class="row-d">社區服務按鈕</section>
+        <section class="row-d">
+          ${renderButtonGrid(cfg.rowDButtons)}
+        </section>
         <section class="row-e">生活服務</section>
-        <section class="row-f">生活服務按鈕</section>
+        <section class="row-f">
+          ${renderButtonGrid(cfg.rowFButtons)}
+        </section>
       </div>
     `;
   }
@@ -366,6 +423,29 @@
     btnGoCommunity.addEventListener("click", () => {
       location.href = "admin.html#community/community-dashboard";
     });
+  }
+
+  // Notification Modal Logic
+  const btnNotification = document.getElementById("btnNotification");
+  const notificationModal = document.getElementById("notificationModal");
+  const btnCloseNotificationModal = document.getElementById("btnCloseNotificationModal");
+  const btnNotificationModalBackdrop = document.getElementById("btnNotificationModalBackdrop");
+
+  if (btnNotification && notificationModal) {
+    btnNotification.addEventListener("click", () => {
+      notificationModal.hidden = false;
+    });
+  }
+
+  const closeNotificationModal = () => {
+    if (notificationModal) notificationModal.hidden = true;
+  };
+
+  if (btnCloseNotificationModal) {
+    btnCloseNotificationModal.addEventListener("click", closeNotificationModal);
+  }
+  if (btnNotificationModalBackdrop) {
+    btnNotificationModalBackdrop.addEventListener("click", closeNotificationModal);
   }
 
   const bindSignOut = () => {

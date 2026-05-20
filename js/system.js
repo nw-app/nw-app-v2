@@ -61,10 +61,29 @@
   ];
 
   const catalogResidentButtons = [
-    { id: "resident-bulletin", name: "公告", defaultUrl: "#resident/resident-bulletin" },
-    { id: "resident-parcel", name: "包裹通知", defaultUrl: "#resident/resident-parcel" },
-    { id: "resident-facility", name: "設施預約", defaultUrl: "#resident/resident-facility" },
-    { id: "resident-parking", name: "綠色停車", defaultUrl: "#resident/resident-parking" },
+    { id: "resident-bulletin", name: "通知", defaultUrl: "#resident/resident-bulletin" },
+  ];
+
+  const defaultRowDButtons = [
+    { name: "AI對話", icon: "photo/b01.png", url: "#" },
+    { name: "郵件包裹", icon: "photo/b02.png", url: "#" },
+    { name: "監視系統", icon: "photo/b03.png", url: "#" },
+    { name: "財務報表", icon: "photo/b04.png", url: "#" },
+    { name: "社區園地", icon: "photo/b05.png", url: "#" },
+    { name: "區大直播", icon: "photo/b06.png", url: "#" },
+    { name: "設施預約", icon: "photo/b07.png", url: "#" },
+    { name: "會議記錄", icon: "photo/b08.png", url: "#" },
+  ];
+
+  const defaultRowFButtons = [
+    { name: "福利通", icon: "photo/b09.png", url: "#" },
+    { name: "銀髮族", icon: "photo/b10.png", url: "#" },
+    { name: "美食街", icon: "photo/b11.png", url: "#" },
+    { name: "購物樂", icon: "photo/b12.png", url: "#" },
+    { name: "聽音樂", icon: "photo/b13.png", url: "#" },
+    { name: "影視台", icon: "photo/b14.png", url: "#" },
+    { name: "電子書", icon: "photo/b15.png", url: "#" },
+    { name: "遊戲網", icon: "photo/b16.png", url: "#" },
   ];
 
   function defaultConfig() {
@@ -72,6 +91,8 @@
     return {
       communityButtons: Object.fromEntries(catalogCommunityButtons.map((x) => [x.id, toButton(x)])),
       residentButtons: Object.fromEntries(catalogResidentButtons.map((x) => [x.id, toButton(x)])),
+      rowDButtons: defaultRowDButtons.map(b => ({ ...b })),
+      rowFButtons: defaultRowFButtons.map(b => ({ ...b })),
     };
   }
 
@@ -109,6 +130,8 @@
       return {
         communityButtons: { ...d.communityButtons, ...(parsed.communityButtons || {}) },
         residentButtons: { ...d.residentButtons, ...(parsed.residentButtons || {}) },
+        rowDButtons: parsed.rowDButtons || d.rowDButtons,
+        rowFButtons: parsed.rowFButtons || d.rowFButtons,
       };
     } catch {
       return defaultConfig();
@@ -121,6 +144,8 @@
       {
         communityButtons: cfg && cfg.communityButtons ? cfg.communityButtons : {},
         residentButtons: cfg && cfg.residentButtons ? cfg.residentButtons : {},
+        rowDButtons: cfg && cfg.rowDButtons ? cfg.rowDButtons : [],
+        rowFButtons: cfg && cfg.rowFButtons ? cfg.rowFButtons : [],
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
@@ -1476,6 +1501,12 @@
         if (unitTitleTextEl) unitTitleTextEl.textContent = "功能列表";
       } else if (next === "row-a") {
         if (unitTitleTextEl) unitTitleTextEl.textContent = "圖覽設定";
+      } else if (next === "row-d") {
+        if (unitTitleTextEl) unitTitleTextEl.textContent = "社紐設定";
+        renderRowButtonSettings("rowDButtonList", "rowDButtons", defaultRowDButtons);
+      } else if (next === "row-f") {
+        if (unitTitleTextEl) unitTitleTextEl.textContent = "生紐設定";
+        renderRowButtonSettings("rowFButtonList", "rowFButtons", defaultRowFButtons);
       } else if (next === "row-b") {
         if (unitTitleTextEl) unitTitleTextEl.textContent = "呼叫設定";
       } else if (next === "row-d") {
@@ -1642,6 +1673,93 @@
             preview.innerHTML = `<img src="${url}" />`;
           } else if (!preview.hasAttribute("data-slot-data")) {
             preview.innerHTML = "<span>8:3</span>";
+          }
+        });
+      });
+    };
+
+    const renderRowButtonSettings = (containerId, storeKey, defaultButtons) => {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      const cfg = unitConfigCache || {};
+      const buttons = Array.isArray(cfg[storeKey]) ? cfg[storeKey] : defaultButtons.map(b => ({ ...b }));
+
+      let html = "";
+      for (let i = 0; i < 8; i++) {
+        const b = buttons[i] || { name: "", icon: "", url: "", data: "" };
+        html += `
+          <div class="button-slot" data-slot-index="${i}">
+            <div class="btn-slot-preview" id="${containerId}_preview_${i}">
+              ${b.data || b.icon ? `<img src="${b.data || b.icon}" />` : "<span>圖</span>"}
+            </div>
+            <div class="btn-slot-inputs">
+              <div class="btn-slot-row">
+                <label>按鈕名稱</label>
+                <input type="text" value="${b.name}" data-btn-name="${i}" />
+              </div>
+              <div class="btn-slot-row">
+                <label>連結網址</label>
+                <input type="text" value="${b.url || ""}" placeholder="#" data-btn-url="${i}" />
+              </div>
+              <div class="btn-slot-actions">
+                <input type="text" placeholder="圖片網址" value="${b.icon && !b.icon.startsWith('photo/') ? b.icon : ''}" data-btn-icon="${i}" />
+                <button class="btn btn-sm" type="button" data-btn-upload="${i}">上傳</button>
+                <input type="file" accept="image/*" hidden data-btn-file="${i}" />
+                <button class="btn btn-sm danger" type="button" data-btn-clear="${i}">清除</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      container.innerHTML = html;
+
+      // Bind events
+      container.querySelectorAll("[data-btn-upload]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const idx = btn.getAttribute("data-btn-upload");
+          container.querySelector(`[data-btn-file="${idx}"]`).click();
+        });
+      });
+
+      container.querySelectorAll("[data-btn-file]").forEach(input => {
+        input.addEventListener("change", async () => {
+          const idx = input.getAttribute("data-btn-file");
+          const file = input.files[0];
+          if (!file) return;
+          try {
+            const dataUrl = await fileToCompressedDataUrl(file);
+            const preview = document.getElementById(`${containerId}_preview_${idx}`);
+            preview.innerHTML = `<img src="${dataUrl}" />`;
+            preview.setAttribute("data-slot-data", dataUrl);
+          } catch (err) {
+            console.error(err);
+          }
+        });
+      });
+
+      container.querySelectorAll("[data-btn-clear]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const idx = btn.getAttribute("data-btn-clear");
+          const preview = document.getElementById(`${containerId}_preview_${idx}`);
+          const def = defaultButtons[idx] || { icon: "" };
+          preview.innerHTML = def.icon ? `<img src="${def.icon}" />` : "<span>圖</span>";
+          preview.removeAttribute("data-slot-data");
+          container.querySelector(`[data-btn-icon="${idx}"]`).value = "";
+          container.querySelector(`[data-btn-name="${idx}"]`).value = def.name || "";
+          container.querySelector(`[data-btn-url="${idx}"]`).value = "#";
+        });
+      });
+
+      container.querySelectorAll("[data-btn-icon]").forEach(input => {
+        input.addEventListener("input", () => {
+          const idx = input.getAttribute("data-btn-icon");
+          const url = input.value.trim();
+          const preview = document.getElementById(`${containerId}_preview_${idx}`);
+          if (url) {
+            preview.innerHTML = `<img src="${url}" />`;
+          } else if (!preview.hasAttribute("data-slot-data")) {
+            const def = defaultButtons[idx] || { icon: "" };
+            preview.innerHTML = def.icon ? `<img src="${def.icon}" />` : "<span>圖</span>";
           }
         });
       });
@@ -1855,6 +1973,29 @@
           }
           const rowAInterval = parseInt(document.getElementById("modal_rowa_interval")?.value) || 5;
 
+          const getButtonsFromDom = (containerId, defaultButtons) => {
+            const container = document.getElementById(containerId);
+            if (!container) return null;
+            const buttons = [];
+            for (let i = 0; i < 8; i++) {
+              const name = container.querySelector(`[data-btn-name="${i}"]`)?.value || "";
+              const url = container.querySelector(`[data-btn-url="${i}"]`)?.value || "";
+              const iconUrl = container.querySelector(`[data-btn-icon="${i}"]`)?.value || "";
+              const data = document.getElementById(`${containerId}_preview_${i}`)?.getAttribute("data-slot-data") || "";
+              const def = defaultButtons[i] || { icon: "" };
+              buttons.push({
+                name,
+                url,
+                icon: iconUrl || (data ? "" : def.icon),
+                data: data
+              });
+            }
+            return buttons;
+          };
+
+          const rowDButtons = getButtonsFromDom("rowDButtonList", defaultRowDButtons) || (unitConfigCache.rowDButtons || defaultRowDButtons.map(b => ({ ...b })));
+          const rowFButtons = getButtonsFromDom("rowFButtonList", defaultRowFButtons) || (unitConfigCache.rowFButtons || defaultRowFButtons.map(b => ({ ...b })));
+
           await Promise.all([
             db.collection("communities").doc(id).set(
               { units: uniq, updatedAt: FieldValue.serverTimestamp() },
@@ -1866,6 +2007,8 @@
                 communityButtonsOrder: featureOrder, 
                 rowAImages,
                 rowAInterval,
+                rowDButtons,
+                rowFButtons,
                 updatedAt: FieldValue.serverTimestamp() 
               },
               { merge: true }
