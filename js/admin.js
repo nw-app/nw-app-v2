@@ -50,6 +50,7 @@
 
   const toastEl = document.getElementById("toast");
   const contentEl = document.getElementById("content");
+  const subnavEl = document.getElementById("subnav");
   const roleSelectEl = document.getElementById("roleSelect");
   const btnSignOut = document.getElementById("btnSignOut");
   const globalSearchEl = document.getElementById("globalSearch");
@@ -523,7 +524,6 @@
           <div class="status" id="visitorQrStatus" hidden></div>
         </div>
         <div class="modal-ft">
-          <button class="btn" type="button" id="btnCopyVisitorQrUrl">複製</button>
           <button class="btn" type="button" id="btnOpenVisitorQrUrl">開啟</button>
           <button class="btn" type="button" data-modal-close="1">關閉</button>
         </div>
@@ -542,7 +542,6 @@
     const inputEl = modal.querySelector("#visitorQrUrl");
     const imgWrap = modal.querySelector("#visitorQrImgWrap");
     const statusEl = modal.querySelector("#visitorQrStatus");
-    const btnCopy = modal.querySelector("#btnCopyVisitorQrUrl");
     const btnOpen = modal.querySelector("#btnOpenVisitorQrUrl");
 
     const setStatus = (msg, isError) => {
@@ -560,12 +559,16 @@
       return String((byUsername && byUsername.username) || cid).trim() || cid;
     })();
     const publicBase = (() => {
-      try {
-        const cfg = window.FIREBASE_CONFIG || null;
-        const pid = cfg && typeof cfg.projectId === "string" ? String(cfg.projectId || "").trim() : "";
-        if (pid) return `https://${pid}.web.app/`;
-      } catch {}
-      return `${location.origin}/`;
+      const origin = location.origin.endsWith("/") ? location.origin.slice(0, -1) : location.origin;
+      const pathParts = location.pathname.split("/");
+      pathParts.pop(); // 移除目前的檔名 (如 admin.html)
+      const basePath = pathParts.join("/");
+      const fullBase = `${origin}${basePath}/`;
+
+      const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname.startsWith("192.168.");
+      // 如果是在本地開發且有設定 projectId，提供正式網址選項，方便手機掃碼測試
+      // 但預設仍使用目前的網址，確保在任何環境下都能運作
+      return fullBase;
     })();
     const u = new URL("visitor.html", publicBase);
     u.searchParams.set("c", key);
@@ -600,32 +603,15 @@
     renderQr();
     setStatus("提示：此網址為固定產生（依社區）。", false);
 
-    const onCopy = async () => {
-      const url = String(inputEl ? inputEl.value : "").trim();
-      if (!url) return;
-      try {
-        if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
-          await navigator.clipboard.writeText(url);
-          toast("已複製");
-          return;
-        }
-      } catch {}
-      try {
-        window.prompt("複製此網址", url);
-      } catch {}
-    };
-
     const onOpen = () => {
       const url = String(inputEl ? inputEl.value : "").trim();
       if (!url) return;
       try { window.open(url, "_blank", "noopener,noreferrer"); } catch { location.href = url; }
     };
 
-    if (btnCopy) btnCopy.addEventListener("click", onCopy);
     if (btnOpen) btnOpen.addEventListener("click", onOpen);
     const oldDetach = detach;
     detach = () => {
-      try { if (btnCopy) btnCopy.removeEventListener("click", onCopy); } catch {}
       try { if (btnOpen) btnOpen.removeEventListener("click", onOpen); } catch {}
       oldDetach();
     };
@@ -1660,6 +1646,7 @@
   }
 
   function renderResidentsModule() {
+    if (subnavEl) subnavEl.innerHTML = "";
     if (!Array.isArray(state.communities) || state.communities.length === 0) {
       contentEl.innerHTML = `
         <section class="card residents-page">
@@ -1686,6 +1673,13 @@
     const c = (accounts.communities || []).find((x) => x && String(x.id || "") === String(cid || "")) || null;
     const cname = c ? String(c.name || "").trim() : "";
 
+    if (subnavEl) {
+      subnavEl.innerHTML = `
+        <button class="btn btn-sm" type="button" id="btnUnits">戶號列表</button>
+        <button class="btn btn-primary btn-sm" type="button" id="btnAddResident">新增帳號</button>
+      `.trim();
+    }
+
     contentEl.innerHTML = `
       <section class="card residents-page">
         <div class="card-hd">
@@ -1695,10 +1689,6 @@
               <h2>住戶造冊</h2>
               <p>${cname || "—"}</p>
             </div>
-          </div>
-          <div class="resident-page-actions">
-            <button class="btn" type="button" id="btnUnits">戶號列表</button>
-            <button class="btn btn-primary" type="button" id="btnAddResident">新增帳號</button>
           </div>
         </div>
         <div class="card-bd">
@@ -2489,6 +2479,7 @@
   }
 
   function renderVisitorModule() {
+    if (subnavEl) subnavEl.innerHTML = "";
     stopVisitorsSubscription();
     if (!Array.isArray(state.communities) || state.communities.length === 0) {
       contentEl.innerHTML = `
@@ -2535,6 +2526,18 @@
     let visitorCommunityTryIndex = 0;
     const visitorDesc = (moduleCatalog.find((m) => m && m.id === "visitor") || {}).desc || "到訪資訊、車牌、進出時間管理";
 
+    const pad2 = (n) => String(n).padStart(2, "0");
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
+
+    if (subnavEl) {
+      subnavEl.innerHTML = `
+        <button class="btn btn-sm" type="button" id="btnVisitorQr">訪客QR Code</button>
+        <button class="btn btn-sm" type="button" id="btnScanVisitor">掃碼登記</button>
+        <button class="btn btn-primary btn-sm" type="button" id="btnAddVisitor">新增訪客</button>
+      `.trim();
+    }
+
     contentEl.innerHTML = `
       <section class="card visitor-page">
         <div class="card-hd">
@@ -2545,13 +2548,17 @@
               <p>${visitorDesc}</p>
             </div>
           </div>
-          <div class="resident-page-actions">
-            <button class="btn" type="button" id="btnVisitorQr">訪客QR Code</button>
-            <button class="btn" type="button" id="btnScanVisitor">掃碼登記</button>
-            <button class="btn btn-primary" type="button" id="btnAddVisitor">新增訪客</button>
-          </div>
         </div>
         <div class="card-bd" id="visitorPanel">
+          <div class="visitor-date-filter" style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+            <button class="icon-btn" type="button" id="btnPrevDate" title="前一天">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <input id="visitorDate" type="date" value="${todayStr}" max="${todayStr}" style="height:44px; padding:0 12px; border-radius:14px; border:1px solid rgba(17,24,39,0.14); background:#fff; outline:none; font:inherit; flex:1; text-align:center;" />
+            <button class="icon-btn" type="button" id="btnNextDate" title="後一天">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
           <div class="visitor-toolbar">
             <div class="visitor-total" id="visitorTotal">總筆數：—</div>
             <div class="search visitor-search">
@@ -2568,6 +2575,9 @@
     const listEl = document.getElementById("visitorList");
     const statusEl = document.getElementById("visitorStatus");
     const searchEl = document.getElementById("visitorSearch");
+    const dateEl = document.getElementById("visitorDate");
+    const prevDateBtn = document.getElementById("btnPrevDate");
+    const nextDateBtn = document.getElementById("btnNextDate");
     const visitorQrBtn = document.getElementById("btnVisitorQr");
     const scanBtn = document.getElementById("btnScanVisitor");
     const addBtn = document.getElementById("btnAddVisitor");
@@ -2581,7 +2591,6 @@
       statusEl.classList.toggle("error", Boolean(isError));
     };
 
-    const pad2 = (n) => String(n).padStart(2, "0");
     const toLocalInputValue = (d) => {
       if (!(d instanceof Date) || !Number.isFinite(d.getTime())) return "";
       return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -2672,8 +2681,9 @@
             `<span class="field-k">拜訪人數：</span>${escapeHtml(party)}`,
             `<span class="field-k">電子郵件：</span>${escapeHtml(email || "—")}`,
           ].join("｜");
+          const isPending = String(v.status || "").toLowerCase() === "pending";
           return `
-            <div class="visitor-item" data-id="${String(v.id || "")}">
+            <div class="visitor-item ${isPending ? "pending" : ""}" data-id="${String(v.id || "")}">
               <div class="visitor-left">
                 <div class="visitor-text">
                   <div class="visitor-name">${name}</div>
@@ -2688,15 +2698,30 @@
                 </div>
               </div>
               <div class="visitor-actions">
-                <button class="icon-btn" type="button" data-pass aria-label="訪客證" title="訪客證">
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M6.5 4.8h11A2.2 2.2 0 0 1 19.7 7v10A2.2 2.2 0 0 1 17.5 19.2h-11A2.2 2.2 0 0 1 4.3 17V7A2.2 2.2 0 0 1 6.5 4.8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                    <path d="M8 9.2h2.2M13.8 9.2H16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                    <path d="M8 12h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                    <path d="M8 14.8h5.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                    <path d="M15.4 14.2a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0Z" stroke="currentColor" stroke-width="1.7"/>
-                  </svg>
+                <button class="icon-btn ${isPending ? "warning" : ""}" type="button" data-pass aria-label="${isPending ? "待審核" : "訪客證"}" title="${isPending ? "待審核" : "訪客證"}">
+                  ${isPending ? `
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                      <path d="M12 8v4l3 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  ` : `
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M6.5 4.8h11A2.2 2.2 0 0 1 19.7 7v10A2.2 2.2 0 0 1 17.5 19.2h-11A2.2 2.2 0 0 1 4.3 17V7A2.2 2.2 0 0 1 6.5 4.8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                      <path d="M8 9.2h2.2M13.8 9.2H16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                      <path d="M8 12h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                      <path d="M8 14.8h5.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                      <path d="M15.4 14.2a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0Z" stroke="currentColor" stroke-width="1.7"/>
+                    </svg>
+                  `}
                 </button>
+                ${isPending ? `
+                  <button class="icon-btn primary" type="button" data-auth aria-label="授權" title="授權">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                      <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                ` : ""}
                 <button class="icon-btn" type="button" data-edit aria-label="編輯" title="編輯">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-2.8l-.2-.2a2 2 0 0 0-2.8 0L5 17v3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
@@ -2745,13 +2770,35 @@
 
     const subscribeVisitors = () => {
       setStatus("讀取中...", false);
+      const Timestamp = firebase.firestore.Timestamp;
+      const dateVal = dateEl ? dateEl.value : "";
+      let selectedDate = new Date();
+      if (dateVal) {
+        const parts = dateVal.split("-");
+        selectedDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      }
+      const start = new Date(selectedDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(selectedDate);
+      end.setHours(23, 59, 59, 999);
+
+      // 檢查是否為今天，限制「後一天」按鈕
+      if (nextDateBtn) {
+        const now = new Date();
+        const isToday = selectedDate.getFullYear() === now.getFullYear() &&
+                        selectedDate.getMonth() === now.getMonth() &&
+                        selectedDate.getDate() === now.getDate();
+        nextDateBtn.disabled = isToday;
+      }
+
       try {
         const startAt = (slug) => {
           stopVisitorsSubscription();
           visitorCommunitySlug = String(slug || "").trim() || visitorCommunitySlug || "default";
           state.unsubVisitors = collRef()
+            .where("createdAt", ">=", Timestamp.fromDate(start))
+            .where("createdAt", "<=", Timestamp.fromDate(end))
             .orderBy("createdAt", "desc")
-            .limit(200)
             .onSnapshot(
             (snap) => {
               const list = (snap && snap.docs ? snap.docs : []).map((d) => {
@@ -2901,7 +2948,10 @@
 
       const setPurposeOtherVisible = () => {
         const isOther = purposeTypeEl && String(purposeTypeEl.value || "") === "其他";
-        if (purposeOtherField) purposeOtherField.hidden = !isOther;
+        if (purposeOtherField) {
+          purposeOtherField.hidden = !isOther;
+          purposeOtherField.style.display = isOther ? "" : "none";
+        }
       };
       setPurposeOtherVisible();
       setModalStatus("", false);
@@ -3014,6 +3064,8 @@
           payload.createdBy = String((auth.currentUser && auth.currentUser.uid) || "");
         payload.createdByName = String(creatorLabel || "").trim();
           payload.qrIssuedAt = FieldValue.serverTimestamp();
+          payload.status = "pending";
+          payload.passAuthorized = false;
         }
         try {
           await docRef.set(payload, { merge: true });
@@ -3048,6 +3100,8 @@
             createdBy: !isEdit ? String((auth.currentUser && auth.currentUser.uid) || "") : String(data.createdBy || ""),
             createdByName: !isEdit ? String(creatorLabel || "").trim() : String(data.createdByName || ""),
             createdAt: !isEdit ? clientCreatedAt : (data.createdAt || null),
+            status: !isEdit ? "pending" : (data.status || "pending"),
+            passAuthorized: !isEdit ? false : (data.passAuthorized || false),
           };
           const idx = visitors.findIndex((x) => String(x.id || "") === id);
           if (idx >= 0) visitors[idx] = { ...(visitors[idx] || {}), ...nextItem };
@@ -3059,33 +3113,9 @@
             return bt - at;
           });
           renderList();
+          if (!isEdit) toast("登記完成");
         } catch {
           toast("已儲存，但畫面更新失敗");
-        }
-
-        if (!isEdit) {
-          try {
-            openVisitorPassModal80({
-              cid: visitorCommunitySlug,
-              communityName: cname,
-              visitorId: id,
-              name,
-              unit,
-              purpose,
-              phone,
-              plate,
-              email,
-              partySize,
-              keep,
-              createdAt: clientCreatedAt,
-              createdByName: String(creatorName || "").trim(),
-              inAt: null,
-              outAt: null,
-              autoSendEmail: true,
-            });
-          } catch {
-            toast("已儲存，但無法開啟訪客證");
-          }
         }
 
         if (submitBtn) submitBtn.disabled = false;
@@ -3114,6 +3144,28 @@
     };
 
     if (searchEl) searchEl.addEventListener("input", renderList);
+    if (dateEl) dateEl.addEventListener("change", subscribeVisitors);
+
+    const changeDate = (offset) => {
+      if (!dateEl) return;
+      const cur = dateEl.value;
+      if (!cur) return;
+      const parts = cur.split("-");
+      const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      d.setDate(d.getDate() + offset);
+      
+      // 不允許超過今天
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      if (d > now) return;
+
+      dateEl.value = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+      subscribeVisitors();
+    };
+
+    if (prevDateBtn) prevDateBtn.addEventListener("click", () => changeDate(-1));
+    if (nextDateBtn) nextDateBtn.addEventListener("click", () => changeDate(1));
+
     if (addBtn) addBtn.addEventListener("click", () => openVisitorEditor("create"));
     if (scanBtn) scanBtn.addEventListener("click", () => openVisitorScanModal80({ cid: visitorCommunitySlug, onApplied: applyLocalVisitorPatch }));
     if (visitorQrBtn) visitorQrBtn.addEventListener("click", () => openVisitorQrModal80({ communityId: cid, communityName: cname }));
@@ -3148,8 +3200,103 @@
           openVisitorEditor("edit", v);
           return;
         }
+
+        const authBtn = e.target.closest("[data-auth]");
+        if (authBtn) {
+          const ok = await (window.nwConfirm ? window.nwConfirm({
+            title: "訪客核准",
+            message: `是否同意訪客「${String(v.name || "")}」的登記並核發訪客證？`,
+            okText: "同意",
+            cancelText: "不同意",
+            danger: false,
+          }) : Promise.resolve(window.confirm("是否同意核准？")));
+          
+          if (ok) {
+            try {
+              await collRef().doc(String(id)).update({
+                status: "approved",
+                passAuthorized: true,
+                updatedAt: FieldValue.serverTimestamp(),
+              });
+              v.status = "approved";
+              v.passAuthorized = true;
+              renderList();
+              // 同意後自動開啟訪客證
+              openVisitorPassModal80({
+                cid: visitorCommunitySlug,
+                communityName: cname,
+                visitorId: id,
+                name: String(v.name || ""),
+                unit: String(v.unit || ""),
+                purpose: String(v.purpose || ""),
+                phone: String(v.phone || ""),
+                plate: String(v.plate || ""),
+                email: String(v.email || ""),
+                partySize: v.partySize != null ? Number(v.partySize) : 1,
+                keep: v.keep || null,
+                createdAt: v.createdAt || null,
+                createdByName: String(v.createdByName || "").trim(),
+                inAt: v.inAt || null,
+                outAt: v.outAt || null,
+              });
+            } catch (err) {
+              toast("核准失敗");
+            }
+          }
+          return;
+        }
+
         const passBtn = e.target.closest("[data-pass]");
         if (passBtn) {
+          const isPending = String(v.status || "").toLowerCase() === "pending";
+          if (isPending) {
+            // 如果是待核准，點擊訪客證按鈕也可觸核准 (保留原邏輯或改為提示？)
+            // 這裡選擇保留原邏輯以相容操作習慣，但主要引導使用授權按鈕
+            authBtn ? authBtn.click() : null; 
+            // 由於 authBtn 是從 e.target 找的，這裡可能拿不到。直接呼叫 auth 邏輯或提示。
+            // 為了簡化，我們讓 data-pass 在 pending 時依然可以觸發核准。
+            const ok = await (window.nwConfirm ? window.nwConfirm({
+              title: "訪客核准",
+              message: `是否同意訪客「${String(v.name || "")}」的登記並核發訪客證？`,
+              okText: "同意",
+              cancelText: "不同意",
+              danger: false,
+            }) : Promise.resolve(window.confirm("是否同意核准？")));
+            
+            if (ok) {
+              try {
+                await collRef().doc(String(id)).update({
+                  status: "approved",
+                  passAuthorized: true,
+                  updatedAt: FieldValue.serverTimestamp(),
+                });
+                v.status = "approved";
+                v.passAuthorized = true;
+                renderList();
+                openVisitorPassModal80({
+                  cid: visitorCommunitySlug,
+                  communityName: cname,
+                  visitorId: id,
+                  name: String(v.name || ""),
+                  unit: String(v.unit || ""),
+                  purpose: String(v.purpose || ""),
+                  phone: String(v.phone || ""),
+                  plate: String(v.plate || ""),
+                  email: String(v.email || ""),
+                  partySize: v.partySize != null ? Number(v.partySize) : 1,
+                  keep: v.keep || null,
+                  createdAt: v.createdAt || null,
+                  createdByName: String(v.createdByName || "").trim(),
+                  inAt: v.inAt || null,
+                  outAt: v.outAt || null,
+                });
+              } catch (err) {
+                toast("核准失敗");
+              }
+            }
+            return;
+          }
+
           let createdByLabel = String(v.createdByName || "").trim();
           if (v.createdBy) {
             const resolved = await getCreatorLabel80(String(v.createdBy || "")).catch(() => "");
@@ -3362,6 +3509,7 @@
   }
 
   function renderDashboard() {
+    if (subnavEl) subnavEl.innerHTML = "";
     stopVisitorsSubscription();
     contentEl.innerHTML = `
       <div class="grid" id="moduleGrid"></div>
@@ -3424,6 +3572,7 @@
       renderVisitorModule();
       return;
     }
+    if (subnavEl) subnavEl.innerHTML = "";
     const m = moduleCatalog.find((x) => x && x.id === moduleId) || null;
     if (!m) {
       toast("尚未設定此頁面（示意）");

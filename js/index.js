@@ -71,8 +71,362 @@
 
   if (btnApply) {
     btnApply.addEventListener("click", () => {
-      setStatus("請聯絡管理員申請帳號。", false);
+      openApplyResidentModal();
     });
+  }
+
+  function openApplyResidentModal() {
+    let modal = document.getElementById("applyResidentModal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.className = "modal";
+      modal.id = "applyResidentModal";
+      modal.hidden = true;
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-modal-close="1"></div>
+        <div class="modal-container">
+          <div class="modal-dialog large">
+            <div class="modal-hd">
+              <h3 class="modal-title">住戶帳號申請</h3>
+              <button class="modal-close" type="button" data-modal-close="1">×</button>
+            </div>
+            <div class="modal-body">
+              <div id="applyStep1" class="apply-step">
+                <div class="step-info">第一步：輸入社區代號</div>
+                <div class="field">
+                  <label for="applyCommunityCode">社區代號</label>
+                  <div class="input-with-suffix">
+                    <input id="applyCommunityCode" type="text" placeholder="例如: TM101" autocomplete="off" />
+                    <span id="applyCommunityName" class="input-suffix-name"></span>
+                  </div>
+                </div>
+              </div>
+              <div id="applyStep2" class="apply-step" hidden>
+              <div class="step-info">第二步：輸入戶號</div>
+              <div class="field">
+                <label for="applyHouseNo">戶號</label>
+                <div class="input-with-suffix">
+                  <input id="applyHouseNo" type="text" placeholder="例如: A1-10F" autocomplete="off" />
+                  <span id="applyHouseStatus" class="input-suffix-name"></span>
+                </div>
+              </div>
+            </div>
+              <div id="applyStep3" class="apply-step" hidden>
+              <div class="step-info">第三步：大頭照 (上傳或選擇內建)</div>
+              <div class="field">
+                <div class="image-uploader" id="applyAvatarUploader">
+                  <div class="image-preview" id="applyAvatarPreview">
+                    <span class="placeholder">點擊上傳照片</span>
+                  </div>
+                  <input type="file" id="applyAvatarInput" accept="image/*" hidden />
+                </div>
+              </div>
+              <div class="built-in-avatars">
+                <div class="built-in-title">或選擇系統內建：</div>
+                <div class="avatar-grid">
+                  <div class="avatar-option" data-url="photo/h01.png">
+                    <img src="photo/h01.png" alt="h01" />
+                  </div>
+                  <div class="avatar-option" data-url="photo/h02.png">
+                    <img src="photo/h02.png" alt="h02" />
+                  </div>
+                  <div class="avatar-option" data-url="photo/h03.png">
+                    <img src="photo/h03.png" alt="h03" />
+                  </div>
+                  <div class="avatar-option" data-url="photo/h04.png">
+                    <img src="photo/h04.png" alt="h04" />
+                  </div>
+                </div>
+              </div>
+            </div>
+              <div id="applyStep4" class="apply-step" hidden>
+                <div class="step-info">第四步：輸入基本資料</div>
+                <div class="field">
+                  <label for="applyName">姓名</label>
+                  <input id="applyName" type="text" placeholder="請輸入姓名" autocomplete="off" />
+                </div>
+                <div class="field">
+                  <label for="applyEmail">電子郵件</label>
+                  <input id="applyEmail" type="email" placeholder="請輸入 Email" autocomplete="off" />
+                </div>
+                <div class="field">
+                  <label for="applyPhone">手機號碼</label>
+                  <input id="applyPhone" type="tel" placeholder="請輸入手機號碼" autocomplete="off" />
+                </div>
+              </div>
+              <div id="applyStep5" class="apply-step" hidden>
+                <div class="apply-complete-msg">
+                  <div class="icon-success">✓</div>
+                  <p>已完成申請，等待管理員開通帳號，謝謝！</p>
+                </div>
+              </div>
+              <div class="status" id="applyStatus" hidden></div>
+            </div>
+            <div class="modal-ft" id="applyModalFt">
+              <button class="btn" type="button" id="btnApplyPrev" hidden>上一步</button>
+              <button class="btn btn-primary" type="button" id="btnApplyNext">下一步</button>
+              <button class="btn btn-primary" type="button" id="btnApplyFinish" hidden>完成</button>
+            </div>
+          </div>
+        </div>
+      `.trim();
+      document.body.appendChild(modal);
+    }
+
+    const steps = [1, 2, 3, 4, 5];
+    let currentStep = 1;
+    const data = {
+      communityCode: "",
+      houseNo: "",
+      avatarDataUrl: "",
+      name: "",
+      email: "",
+      phone: ""
+    };
+
+    const statusEl = modal.querySelector("#applyStatus");
+    const setModalStatus = (msg, isError) => {
+      statusEl.textContent = msg || "";
+      statusEl.hidden = !msg;
+      statusEl.classList.toggle("error", !!isError);
+    };
+
+    const updateStepUI = () => {
+      steps.forEach(s => {
+        const el = modal.querySelector(`#applyStep${s}`);
+        if (el) el.hidden = (s !== currentStep);
+      });
+      
+      const btnPrev = modal.querySelector("#btnApplyPrev");
+      const btnNext = modal.querySelector("#btnApplyNext");
+      const btnFinish = modal.querySelector("#btnApplyFinish");
+      
+      btnPrev.hidden = (currentStep === 1 || currentStep === 5);
+      btnNext.hidden = (currentStep >= 4);
+      btnFinish.hidden = (currentStep !== 4);
+      
+      if (currentStep === 5) {
+        modal.querySelector("#applyModalFt").innerHTML = `<button class="btn btn-primary" type="button" data-modal-close="1">關閉</button>`;
+      }
+      setModalStatus("");
+    };
+
+    const avatarUploader = modal.querySelector("#applyAvatarUploader");
+    const avatarInput = modal.querySelector("#applyAvatarInput");
+    const avatarPreview = modal.querySelector("#applyAvatarPreview");
+
+    const applyCommunityCodeEl = modal.querySelector("#applyCommunityCode");
+    const applyCommunityNameEl = modal.querySelector("#applyCommunityName");
+    const applyHouseNoEl = modal.querySelector("#applyHouseNo");
+    const applyHouseStatusEl = modal.querySelector("#applyHouseStatus");
+
+    if (applyCommunityCodeEl) {
+      applyCommunityCodeEl.oninput = async () => {
+        const code = applyCommunityCodeEl.value.trim();
+        if (!code) {
+          applyCommunityNameEl.textContent = "";
+          return;
+        }
+        try {
+          const snap = await db.collection("communities").where("username", "==", code).get();
+          if (!snap.empty) {
+            const cdata = snap.docs[0].data();
+            applyCommunityNameEl.textContent = String(cdata.name || "");
+            data.communityUnits = Array.isArray(cdata.units) ? cdata.units : [];
+          } else {
+            const doc = await db.collection("communities").doc(code).get();
+            if (doc.exists) {
+              const cdata = doc.data();
+              applyCommunityNameEl.textContent = String(cdata.name || "");
+              data.communityUnits = Array.isArray(cdata.units) ? cdata.units : [];
+            } else {
+              applyCommunityNameEl.textContent = "";
+              data.communityUnits = [];
+            }
+          }
+        } catch {
+          applyCommunityNameEl.textContent = "";
+          data.communityUnits = [];
+        }
+      };
+    }
+
+    if (applyHouseNoEl) {
+      applyHouseNoEl.oninput = () => {
+        const val = applyHouseNoEl.value.trim();
+        if (!val) {
+          applyHouseStatusEl.textContent = "";
+          return;
+        }
+        const units = Array.isArray(data.communityUnits) ? data.communityUnits : [];
+        const exists = units.some(u => String(u).trim() === val);
+        if (exists) {
+          applyHouseStatusEl.textContent = "有此戶號";
+          applyHouseStatusEl.classList.add("success");
+        } else {
+          applyHouseStatusEl.textContent = "無此戶號";
+          applyHouseStatusEl.classList.remove("success");
+        }
+      };
+    }
+
+    if (avatarUploader) {
+      avatarUploader.onclick = () => avatarInput.click();
+      avatarInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (re) => {
+          data.avatarDataUrl = re.target.result;
+          avatarPreview.innerHTML = `<img src="${data.avatarDataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;" />`;
+          // 清除內建選取狀態
+          modal.querySelectorAll(".avatar-option").forEach(opt => opt.classList.remove("active"));
+        };
+        reader.readAsDataURL(file);
+      };
+    }
+
+    // 內建大頭照點擊邏輯
+    const avatarOptions = modal.querySelectorAll(".avatar-option");
+    avatarOptions.forEach(opt => {
+      opt.onclick = () => {
+        const url = opt.getAttribute("data-url");
+        data.avatarDataUrl = url;
+        avatarPreview.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;" />`;
+        
+        // 切換 active 狀態
+        avatarOptions.forEach(o => o.classList.remove("active"));
+        opt.classList.add("active");
+        
+        // 清除上傳的檔案
+        avatarInput.value = "";
+      };
+    });
+
+    const nextLogic = async (e) => {
+      const btn = e.target;
+      btn.disabled = true;
+      
+      try {
+        if (currentStep === 1) {
+          data.communityCode = modal.querySelector("#applyCommunityCode").value.trim();
+          if (!data.communityCode) {
+            setModalStatus("請輸入社區代號", true);
+            return;
+          }
+          setModalStatus("驗證社區中...", false);
+          const snap = await db.collection("communities").where("username", "==", data.communityCode).get();
+          if (snap.empty) {
+            const doc = await db.collection("communities").doc(data.communityCode).get();
+            if (!doc.exists) {
+              setModalStatus("找不到該社區，請確認代號是否正確。", true);
+              return;
+            }
+            data.communityId = doc.id;
+          } else {
+            data.communityId = snap.docs[0].id;
+          }
+        } else if (currentStep === 2) {
+           data.houseNo = modal.querySelector("#applyHouseNo").value.trim();
+           if (!data.houseNo) {
+             setModalStatus("請輸入戶號", true);
+             return;
+           }
+           // 驗證戶號是否存在於該社區
+           const units = Array.isArray(data.communityUnits) ? data.communityUnits : [];
+           const exists = units.some(u => String(u).trim() === data.houseNo);
+           if (!exists) {
+             setModalStatus("戶號不正確，請確認後再試。", true);
+             return;
+           }
+         } else if (currentStep === 3) {
+          if (!data.avatarDataUrl) {
+            setModalStatus("請上傳大頭照", true);
+            return;
+          }
+        }
+        
+        currentStep++;
+        updateStepUI();
+      } catch (err) {
+        setModalStatus("驗證失敗：" + err.message, true);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
+    const prevLogic = () => {
+      if (currentStep > 1) {
+        currentStep--;
+        updateStepUI();
+      }
+    };
+
+    const finishLogic = async () => {
+      data.name = modal.querySelector("#applyName").value.trim();
+      data.email = modal.querySelector("#applyEmail").value.trim().toLowerCase();
+      data.phone = modal.querySelector("#applyPhone").value.trim();
+      
+      if (!data.name || !data.email || !data.phone) {
+        return setModalStatus("請填寫所有欄位", true);
+      }
+      
+      setModalStatus("提交申請中...", false);
+      try {
+        await db.collection("users").add({
+          community: data.communityId,
+          houseNo: data.houseNo,
+          displayName: data.name,
+          email: data.email,
+          phone: data.phone,
+          avatarDataUrl: data.avatarDataUrl,
+          role: "resident",
+          enabled: false,
+          status: "pending",
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        currentStep = 5;
+        updateStepUI();
+      } catch (err) {
+        setModalStatus("提交失敗：" + err.message, true);
+      }
+    };
+
+    modal.querySelector("#btnApplyNext").onclick = nextLogic;
+    modal.querySelector("#btnApplyPrev").onclick = prevLogic;
+    modal.querySelector("#btnApplyFinish").onclick = finishLogic;
+
+    // 綁定關閉事件 (使用事件代理確保動態產生的按鈕也能運作)
+    modal.onclick = (e) => {
+      if (e.target.closest("[data-modal-close]")) {
+        modal.hidden = true;
+        // 重置
+        currentStep = 1;
+        modal.querySelector("#applyCommunityCode").value = "";
+        modal.querySelector("#applyHouseNo").value = "";
+        modal.querySelector("#applyName").value = "";
+        modal.querySelector("#applyEmail").value = "";
+        modal.querySelector("#applyPhone").value = "";
+        avatarPreview.innerHTML = `<span class="placeholder">點擊上傳照片</span>`;
+        data.avatarDataUrl = "";
+        
+        // 恢復原本的按鈕結構
+        modal.querySelector("#applyModalFt").innerHTML = `
+          <button class="btn" type="button" id="btnApplyPrev" hidden>上一步</button>
+          <button class="btn btn-primary" type="button" id="btnApplyNext">下一步</button>
+          <button class="btn btn-primary" type="button" id="btnApplyFinish" hidden>完成</button>
+        `.trim();
+        
+        // 重新綁定新產生的按鈕事件
+        modal.querySelector("#btnApplyNext").onclick = nextLogic;
+        modal.querySelector("#btnApplyPrev").onclick = prevLogic;
+        modal.querySelector("#btnApplyFinish").onclick = finishLogic;
+        
+        updateStepUI();
+      }
+    };
+
+    modal.hidden = false;
   }
 
   if (btnTogglePassword) {

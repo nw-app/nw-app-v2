@@ -128,7 +128,7 @@ label { font-size: 14px; color: #4b5563; }
   height: 22px;
   accent-color: var(--brand);
 }
-input[type="text"], input[type="email"], input[type="password"], select {
+input[type="text"], input[type="email"], input[type="tel"], input[type="password"], select {
   height: 56px;
   padding: 0 16px;
   border-radius: 16px;
@@ -214,11 +214,22 @@ input:focus, select:focus {
 .modal-backdrop {
   position: fixed;
   inset: 0;
+  width: 100vw;
+  height: 100vh;
   background: rgba(17, 24, 39, 0.55);
+  z-index: 50;
+}
+.modal-container {
+  position: fixed;
+  inset: 0;
   display: grid;
   place-items: center;
   padding: 18px;
-  z-index: 50;
+  z-index: 51;
+  pointer-events: none;
+}
+.modal, .modal-dialog {
+  pointer-events: auto;
 }
 .modal {
   width: min(520px, 100%);
@@ -229,6 +240,7 @@ input:focus, select:focus {
   padding: 22px 20px;
   display: grid;
   gap: 14px;
+  pointer-events: auto;
 }
 .modal h3 {
   margin: 0;
@@ -285,7 +297,7 @@ input:focus, select:focus {
   .remember { font-size: 13px; gap: 8px; }
   .remember input { width: 18px; height: 18px; }
 
-  input[type="text"], input[type="email"], input[type="password"], select { height: 48px; border-radius: 14px; }
+  input[type="text"], input[type="email"], input[type="tel"], input[type="password"], select { height: 48px; border-radius: 14px; }
   .input-wrap input { padding-right: 48px; }
   .icon-btn { width: 36px; height: 36px; border-radius: 12px; right: 8px; }
 
@@ -293,6 +305,141 @@ input:focus, select:focus {
   .actions { gap: 10px; }
   .btn { height: 48px; border-radius: 16px; }
 }
+
+/* 帳號申請彈窗樣式 */
+.apply-step {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.apply-step[hidden] {
+  display: none !important;
+}
+.step-info {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--brand, #d32f2f);
+  margin-bottom: 4px;
+}
+.image-uploader {
+  width: 120px;
+  height: 120px;
+  border: 2px dashed rgba(17, 24, 39, 0.12);
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  margin: 0 auto;
+  transition: all 0.2s ease;
+}
+.image-uploader:hover {
+  border-color: var(--brand, #d32f2f);
+  background: rgba(211, 47, 47, 0.05);
+}
+.image-preview {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--muted, #6b7280);
+  font-size: 12px;
+  text-align: center;
+  padding: 4px;
+}
+.apply-complete-msg {
+  text-align: center;
+  padding: 24px 0;
+}
+.icon-success {
+  width: 64px;
+  height: 64px;
+  background: #2e7d32;
+  color: #fff;
+  border-radius: 999px;
+  font-size: 32px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 16px;
+}
+.apply-complete-msg p {
+  font-weight: 900;
+  color: var(--text, #1f2937);
+  font-size: 16px;
+}
+#applyStatus.error {
+  color: #d32f2f;
+  background: rgba(211, 47, 47, 0.1);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+/* 大頭照選擇樣式 */
+.built-in-avatars {
+  margin-top: 8px;
+}
+.built-in-title {
+  font-size: 13px;
+  color: var(--muted, #6b7280);
+  margin-bottom: 8px;
+  text-align: center;
+}
+.avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  justify-items: center;
+}
+.avatar-option {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #f3f4f6;
+}
+.avatar-option:hover {
+  transform: scale(1.05);
+  border-color: rgba(17, 24, 39, 0.1);
+}
+.avatar-option.active {
+  border-color: var(--brand, #d32f2f);
+  box-shadow: 0 4px 12px rgba(211, 47, 47, 0.2);
+}
+.avatar-option img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 輸入框內靠右顯示名稱 */
+.input-with-suffix {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-with-suffix input {
+  width: 100%;
+  padding-right: 120px !important; /* 為右側文字預留空間 */
+}
+.input-suffix-name {
+  position: absolute;
+  right: 12px;
+  color: var(--brand, #d32f2f);
+  font-size: 13px;
+  font-weight: 900;
+  pointer-events: none; /* 防止點擊到文字導致無法 focus input */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
+}
+.input-suffix-name.success {
+  color: #2e7d32;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; scroll-behavior: auto !important; }
   .wrap { animation: none !important; }

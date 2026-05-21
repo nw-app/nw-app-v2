@@ -336,14 +336,19 @@
       if (!buttons || buttons.length === 0) return "";
       return `
         <div class="button-grid">
-          ${buttons.map(b => `
-            <a href="${b.url || "#"}" class="grid-btn">
-              <div class="grid-btn-icon">
-                <img src="${b.data || b.icon || "photo/logo.png"}" alt="${b.name}" />
-              </div>
-              <div class="grid-btn-label">${b.name}</div>
-            </a>
-          `).join("")}
+          ${buttons.map(b => {
+            // 優先順序：1. 如果 icon 是遠端網址則優先, 2. 上傳的 Base64 (data), 3. 本地圖示 (icon), 4. 預設 logo
+            const isRemoteIcon = b.icon && (b.icon.startsWith("http") || b.icon.startsWith("//"));
+            const imgSrc = isRemoteIcon ? b.icon : (b.data || b.icon || "photo/logo.png");
+            return `
+              <a href="${b.url || "#"}" class="grid-btn">
+                <div class="grid-btn-icon">
+                  <img src="${imgSrc}" alt="${b.name}" />
+                </div>
+                <div class="grid-btn-label">${b.name}</div>
+              </a>
+            `;
+          }).join("")}
         </div>
       `;
     };
@@ -380,7 +385,7 @@
 
     track.innerHTML = images.map(img => `
       <div class="carousel-slide">
-        <img src="${img.data || img.url}" alt="" />
+        <img src="${img.url || img.data}" alt="" />
       </div>
     `).join("");
 

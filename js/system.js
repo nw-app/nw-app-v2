@@ -1610,7 +1610,7 @@
         const v = images[i] || { url: "", data: "" };
         html += `
           <div class="image-slot" data-slot-index="${i}">
-            <div class="slot-preview" id="slot_preview_${i}">
+            <div class="slot-preview" id="slot_preview_${i}" ${v.data ? `data-slot-data="${v.data}"` : ""}>
               ${v.data || v.url ? `<img src="${v.data || v.url}" />` : "<span>8:3</span>"}
             </div>
             <div class="slot-inputs">
@@ -1665,9 +1665,12 @@
           const idx = input.getAttribute("data-slot-url");
           const url = input.value.trim();
           const preview = document.getElementById(`slot_preview_${idx}`);
+          const slotData = preview.getAttribute("data-slot-data");
           if (url) {
             preview.innerHTML = `<img src="${url}" />`;
-          } else if (!preview.hasAttribute("data-slot-data")) {
+          } else if (slotData) {
+            preview.innerHTML = `<img src="${slotData}" />`;
+          } else {
             preview.innerHTML = "<span>8:3</span>";
           }
         });
@@ -1685,7 +1688,7 @@
         const b = buttons[i] || { name: "", icon: "", url: "", data: "" };
         html += `
           <div class="button-slot" data-slot-index="${i}">
-            <div class="btn-slot-preview" id="${containerId}_preview_${i}">
+            <div class="btn-slot-preview" id="${containerId}_preview_${i}" ${b.data ? `data-slot-data="${b.data}"` : ""}>
               ${b.data || b.icon ? `<img src="${b.data || b.icon}" />` : "<span>圖</span>"}
             </div>
             <div class="btn-slot-inputs">
@@ -1751,9 +1754,12 @@
           const idx = input.getAttribute("data-btn-icon");
           const url = input.value.trim();
           const preview = document.getElementById(`${containerId}_preview_${idx}`);
+          const slotData = preview.getAttribute("data-slot-data");
           if (url) {
             preview.innerHTML = `<img src="${url}" />`;
-          } else if (!preview.hasAttribute("data-slot-data")) {
+          } else if (slotData) {
+            preview.innerHTML = `<img src="${slotData}" />`;
+          } else {
             const def = defaultButtons[idx] || { icon: "" };
             preview.innerHTML = def.icon ? `<img src="${def.icon}" />` : "<span>圖</span>";
           }
@@ -1973,9 +1979,8 @@
           for (let i = 0; i < 8; i++) {
             const url = document.querySelector(`[data-slot-url="${i}"]`)?.value || "";
             const data = document.getElementById(`slot_preview_${i}`)?.getAttribute("data-slot-data") || "";
-            const existing = Array.isArray(unitConfigCache.rowAImages) ? unitConfigCache.rowAImages[i] : null;
             if (url || data) {
-              rowAImages.push({ url, data: data || (existing ? existing.data : "") });
+              rowAImages.push({ url, data });
             } else {
               rowAImages.push({ url: "", data: "" });
             }
