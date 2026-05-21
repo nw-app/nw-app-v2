@@ -51,6 +51,17 @@
     btnLogin.disabled = Boolean(isBusy);
   }
 
+  async function ensureAnonAuth() {
+    try {
+      if (auth.currentUser) return auth.currentUser;
+      const res = await auth.signInAnonymously();
+      return res && res.user ? res.user : auth.currentUser;
+    } catch (err) {
+      console.error("Anonymous auth failed:", err);
+      throw err;
+    }
+  }
+
   function goTo(url) {
     const raw = String(url || "").trim();
     const cleaned = raw ? raw.replace(/\/+$/, "") : "";
@@ -150,10 +161,14 @@
                   <input id="applyEmail" type="email" placeholder="請輸入 Email" autocomplete="off" />
                 </div>
                 <div class="field">
-                  <label for="applyPhone">手機號碼</label>
-                  <input id="applyPhone" type="tel" placeholder="請輸入手機號碼" autocomplete="off" />
-                </div>
+                <label for="applyPhone">手機號碼</label>
+                <input id="applyPhone" type="tel" placeholder="請輸入手機號碼" autocomplete="off" />
               </div>
+              <div class="field">
+                <label for="applyPassword">密碼 (選填)</label>
+                <input id="applyPassword" type="password" placeholder="預設為手機號碼" autocomplete="off" />
+              </div>
+            </div>
               <div id="applyStep5" class="apply-step" hidden>
                 <div class="apply-complete-msg">
                   <div class="icon-success">✓</div>
@@ -165,7 +180,6 @@
             <div class="modal-ft" id="applyModalFt">
               <button class="btn" type="button" id="btnApplyPrev" hidden>上一步</button>
               <button class="btn btn-primary" type="button" id="btnApplyNext">下一步</button>
-              <button class="btn btn-primary" type="button" id="btnApplyFinish" hidden>完成</button>
             </div>
           </div>
         </div>
@@ -199,11 +213,11 @@
       
       const btnPrev = modal.querySelector("#btnApplyPrev");
       const btnNext = modal.querySelector("#btnApplyNext");
-      const btnFinish = modal.querySelector("#btnApplyFinish");
       
-      btnPrev.hidden = (currentStep === 1 || currentStep === 5);
-      btnNext.hidden = (currentStep >= 4);
-      btnFinish.hidden = (currentStep !== 4);
+      // 第一步至第四步均不顯示「上一步」按鈕
+      btnPrev.hidden = true; 
+      // 顯示下一步按鈕 (直到完成申請為止)
+      btnNext.hidden = (currentStep >= 5);
       
       if (currentStep === 5) {
         modal.querySelector("#applyModalFt").innerHTML = `<button class="btn btn-primary" type="button" data-modal-close="1">關閉</button>`;
@@ -304,8 +318,8 @@
     });
 
     const nextLogic = async (e) => {
-      const btn = e.target;
-      btn.disabled = true;
+      const btn = e ? e.target : null;
+      if (btn) btn.disabled = true;
       
       try {
         if (currentStep === 1) {
@@ -344,6 +358,9 @@
             setModalStatus("請上傳大頭照", true);
             return;
           }
+        } else if (currentStep === 4) {
+          await finishLogic();
+          return;
         }
         
         currentStep++;
@@ -366,6 +383,8 @@
       data.name = modal.querySelector("#applyName").value.trim();
       data.email = modal.querySelector("#applyEmail").value.trim().toLowerCase();
       data.phone = modal.querySelector("#applyPhone").value.trim();
+      const pwd = modal.querySelector("#applyPassword").value.trim();
+      data.password = pwd || data.phone; // 若未填則預設為手機號碼
       
       if (!data.name || !data.email || !data.phone) {
         return setModalStatus("請填寫所有欄位", true);
@@ -373,12 +392,27 @@
       
       setModalStatus("提交申請中...", false);
       try {
+        // 防止重複申請機制：檢查該社區是否已有相同手機號碼的待審核申請
+        const dupSnap = await db.collection("users")
+          .where("community", "==", data.communityId)
+          .where("phone", "==", data.phone)
+          .where("role", "==", "resident")
+          .where("status", "==", "pending")
+          .get();
+        
+        if (!dupSnap.empty) {
+          setModalStatus("已送審中", true);
+          return;
+        }
+
+        // 直接寫入 Firestore
         await db.collection("users").add({
           community: data.communityId,
           houseNo: data.houseNo,
           displayName: data.name,
           email: data.email,
           phone: data.phone,
+          password: data.password, // 儲存密碼
           avatarDataUrl: data.avatarDataUrl,
           role: "resident",
           enabled: false,
@@ -394,7 +428,6 @@
 
     modal.querySelector("#btnApplyNext").onclick = nextLogic;
     modal.querySelector("#btnApplyPrev").onclick = prevLogic;
-    modal.querySelector("#btnApplyFinish").onclick = finishLogic;
 
     // 綁定關閉事件 (使用事件代理確保動態產生的按鈕也能運作)
     modal.onclick = (e) => {
@@ -414,13 +447,11 @@
         modal.querySelector("#applyModalFt").innerHTML = `
           <button class="btn" type="button" id="btnApplyPrev" hidden>上一步</button>
           <button class="btn btn-primary" type="button" id="btnApplyNext">下一步</button>
-          <button class="btn btn-primary" type="button" id="btnApplyFinish" hidden>完成</button>
         `.trim();
         
         // 重新綁定新產生的按鈕事件
         modal.querySelector("#btnApplyNext").onclick = nextLogic;
         modal.querySelector("#btnApplyPrev").onclick = prevLogic;
-        modal.querySelector("#btnApplyFinish").onclick = finishLogic;
         
         updateStepUI();
       }

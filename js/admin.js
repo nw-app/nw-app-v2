@@ -27,6 +27,8 @@
     config: null,
     unsubConfig: null,
     unsubVisitors: null,
+    unsubResidents: null,
+    unsubPendingBadge: null,
     creatorLabelByUid: new Map(),
     creatorFetches: new Map(),
   };
@@ -62,6 +64,14 @@
     toastEl.classList.add("show");
     window.clearTimeout(toastEl._t);
     toastEl._t = window.setTimeout(() => toastEl.classList.remove("show"), 1600);
+  }
+
+  function avatarHtml(r) {
+    const name = String(r.displayName || r.name || r.email || "U").trim();
+    const initial = name.slice(0, 1).toUpperCase() || "U";
+    const url = String(r.avatarDataUrl || "").trim();
+    if (url) return `<img class="avatar-sm avatar-img" alt="" src="${url}">`;
+    return `<span class="avatar-fallback" aria-hidden="true">${initial}</span>`;
   }
 
   function loadAccounts() {
@@ -463,6 +473,17 @@
       state.unsubVisitors = null;
     }
   }
+
+  function stopResidentsSubscription() {
+     if (state.unsubResidents) {
+       try { state.unsubResidents(); } catch {}
+       state.unsubResidents = null;
+     }
+     if (state.unsubPendingBadge) {
+       try { state.unsubPendingBadge(); } catch {}
+       state.unsubPendingBadge = null;
+     }
+   }
 
   function ensureVisitorPassModal() {
     let modal = document.getElementById("visitorPassModal");
@@ -1409,6 +1430,16 @@
     return digits;
   }
 
+  const sha256Hex = async (text) => {
+    const v = String(text || "");
+    const cryptoObj = window.crypto && window.crypto.subtle ? window.crypto : null;
+    if (!cryptoObj) return "";
+    const data = new TextEncoder().encode(v);
+    const hashBuf = await cryptoObj.subtle.digest("SHA-256", data);
+    const bytes = Array.from(new Uint8Array(hashBuf));
+    return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+  };
+
   function isResidentRole(role) {
     const r = String(role || "").trim();
     if (!r) return true;
@@ -1651,7 +1682,12 @@
   async function openPendingResidentsModal80({ communityId }) {
     const modal = ensurePendingResidentsModal80();
     let detach = () => {};
-    detach = bindModalClose(modal, () => detach());
+    let detachList = () => {};
+    
+    detach = bindModalClose(modal, () => {
+      detach();
+      detachList();
+    });
 
     const listEl = modal.querySelector("#pendingResidentsList");
     const statusEl = modal.querySelector("#pendingResidentsStatus");
@@ -1667,7 +1703,7 @@
     const renderList = (list) => {
       if (!listEl) return;
       if (!list.length) {
-        listEl.innerHTML = `<div class="status">目前沒有待審核的帳號。</div>`;
+        listEl.innerHTML = `<div class="status">目前沒有帳號申請紀錄。</div>`;
         return;
       }
 
@@ -1676,18 +1712,29 @@
         const phone = String(r.phone || "").trim();
         const email = String(r.email || "").trim();
         const subParts = [houseNo, phone, email].filter(Boolean);
+        const isPending = r.status === "pending";
+        const statusLabel = isPending ? "待審核" : (r.status === "approved" ? "已核准" : r.status);
+        const statusClass = isPending ? "warning" : "success";
+
         return `
           <div class="resident-item" data-id="${String(r.id || "")}">
             <div class="resident-left">
               <div class="avatar-sm">${avatarHtml(r)}</div>
               <div class="resident-text">
-                <div class="resident-name">${String(r.displayName || "—")}</div>
+                <div class="resident-name">
+                  ${String(r.displayName || "—")}
+                  <span class="status-chip ${statusClass}">${statusLabel}</span>
+                </div>
                 <div class="resident-sub">${subParts.join("｜")}</div>
               </div>
             </div>
             <div class="resident-actions">
-              <button class="btn btn-primary btn-sm" type="button" data-approve title="核准">核准</button>
-              <button class="btn btn-sm danger" type="button" data-reject title="拒絕">拒絕</button>
+              ${isPending ? `
+                <button class="btn btn-primary btn-sm" type="button" data-approve title="核准">核准</button>
+                <button class="btn btn-sm danger" type="button" data-reject title="刪除">刪除</button>
+              ` : `
+                <button class="btn btn-sm" type="button" disabled>已處理</button>
+              `}
             </div>
           </div>
         `.trim();
@@ -1697,44 +1744,106 @@
       listEl.querySelectorAll(".resident-item").forEach(item => {
         const id = item.getAttribute("data-id");
         const r = list.find(x => x.id === id);
+        if (!r || r.status !== "pending") return;
         
         item.querySelector("[data-approve]").onclick = async () => {
           const ok = await (window.nwConfirm ? window.nwConfirm({
             title: "核准帳號",
-            message: `是否核准「${r.displayName}」的住戶帳號申請？`,
-            okText: "核准",
+            message: `是否核准「${r.displayName}」的住戶帳號申請並建立正式登入帳號？`,
+            okText: "核准並建立",
             cancelText: "取消"
           }) : Promise.resolve(confirm("是否核准？")));
           
           if (ok) {
+            let createdAuth = null;
             try {
-              await db.collection("users").doc(id).update({
+              toast("正在建立帳號...");
+              const email = String(r.email || "").trim().toLowerCase();
+              const phone = normalizePhoneDigits(r.phone);
+              // 密碼優先使用申請時填寫的，若無則用手機號碼
+              const password = String(r.password || phone).trim();
+              
+              if (!email || !password) throw new Error("缺少必要的 Email 或密碼資訊");
+
+              // 1. 在 Firebase Auth 建立帳號
+              createdAuth = await createAuthUser(email, password);
+              const newUid = createdAuth.uid;
+
+              // 2. 將資料轉移至以 UID 為鍵的文件，並更新狀態
+              const payload = {
+                ...r,
+                id: newUid,
+                uid: newUid,
+                username: email,
                 status: "approved",
                 enabled: true,
                 updatedAt: FieldValue.serverTimestamp()
-              });
-              toast("已核准帳號");
-              loadData(); // 重新讀取
+              };
+              delete payload.password; // 不在 Firestore 儲存明文密碼
+
+              // 密碼 Hash 處理 (參考住戶編輯器邏輯)
+              if (typeof sha256Hex === "function") {
+                payload.passwordHash = await sha256Hex(password);
+                payload.passwordHashAlg = "SHA-256";
+                payload.passwordUpdatedAt = FieldValue.serverTimestamp();
+              }
+
+              await db.collection("users").doc(newUid).set(payload, { merge: true });
+
+              // 3. 更新搜尋索引
+              if (typeof upsertUserLookup === "function") {
+                const accounts = loadAccounts();
+                const c = (accounts.communities || []).find((x) => x && String(x.id || "") === String(communityId || "")) || null;
+                const communityCode = c ? String(c.username || "") : "";
+                await upsertUserLookup({ 
+                  phoneNormalized: phone, 
+                  email, 
+                  phone, 
+                  uid: newUid, 
+                  community: communityId, 
+                  communityCode, 
+                  role: "住戶" 
+                });
+              }
+
+              // 4. 刪除原本的申請紀錄 (因為已轉移至新 UID 文件)
+              if (id !== newUid) {
+                await db.collection("users").doc(id).delete();
+              }
+
+              toast("帳號核准成功並已建立");
             } catch (err) {
-              toast("操作失敗：" + err.message);
+              console.error("Approval error:", err);
+              const code = String(err && err.code ? err.code : "");
+              const msg =
+                code.includes("auth/email-already-in-use") ? "此電子郵件已被使用。" :
+                code.includes("auth/weak-password") ? "密碼強度不足。" :
+                "核准失敗：" + err.message;
+              toast(msg);
+            } finally {
+              if (createdAuth && createdAuth.auth) {
+                try {
+                  await createdAuth.auth.signOut();
+                } catch {}
+              }
             }
           }
         };
 
         item.querySelector("[data-reject]").onclick = async () => {
           const ok = await (window.nwConfirm ? window.nwConfirm({
-            title: "拒絕申請",
-            message: `是否拒絕「${r.displayName}」的住戶帳號申請？這將會刪除此筆申請。`,
-            okText: "拒絕並刪除",
+            title: "刪除申請",
+            message: `是否刪除「${r.displayName}」的住戶帳號申請紀錄？`,
+            okText: "確認刪除",
             cancelText: "取消",
             danger: true
-          }) : Promise.resolve(confirm("是否拒絕？")));
+          }) : Promise.resolve(confirm("是否刪除？")));
           
           if (ok) {
             try {
               await db.collection("users").doc(id).delete();
-              toast("已拒絕並刪除申請");
-              loadData(); // 重新讀取
+              toast("已刪除申請紀錄");
+              // 由於使用了 onSnapshot，不需手動 loadData
             } catch (err) {
               toast("操作失敗：" + err.message);
             }
@@ -1743,28 +1852,31 @@
       });
     };
 
-    const loadData = async () => {
-      setStatus("讀取中...", false);
-      try {
-        const snap = await db.collection("users")
-          .where("community", "==", communityId)
-          .where("status", "==", "pending")
-          .get();
-        
-        const list = snap.docs.map(doc => ({
+    setStatus("讀取中...", false);
+    detachList = db.collection("users")
+      .where("community", "==", communityId)
+      .where("role", "==", "resident")
+      .where("status", "==", "pending") // 只顯示待審核紀錄
+      .onSnapshot((snap) => {
+        let list = snap.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
+        
+        // 在前端進行排序
+        list.sort((a, b) => {
+          const tA = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : a.createdAt) : 0;
+          const tB = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : b.createdAt) : 0;
+          return tB - tA; // 降冪排序 (由新到舊)
+        });
 
         setStatus("", false);
         renderList(list);
-      } catch (err) {
+      }, (err) => {
         setStatus("讀取失敗：" + err.message, true);
-      }
-    };
+      });
 
     modal.hidden = false;
-    loadData();
   }
 
   function bindModalClose(modal, onClose) {
@@ -1792,6 +1904,7 @@
   }
 
   function renderResidentsModule() {
+    stopResidentsSubscription();
     if (subnavEl) subnavEl.innerHTML = "";
     if (!Array.isArray(state.communities) || state.communities.length === 0) {
       contentEl.innerHTML = `
@@ -1821,10 +1934,19 @@
 
     if (subnavEl) {
       subnavEl.innerHTML = `
-        <button class="btn btn-sm" type="button" id="btnPendingResidents">待審帳號</button>
+        <div class="btn-with-badge">
+          <button class="btn btn-sm" type="button" id="btnPendingResidents">待審帳號</button>
+          <span class="badge" id="pendingBadge" hidden>0</span>
+        </div>
         <button class="btn btn-sm" type="button" id="btnUnits">戶號列表</button>
         <button class="btn btn-primary btn-sm" type="button" id="btnAddResident">新增帳號</button>
       `.trim();
+      
+      // 獲取按鈕引用 (因為剛剛 innerHTML 重置了)
+      const pendingBtn = document.getElementById("btnPendingResidents");
+      if (pendingBtn) {
+        pendingBtn.onclick = () => openPendingResidentsModal80({ communityId: cid });
+      }
     }
 
     contentEl.innerHTML = `
@@ -1859,12 +1981,23 @@
     const searchEl = document.getElementById("residentSearch");
     const addBtn = document.getElementById("btnAddResident");
     const unitsBtn = document.getElementById("btnUnits");
-    const pendingBtn = document.getElementById("btnPendingResidents");
     const unitTotalEl = document.getElementById("unitTotal");
     const peopleTotalEl = document.getElementById("peopleTotal");
 
-    if (pendingBtn) {
-      pendingBtn.onclick = () => openPendingResidentsModal80({ communityId: cid });
+    // 監聽待審核帳號數量
+    if (cid) {
+      state.unsubPendingBadge = db.collection("users")
+        .where("community", "==", cid)
+        .where("role", "==", "resident")
+        .where("status", "==", "pending")
+        .onSnapshot((snap) => {
+          const badge = document.getElementById("pendingBadge");
+          if (badge) {
+            const count = snap.size;
+            badge.textContent = count;
+            badge.hidden = count === 0;
+          }
+        });
     }
 
     const setStatus = (msg, isError) => {
@@ -1895,14 +2028,6 @@
     const refreshUnitTotals = () => {
       const unitCount = normalizeUnitList(communityUnits).length;
       if (unitTotalEl) unitTotalEl.textContent = `總戶數：${unitCount}`;
-    };
-
-    const avatarHtml = (r) => {
-      const name = String(r.displayName || r.name || r.email || "U").trim();
-      const initial = name.slice(0, 1).toUpperCase() || "U";
-      const url = String(r.avatarDataUrl || "").trim();
-      if (url) return `<img class="avatar-img" alt="" src="${url}">`;
-      return `<span class="avatar-fallback" aria-hidden="true">${initial}</span>`;
     };
 
     const renderList = () => {
@@ -1969,40 +2094,46 @@
     const loadResidents = async () => {
       setStatus("讀取中...", false);
       try {
-        const snap = await db.collection("users").where("community", "==", String(cid || "default")).get();
-        const list = snap.docs
-          .map((d) => {
-            const v = d.data() || {};
-            return {
-              id: d.id,
-              role: String(v.role || ""),
-              houseNo: String(v.houseNo || v.unit || ""),
-              displayName: String(v.displayName || v.name || ""),
-              email: String(v.email || v.username || ""),
-              phone: String(v.phone || ""),
-              enabled: v.enabled !== false,
-              address: String(v.address || ""),
-              avatarDataUrl: String(v.avatarDataUrl || ""),
-              phoneNormalized: String(v.phoneNormalized || ""),
-            };
-          })
-          .filter((x) => isResidentRole(x.role));
+        state.unsubResidents = db.collection("users")
+          .where("community", "==", String(cid || "default"))
+          .onSnapshot((snap) => {
+            const list = snap.docs
+              .map((d) => {
+                const v = d.data() || {};
+                return {
+                  id: d.id,
+                  role: String(v.role || ""),
+                  houseNo: String(v.houseNo || v.unit || ""),
+                  displayName: String(v.displayName || v.name || ""),
+                  email: String(v.email || v.username || ""),
+                  phone: String(v.phone || ""),
+                  enabled: v.enabled !== false,
+                  address: String(v.address || ""),
+                  avatarDataUrl: String(v.avatarDataUrl || ""),
+                  phoneNormalized: String(v.phoneNormalized || ""),
+                  status: String(v.status || ""),
+                };
+              })
+              .filter((x) => isResidentRole(x.role) && x.status !== "pending");
 
-        list.sort((a, b) => {
-          const ah = String(a.houseNo || "");
-          const bh = String(b.houseNo || "");
-          if (ah !== bh) return ah.localeCompare(bh, "zh-Hant");
-          return String(a.displayName || "").localeCompare(String(b.displayName || ""), "zh-Hant");
-        });
+            list.sort((a, b) => {
+              const ah = String(a.houseNo || "");
+              const bh = String(b.houseNo || "");
+              if (ah !== bh) return ah.localeCompare(bh, "zh-Hant");
+              return String(a.displayName || "").localeCompare(String(b.displayName || ""), "zh-Hant");
+            });
 
-        residents = list;
-        setStatus("", false);
-        renderList();
+            residents = list;
+            setStatus("", false);
+            renderList();
+          }, (err) => {
+            const code = String(err && err.code ? err.code : "");
+            setStatus(code.includes("permission-denied") ? "沒有權限讀取住戶資料。" : "讀取失敗，請稍後再試。", true);
+            residents = [];
+            renderList();
+          });
       } catch (err) {
-        const code = String(err && err.code ? err.code : "");
-        setStatus(code.includes("permission-denied") ? "沒有權限讀取住戶資料。" : "讀取失敗，請稍後再試。", true);
-        residents = [];
-        renderList();
+        setStatus("系統錯誤，請重整頁面。", true);
       }
     };
 
@@ -2117,16 +2248,6 @@
         unitMatchBadge.hidden = !ok;
         unitMatchBadge.classList.toggle("show", ok);
         unitMatchBadge.style.display = ok ? "inline-flex" : "none";
-      };
-
-      const sha256Hex = async (text) => {
-        const v = String(text || "");
-        const cryptoObj = window.crypto && window.crypto.subtle ? window.crypto : null;
-        if (!cryptoObj) return "";
-        const data = new TextEncoder().encode(v);
-        const hashBuf = await cryptoObj.subtle.digest("SHA-256", data);
-        const bytes = Array.from(new Uint8Array(hashBuf));
-        return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
       };
 
       const fileToAvatarDataUrl = (file) => new Promise((resolve, reject) => {
@@ -3710,6 +3831,7 @@
 
   function renderModule(moduleId) {
     if (moduleId !== "visitor") stopVisitorsSubscription();
+    if (moduleId !== "residents") stopResidentsSubscription();
     const gate = getButtonConfig(moduleId);
     if (gate && gate.enabled === false) {
       toast("此功能未開放（示意）");
