@@ -1621,6 +1621,152 @@
     return modal;
   }
 
+  function ensurePendingResidentsModal80() {
+    let modal = document.getElementById("pendingResidentsModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "pendingResidentsModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog large">
+        <div class="modal-hd">
+          <h3 class="modal-title">待審核帳號</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="status" id="pendingResidentsStatus" hidden></div>
+          <div class="resident-list" id="pendingResidentsList"></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  async function openPendingResidentsModal80({ communityId }) {
+    const modal = ensurePendingResidentsModal80();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const listEl = modal.querySelector("#pendingResidentsList");
+    const statusEl = modal.querySelector("#pendingResidentsStatus");
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    const renderList = (list) => {
+      if (!listEl) return;
+      if (!list.length) {
+        listEl.innerHTML = `<div class="status">目前沒有待審核的帳號。</div>`;
+        return;
+      }
+
+      listEl.innerHTML = list.map((r) => {
+        const houseNo = String(r.houseNo || "").trim();
+        const phone = String(r.phone || "").trim();
+        const email = String(r.email || "").trim();
+        const subParts = [houseNo, phone, email].filter(Boolean);
+        return `
+          <div class="resident-item" data-id="${String(r.id || "")}">
+            <div class="resident-left">
+              <div class="avatar-sm">${avatarHtml(r)}</div>
+              <div class="resident-text">
+                <div class="resident-name">${String(r.displayName || "—")}</div>
+                <div class="resident-sub">${subParts.join("｜")}</div>
+              </div>
+            </div>
+            <div class="resident-actions">
+              <button class="btn btn-primary btn-sm" type="button" data-approve title="核准">核准</button>
+              <button class="btn btn-sm danger" type="button" data-reject title="拒絕">拒絕</button>
+            </div>
+          </div>
+        `.trim();
+      }).join("");
+
+      // 綁定核准/拒絕事件
+      listEl.querySelectorAll(".resident-item").forEach(item => {
+        const id = item.getAttribute("data-id");
+        const r = list.find(x => x.id === id);
+        
+        item.querySelector("[data-approve]").onclick = async () => {
+          const ok = await (window.nwConfirm ? window.nwConfirm({
+            title: "核准帳號",
+            message: `是否核准「${r.displayName}」的住戶帳號申請？`,
+            okText: "核准",
+            cancelText: "取消"
+          }) : Promise.resolve(confirm("是否核准？")));
+          
+          if (ok) {
+            try {
+              await db.collection("users").doc(id).update({
+                status: "approved",
+                enabled: true,
+                updatedAt: FieldValue.serverTimestamp()
+              });
+              toast("已核准帳號");
+              loadData(); // 重新讀取
+            } catch (err) {
+              toast("操作失敗：" + err.message);
+            }
+          }
+        };
+
+        item.querySelector("[data-reject]").onclick = async () => {
+          const ok = await (window.nwConfirm ? window.nwConfirm({
+            title: "拒絕申請",
+            message: `是否拒絕「${r.displayName}」的住戶帳號申請？這將會刪除此筆申請。`,
+            okText: "拒絕並刪除",
+            cancelText: "取消",
+            danger: true
+          }) : Promise.resolve(confirm("是否拒絕？")));
+          
+          if (ok) {
+            try {
+              await db.collection("users").doc(id).delete();
+              toast("已拒絕並刪除申請");
+              loadData(); // 重新讀取
+            } catch (err) {
+              toast("操作失敗：" + err.message);
+            }
+          }
+        };
+      });
+    };
+
+    const loadData = async () => {
+      setStatus("讀取中...", false);
+      try {
+        const snap = await db.collection("users")
+          .where("community", "==", communityId)
+          .where("status", "==", "pending")
+          .get();
+        
+        const list = snap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+
+        setStatus("", false);
+        renderList(list);
+      } catch (err) {
+        setStatus("讀取失敗：" + err.message, true);
+      }
+    };
+
+    modal.hidden = false;
+    loadData();
+  }
+
   function bindModalClose(modal, onClose) {
     if (!modal) return () => {};
     const close = () => {
@@ -1675,6 +1821,7 @@
 
     if (subnavEl) {
       subnavEl.innerHTML = `
+        <button class="btn btn-sm" type="button" id="btnPendingResidents">待審帳號</button>
         <button class="btn btn-sm" type="button" id="btnUnits">戶號列表</button>
         <button class="btn btn-primary btn-sm" type="button" id="btnAddResident">新增帳號</button>
       `.trim();
@@ -1712,8 +1859,13 @@
     const searchEl = document.getElementById("residentSearch");
     const addBtn = document.getElementById("btnAddResident");
     const unitsBtn = document.getElementById("btnUnits");
+    const pendingBtn = document.getElementById("btnPendingResidents");
     const unitTotalEl = document.getElementById("unitTotal");
     const peopleTotalEl = document.getElementById("peopleTotal");
+
+    if (pendingBtn) {
+      pendingBtn.onclick = () => openPendingResidentsModal80({ communityId: cid });
+    }
 
     const setStatus = (msg, isError) => {
       if (!statusEl) return;
