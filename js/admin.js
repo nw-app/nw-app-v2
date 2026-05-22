@@ -1630,15 +1630,37 @@
       <div class="modal-backdrop" data-modal-close="1"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="unitsModalTitle">
         <div class="modal-hd">
-          <h3 class="modal-title" id="unitsModalTitle">戶號列表 <span class="unit-modal-count" id="unitsModalCount">總戶數：—</span></h3>
+          <h3 class="modal-title" id="unitsModalTitle">戶號資料設定 <span class="unit-modal-count" id="unitsModalCount">總戶數：—</span></h3>
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <form id="unitsForm">
-          <div class="modal-body">
-            <div class="status" id="unitsStatus" hidden></div>
-            <div class="profile-item">
-              <div class="profile-label">戶號列表（每行一戶）</div>
-              <textarea id="unitsText" class="units-text" placeholder="例如：&#10;A1101&#10;A1102"></textarea>
+          <div class="modal-body" style="padding: 0;">
+            <div class="status" id="unitsStatus" hidden style="margin: 16px;"></div>
+            <div class="profile-item" style="margin: 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; background: #f9fafb; border-bottom: 1px solid var(--border);">
+                <div class="profile-label" style="margin-bottom: 0;">戶號資料設定</div>
+                <div style="display: flex; gap: 8px;">
+                  <button class="btn btn-sm" type="button" id="btnExportUnits">匯出 Excel</button>
+                  <button class="btn btn-sm" type="button" id="btnImportUnits">匯入 Excel</button>
+                  <input type="file" id="inputImportUnits" accept=".xlsx, .xls, .csv" hidden />
+                  <button class="btn btn-sm btn-primary" type="button" id="btnAddUnitRow">+ 新增行</button>
+                </div>
+              </div>
+              
+              <div class="units-table-container" style="max-height: 450px; overflow-y: auto;">
+                <table class="units-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 100px;">戶號</th>
+                      <th>地址</th>
+                      <th style="width: 100px;">坪數</th>
+                      <th style="width: 120px;">所有權人%</th>
+                      <th style="width: 50px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="unitsTableBody"></tbody>
+                </table>
+              </div>
             </div>
           </div>
           <div class="modal-ft">
@@ -2016,7 +2038,12 @@
       const uniq = [];
       const seen = new Set();
       for (const x of raw) {
-        const v = String(x || "").trim();
+        let v = "";
+        if (typeof x === "object" && x !== null) {
+          v = String(x.id || "").trim();
+        } else {
+          v = String(x || "").trim();
+        }
         if (!v) continue;
         if (seen.has(v)) continue;
         seen.add(v);
@@ -2244,7 +2271,7 @@
           return;
         }
         const unit = normalizeText(inputUnit.value);
-        const ok = Boolean(unit) && normalizeUnitList(communityUnits).some((x) => x === unit);
+        const ok = Boolean(unit) && normalizeUnitList(communityUnits).some((x) => x.toLowerCase() === unit.toLowerCase());
         unitMatchBadge.hidden = !ok;
         unitMatchBadge.classList.toggle("show", ok);
         unitMatchBadge.style.display = ok ? "inline-flex" : "none";
@@ -2335,6 +2362,18 @@
       const onUnitInput = () => {
         unitTouched = true;
         updateUnitMatch();
+        
+        // 自動填寫地址
+        const unitVal = normalizeText(inputUnit.value);
+        if (unitVal && inputAddress && !inputAddress.value.trim()) {
+          const found = (Array.isArray(communityUnits) ? communityUnits : []).find(u => {
+            const uid = (typeof u === "object" && u !== null) ? String(u.id || "") : String(u || "");
+            return uid.trim().toLowerCase() === unitVal.toLowerCase();
+          });
+          if (found && typeof found === "object" && found.address) {
+            inputAddress.value = found.address;
+          }
+        }
       };
       if (inputUnit) inputUnit.addEventListener("input", onUnitInput);
 
@@ -2489,9 +2528,10 @@
       let detach = () => {};
       detach = bindModalClose(modal, () => detach());
       const form = modal.querySelector("#unitsForm");
-      const ta = modal.querySelector("#unitsText");
+      const tbody = modal.querySelector("#unitsTableBody");
       const st = modal.querySelector("#unitsStatus");
       const countEl = modal.querySelector("#unitsModalCount");
+      const btnAddRow = modal.querySelector("#btnAddUnitRow");
 
       const setModalStatus = (msg, isError) => {
         if (!st) return;
@@ -2501,46 +2541,95 @@
         st.classList.toggle("error", Boolean(isError));
       };
 
+      const createRow = (u = {}) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><input type="text" class="u-id" value="${u.id || ""}" placeholder="戶號" /></td>
+          <td><input type="text" class="u-address" value="${u.address || ""}" placeholder="地址" /></td>
+          <td><input type="text" class="u-area" value="${u.area || ""}" placeholder="坪數" /></td>
+          <td><input type="text" class="u-ownership" value="${u.ownership || ""}" placeholder="%" /></td>
+          <td><div class="remove-row" title="刪除">&times;</div></td>
+        `;
+        tr.querySelector(".remove-row").onclick = () => {
+          tr.remove();
+          updateCount();
+        };
+        return tr;
+      };
+
+      const updateCount = () => {
+        if (countEl && tbody) {
+          countEl.textContent = `總戶數：${tbody.children.length}`;
+        }
+      };
+
       setModalStatus("讀取中...", false);
       modal.hidden = false;
       try {
         const doc = await db.collection("communities").doc(String(cid || "default")).get();
         const v = doc && doc.exists ? (doc.data() || {}) : {};
-        const units = normalizeUnitList(v.units);
+        const units = Array.isArray(v.units) ? v.units : [];
         communityUnits = units;
         refreshUnitTotals();
-        if (countEl) countEl.textContent = `總戶數：${units.length}`;
-        if (ta) ta.value = units.join("\n");
+        if (tbody) {
+          tbody.innerHTML = "";
+          units.forEach(u => {
+            const rowData = typeof u === "object" && u !== null ? u : { id: String(u) };
+            tbody.appendChild(createRow(rowData));
+          });
+          if (units.length === 0) tbody.appendChild(createRow());
+        }
+        updateCount();
         setModalStatus("", false);
-      } catch {
-        if (ta) ta.value = "";
+      } catch (err) {
+        console.error("Load units failed:", err);
+        if (tbody) tbody.innerHTML = "";
         if (countEl) countEl.textContent = "總戶數：—";
         setModalStatus("讀取失敗，請稍後再試。", true);
       }
 
+      const onAddRow = () => {
+        if (tbody) {
+          const row = createRow();
+          tbody.appendChild(row);
+          updateCount();
+          row.querySelector("input").focus();
+        }
+      };
+
       const onSubmit = async (e) => {
         e.preventDefault();
-        const raw = String(ta ? ta.value : "");
-        const lines = raw.split(/\r?\n/).map((x) => String(x || "").trim()).filter(Boolean);
+        if (!tbody) return;
+        
         const uniq = [];
         const seen = new Set();
-        for (const x of lines) {
-          if (seen.has(x)) continue;
-          seen.add(x);
-          uniq.push(x);
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        
+        for (const tr of rows) {
+          const id = tr.querySelector(".u-id").value.trim();
+          const address = tr.querySelector(".u-address").value.trim();
+          const area = tr.querySelector(".u-area").value.trim();
+          const ownership = tr.querySelector(".u-ownership").value.trim();
+          
+          if (!id) continue;
+          if (seen.has(id)) continue;
+          seen.add(id);
+
+          uniq.push({ id, address, area, ownership });
         }
+
         if (uniq.length === 0) {
-          setModalStatus("請至少輸入 1 個戶號（每行一戶）。", true);
+          setModalStatus("請至少輸入 1 個戶號。", true);
           return;
         }
+
         setModalStatus("儲存中...", false);
         try {
           await db.collection("communities").doc(String(cid || "default")).set(
             { units: uniq, updatedAt: FieldValue.serverTimestamp() },
             { merge: true }
           );
-          const clean = normalizeUnitList(uniq);
-          communityUnits = clean;
+          communityUnits = uniq;
           refreshUnitTotals();
           modal.hidden = true;
           detach();
@@ -2550,10 +2639,87 @@
         }
       };
 
+      const btnExport = modal.querySelector("#btnExportUnits");
+      const btnImport = modal.querySelector("#btnImportUnits");
+      const inputImport = modal.querySelector("#inputImportUnits");
+
+      const onExport = () => {
+        if (!window.XLSX) {
+          toast("Excel 函式庫尚未載入，請稍後再試。");
+          return;
+        }
+        // 從目前表格抓取資料（包含尚未儲存的變更）
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        const data = rows.map(tr => ({
+          "戶號": tr.querySelector(".u-id").value.trim(),
+          "地址": tr.querySelector(".u-address").value.trim(),
+          "坪數": tr.querySelector(".u-area").value.trim(),
+          "區分所有權人%": tr.querySelector(".u-ownership").value.trim()
+        })).filter(x => x["戶號"]);
+
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "戶號列表");
+        XLSX.writeFile(wb, `戶號列表_${cname || "社區"}.xlsx`);
+      };
+
+      const onImportClick = () => inputImport.click();
+
+      const onImportFile = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (!window.XLSX) {
+          toast("Excel 函式庫尚未載入，請稍後再試。");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (re) => {
+          try {
+            const data = new Uint8Array(re.target.result);
+            const workbook = XLSX.read(data, { type: "array" });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const json = XLSX.utils.sheet_to_json(firstSheet);
+            
+            if (json.length === 0) {
+              setModalStatus("檔案中沒有資料。", true);
+              return;
+            }
+
+            if (tbody) {
+              tbody.innerHTML = "";
+              json.forEach(row => {
+                const id = String(row["戶號"] || row["id"] || row["戶"] || Object.values(row)[0] || "").trim();
+                const addr = String(row["地址"] || row["address"] || Object.values(row)[1] || "").trim();
+                const area = String(row["坪數"] || row["area"] || Object.values(row)[2] || "").trim();
+                const own = String(row["區分所有權人%"] || row["ownership"] || Object.values(row)[3] || "").trim();
+                if (id) tbody.appendChild(createRow({ id, address: addr, area, ownership: own }));
+              });
+              updateCount();
+            }
+            setModalStatus("匯入成功，請確認後點擊儲存。", false);
+          } catch (err) {
+            console.error("Import failed:", err);
+            setModalStatus("匯入失敗，請檢查檔案格式。", true);
+          } finally {
+            inputImport.value = "";
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      };
+
+      if (btnAddRow) btnAddRow.addEventListener("click", onAddRow);
+      if (btnExport) btnExport.addEventListener("click", onExport);
+      if (btnImport) btnImport.addEventListener("click", onImportClick);
+      if (inputImport) inputImport.addEventListener("change", onImportFile);
+
       form.addEventListener("submit", onSubmit);
       const oldDetach = detach;
       detach = () => {
         try {
+          if (btnAddRow) btnAddRow.removeEventListener("click", onAddRow);
+          if (btnExport) btnExport.removeEventListener("click", onExport);
+          if (btnImport) btnImport.removeEventListener("click", onImportClick);
+          if (inputImport) inputImport.removeEventListener("change", onImportFile);
           form.removeEventListener("submit", onSubmit);
         } catch {}
         oldDetach();
@@ -3230,7 +3396,11 @@
       setModalStatus("", false);
 
       if (unitDatalist) {
-        unitDatalist.innerHTML = communityUnits.map((u) => `<option value="${String(u).replace(/"/g, "&quot;")}"></option>`).join("");
+        unitDatalist.innerHTML = communityUnits.map((u) => {
+          const uid = (typeof u === "object" && u !== null) ? String(u.id || "") : String(u || "");
+          const addr = (typeof u === "object" && u !== null && u.address) ? ` (${u.address})` : "";
+          return `<option value="${uid.replace(/"/g, "&quot;")}" label="${addr.replace(/"/g, "&quot;")}"></option>`;
+        }).join("");
       }
 
       const applyKeepState = () => {

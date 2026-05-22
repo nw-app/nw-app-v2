@@ -273,7 +273,10 @@
           return;
         }
         const units = Array.isArray(data.communityUnits) ? data.communityUnits : [];
-        const exists = units.some(u => String(u).trim() === val);
+        const exists = units.some(u => {
+          const uid = (typeof u === "object" && u !== null) ? String(u.id || "") : String(u || "");
+          return uid.trim().toLowerCase() === val.toLowerCase();
+        });
         if (exists) {
           applyHouseStatusEl.textContent = "有此戶號";
           applyHouseStatusEl.classList.add("success");
@@ -336,9 +339,13 @@
               setModalStatus("找不到該社區，請確認代號是否正確。", true);
               return;
             }
+            const cdata = doc.data();
             data.communityId = doc.id;
+            data.communityUnits = Array.isArray(cdata.units) ? cdata.units : [];
           } else {
+            const cdata = snap.docs[0].data();
             data.communityId = snap.docs[0].id;
+            data.communityUnits = Array.isArray(cdata.units) ? cdata.units : [];
           }
         } else if (currentStep === 2) {
            data.houseNo = modal.querySelector("#applyHouseNo").value.trim();
@@ -348,7 +355,10 @@
            }
            // 驗證戶號是否存在於該社區
            const units = Array.isArray(data.communityUnits) ? data.communityUnits : [];
-           const exists = units.some(u => String(u).trim() === data.houseNo);
+           const exists = units.some(u => {
+             const uid = (typeof u === "object" && u !== null) ? String(u.id || "") : String(u || "");
+             return uid.trim().toLowerCase() === data.houseNo.toLowerCase();
+           });
            if (!exists) {
              setModalStatus("戶號不正確，請確認後再試。", true);
              return;

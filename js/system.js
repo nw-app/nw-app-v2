@@ -308,7 +308,10 @@
       }
       const unit = normalizeText(inputUnit.value);
       const units = resolveUnits();
-      const ok = Boolean(unit) && units.some((x) => String(x || "").trim() === unit);
+      const ok = Boolean(unit) && units.some((x) => {
+        const uid = (typeof x === "object" && x !== null) ? String(x.id || "") : String(x || "");
+        return uid.trim().toLowerCase() === unit.toLowerCase();
+      });
       unitMatchBadge.hidden = !ok;
       unitMatchBadge.classList.toggle("show", ok);
       unitMatchBadge.style.display = ok ? "inline-flex" : "none";
@@ -2185,7 +2188,7 @@
     db.collection("communities").get().then((snap) => {
       const list = snap.docs.map((d) => {
         const v = d.data() || {};
-        const units = Array.isArray(v.units) ? v.units.map((x) => String(x || "").trim()).filter(Boolean) : [];
+        const units = Array.isArray(v.units) ? v.units : [];
         return {
           id: String(v.id || d.id),
           name: String(v.name || ""),

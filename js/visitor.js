@@ -104,10 +104,12 @@
       if (!unitList) return;
       unitList.innerHTML = "";
       (Array.isArray(units) ? units : []).forEach((u) => {
-        const v = String(u || "").trim();
-        if (!v) return;
+        const uid = (typeof u === "object" && u !== null) ? String(u.id || "").trim() : String(u || "").trim();
+        const addr = (typeof u === "object" && u !== null && u.address) ? ` (${u.address})` : "";
+        if (!uid) return;
         const opt = document.createElement("option");
-        opt.value = v;
+        opt.value = uid;
+        opt.label = addr;
         unitList.appendChild(opt);
       });
     };
