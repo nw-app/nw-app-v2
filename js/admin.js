@@ -33,6 +33,8 @@
     creatorFetches: new Map(),
   };
 
+  const pad2 = (n) => String(n).padStart(2, "0");
+
   const moduleCatalog = [
     { id: "parcel", name: "包裹郵件", desc: "登記到貨、通知住戶、領取簽收", badge: "常用", page: "#community/parcel" },
     { id: "visitor", name: "訪客登記", desc: "到訪資訊、車牌、進出時間管理", badge: "安全", page: "#community/visitor" },
@@ -472,6 +474,155 @@
       try { state.unsubVisitors(); } catch {}
       state.unsubVisitors = null;
     }
+  }
+
+  function ensureModal(id, className, width) {
+    let modal = document.getElementById(id);
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal " + (className || "");
+    modal.id = id;
+    modal.hidden = true;
+    if (width) {
+      modal.style.setProperty("--modal-width", width);
+    }
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  async function openPendingVisitorsModal80({ communityId, communityName }) {
+    const modal = ensureModal("pendingVisitorsModal", "modal-pending-visitors", "80%");
+    let detachList = () => {};
+    const detach = bindModalClose(modal, () => {
+      detachList();
+    });
+
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="pendingVisitorsTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="pendingVisitorsTitle">待審核訪客 - ${communityName || "社區"}</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="status" id="pendingVisitorStatus" hidden></div>
+          <div class="pending-list" id="pendingVisitorList"></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+
+    const listEl = modal.querySelector("#pendingVisitorList");
+    const stEl = modal.querySelector("#pendingVisitorStatus");
+
+    const setStatus = (msg, isError) => {
+      if (!stEl) return;
+      const t = String(msg || "").trim();
+      stEl.textContent = t;
+      stEl.hidden = !t;
+      stEl.classList.toggle("error", Boolean(isError));
+    };
+
+    const renderList = (list) => {
+      if (!listEl) return;
+      if (!list.length) {
+        listEl.innerHTML = `<div class="status">目前沒有待審核的訪客。</div>`;
+        return;
+      }
+
+      listEl.innerHTML = list.map(v => {
+        const id = String(v.id || "");
+        const name = String(v.name || "—");
+        const unit = String(v.unit || "—");
+        const phone = String(v.phone || "—");
+        const purpose = String(v.purpose || "—");
+        const createdAt = v.createdAt ? (v.createdAt.toDate ? v.createdAt.toDate() : new Date(v.createdAt)) : null;
+        const createdText = createdAt ? `${createdAt.getFullYear()}-${pad2(createdAt.getMonth()+1)}-${pad2(createdAt.getDate())} ${pad2(createdAt.getHours())}:${pad2(createdAt.getMinutes())}` : "—";
+
+        return `
+          <div class="pending-item" data-id="${id}">
+            <div class="pending-info">
+              <div class="pending-name">${escapeHtml(name)} <span class="tag yellow">待審核</span></div>
+              <div class="pending-sub">戶號：${escapeHtml(unit)}｜手機：${escapeHtml(phone)}</div>
+              <div class="pending-sub">事由：${escapeHtml(purpose)}</div>
+              <div class="pending-created">建立時間：${escapeHtml(createdText)}</div>
+            </div>
+            <div class="pending-actions">
+              <button class="btn btn-primary btn-sm" type="button" data-approve title="核准授權">核准</button>
+              <button class="btn btn-sm danger" type="button" data-reject title="刪除紀錄">刪除</button>
+            </div>
+          </div>
+        `.trim();
+      }).join("");
+
+      // 綁定事件
+      listEl.querySelectorAll(".pending-item").forEach(item => {
+        const id = item.getAttribute("data-id");
+        const v = list.find(x => x.id === id);
+        if (!v) return;
+
+        item.querySelector("[data-approve]").onclick = async () => {
+          const ok = await (window.nwConfirm ? window.nwConfirm({
+            title: "核准訪客",
+            message: `是否核准「${v.name}」的訪客登記並核發訪客證？`,
+            okText: "核准",
+            cancelText: "取消"
+          }) : Promise.resolve(confirm("是否核准？")));
+
+          if (ok) {
+            try {
+              await db.collection("communities").doc(communityId).collection("visitors").doc(id).update({
+                status: "approved",
+                passAuthorized: true,
+                updatedAt: FieldValue.serverTimestamp()
+              });
+              toast("訪客已核准");
+            } catch (err) {
+              toast("操作失敗：" + err.message);
+            }
+          }
+        };
+
+        item.querySelector("[data-reject]").onclick = async () => {
+          const ok = await (window.nwConfirm ? window.nwConfirm({
+            title: "刪除申請",
+            message: `是否刪除「${v.name}」的訪客登記紀錄？`,
+            okText: "確認刪除",
+            cancelText: "取消",
+            danger: true
+          }) : Promise.resolve(confirm("是否刪除？")));
+
+          if (ok) {
+            try {
+              await db.collection("communities").doc(communityId).collection("visitors").doc(id).delete();
+              toast("已刪除紀錄");
+            } catch (err) {
+              toast("操作失敗：" + err.message);
+            }
+          }
+        };
+      });
+    };
+
+    setStatus("讀取中...", false);
+    detachList = db.collection("communities").doc(communityId).collection("visitors")
+      .where("status", "==", "pending")
+      .onSnapshot((snap) => {
+        const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        list.sort((a, b) => {
+          const tA = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : a.createdAt) : 0;
+          const tB = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : b.createdAt) : 0;
+          return tB - tA;
+        });
+        setStatus("", false);
+        renderList(list);
+      }, (err) => {
+        setStatus("讀取失敗：" + err.message, true);
+      });
+
+    modal.hidden = false;
   }
 
   function stopResidentsSubscription() {
@@ -995,7 +1146,6 @@
     const statusEl = modal.querySelector("#visitorTimeStatus");
     const submitBtn = modal.querySelector("#btnSaveVisitorTime");
 
-    const pad2 = (n) => String(n).padStart(2, "0");
     const toLocalInputValue = (d) => {
       if (!(d instanceof Date) || !Number.isFinite(d.getTime())) return "";
       return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -1100,7 +1250,6 @@
 
   function formatYmdHms(d) {
     if (!(d instanceof Date) || !Number.isFinite(d.getTime())) return "";
-    const pad2 = (n) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   }
 
@@ -2965,16 +3114,48 @@
     let visitorCommunityTryIndex = 0;
     const visitorDesc = (moduleCatalog.find((m) => m && m.id === "visitor") || {}).desc || "到訪資訊、車牌、進出時間管理";
 
-    const pad2 = (n) => String(n).padStart(2, "0");
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
 
     if (subnavEl) {
       subnavEl.innerHTML = `
+        <div class="btn-with-badge">
+          <button class="btn btn-sm" type="button" id="btnPendingVisitors">待審訪客</button>
+          <span class="badge" id="pendingVisitorsBadge" hidden>0</span>
+        </div>
         <button class="btn btn-sm" type="button" id="btnVisitorQr">訪客QR Code</button>
         <button class="btn btn-sm" type="button" id="btnScanVisitor">掃碼登記</button>
         <button class="btn btn-primary btn-sm" type="button" id="btnAddVisitor">新增訪客</button>
       `.trim();
+      
+      const pendingBtn = document.getElementById("btnPendingVisitors");
+      if (pendingBtn) {
+        pendingBtn.onclick = () => openPendingVisitorsModal80({ communityId: cid, communityName: cname });
+      }
+    }
+
+    // 監聽待審核訪客數量
+    if (cid) {
+      // 清理舊的監聽
+      if (state.unsubPendingVisitorsBadge) {
+        try { state.unsubPendingVisitorsBadge(); } catch {}
+      }
+      
+      // 這裡需要支援多路徑監聽嗎？通常 pending 應該在正確的 cid 下
+      state.unsubPendingVisitorsBadge = db.collection("communities").doc(cid).collection("visitors")
+        .where("status", "==", "pending")
+        .onSnapshot((snap) => {
+          const badge = document.getElementById("pendingVisitorsBadge");
+          if (badge) {
+            const count = snap.size;
+            badge.textContent = count;
+            badge.hidden = count === 0;
+          }
+        }, (err) => {
+          console.error("Pending visitors badge error:", err);
+          // 如果 cid 失敗，嘗試用 slug? 
+          // 暫不複雜化，除非使用者回報
+        });
     }
 
     contentEl.innerHTML = `
@@ -3137,6 +3318,14 @@
                 </div>
               </div>
               <div class="visitor-actions">
+                ${isPending ? `
+                  <button class="icon-btn primary" type="button" data-auth aria-label="授權" title="授權">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                      <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                ` : ""}
                 <button class="icon-btn ${isPending ? "warning" : ""}" type="button" data-pass aria-label="${isPending ? "待審核" : "訪客證"}" title="${isPending ? "待審核" : "訪客證"}">
                   ${isPending ? `
                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -3153,14 +3342,6 @@
                     </svg>
                   `}
                 </button>
-                ${isPending ? `
-                  <button class="icon-btn primary" type="button" data-auth aria-label="授權" title="授權">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                      <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </button>
-                ` : ""}
                 <button class="icon-btn" type="button" data-edit aria-label="編輯" title="編輯">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-2.8l-.2-.2a2 2 0 0 0-2.8 0L5 17v3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>

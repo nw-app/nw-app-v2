@@ -31,8 +31,10 @@
       .qr-box img { width: 220px; height: 220px; }
       .hint { color: var(--muted); font-size: 13px; line-height: 1.6; text-align: center; }
       .pill { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 12px; background: rgba(211, 47, 47, 0.10); color: #b91c1c; border: 1px solid rgba(211, 47, 47, 0.22); white-space: nowrap; justify-self: end; }
-      .v-ft { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-content: center; border-top: 1px solid rgba(17, 24, 39, 0.08); background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(10px); }
+      .v-ft { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 12px; align-content: center; border-top: 1px solid rgba(17, 24, 39, 0.08); background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(10px); }
       .v-ft .btn { height: 52px; border-radius: 16px; }
+      .btn-success { background: #10b981; color: #fff; border: 1px solid rgba(0,0,0,0.08); }
+      .btn-success:active { transform: scale(0.98); }
     </style>
   </head>
   <body>
@@ -121,6 +123,7 @@
 
         <footer class="v-ft">
           <button class="btn btn-primary" type="submit" form="visitorForm" id="btnFooterSubmit">送出登記</button>
+          <button class="btn btn-success" type="button" id="btnFooterAuth" hidden>授權</button>
           <button class="btn" type="button" id="btnFooterPass" disabled>訪客證</button>
         </footer>
       </div>

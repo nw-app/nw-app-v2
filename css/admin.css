@@ -821,6 +821,28 @@ a { color: inherit; text-decoration: none; }
   display: none !important;
 }
 
+.pending-list { display: grid; gap: 12px; }
+.pending-item {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: #fff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  transition: all 120ms ease;
+}
+.pending-item:hover {
+  border-color: rgba(17, 24, 39, 0.22);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.04);
+}
+.pending-info { min-width: 0; flex: 1; }
+.pending-name { font-size: 16px; font-weight: 700; color: #111827; display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.pending-sub { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.pending-created { font-size: 11px; color: var(--muted); margin-top: 4px; opacity: 0.8; }
+.pending-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
 @media (max-width: 980px) {
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

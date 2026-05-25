@@ -91,6 +91,7 @@
     const form = qs("#visitorForm");
     const resultBox = qs("#resultBox");
     const btnFooterSubmit = qs("#btnFooterSubmit");
+    const btnFooterAuth = qs("#btnFooterAuth");
     const btnFooterPass = qs("#btnFooterPass");
     const pageTitle = qs("#pageTitle");
     const resultMsg = qs("#resultMsg");
@@ -190,17 +191,42 @@
           const authorized = Boolean(data && (data.passAuthorized === true || data.status === "approved"));
           current.passAuthorized = authorized;
           setPassReady(authorized);
+          if (btnFooterAuth) show(btnFooterAuth, !authorized);
           if (resultMsg) {
             resultMsg.textContent = authorized ? "已授權，可查看訪客證。" : "已送出登記，等待授權。";
           }
         },
         () => {
           setPassReady(false);
+          if (btnFooterAuth) show(btnFooterAuth, false);
         }
       );
     };
 
     setPassReady(false);
+    if (btnFooterAuth) {
+      btnFooterAuth.addEventListener("click", async () => {
+        if (!current.docRef) {
+          setStatus("請先送出登記。", true);
+          return;
+        }
+        btnFooterAuth.disabled = true;
+        setStatus("授權中...", false);
+        try {
+          await current.docRef.update({
+            passAuthorized: true,
+            status: "approved",
+            authorizedAt: firebase.firestore.Timestamp.now()
+          });
+          setStatus("授權成功！", false);
+        } catch (err) {
+          console.error("Auth failed:", err);
+          setStatus("授權失敗，請稍後再試。", true);
+          btnFooterAuth.disabled = false;
+        }
+      });
+    }
+
     if (btnFooterPass) {
       btnFooterPass.addEventListener("click", async () => {
         if (!current.docRef || !current.vid) {
@@ -282,6 +308,8 @@
         setPassReady(false);
         attachDoc(docRef);
         show(form, false);
+        if (btnFooterSubmit) show(btnFooterSubmit, false);
+        if (btnFooterAuth) show(btnFooterAuth, true);
         show(resultBox, true);
         show(passBox, false);
         if (resultMsg) resultMsg.textContent = "已送出登記，等待授權。";
