@@ -2126,6 +2126,7 @@
         <button class="btn btn-sm btn-primary" data-filter="all">全部包裹</button>
         <button class="btn btn-sm" data-filter="pending">待領取</button>
         <button class="btn btn-sm" data-filter="received">已領取</button>
+        <button class="btn btn-sm" id="btnCourierConfig">物流設定</button>
         <button class="btn btn-primary btn-sm" id="btnRegisterParcel">登記包裹</button>
       `;
       
@@ -2137,6 +2138,11 @@
           renderParcelList(filter);
         };
       });
+
+      const btnCourierConfig = subnavEl.querySelector("#btnCourierConfig");
+      if (btnCourierConfig) {
+        btnCourierConfig.onclick = () => openCourierConfigModal80({ cid });
+      }
 
       const btnRegister = subnavEl.querySelector("#btnRegisterParcel");
       if (btnRegister) {
@@ -2586,6 +2592,11 @@
         }
         ctx.putImageData(imageData, 0, 0);
         
+        // 取得自定義物流清單
+        const cid = resolveActiveCommunityId();
+        const configDoc = await db.collection("communities").doc(cid).collection("settings").doc("parcel_config").get();
+        const customCouriers = configDoc.exists ? (configDoc.data().couriers || []) : [];
+        
         // 使用 Tesseract 進行 OCR
         const result = await Tesseract.recognize(canvas, "chi_tra+eng", {
           logger: m => console.log(m)
@@ -2594,9 +2605,11 @@
         const text = result.data.text;
         console.log("OCR Result:", text);
 
-        // 簡易解析邏輯 (擴展物流公司)
-        const companies = ["黑貓", "宅急便", "宅配通", "新竹物流", "嘉里大榮", "郵政", "順豐", "SF", "FedEx", "DHL", "全家", "7-11", "萊爾富", "OK", "蝦皮"];
-        for (const c of companies) {
+        // 簡易解析邏輯
+        const baseCompanies = ["黑貓", "宅急便", "宅配通", "新竹物流", "嘉里大榮", "郵政", "順豐", "SF", "FedEx", "DHL", "全家", "7-11", "萊爾富", "OK", "蝦皮"];
+        const allCompanies = [...new Set([...baseCompanies, ...customCouriers])];
+        
+        for (const c of allCompanies) {
           if (text.includes(c)) {
             if (c === "SF") detectedData.company = "順豐速運";
             else if (c.includes("黑貓")) detectedData.company = "黑貓宅急便";
@@ -2636,6 +2649,150 @@
 
     modal.hidden = false;
     startScanner();
+  }
+
+  function ensureCourierConfigModal() {
+    let modal = document.getElementById("courierConfigModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "courierConfigModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="courierConfigTitle" style="width: min(800px, 80vw); max-height: 80vh;">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="courierConfigTitle">物流公司設定</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="courier-add-box" style="display: flex; gap: 10px; margin-bottom: 20px; background: var(--panel-2); padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <input type="text" id="newCourierName" placeholder="新增物流名稱 (如: 順豐速運)" style="flex: 1; height: 44px; border-radius: 10px; border: 1px solid var(--border); padding: 0 12px;" />
+            <button class="btn btn-primary" id="btnAddCourier">新增</button>
+          </div>
+          <div class="status" id="courierConfigStatus" hidden></div>
+          <div class="courier-list" id="courierList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px;">
+            <!-- 物流清單 -->
+          </div>
+          <div style="margin-top: 24px;">
+            <p style="font-size: 13px; color: var(--muted); margin-bottom: 12px;">預設物流 (點擊可快速加入)：</p>
+            <div id="defaultCouriers" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  async function openCourierConfigModal80({ cid }) {
+    const modal = ensureCourierConfigModal();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const listEl = modal.querySelector("#courierList");
+    const statusEl = modal.querySelector("#courierConfigStatus");
+    const newCourierInput = modal.querySelector("#newCourierName");
+    const btnAdd = modal.querySelector("#btnAddCourier");
+    const defaultBox = modal.querySelector("#defaultCouriers");
+
+    const defaultList = [
+      "黑貓宅急便", "新竹物流", "宅配通", "嘉里大榮", "中華郵政", 
+      "順豐速運", "FedEx", "DHL", "UPS",
+      "全家便利商店", "統一超商 (7-11)", "萊爾富", "OK超商", "蝦皮店到店",
+      "圓通速遞", "中通快遞", "申通快遞", "韻達快遞"
+    ];
+
+    const setStatus = (msg, isError) => {
+      statusEl.textContent = msg;
+      statusEl.hidden = !msg;
+      statusEl.classList.toggle("error", isError);
+    };
+
+    const renderDefaultCouriers = (currentCouriers) => {
+      const remaining = defaultList.filter(d => !currentCouriers.includes(d));
+      defaultBox.innerHTML = remaining.map(name => 
+        `<button class="tag" style="cursor:pointer; border-style: dashed;" data-add-default="${name}">+ ${name}</button>`
+      ).join("");
+      
+      defaultBox.querySelectorAll("[data-add-default]").forEach(btn => {
+        btn.onclick = () => {
+          const name = btn.getAttribute("data-add-default");
+          saveCourier(name, true);
+        };
+      });
+    };
+
+    const saveCourier = async (name, isAdd) => {
+      if (!name) return;
+      setStatus("儲存中...", false);
+      try {
+        const docRef = db.collection("communities").doc(cid).collection("settings").doc("parcel_config");
+        const doc = await docRef.get();
+        let couriers = doc.exists ? (doc.data().couriers || []) : [];
+        
+        if (isAdd) {
+          if (!couriers.includes(name)) couriers.push(name);
+        } else {
+          couriers = couriers.filter(c => c !== name);
+        }
+        
+        await docRef.set({ couriers, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        newCourierInput.value = "";
+        setStatus("", false);
+        toast(isAdd ? "已新增" : "已刪除");
+      } catch (err) {
+        setStatus("操作失敗：" + err.message, true);
+      }
+    };
+
+    btnAdd.onclick = () => {
+      const name = newCourierInput.value.trim();
+      if (!name) return toast("請輸入名稱");
+      saveCourier(name, true);
+    };
+
+    // 監聽物流清單
+    const unsub = db.collection("communities").doc(cid).collection("settings").doc("parcel_config")
+      .onSnapshot(async doc => {
+        let couriers = doc.exists ? (doc.data().couriers || []) : [];
+        
+        // 若完全沒有資料，則自動初始化預設清單
+        if (!doc.exists || couriers.length === 0) {
+          couriers = [...defaultList];
+          try {
+            await db.collection("communities").doc(cid).collection("settings").doc("parcel_config")
+              .set({ couriers, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+            toast("已自動載入預設物流清單");
+          } catch (err) {
+            console.error("Initialize couriers error:", err);
+          }
+        }
+
+        renderDefaultCouriers(couriers);
+        
+        listEl.innerHTML = couriers.map(name => `
+          <div class="courier-item" style="display: flex; justify-content: space-between; align-items: center; background: #fff; border: 1px solid var(--border); padding: 10px 12px; border-radius: 10px;">
+            <span style="font-weight: 700; font-size: 14px;">${escapeHtml(name)}</span>
+            <button class="icon-btn danger" style="width: 28px; height: 28px;" data-del-courier="${name}">×</button>
+          </div>
+        `).join("");
+        
+        listEl.querySelectorAll("[data-del-courier]").forEach(btn => {
+          btn.onclick = () => {
+            const name = btn.getAttribute("data-del-courier");
+            saveCourier(name, false);
+          };
+        });
+      });
+
+    const oldDetach = detach;
+    detach = () => { unsub(); oldDetach(); };
+
+    modal.hidden = false;
   }
 
   function renderResidentsModule() {
