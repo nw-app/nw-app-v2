@@ -71,15 +71,28 @@
       </div>
     </div>
 
-    <div class="modal" id="serviceModal" hidden>
-      <div class="modal-backdrop" id="btnServiceModalBackdrop"></div>
-      <div class="modal-dialog full" role="dialog" aria-modal="true" aria-labelledby="serviceModalTitle">
+    <div class="modal" id="externalPageModal" hidden>
+      <div class="modal-backdrop" id="btnExternalPageModalBackdrop"></div>
+      <div class="modal-dialog full" role="dialog" aria-modal="true" aria-labelledby="externalPageModalTitle">
         <div class="modal-hd">
-          <h3 class="modal-title" id="serviceModalTitle">客服中心</h3>
-          <button class="modal-close" type="button" id="btnCloseServiceModal" aria-label="關閉">×</button>
+          <h3 class="modal-title" id="externalPageModalTitle">頁面名稱</h3>
+          <div class="modal-hd-actions">
+            <a href="#" target="_blank" class="btn-icon-only" id="btnExternalPageOpenNew" title="在新視窗開啟">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+            </a>
+            <button class="modal-close" type="button" id="btnCloseExternalPageModal" aria-label="關閉">×</button>
+          </div>
         </div>
         <div class="modal-body no-padding">
-          <iframe id="serviceIframe" src="" frameborder="0" style="width: 100%; height: 100%; display: block;"></iframe>
+          <div id="externalPageError" class="iframe-error-container" hidden>
+            <div class="iframe-error-content">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:64px;height:64px;margin-bottom:16px;opacity:0.5;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+              <h3>無法在此嵌入顯示</h3>
+              <p>基於安全性考量，部分網站（如 Google、Gemini）不允許在小視窗中開啟。請點擊下方按鈕直接在瀏覽器分頁中瀏覽。</p>
+              <a href="#" target="_blank" class="btn btn-primary" id="btnExternalPageErrorOpen">在新分頁開啟</a>
+            </div>
+          </div>
+          <iframe id="externalPageIframe" src="" frameborder="0" style="width: 100%; height: 100%; display: block;"></iframe>
         </div>
       </div>
     </div>

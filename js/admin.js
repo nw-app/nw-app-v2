@@ -984,23 +984,57 @@
 
     const onShareLine = async (e) => {
       e.preventDefault();
+      const dialog = modal.querySelector(".modal-dialog");
+      if (!dialog) return;
+
+      if (btnLine) btnLine.disabled = true;
+      const originalText = btnLine.textContent;
+      btnLine.textContent = "處理中...";
+
       try {
-        if (navigator && typeof navigator.share === "function") {
-          try {
-            const resp = await fetch(qrSrc, { cache: "no-store" });
-            const blob = await resp.blob();
-            const file = new File([blob], "visitor-pass-qr.png", { type: blob.type || "image/png" });
-            if (navigator.canShare && navigator.canShare({ files: [file] })) {
-              await navigator.share({ title: "訪客證", text: shareText, files: [file] });
-              return;
-            }
-          } catch {}
-          await navigator.share({ title: "訪客證", text: shareText });
-          return;
+        // 使用 html2canvas 捕捉訪客證內容
+        // 暫時隱藏按鈕列以免出現在圖片中
+        const footer = modal.querySelector(".modal-ft");
+        if (footer) footer.style.visibility = "hidden";
+        
+        const canvas = await html2canvas(dialog, {
+          useCORS: true,
+          scale: 2,
+          backgroundColor: "#ffffff",
+          logging: false,
+          ignoreElements: (el) => {
+            // 忽略關閉按鈕和底部按鈕
+            return el.classList.contains("modal-close") || el.classList.contains("modal-ft");
+          }
+        });
+
+        if (footer) footer.style.visibility = "visible";
+
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+        const file = new File([blob], `訪客證_${communityName || "社區"}.png`, { type: "image/png" });
+
+        if (navigator && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: "訪客證",
+            text: `【${String(communityName || "").trim() || "社區"}｜訪客證】\n訪客：${name || "—"}\n戶號：${unit || "—"}`,
+            files: [file]
+          });
+        } else {
+          // 不支援檔案分享時，退而求其次分享文字
+          const url = `https://social-plugins.line.me/lineit/share?text=${encodeURIComponent(shareText)}`;
+          try { window.open(url, "_blank", "noopener,noreferrer"); } catch { location.href = url; }
         }
-      } catch {}
-      const url = `https://social-plugins.line.me/lineit/share?text=${encodeURIComponent(shareText)}`;
-      try { window.open(url, "_blank", "noopener,noreferrer"); } catch { location.href = url; }
+      } catch (err) {
+        console.error("LINE share failed:", err);
+        // 出錯時退而求其次分享文字
+        const url = `https://social-plugins.line.me/lineit/share?text=${encodeURIComponent(shareText)}`;
+        try { window.open(url, "_blank", "noopener,noreferrer"); } catch { location.href = url; }
+      } finally {
+        if (btnLine) {
+          btnLine.disabled = false;
+          btnLine.textContent = originalText;
+        }
+      }
     };
 
     if (btnLine) btnLine.classList.add("btn-line");
@@ -2072,6 +2106,463 @@
       modal.removeEventListener("click", onClick);
       document.removeEventListener("keydown", onKey);
     };
+  }
+
+  function renderParcelModule() {
+    const cid = resolveActiveCommunityId();
+    const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
+    
+    if (subnavEl) {
+      subnavEl.innerHTML = `
+        <button class="btn btn-sm btn-primary" data-filter="all">全部包裹</button>
+        <button class="btn btn-sm" data-filter="pending">待領取</button>
+        <button class="btn btn-sm" data-filter="received">已領取</button>
+        <button class="btn btn-primary btn-sm" id="btnRegisterParcel">登記包裹</button>
+      `;
+      
+      subnavEl.querySelectorAll("[data-filter]").forEach(btn => {
+        btn.onclick = () => {
+          subnavEl.querySelectorAll("[data-filter]").forEach(b => b.classList.remove("btn-primary"));
+          btn.classList.add("btn-primary");
+          const filter = btn.getAttribute("data-filter");
+          renderParcelList(filter);
+        };
+      });
+
+      const btnRegister = subnavEl.querySelector("#btnRegisterParcel");
+      if (btnRegister) {
+        btnRegister.onclick = () => openParcelModal80({ cid, communityName });
+      }
+    }
+
+    contentEl.innerHTML = `
+      <div class="parcel-list-container" id="parcelList">
+        <div class="status">讀取中...</div>
+      </div>
+    `;
+
+    renderParcelList("all");
+  }
+
+  let _unsubParcels = null;
+  function renderParcelList(filter = "all") {
+    const cid = resolveActiveCommunityId();
+    const listEl = document.getElementById("parcelList");
+    if (!listEl) return;
+
+    if (_unsubParcels) {
+      _unsubParcels();
+      _unsubParcels = null;
+    }
+
+    // 為了避免複合索引報錯，改為讀取後在前端過濾
+    let query = db.collection("communities").doc(cid).collection("parcels").orderBy("createdAt", "desc").limit(200);
+    
+    _unsubParcels = query.onSnapshot((snap) => {
+      if (snap.empty) {
+        listEl.innerHTML = `<div class="status">目前沒有包裹紀錄。</div>`;
+        return;
+      }
+
+      let docs = snap.docs;
+      if (filter !== "all") {
+        docs = docs.filter(doc => doc.data().status === filter);
+      }
+
+      if (docs.length === 0) {
+        listEl.innerHTML = `<div class="status">沒有符合條件的包裹。</div>`;
+        return;
+      }
+
+      listEl.innerHTML = `
+        <div class="parcel-grid">
+          ${docs.map(doc => {
+            const p = doc.data();
+            const id = doc.id;
+            const statusLabel = p.status === "received" ? "已領取" : "待領取";
+            const statusClass = p.status === "received" ? "tag green" : "tag yellow";
+            const time = p.createdAt ? (p.createdAt.toDate ? p.createdAt.toDate() : new Date(p.createdAt)) : null;
+            const timeText = time ? `${pad2(time.getMonth()+1)}/${pad2(time.getDate())} ${pad2(time.getHours())}:${pad2(time.getMinutes())}` : "—";
+            
+            return `
+              <div class="parcel-card" data-id="${id}">
+                <div class="parcel-card-hd">
+                  <div class="parcel-company">${escapeHtml(p.company || "其他物流")}</div>
+                  <div class="${statusClass}">${statusLabel}</div>
+                </div>
+                <div class="parcel-card-bd">
+                  <div class="parcel-info">
+                    <div class="parcel-recipient"><strong>${escapeHtml(p.unit || "—")}</strong> ${escapeHtml(p.recipient || "—")}</div>
+                    <div class="parcel-track">單號：${escapeHtml(p.trackNo || "—")}</div>
+                    <div class="parcel-time">到貨：${timeText}</div>
+                  </div>
+                  <div class="parcel-actions">
+                    ${p.status === "pending" ? `<button class="btn btn-sm btn-primary" data-receive="${id}">簽收</button>` : ""}
+                    <button class="btn btn-sm" data-detail="${id}">詳情</button>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+
+      listEl.querySelectorAll("[data-receive]").forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const id = btn.getAttribute("data-receive");
+          receiveParcel(id);
+        };
+      });
+
+      listEl.querySelectorAll("[data-detail]").forEach(btn => {
+        btn.onclick = () => {
+          const id = btn.getAttribute("data-detail");
+          const p = snap.docs.find(d => d.id === id).data();
+          openParcelModal80({ cid, parcelId: id, parcelData: p, isEdit: true });
+        };
+      });
+    }, (err) => {
+      listEl.innerHTML = `<div class="status error">讀取失敗：${err.message}</div>`;
+    });
+  }
+
+  async function receiveParcel(id) {
+    const cid = resolveActiveCommunityId();
+    const ok = await (window.nwConfirm ? window.nwConfirm({
+      title: "包裹簽收",
+      message: "確認住戶已領取此包裹？",
+      okText: "確認簽收",
+      cancelText: "取消"
+    }) : Promise.resolve(confirm("確認簽收？")));
+
+    if (ok) {
+      try {
+        await db.collection("communities").doc(cid).collection("parcels").doc(id).update({
+          status: "received",
+          receivedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()
+        });
+        toast("已完成簽收");
+      } catch (err) {
+        toast("操作失敗：" + err.message);
+      }
+    }
+  }
+
+  function ensureParcelModal() {
+    let modal = document.getElementById("parcelModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "parcelModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="parcelModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="parcelModalTitle">登記包裹</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="parcelModalForm">
+          <div class="modal-body">
+            <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+              <button class="btn btn-primary" type="button" id="btnScanParcel" style="flex: 1;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                掃描辨識
+              </button>
+            </div>
+            <div class="field">
+              <label for="p_company">物流公司</label>
+              <input id="p_company" type="text" placeholder="例：黑貓宅急便" required />
+            </div>
+            <div class="field">
+              <label for="p_trackNo">物流單號</label>
+              <input id="p_trackNo" type="text" placeholder="請輸入或掃描單號" required />
+            </div>
+            <div class="field">
+              <label for="p_unit">收件戶號</label>
+              <input id="p_unit" type="text" placeholder="例：A-1203" required />
+            </div>
+            <div class="field">
+              <label for="p_recipient">收件人姓名</label>
+              <input id="p_recipient" type="text" placeholder="例：林小姐" required />
+            </div>
+            <div class="field">
+              <label for="p_address">收件地址 (選填)</label>
+              <input id="p_address" type="text" placeholder="物流單上的完整地址" />
+            </div>
+            <div class="field">
+              <label for="p_note">備註</label>
+              <input id="p_note" type="text" placeholder="例：冷藏、易碎品" />
+            </div>
+            <div class="status" id="parcelModalStatus" hidden></div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">取消</button>
+            <button class="btn btn-primary" type="submit" id="btnSubmitParcel">儲存</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openParcelModal80({ cid, parcelId, parcelData, isEdit }) {
+    const modal = ensureParcelModal();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const form = modal.querySelector("#parcelModalForm");
+    const titleEl = modal.querySelector("#parcelModalTitle");
+    const statusEl = modal.querySelector("#parcelModalStatus");
+    const btnSubmit = modal.querySelector("#btnSubmitParcel");
+    const btnScan = modal.querySelector("#btnScanParcel");
+
+    const inputCompany = modal.querySelector("#p_company");
+    const inputTrackNo = modal.querySelector("#p_trackNo");
+    const inputUnit = modal.querySelector("#p_unit");
+    const inputRecipient = modal.querySelector("#p_recipient");
+    const inputAddress = modal.querySelector("#p_address");
+    const inputNote = modal.querySelector("#p_note");
+
+    if (titleEl) titleEl.textContent = isEdit ? "編輯包裹" : "登記包裹";
+    if (btnSubmit) btnSubmit.textContent = isEdit ? "更新" : "登記";
+    if (statusEl) { statusEl.hidden = true; statusEl.textContent = ""; }
+
+    if (isEdit && parcelData) {
+      inputCompany.value = parcelData.company || "";
+      inputTrackNo.value = parcelData.trackNo || "";
+      inputUnit.value = parcelData.unit || "";
+      inputRecipient.value = parcelData.recipient || "";
+      inputAddress.value = parcelData.address || "";
+      inputNote.value = parcelData.note || "";
+    } else {
+      form.reset();
+    }
+
+    if (btnScan) {
+      btnScan.onclick = () => {
+        openParcelScanModal80({
+          onDetected: (data) => {
+            if (data.company) inputCompany.value = data.company;
+            if (data.trackNo) inputTrackNo.value = data.trackNo;
+            if (data.recipient) inputRecipient.value = data.recipient;
+            if (data.address) inputAddress.value = data.address;
+            toast("辨識完成");
+          }
+        });
+      };
+    }
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const payload = {
+        company: inputCompany.value.trim(),
+        trackNo: inputTrackNo.value.trim(),
+        unit: inputUnit.value.trim(),
+        recipient: inputRecipient.value.trim(),
+        address: inputAddress.value.trim(),
+        note: inputNote.value.trim(),
+        updatedAt: FieldValue.serverTimestamp()
+      };
+
+      if (!isEdit) {
+        payload.status = "pending";
+        payload.createdAt = FieldValue.serverTimestamp();
+      }
+
+      if (btnSubmit) btnSubmit.disabled = true;
+      try {
+        const ref = isEdit 
+          ? db.collection("communities").doc(cid).collection("parcels").doc(parcelId)
+          : db.collection("communities").doc(cid).collection("parcels").doc();
+        
+        await ref.set(payload, { merge: true });
+        toast(isEdit ? "更新成功" : "登記成功");
+        modal.hidden = true;
+        detach();
+      } catch (err) {
+        if (statusEl) {
+          statusEl.textContent = "儲存失敗：" + err.message;
+          statusEl.hidden = false;
+          statusEl.classList.add("error");
+        }
+      } finally {
+        if (btnSubmit) btnSubmit.disabled = false;
+      }
+    };
+
+    modal.hidden = false;
+  }
+
+  function ensureParcelScanModal() {
+    let modal = document.getElementById("parcelScanModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "parcelScanModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="parcelScanModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="parcelScanModalTitle">掃描包裹單</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div id="parcelScanReader" style="width: 100%; border-radius: 12px; overflow: hidden;"></div>
+          <div class="scan-hint" id="parcelScanHint">請對準物流單上的條碼或收件資訊</div>
+          <div class="scan-results-preview" id="parcelScanPreview" hidden>
+            <div class="scan-result-item"><span>物流公司</span><span id="scanResCompany">—</span></div>
+            <div class="scan-result-item"><span>物流單號</span><span id="scanResTrackNo">—</span></div>
+            <div class="scan-result-item"><span>收件人</span><span id="scanResRecipient">—</span></div>
+            <div class="scan-result-item"><span>收件地址</span><span id="scanResAddress">—</span></div>
+          </div>
+          <div class="status" id="parcelScanStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" id="btnCaptureOCR">捕捉並辨識文字</button>
+          <button class="btn btn-primary" type="button" id="btnConfirmScan" disabled>確認套用</button>
+        </div>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openParcelScanModal80({ onDetected }) {
+    const modal = ensureParcelScanModal();
+    const statusEl = modal.querySelector("#parcelScanStatus");
+    const previewEl = modal.querySelector("#parcelScanPreview");
+    const btnCapture = modal.querySelector("#btnCaptureOCR");
+    const btnConfirm = modal.querySelector("#btnConfirmScan");
+    
+    const resCompany = modal.querySelector("#scanResCompany");
+    const resTrackNo = modal.querySelector("#scanResTrackNo");
+    const resRecipient = modal.querySelector("#scanResRecipient");
+    const resAddress = modal.querySelector("#scanResAddress");
+
+    let scanner = null;
+    let detectedData = { company: "", trackNo: "", recipient: "", address: "" };
+
+    const setStatus = (msg, isError) => {
+      statusEl.textContent = msg;
+      statusEl.hidden = !msg;
+      statusEl.classList.toggle("error", isError);
+    };
+
+    const updatePreview = () => {
+      resCompany.textContent = detectedData.company || "—";
+      resTrackNo.textContent = detectedData.trackNo || "—";
+      resRecipient.textContent = detectedData.recipient || "—";
+      resAddress.textContent = detectedData.address || "—";
+      previewEl.hidden = false;
+      btnConfirm.disabled = !(detectedData.company || detectedData.trackNo || detectedData.recipient);
+    };
+
+    const stopScanner = async () => {
+      if (scanner) {
+        try {
+          await scanner.stop();
+          await scanner.clear();
+        } catch {}
+        scanner = null;
+      }
+    };
+
+    let detach = () => {};
+    detach = bindModalClose(modal, async () => {
+      await stopScanner();
+      detach();
+    });
+
+    const onScanSuccess = (decodedText) => {
+      if (decodedText && decodedText !== detectedData.trackNo) {
+        detectedData.trackNo = decodedText;
+        toast("偵測到單號：" + decodedText);
+        updatePreview();
+      }
+    };
+
+    const startScanner = async () => {
+      detectedData = { company: "", trackNo: "", recipient: "", address: "" };
+      updatePreview();
+      setStatus("啟動相機中...", false);
+      
+      scanner = new Html5Qrcode("parcelScanReader");
+      const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+
+      try {
+        await scanner.start({ facingMode: "environment" }, config, onScanSuccess);
+        setStatus("", false);
+      } catch (err) {
+        setStatus("相機啟動失敗：" + err, true);
+      }
+    };
+
+    btnCapture.onclick = async () => {
+      if (!scanner) return;
+      
+      btnCapture.disabled = true;
+      btnCapture.textContent = "辨識中...";
+      setStatus("正在辨識標籤文字，請保持穩定...", false);
+
+      try {
+        // 從 video 元素捕捉畫面
+        const video = document.querySelector("#parcelScanReader video");
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext("2d").drawImage(video, 0, 0);
+        
+        // 使用 Tesseract 進行 OCR
+        const result = await Tesseract.recognize(canvas, "chi_tra+eng", {
+          logger: m => console.log(m)
+        });
+        
+        const text = result.data.text;
+        console.log("OCR Result:", text);
+
+        // 簡易解析邏輯
+        const companies = ["黑貓", "宅急便", "宅配通", "新竹物流", "嘉里大榮", "郵政", "順豐", "SF", "FedEx", "DHL"];
+        for (const c of companies) {
+          if (text.includes(c)) {
+            detectedData.company = c === "SF" ? "順豐速運" : (c.includes("黑貓") ? "黑貓宅急便" : c);
+            break;
+          }
+        }
+
+        const nameMatch = text.match(/(?:收件人|收人|收)\s*[:：]?\s*([\u4e00-\u9fa5]{2,4})/);
+        if (nameMatch) detectedData.recipient = nameMatch[1];
+
+        const addrMatch = text.match(/[\u4e00-\u9fa5]{2,3}(?:市|縣)[\u4e00-\u9fa5]{2,3}(?:區|市|鎮|鄉).+?[0-9]+號/);
+        if (addrMatch) detectedData.address = addrMatch[0];
+
+        if (!detectedData.trackNo) {
+          const trackMatch = text.match(/[0-9]{10,15}/);
+          if (trackMatch) detectedData.trackNo = trackMatch[0];
+        }
+
+        updatePreview();
+        setStatus("文字辨識完成", false);
+      } catch (err) {
+        setStatus("辨識出錯：" + err.message, true);
+      } finally {
+        btnCapture.disabled = false;
+        btnCapture.textContent = "捕捉並辨識文字";
+      }
+    };
+
+    btnConfirm.onclick = () => {
+      if (typeof onDetected === "function") onDetected(detectedData);
+      modal.hidden = true;
+      stopScanner();
+    };
+
+    modal.hidden = false;
+    startScanner();
   }
 
   function renderResidentsModule() {
@@ -4195,6 +4686,10 @@
     }
     if (moduleId === "visitor") {
       renderVisitorModule();
+      return;
+    }
+    if (moduleId === "parcel") {
+      renderParcelModule();
       return;
     }
     if (subnavEl) subnavEl.innerHTML = "";

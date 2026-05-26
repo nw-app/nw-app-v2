@@ -1131,15 +1131,19 @@
     const backdrop = modal ? modal.querySelector("[data-modal-close]") : null;
     const unitModal = document.getElementById("unitModal");
     const unitForm = document.getElementById("unitModalForm");
-    const unitTextarea = document.getElementById("modal_units_text");
+    const tbody = document.getElementById("unitsTableBody");
     const unitStatus = document.getElementById("unitModalStatus");
-    const unitCountEl = document.getElementById("unitModalCount");
     const unitTitleTextEl = document.getElementById("unitModalTitleText");
     const unitFeatureList = document.getElementById("unitFeatureList");
     const unitFeatureAll = document.getElementById("unitFeatureAll");
     const unitCloseBtn = document.getElementById("btnCloseUnitModal");
     const unitCancelBtn = document.getElementById("btnCancelUnitModal");
     const unitBackdrop = unitModal ? unitModal.querySelector("[data-modal-close]") : null;
+
+    const btnExport = document.getElementById("btnExportUnits");
+    const btnImport = document.getElementById("btnImportUnits");
+    const inputImport = document.getElementById("inputImportUnits");
+    const btnAddRow = document.getElementById("btnAddUnitRow");
 
     let editCommunityId = "";
     let modalImageData = "";
@@ -1150,6 +1154,22 @@
     let unitActiveTab = "units";
     let unitConfigCache = null;
     let unitDrag = null;
+
+    const createUnitRow = (u = {}) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><input type="text" class="u-id" value="${u.id || ""}" placeholder="戶號" /></td>
+        <td><input type="text" class="u-address" value="${u.address || ""}" placeholder="地址" /></td>
+        <td><input type="text" class="u-area" value="${u.area || ""}" placeholder="坪數" /></td>
+        <td><input type="text" class="u-ownership" value="${u.ownership || ""}" placeholder="%" /></td>
+        <td><div class="remove-row" title="刪除">&times;</div></td>
+      `;
+      tr.querySelector(".remove-row").onclick = () => {
+        tr.remove();
+        updateUnitHeaderCounts();
+      };
+      return tr;
+    };
 
     const adminModules = [
       { id: "parcel", name: "包裹郵件" },
@@ -1519,18 +1539,38 @@
     };
 
     const updateUnitHeaderCounts = () => {
+      const summary = document.getElementById("unitTotalsSummary");
       if (unitActiveTab === "features") {
+        if (summary) summary.hidden = true;
         return;
       }
-      const raw = String(unitTextarea ? unitTextarea.value : "");
-      const lines = raw.split(/\r?\n/).map((x) => String(x || "").trim()).filter(Boolean);
-      const seen = new Set();
-      const uniq = [];
-      for (const x of lines) {
-        if (seen.has(x)) continue;
-        seen.add(x);
-        uniq.push(x);
-      }
+      if (summary) summary.hidden = false;
+      if (!tbody) return;
+
+      const rows = Array.from(tbody.querySelectorAll("tr"));
+      let totalUnits = 0;
+      let totalArea = 0;
+      let totalOwnership = 0;
+
+      rows.forEach(tr => {
+        const id = tr.querySelector(".u-id").value.trim();
+        if (!id) return;
+        totalUnits++;
+        
+        const area = parseFloat(tr.querySelector(".u-area").value) || 0;
+        const ownership = parseFloat(tr.querySelector(".u-ownership").value) || 0;
+        
+        totalArea += area;
+        totalOwnership += ownership;
+      });
+
+      const elUnits = document.getElementById("totalUnitsCount");
+      const elArea = document.getElementById("totalAreaSum");
+      const elOwnership = document.getElementById("totalOwnershipSum");
+
+      if (elUnits) elUnits.textContent = `總戶數：${totalUnits}`;
+      if (elArea) elArea.textContent = `總坪數：${totalArea.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+      if (elOwnership) elOwnership.textContent = `總比例：${totalOwnership.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}%`;
     };
 
     const getFeatureOrderFromDom = () => {
@@ -1688,7 +1728,9 @@
 
       let html = "";
       for (let i = 0; i < 8; i++) {
-        const b = buttons[i] || { name: "", icon: "", url: "", data: "" };
+        const b = buttons[i] || { name: "", icon: "", url: "", data: "", openExternal: false };
+        const def = defaultButtons[i] || { name: "", icon: "" };
+        const displayName = b.name || def.name || "";
         html += `
           <div class="button-slot" data-slot-index="${i}">
             <div class="btn-slot-preview" id="${containerId}_preview_${i}" ${b.data ? `data-slot-data="${b.data}"` : ""}>
@@ -1697,11 +1739,17 @@
             <div class="btn-slot-inputs">
               <div class="btn-slot-row">
                 <label>按鈕名稱</label>
-                <input type="text" value="${b.name}" data-btn-name="${i}" />
+                <input type="text" value="${displayName}" data-btn-name="${i}" placeholder="${def.name || ""}" />
               </div>
               <div class="btn-slot-row">
                 <label>連結網址</label>
-                <input type="text" value="${b.url || ""}" placeholder="#" data-btn-url="${i}" />
+                <div class="url-with-check">
+                  <input type="text" value="${b.url || ""}" placeholder="#" data-btn-url="${i}" />
+                  <label class="check-inline">
+                    <input type="checkbox" data-btn-external="${i}" ${b.openExternal ? "checked" : ""} />
+                    <span>另開</span>
+                  </label>
+                </div>
               </div>
               <div class="btn-slot-actions">
                 <input type="text" placeholder="圖片網址" value="${b.icon && !b.icon.startsWith('photo/') ? b.icon : ''}" data-btn-icon="${i}" />
@@ -1749,6 +1797,8 @@
           container.querySelector(`[data-btn-icon="${idx}"]`).value = "";
           container.querySelector(`[data-btn-name="${idx}"]`).value = def.name || "";
           container.querySelector(`[data-btn-url="${idx}"]`).value = "#";
+          const externalCheck = container.querySelector(`[data-btn-external="${idx}"]`);
+          if (externalCheck) externalCheck.checked = false;
         });
       });
 
@@ -1790,18 +1840,19 @@
     };
 
     const openUnitModal = (community) => {
-      if (!unitModal || !unitTextarea) return;
+      if (!unitModal || !tbody) return;
       unitCommunityId = String(community?.id || "");
       const list = Array.isArray(community?.units) ? community.units : [];
-      const cleaned = list.map((x) => String(x || "").trim()).filter(Boolean);
-      const uniq = [];
-      const seen = new Set();
-      for (const x of cleaned) {
-        if (seen.has(x)) continue;
-        seen.add(x);
-        uniq.push(x);
+      
+      if (tbody) {
+        tbody.innerHTML = "";
+        list.forEach(u => {
+          const rowData = typeof u === "object" && u !== null ? u : { id: String(u) };
+          tbody.appendChild(createUnitRow(rowData));
+        });
+        if (list.length === 0) tbody.appendChild(createUnitRow());
       }
-      unitTextarea.value = uniq.join("\n");
+
       clearUnitStatus();
       unitModal.hidden = false;
       setActiveUnitTab("units");
@@ -1824,7 +1875,6 @@
           renderServiceSettings(unitConfigCache);
         });
       }
-      unitTextarea.focus();
       const onKeydown = (e) => {
         if (e.key === "Escape") closeUnitModal();
       };
@@ -1832,9 +1882,90 @@
       detachUnitKeydown = () => document.removeEventListener("keydown", onKeydown);
     };
 
+    if (btnAddRow) btnAddRow.addEventListener("click", () => {
+      if (tbody) {
+        const row = createUnitRow();
+        tbody.appendChild(row);
+        updateUnitHeaderCounts();
+        row.querySelector("input").focus();
+      }
+    });
+
+    if (btnExport) btnExport.addEventListener("click", () => {
+      if (!window.XLSX) {
+        alert("Excel 函式庫尚未載入，請稍後再試。");
+        return;
+      }
+      const rows = Array.from(tbody.querySelectorAll("tr"));
+      const data = rows.map(tr => ({
+        "戶號": tr.querySelector(".u-id").value.trim(),
+        "地址": tr.querySelector(".u-address").value.trim(),
+        "坪數": tr.querySelector(".u-area").value.trim(),
+        "區分所有權人%": tr.querySelector(".u-ownership").value.trim()
+      })).filter(x => x["戶號"]);
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "戶號列表");
+      XLSX.writeFile(wb, `戶號列表_${unitCommunityId}.xlsx`);
+    });
+
+    if (btnImport) btnImport.addEventListener("click", () => inputImport.click());
+    if (inputImport) inputImport.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!window.XLSX) {
+        alert("Excel 函式庫尚未載入，請稍後再試。");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (re) => {
+        try {
+          const data = new Uint8Array(re.target.result);
+          const workbook = XLSX.read(data, { type: "array" });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(firstSheet);
+          
+          if (json.length === 0) {
+            showUnitError("檔案中沒有資料。");
+            return;
+          }
+
+          if (tbody) {
+            tbody.innerHTML = "";
+            json.forEach(row => {
+              const id = String(row["戶號"] || row["id"] || row["戶"] || Object.values(row)[0] || "").trim();
+              const addr = String(row["地址"] || row["address"] || Object.values(row)[1] || "").trim();
+              const area = String(row["坪數"] || row["area"] || Object.values(row)[2] || "").trim();
+              const own = String(row["區分所有權人%"] || row["ownership"] || Object.values(row)[3] || "").trim();
+              if (id) tbody.appendChild(createUnitRow({ id, address: addr, area, ownership: own }));
+            });
+            updateUnitHeaderCounts();
+          }
+          showUnitError("匯入成功，請確認後點擊儲存。");
+          unitStatus.classList.remove("error");
+        } catch (err) {
+          console.error("Import failed:", err);
+          showUnitError("匯入失敗，請檢查檔案格式。");
+        } finally {
+          inputImport.value = "";
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
     if (unitCancelBtn) unitCancelBtn.addEventListener("click", closeUnitModal);
     if (unitCloseBtn) unitCloseBtn.addEventListener("click", closeUnitModal);
     if (unitBackdrop) unitBackdrop.addEventListener("click", closeUnitModal);
+
+    if (tbody && !tbody._boundInput) {
+      tbody._boundInput = true;
+      tbody.addEventListener("input", (e) => {
+        if (e.target && (e.target.classList.contains("u-area") || e.target.classList.contains("u-ownership") || e.target.classList.contains("u-id"))) {
+          updateUnitHeaderCounts();
+        }
+      });
+    }
 
     if (unitModal && !unitModal._boundTabs) {
       unitModal._boundTabs = true;
@@ -1944,18 +2075,26 @@
           closeUnitModal();
           return;
         }
-        const raw = String(unitTextarea ? unitTextarea.value : "");
-        const lines = raw.split(/\r?\n/).map((x) => String(x || "").trim()).filter(Boolean);
+
         const uniq = [];
         const seen = new Set();
-        for (const x of lines) {
-          const k = x;
-          if (seen.has(k)) continue;
-          seen.add(k);
-          uniq.push(k);
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        
+        for (const tr of rows) {
+          const uId = tr.querySelector(".u-id").value.trim();
+          const address = tr.querySelector(".u-address").value.trim();
+          const area = tr.querySelector(".u-area").value.trim();
+          const ownership = tr.querySelector(".u-ownership").value.trim();
+          
+          if (!uId) continue;
+          if (seen.has(uId)) continue;
+          seen.add(uId);
+
+          uniq.push({ id: uId, address, area, ownership });
         }
+
         if (uniq.length === 0) {
-          showUnitError("請至少輸入 1 個戶號（每行一戶）。");
+          showUnitError("請至少輸入 1 個戶號。");
           return;
         }
         setBusy(true);
@@ -1997,12 +2136,14 @@
             for (let i = 0; i < 8; i++) {
               const name = container.querySelector(`[data-btn-name="${i}"]`)?.value || "";
               const url = container.querySelector(`[data-btn-url="${i}"]`)?.value || "";
+              const openExternal = container.querySelector(`[data-btn-external="${i}"]`)?.checked || false;
               const iconUrl = container.querySelector(`[data-btn-icon="${i}"]`)?.value || "";
               const data = document.getElementById(`${containerId}_preview_${i}`)?.getAttribute("data-slot-data") || "";
               const def = defaultButtons[i] || { icon: "" };
               buttons.push({
                 name,
                 url,
+                openExternal,
                 icon: iconUrl || (data ? "" : def.icon),
                 data: data
               });

@@ -12,24 +12,25 @@
     <script defer src="./js/firebase-config.js"></script>
     <script defer src="./js/pwa.js"></script>
     <script defer src="./js/visitor.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
       body { background: var(--bg); }
       [hidden] { display: none !important; }
       .wrap { min-height: 100dvh; padding: 0; grid-template-rows: none; justify-items: stretch; align-items: stretch; }
-      .v-page { height: 100dvh; width: 100%; display: grid; grid-template-rows: 8fr 84fr 8fr; }
-      .v-hd { padding: calc(10px + env(safe-area-inset-top)) 16px 10px; display: grid; gap: 6px; align-content: center; border-bottom: 1px solid rgba(17, 24, 39, 0.08); background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(10px); }
+      .v-page { height: 100dvh; width: 100%; display: grid; grid-template-rows: auto 1fr auto; }
+      .v-hd { padding: calc(12px + env(safe-area-inset-top)) 16px 12px; display: grid; gap: 6px; align-content: center; border-bottom: 1px solid rgba(17, 24, 39, 0.08); background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(10px); }
       .v-brand { display: flex; align-items: center; gap: 10px; font-weight: 900; }
       .v-brand img { width: 28px; height: 28px; display: block; }
       .v-title { font-size: 14px; font-weight: 900; color: rgba(31, 41, 55, 0.92); }
-      .v-main { display: grid; place-items: center; padding: 14px 16px; overflow: auto; }
-      .v-card { width: min(620px, 100%); background: var(--panel); border-radius: 20px; border: 1px solid rgba(17, 24, 39, 0.08); box-shadow: 0 14px 36px rgba(17, 24, 39, 0.10); padding: 16px; display: grid; gap: 14px; }
+      .v-main { display: grid; place-items: center; padding: 16px; overflow: auto; }
+      .v-card { width: 100%; max-width: 520px; background: var(--panel); border-radius: 24px; border: 1px solid rgba(17, 24, 39, 0.08); box-shadow: 0 14px 36px rgba(17, 24, 39, 0.10); padding: clamp(16px, 4vw, 24px); display: grid; gap: 16px; }
       .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
       @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
       textarea { min-height: 92px; padding: 12px 16px; border-radius: 16px; border: 2px solid rgba(17, 24, 39, 0.08); background: #fff; outline: none; resize: vertical; font: inherit; }
       textarea:focus { border-color: rgba(211, 47, 47, 0.42); box-shadow: 0 0 0 4px rgba(211, 47, 47, 0.14); }
-      .qr-box { display: grid; justify-items: center; gap: 10px; padding: 14px; border-radius: 18px; background: rgba(17, 24, 39, 0.03); border: 1px dashed rgba(17, 24, 39, 0.22); }
-      .qr-box img { width: 220px; height: 220px; }
-      .hint { color: var(--muted); font-size: 13px; line-height: 1.6; text-align: center; }
+      .qr-box { display: grid; justify-items: center; gap: 12px; padding: 20px; border-radius: 20px; background: rgba(17, 24, 39, 0.03); border: 1px dashed rgba(17, 24, 39, 0.22); }
+      .qr-box img { width: 100%; max-width: 240px; height: auto; aspect-ratio: 1/1; }
+      .hint { color: var(--muted); font-size: 13px; line-height: 1.6; text-align: center; word-break: break-all; }
       .pill { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 12px; background: rgba(211, 47, 47, 0.10); color: #b91c1c; border: 1px solid rgba(211, 47, 47, 0.22); white-space: nowrap; justify-self: end; }
       .v-ft { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 12px; align-content: center; border-top: 1px solid rgba(17, 24, 39, 0.08); background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(10px); }
       .v-ft .btn { height: 52px; border-radius: 16px; }
@@ -116,6 +117,7 @@
                 <img id="passQrImg" alt="QR Code" />
                 <div class="hint" id="passHint">請出示此 QR code 作為訪客證。</div>
                 <div class="hint" id="passUrl"></div>
+                <button class="btn btn-sm btn-success" type="button" id="btnSavePassImage" style="margin-top: 10px; height: 36px; padding: 0 20px; font-size: 13px;">儲存為圖片</button>
               </div>
             </div>
           </div>

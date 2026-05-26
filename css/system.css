@@ -342,6 +342,30 @@ input:focus, select:focus, textarea:focus {
   gap: 8px;
   align-items: center;
 }
+.url-with-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.url-with-check input[type="text"] {
+  flex: 1;
+}
+.check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--brand);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.check-inline input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
 .btn-slot-actions {
   display: flex;
   gap: 8px;
@@ -352,9 +376,81 @@ input:focus, select:focus, textarea:focus {
   height: 32px;
   font-size: 13px;
 }
-.btn-slot-row input[type="text"] {
-  height: 32px;
+.unit-modal-header-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.unit-totals-summary {
+  display: flex;
+  gap: 16px;
   font-size: 13px;
+  font-weight: 800;
+  color: var(--brand);
+}
+.unit-totals-summary span {
+  background: rgba(211, 47, 47, 0.08);
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(211, 47, 47, 0.15);
+}
+.units-table-container {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+.units-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.units-table th, .units-table td {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.units-table th {
+  background: var(--panel-2);
+  font-weight: 900;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.units-table input {
+  width: 100%;
+  height: 32px;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 0 4px;
+}
+.units-table input:focus {
+  border-color: var(--brand);
+  background: #fff;
+}
+.remove-row {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 18px;
+  border-radius: 4px;
+}
+.remove-row:hover {
+  background: rgba(211, 47, 47, 0.1);
+  color: var(--brand);
+}
+.btn-sm {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 8px;
 }
 
 @media (max-width: 1024px), (max-height: 520px) {

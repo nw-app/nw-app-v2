@@ -498,6 +498,124 @@ a { color: inherit; text-decoration: none; }
 .visitor-meta .time-pill:focus-visible { outline: 3px solid rgba(211, 47, 47, 0.22); outline-offset: 2px; }
 .visitor-created { margin-top: 6px; font-size: 12px; color: rgba(31, 41, 55, 0.72); }
 .visitor-created .field-k { font-weight: 900; color: rgba(31, 41, 55, 0.85); }
+
+/* Parcel Module */
+.parcel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.parcel-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+.parcel-card-hd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.parcel-company {
+  font-weight: 900;
+  font-size: 16px;
+  color: var(--brand);
+}
+.parcel-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.parcel-recipient {
+  font-size: 15px;
+}
+.parcel-recipient strong {
+  color: #1f2937;
+  margin-right: 4px;
+}
+.parcel-track, .parcel-time {
+  font-size: 13px;
+  color: var(--muted);
+}
+.parcel-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+/* Scan Modal Enhancements */
+.scan-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4/3;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.scan-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.scan-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.scan-frame {
+  width: 70%;
+  height: 60%;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  position: relative;
+}
+.scan-frame::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--brand);
+  border-radius: 8px;
+  animation: scan-pulse 2s infinite;
+}
+@keyframes scan-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+.scan-hint {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+.scan-results-preview {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--panel-2);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+}
+.scan-result-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.scan-result-item span:first-child {
+  color: var(--muted);
+}
+.scan-result-item span:last-child {
+  font-weight: 700;
+  color: var(--text);
+}
+
 .visitor-keep { margin-top: 4px; font-size: 12px; color: rgba(31, 41, 55, 0.72); }
 .visitor-keep .field-k { font-weight: 900; color: rgba(31, 41, 55, 0.85); }
 .visitor-actions { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
@@ -642,6 +760,28 @@ a { color: inherit; text-decoration: none; }
 
 #visitorModal .check { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; color: rgba(31, 41, 55, 0.85); }
 #visitorModal .check input { width: 18px; height: 18px; accent-color: var(--brand, #d32f2f); }
+
+/* Parcel Modal Styles */
+#parcelModal .field { display: grid; gap: 6px; margin-bottom: 16px; }
+#parcelModal .field:last-child { margin-bottom: 0; }
+#parcelModal .row { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 16px; }
+#parcelModal .row .field { margin-bottom: 0; }
+#parcelModal label { font-size: 12px; color: var(--muted); font-weight: 800; }
+#parcelModal input[type="text"] {
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  background: #fff;
+  outline: none;
+  font: inherit;
+  width: 100%;
+}
+#parcelModal input:focus {
+  border-color: rgba(211, 47, 47, 0.42);
+  box-shadow: 0 0 0 4px rgba(211, 47, 47, 0.14);
+}
+
 #visitorModal .deposit-title { font-size: 12px; color: var(--muted); font-weight: 900; letter-spacing: 0.1px; }
 #visitorModal .deposit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; align-items: center; }
 #visitorModal .deposit-grid > span { height: 1px; }

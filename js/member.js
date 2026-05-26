@@ -166,6 +166,7 @@
               if (b.url) result[i].url = b.url;
               if (b.data) result[i].data = b.data;
               if (b.icon) result[i].icon = b.icon;
+              result[i].openExternal = b.openExternal || false;
             }
           });
         }
@@ -264,12 +265,7 @@
         const moduleId = a.getAttribute("data-id");
         if (moduleId === "resident-service") {
           const cfg = loadConfig();
-          const serviceModal = document.getElementById("serviceModal");
-          const serviceIframe = document.getElementById("serviceIframe");
-          if (serviceModal && serviceIframe) {
-            serviceIframe.src = cfg.serviceUrl || "";
-            serviceModal.hidden = false;
-          }
+          openPageModal(cfg.serviceUrl || "", "客服中心");
           return;
         }
         location.hash = a.getAttribute("href");
@@ -327,7 +323,57 @@
     contentEl.innerHTML = homeView();
     if (moduleId === "home") {
       renderRowACarousel();
+      
+      // 綁定九宮格按鈕點擊事件
+      contentEl.querySelectorAll(".grid-btn").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          const url = btn.getAttribute("data-url");
+          const name = btn.getAttribute("data-name");
+          const isExternal = btn.getAttribute("data-external") === "1";
+          
+          if (url && url !== "#" && !url.startsWith("#")) {
+            e.preventDefault();
+            if (isExternal) {
+              window.open(url, "_blank");
+            } else {
+              openPageModal(url, name);
+            }
+          }
+        });
+      });
     }
+  }
+
+  function openPageModal(url, name) {
+    const modal = document.getElementById("externalPageModal");
+    const iframe = document.getElementById("externalPageIframe");
+    const title = document.getElementById("externalPageModalTitle");
+    const openNewBtn = document.getElementById("btnExternalPageOpenNew");
+    const errorContainer = document.getElementById("externalPageError");
+    const errorOpenBtn = document.getElementById("btnExternalPageErrorOpen");
+
+    if (!modal || !iframe || !title) return;
+
+    // 更新標題與按鈕網址
+    title.textContent = name || "頁面";
+    if (openNewBtn) openNewBtn.href = url;
+    if (errorOpenBtn) errorOpenBtn.href = url;
+
+    // 檢查是否為已知無法嵌入的網站
+    const blockedDomains = ["google.com", "gemini.google.com", "facebook.com", "youtube.com", "line.me"];
+    const isBlocked = blockedDomains.some(domain => url.toLowerCase().includes(domain));
+
+    if (isBlocked) {
+      iframe.hidden = true;
+      iframe.src = "";
+      if (errorContainer) errorContainer.hidden = false;
+    } else {
+      if (errorContainer) errorContainer.hidden = true;
+      iframe.hidden = false;
+      iframe.src = url;
+    }
+
+    modal.hidden = false;
   }
 
   function homeView() {
@@ -337,11 +383,11 @@
       return `
         <div class="button-grid">
           ${buttons.map(b => {
-            // 優先順序：1. 如果 icon 是遠端網址則優先, 2. 上傳的 Base64 (data), 3. 本地圖示 (icon), 4. 預設 logo
             const isRemoteIcon = b.icon && (b.icon.startsWith("http") || b.icon.startsWith("//"));
             const imgSrc = isRemoteIcon ? b.icon : (b.data || b.icon || "photo/logo.png");
+            const isExternal = b.openExternal ? "1" : "";
             return `
-              <a href="${b.url || "#"}" class="grid-btn">
+              <a href="${b.url || "#"}" class="grid-btn" data-url="${b.url || ""}" data-name="${b.name || ""}" data-external="${isExternal}">
                 <div class="grid-btn-icon">
                   <img src="${imgSrc}" alt="${b.name}" />
                 </div>
@@ -499,22 +545,22 @@
     btnNotificationModalBackdrop.addEventListener("click", closeNotificationModal);
   }
 
-  // Service Modal Logic
-  const serviceModal = document.getElementById("serviceModal");
-  const btnCloseServiceModal = document.getElementById("btnCloseServiceModal");
-  const btnServiceModalBackdrop = document.getElementById("btnServiceModalBackdrop");
-  const serviceIframe = document.getElementById("serviceIframe");
+  // External Page Modal Logic
+  const externalPageModal = document.getElementById("externalPageModal");
+  const btnCloseExternalPageModal = document.getElementById("btnCloseExternalPageModal");
+  const btnExternalPageModalBackdrop = document.getElementById("btnExternalPageModalBackdrop");
+  const externalPageIframe = document.getElementById("externalPageIframe");
 
-  const closeServiceModal = () => {
-    if (serviceModal) serviceModal.hidden = true;
-    if (serviceIframe) serviceIframe.src = "";
+  const closeExternalPageModal = () => {
+    if (externalPageModal) externalPageModal.hidden = true;
+    if (externalPageIframe) externalPageIframe.src = "";
   };
 
-  if (btnCloseServiceModal) {
-    btnCloseServiceModal.addEventListener("click", closeServiceModal);
+  if (btnCloseExternalPageModal) {
+    btnCloseExternalPageModal.addEventListener("click", closeExternalPageModal);
   }
-  if (btnServiceModalBackdrop) {
-    btnServiceModalBackdrop.addEventListener("click", closeServiceModal);
+  if (btnExternalPageModalBackdrop) {
+    btnExternalPageModalBackdrop.addEventListener("click", closeExternalPageModal);
   }
 
   const bindSignOut = () => {

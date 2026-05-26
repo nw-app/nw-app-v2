@@ -93,6 +93,7 @@
     const btnFooterSubmit = qs("#btnFooterSubmit");
     const btnFooterAuth = qs("#btnFooterAuth");
     const btnFooterPass = qs("#btnFooterPass");
+    const btnSavePassImage = qs("#btnSavePassImage");
     const pageTitle = qs("#pageTitle");
     const resultMsg = qs("#resultMsg");
     const passBox = qs("#passBox");
@@ -242,6 +243,38 @@
         show(form, false);
         show(resultBox, true);
         showPass(pass);
+      });
+    }
+
+    if (btnSavePassImage) {
+      btnSavePassImage.addEventListener("click", async () => {
+        const card = qs(".v-card");
+        if (!card || !window.html2canvas) return;
+        
+        btnSavePassImage.disabled = true;
+        const originalText = btnSavePassImage.textContent;
+        btnSavePassImage.textContent = "處理中...";
+        
+        try {
+          const canvas = await html2canvas(card, {
+            useCORS: true,
+            scale: 2, // 提高解析度
+            backgroundColor: null,
+            logging: false
+          });
+          
+          const link = document.createElement("a");
+          link.download = `訪客證_${current.cname || "社區"}.png`;
+          link.href = canvas.toDataURL("image/png");
+          link.click();
+          setStatus("訪客證已儲存至您的裝置。", false);
+        } catch (err) {
+          console.error("Save image failed:", err);
+          setStatus("儲存圖片失敗，請嘗試直接截圖。", true);
+        } finally {
+          btnSavePassImage.disabled = false;
+          btnSavePassImage.textContent = originalText;
+        }
       });
     }
 

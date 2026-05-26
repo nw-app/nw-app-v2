@@ -216,6 +216,14 @@ service cloud.firestore {
         );
       }
 
+      match /parcels/{parcelId} {
+        allow read, write: if request.auth != null && (
+          isAdmin() || 
+          (isCommunityStaff() && slug == getUserData().community) ||
+          (getUserData().houseNo == resource.data.unit)
+        );
+      }
+
       match /visitors/{visitorId} {
         allow get: if request.auth != null && (
           isAdmin()

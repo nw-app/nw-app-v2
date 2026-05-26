@@ -295,11 +295,39 @@
                 </div>
                 <form id="unitModalForm">
                   <div class="modal-body">
-                    <h3 class="modal-title" id="unitModalTitle"><span id="unitModalTitleText">戶號列表</span></h3>
+                    <div class="unit-modal-header-info">
+                      <h3 class="modal-title" id="unitModalTitle"><span id="unitModalTitleText">戶號列表</span></h3>
+                      <div class="unit-totals-summary" id="unitTotalsSummary">
+                        <span id="totalUnitsCount">總戶數：0</span>
+                        <span id="totalAreaSum">總坪數：0</span>
+                        <span id="totalOwnershipSum">總比例：0%</span>
+                      </div>
+                    </div>
                     <div class="unit-tab-panel" data-unit-panel="units" role="tabpanel">
-                      <div class="field">
-                        <label for="modal_units_text">戶號列表（每行一戶）</label>
-                        <textarea id="modal_units_text" rows="12" placeholder="例：A-1203&#10;A-1205&#10;B-0901" required></textarea>
+                      <div class="field" style="margin-bottom: 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                          <label style="margin-bottom: 0;">戶號資料列表</label>
+                          <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-sm" type="button" id="btnExportUnits">匯出 Excel</button>
+                            <button class="btn btn-sm" type="button" id="btnImportUnits">匯入 Excel</button>
+                            <input type="file" id="inputImportUnits" accept=".xlsx, .xls, .csv" hidden />
+                            <button class="btn btn-sm btn-primary" type="button" id="btnAddUnitRow">+ 新增行</button>
+                          </div>
+                        </div>
+                        <div class="units-table-container">
+                          <table class="units-table">
+                            <thead>
+                              <tr>
+                                <th style="width: 100px;">戶號</th>
+                                <th>地址</th>
+                                <th style="width: 100px;">坪數</th>
+                                <th style="width: 120px;">所有權人%</th>
+                                <th style="width: 50px;"></th>
+                              </tr>
+                            </thead>
+                            <tbody id="unitsTableBody"></tbody>
+                          </table>
+                        </div>
                       </div>
                     </div>
 
@@ -376,6 +404,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <script src="js/firebase-config.js"></script>
     <script src="js/system.js"></script>
     <script src="js/pwa.js"></script>
