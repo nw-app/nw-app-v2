@@ -2421,20 +2421,24 @@
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <div class="modal-body">
-          <div class="scan-stage">
-            <div id="parcelScanReader"></div>
-            <div class="scan-overlay">
-              <div class="scan-frame"></div>
+          <div class="scan-responsive-container">
+            <div class="scan-stage">
+              <div id="parcelScanReader"></div>
+              <div class="scan-overlay">
+                <div class="scan-frame"></div>
+              </div>
+            </div>
+            <div class="scan-results-side">
+              <div class="scan-hint" id="parcelScanHint">請對準物流單上的條碼或收件資訊</div>
+              <div class="scan-results-preview" id="parcelScanPreview" hidden>
+                <div class="scan-result-item"><span>物流公司</span><span id="scanResCompany">—</span></div>
+                <div class="scan-result-item"><span>物流單號</span><span id="scanResTrackNo">—</span></div>
+                <div class="scan-result-item"><span>收件人</span><span id="scanResRecipient">—</span></div>
+                <div class="scan-result-item"><span>收件地址</span><span id="scanResAddress">—</span></div>
+              </div>
+              <div class="status" id="parcelScanStatus" hidden></div>
             </div>
           </div>
-          <div class="scan-hint" id="parcelScanHint">請對準物流單上的條碼或收件資訊</div>
-          <div class="scan-results-preview" id="parcelScanPreview" hidden>
-            <div class="scan-result-item"><span>物流公司</span><span id="scanResCompany">—</span></div>
-            <div class="scan-result-item"><span>物流單號</span><span id="scanResTrackNo">—</span></div>
-            <div class="scan-result-item"><span>收件人</span><span id="scanResRecipient">—</span></div>
-            <div class="scan-result-item"><span>收件地址</span><span id="scanResAddress">—</span></div>
-          </div>
-          <div class="status" id="parcelScanStatus" hidden></div>
         </div>
         <div class="modal-ft">
           <button class="btn" type="button" id="btnCaptureOCR">捕捉並辨識文字</button>
