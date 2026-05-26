@@ -552,10 +552,20 @@ a { color: inherit; text-decoration: none; }
 .scan-stage {
   position: relative;
   width: 100%;
-  aspect-ratio: 4/3;
+  aspect-ratio: 1 / 1;
   background: #000;
   border-radius: 12px;
   overflow: hidden;
+}
+#parcelScanReader {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: 1 / 1;
+}
+#parcelScanReader video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
 }
 .scan-video {
   width: 100%;
@@ -567,13 +577,14 @@ a { color: inherit; text-decoration: none; }
   inset: 0;
   display: grid;
   place-items: center;
+  pointer-events: none;
 }
 .scan-frame {
-  width: 70%;
-  height: 60%;
+  width: 80%;
+  height: 80%;
   border: 2px solid rgba(255, 255, 255, 0.5);
   box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5);
-  border-radius: 8px;
+  border-radius: 12px;
   position: relative;
 }
 .scan-frame::after {
@@ -709,6 +720,33 @@ a { color: inherit; text-decoration: none; }
 #residentModal .input-suffix.show { display: inline-flex; }
 #residentModal .input-suffix svg { width: 20px; height: 20px; display: block; }
 #residentModal .input-suffix.ok { color: #15803d; background: rgba(22, 163, 74, 0.12); border: 1px solid rgba(22, 163, 74, 0.22); }
+#residentModal .input-suffix-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 32px;
+  width: 32px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  background: #fff;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+#residentModal .input-suffix-btn:hover {
+  background: rgba(17, 24, 39, 0.04);
+  color: var(--brand);
+}
+#residentModal .input-suffix-btn.unlocked {
+  background: rgba(211, 47, 47, 0.1);
+  color: var(--brand);
+  border-color: rgba(211, 47, 47, 0.2);
+}
 #residentModal .check-grid { display: grid; gap: 10px; }
 #residentModal .check { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; color: rgba(31, 41, 55, 0.85); }
 #residentModal .check input { width: 18px; height: 18px; accent-color: var(--brand, #d32f2f); }

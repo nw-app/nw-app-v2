@@ -1738,7 +1738,12 @@
             </div>
             <div class="field" id="field_r_community">
               <label for="modal_r_community">所屬社區</label>
-              <select id="modal_r_community" required></select>
+              <div class="input-wrap">
+                <select id="modal_r_community" class="has-suffix" required disabled></select>
+                <button type="button" class="input-suffix-btn" id="btnUnlockCommunity" title="解鎖變更社區">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                </button>
+              </div>
             </div>
             <div class="field" id="field_r_unit">
               <label for="modal_r_unit">戶號</label>
@@ -1751,6 +1756,10 @@
                   <span>有此戶號</span>
                 </span>
               </div>
+            </div>
+            <div class="field" id="field_r_sub_unit">
+              <label for="modal_r_sub_unit">子戶號 (選填)</label>
+              <input id="modal_r_sub_unit" type="text" placeholder="例：1" autocomplete="off" />
             </div>
             <div class="field">
               <label for="modal_r_name">姓名</label>
@@ -2412,7 +2421,12 @@
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <div class="modal-body">
-          <div id="parcelScanReader" style="width: 100%; border-radius: 12px; overflow: hidden;"></div>
+          <div class="scan-stage">
+            <div id="parcelScanReader"></div>
+            <div class="scan-overlay">
+              <div class="scan-frame"></div>
+            </div>
+          </div>
           <div class="scan-hint" id="parcelScanHint">請對準物流單上的條碼或收件資訊</div>
           <div class="scan-results-preview" id="parcelScanPreview" hidden>
             <div class="scan-result-item"><span>物流公司</span><span id="scanResCompany">—</span></div>
@@ -2492,13 +2506,51 @@
       setStatus("啟動相機中...", false);
       
       scanner = new Html5Qrcode("parcelScanReader");
-      const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+      
+      // 使用高解析度配置與 1:1 比例
+      const config = { 
+        fps: 20, 
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          const size = Math.min(viewfinderWidth, viewfinderHeight) * 0.8;
+          return { width: size, height: size };
+        },
+        aspectRatio: 1.0,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        }
+      };
 
       try {
-        await scanner.start({ facingMode: "environment" }, config, onScanSuccess);
+        // 請求後置鏡頭並指定高解析度
+        await scanner.start(
+          { facingMode: "environment" }, 
+          {
+            ...config,
+            videoConstraints: {
+              facingMode: "environment",
+              width: { ideal: 1920 },
+              height: { ideal: 1920 },
+              aspectRatio: { exact: 1.0 }
+            }
+          }, 
+          onScanSuccess
+        );
         setStatus("", false);
       } catch (err) {
-        setStatus("相機啟動失敗：" + err, true);
+        console.error("Camera start error:", err);
+        let msg = "相機啟動失敗：";
+        if (err.name === "NotAllowedError" || String(err).includes("Permission denied")) {
+          msg += "請在瀏覽器設定中「允許」此網站使用相機，並重新開啟。";
+        } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+          msg += "找不到相機設備。";
+        } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+          msg += "相機可能被其他程式佔用。";
+        } else if (!window.isSecureContext) {
+          msg += "相機功能僅能在安全連線 (HTTPS 或 localhost) 下運作。";
+        } else {
+          msg += err.message || err;
+        }
+        setStatus(msg, true);
       }
     };
 
@@ -2507,15 +2559,28 @@
       
       btnCapture.disabled = true;
       btnCapture.textContent = "辨識中...";
-      setStatus("正在辨識標籤文字，請保持穩定...", false);
+      setStatus("正在進行高對比辨識，請保持穩定...", false);
 
       try {
-        // 從 video 元素捕捉畫面
         const video = document.querySelector("#parcelScanReader video");
         const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        
+        // 捕捉高解析度畫面
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        canvas.getContext("2d").drawImage(video, 0, 0);
+        ctx.drawImage(video, 0, 0);
+        
+        // 簡易影像預處理：提升對比度與灰階以利 OCR
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+          // 提升對比：低於 128 變黑，高於 128 變白 (門檻值可調)
+          const val = avg < 120 ? 0 : 255;
+          data[i] = data[i + 1] = data[i + 2] = val;
+        }
+        ctx.putImageData(imageData, 0, 0);
         
         // 使用 Tesseract 進行 OCR
         const result = await Tesseract.recognize(canvas, "chi_tra+eng", {
@@ -2525,11 +2590,14 @@
         const text = result.data.text;
         console.log("OCR Result:", text);
 
-        // 簡易解析邏輯
-        const companies = ["黑貓", "宅急便", "宅配通", "新竹物流", "嘉里大榮", "郵政", "順豐", "SF", "FedEx", "DHL"];
+        // 簡易解析邏輯 (擴展物流公司)
+        const companies = ["黑貓", "宅急便", "宅配通", "新竹物流", "嘉里大榮", "郵政", "順豐", "SF", "FedEx", "DHL", "全家", "7-11", "萊爾富", "OK", "蝦皮"];
         for (const c of companies) {
           if (text.includes(c)) {
-            detectedData.company = c === "SF" ? "順豐速運" : (c.includes("黑貓") ? "黑貓宅急便" : c);
+            if (c === "SF") detectedData.company = "順豐速運";
+            else if (c.includes("黑貓")) detectedData.company = "黑貓宅急便";
+            else if (c === "7-11") detectedData.company = "統一超商";
+            else detectedData.company = c;
             break;
           }
         }
@@ -2541,13 +2609,14 @@
         if (addrMatch) detectedData.address = addrMatch[0];
 
         if (!detectedData.trackNo) {
-          const trackMatch = text.match(/[0-9]{10,15}/);
+          const trackMatch = text.match(/[0-9A-Z]{10,20}/);
           if (trackMatch) detectedData.trackNo = trackMatch[0];
         }
 
         updatePreview();
         setStatus("文字辨識完成", false);
       } catch (err) {
+        console.error("OCR Error:", err);
         setStatus("辨識出錯：" + err.message, true);
       } finally {
         btnCapture.disabled = false;
@@ -2721,9 +2790,11 @@
         .map((r) => {
           const enabled = r.enabled !== false;
           const houseNo = String(r.houseNo || "").trim();
+          const subUnit = String(r.subUnit || "").trim();
+          const fullUnit = subUnit ? `${houseNo}-${subUnit}` : houseNo;
           const phone = String(r.phone || "").trim();
           const email = String(r.email || "").trim();
-          const subParts = [houseNo, phone, email].filter(Boolean);
+          const subParts = [fullUnit, phone, email].filter(Boolean);
           return `
             <div class="resident-item" data-id="${String(r.id || "")}">
               <div class="resident-left">
@@ -2771,6 +2842,7 @@
                   id: d.id,
                   role: String(v.role || ""),
                   houseNo: String(v.houseNo || v.unit || ""),
+                  subUnit: String(v.subUnit || ""),
                   displayName: String(v.displayName || v.name || ""),
                   email: String(v.email || v.username || ""),
                   phone: String(v.phone || ""),
@@ -2787,6 +2859,9 @@
               const ah = String(a.houseNo || "");
               const bh = String(b.houseNo || "");
               if (ah !== bh) return ah.localeCompare(bh, "zh-Hant");
+              const as = String(a.subUnit || "");
+              const bs = String(b.subUnit || "");
+              if (as !== bs) return as.localeCompare(bs, "zh-Hant");
               return String(a.displayName || "").localeCompare(String(b.displayName || ""), "zh-Hant");
             });
 
@@ -2815,6 +2890,7 @@
       const inputCategory = modal.querySelector("#modal_r_category");
       const inputCommunity = modal.querySelector("#modal_r_community");
       const inputUnit = modal.querySelector("#modal_r_unit");
+      const inputSubUnit = modal.querySelector("#modal_r_sub_unit");
       const inputName = modal.querySelector("#modal_r_name");
       const inputEmail = modal.querySelector("#modal_r_email");
       const inputPhone = modal.querySelector("#modal_r_phone");
@@ -2832,6 +2908,7 @@
       const cancelBtn = modal.querySelector("#btnCancelResidentModal");
       const closeBtn = modal.querySelector("#btnCloseResidentModal");
       const submitBtn = modal.querySelector("#btnSubmitResidentModal");
+      const btnUnlockCommunity = modal.querySelector("#btnUnlockCommunity");
 
       const setModalStatus = (msg, isError) => {
         if (!st) return;
@@ -2849,12 +2926,36 @@
       }
       if (roleNameEl) roleNameEl.textContent = "住戶";
       if (inputCategory) inputCategory.value = isEdit ? String(data.category || "住戶") : "住戶";
+      
       if (inputCommunity) {
-        inputCommunity.innerHTML = `<option value="${String(cid || "default")}">${String(cname || cid || "—")}</option>`;
-        inputCommunity.value = String(cid || "default");
+        const currentCid = isEdit ? String(data.community || cid || "default") : String(cid || "default");
+        const options = (state.communities || []).map(c => 
+          `<option value="${c.id}">${escapeHtml(c.name)}</option>`
+        ).join("");
+        inputCommunity.innerHTML = options;
+        inputCommunity.value = currentCid;
         inputCommunity.disabled = true;
+        
+        if (btnUnlockCommunity) {
+          btnUnlockCommunity.classList.remove("unlocked");
+          btnUnlockCommunity.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
+          btnUnlockCommunity.onclick = () => {
+            const isLocked = inputCommunity.disabled;
+            inputCommunity.disabled = !isLocked;
+            btnUnlockCommunity.classList.toggle("unlocked", isLocked);
+            if (isLocked) {
+              // 切換為解鎖狀態
+              btnUnlockCommunity.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path><path d="M12 11v4"></path><path d="M12 11h.01"></path></svg>`;
+              toast("已解鎖所屬社區變更");
+            } else {
+              // 切換為鎖定狀態
+              btnUnlockCommunity.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
+            }
+          };
+        }
       }
       if (inputUnit) inputUnit.value = isEdit ? String(data.houseNo || "") : "";
+      if (inputSubUnit) inputSubUnit.value = isEdit ? String(data.subUnit || "") : "";
       if (inputName) inputName.value = isEdit ? String(data.displayName || "") : "";
       if (inputEmail) inputEmail.value = isEdit ? String(data.email || "") : "";
       if (inputPhone) inputPhone.value = isEdit ? String(data.phone || "") : "";
@@ -3037,6 +3138,7 @@
 
         const category = normalizeText(inputCategory ? inputCategory.value : "住戶") || "住戶";
         const unit = normalizeText(inputUnit ? inputUnit.value : "");
+        const subUnit = normalizeText(inputSubUnit ? inputSubUnit.value : "");
         const name = normalizeText(inputName ? inputName.value : "");
         const email = normalizeText(inputEmail ? inputEmail.value : "");
         const phone = normalizeText(inputPhone ? inputPhone.value : "");
@@ -3054,6 +3156,21 @@
           if (submitBtn) submitBtn.disabled = false;
           return;
         }
+
+        // 檢查子戶號重複性 (同社區、同戶號下不可重複)
+        const selectedCid = normalizeText(inputCommunity ? inputCommunity.value : cid) || cid || "default";
+        const isDuplicateSubUnit = residents.some(r => 
+          r.id !== data.id && 
+          r.houseNo.toLowerCase() === unit.toLowerCase() && 
+          r.subUnit.toLowerCase() === subUnit.toLowerCase()
+        );
+
+        if (isDuplicateSubUnit) {
+          setModalStatus(`子戶號「${subUnit || "(無)"}」在戶號「${unit}」中已存在。`, true);
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           setModalStatus("電子郵件格式不正確。", true);
           if (submitBtn) submitBtn.disabled = false;
@@ -3091,11 +3208,15 @@
           const id = isEdit ? String(data.id || "") : String(createdAuth && createdAuth.uid ? createdAuth.uid : "");
           if (!id) throw new Error("no-id");
 
-          const communityCode = c ? String(c.username || "") : "";
+          const selectedCid = normalizeText(inputCommunity ? inputCommunity.value : cid) || cid || "default";
+          const selectedCommunity = (state.communities || []).find(c => c.id === selectedCid) || {};
+          const communityCode = String(selectedCommunity.username || "");
+          
           const payload = {
             role: "住戶",
-            community: String(cid || "default"),
+            community: selectedCid,
             houseNo: unit,
+            subUnit: subUnit,
             displayName: name,
             username: email,
             email,
@@ -3124,13 +3245,14 @@
           detach();
           await loadResidents();
         } catch (err) {
+          console.error("Save resident error:", err);
           const code = String(err && err.code ? err.code : "");
           const msg =
             code.includes("auth/email-already-in-use") ? "此電子郵件已被使用。" :
             code.includes("auth/invalid-email") ? "電子郵件格式不正確。" :
             code.includes("auth/weak-password") ? "密碼強度不足（請確認手機號碼）。" :
-            code.includes("permission-denied") ? "沒有權限執行此操作。" :
-            "儲存失敗，請稍後再試。";
+            code.includes("permission-denied") ? "沒有權限執行此操作（請確認 Firestore 規則）。" :
+            "儲存失敗：" + (err.message || "請稍後再試。");
           setModalStatus(msg, true);
         } finally {
           if (createdAuth && createdAuth.auth) {
