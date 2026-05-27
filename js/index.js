@@ -117,7 +117,8 @@
               <div class="field">
                 <label for="applyHouseNo">戶號</label>
                 <div class="input-with-suffix">
-                  <input id="applyHouseNo" type="text" placeholder="例如: A1-10F" autocomplete="off" />
+                  <input id="applyHouseNo" type="text" placeholder="例如: A1-10F" autocomplete="off" list="applyHouseNoList" />
+                  <datalist id="applyHouseNoList"></datalist>
                   <span id="applyHouseStatus" class="input-suffix-name"></span>
                 </div>
               </div>
@@ -233,12 +234,36 @@
     const applyCommunityNameEl = modal.querySelector("#applyCommunityName");
     const applyHouseNoEl = modal.querySelector("#applyHouseNo");
     const applyHouseStatusEl = modal.querySelector("#applyHouseStatus");
+    const applyHouseNoListEl = modal.querySelector("#applyHouseNoList");
+
+    const updateHouseNoDatalist = (units) => {
+      if (!applyHouseNoListEl) return;
+      const list = Array.isArray(units) ? units : [];
+      let html = `<option value="訪客"></option>`;
+      html += list.map(u => {
+        const uid = (typeof u === "object" && u !== null) ? String(u.id || "") : String(u || "");
+        return `<option value="${escapeHtml(uid.trim())}"></option>`;
+      }).join("");
+      applyHouseNoListEl.innerHTML = html;
+    };
+
+    function escapeHtml(str) {
+      return String(str || "").replace(/[&<>"']/g, m => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      })[m]);
+    }
 
     if (applyCommunityCodeEl) {
       applyCommunityCodeEl.oninput = async () => {
         const code = applyCommunityCodeEl.value.trim();
         if (!code) {
           applyCommunityNameEl.textContent = "";
+          data.communityUnits = [];
+          updateHouseNoDatalist([]);
           return;
         }
         try {
@@ -258,9 +283,11 @@
               data.communityUnits = [];
             }
           }
+          updateHouseNoDatalist(data.communityUnits);
         } catch {
           applyCommunityNameEl.textContent = "";
           data.communityUnits = [];
+          updateHouseNoDatalist([]);
         }
       };
     }
@@ -270,6 +297,11 @@
         const val = applyHouseNoEl.value.trim();
         if (!val) {
           applyHouseStatusEl.textContent = "";
+          return;
+        }
+        if (val === "訪客") {
+          applyHouseStatusEl.textContent = "訪客身分";
+          applyHouseStatusEl.classList.add("success");
           return;
         }
         const units = Array.isArray(data.communityUnits) ? data.communityUnits : [];
@@ -353,15 +385,19 @@
              setModalStatus("請輸入戶號", true);
              return;
            }
-           // 驗證戶號是否存在於該社區
-           const units = Array.isArray(data.communityUnits) ? data.communityUnits : [];
-           const exists = units.some(u => {
-             const uid = (typeof u === "object" && u !== null) ? String(u.id || "") : String(u || "");
-             return uid.trim().toLowerCase() === data.houseNo.toLowerCase();
-           });
-           if (!exists) {
-             setModalStatus("戶號不正確，請確認後再試。", true);
-             return;
+           // 驗證戶號是否存在於該社區，或為訪客
+           if (data.houseNo === "訪客") {
+             // 允許訪客身分進入下一步
+           } else {
+             const units = Array.isArray(data.communityUnits) ? data.communityUnits : [];
+             const exists = units.some(u => {
+               const uid = (typeof u === "object" && u !== null) ? String(u.id || "") : String(u || "");
+               return uid.trim().toLowerCase() === data.houseNo.toLowerCase();
+             });
+             if (!exists) {
+               setModalStatus("戶號不正確，請確認後再試。", true);
+               return;
+             }
            }
          } else if (currentStep === 3) {
           if (!data.avatarDataUrl) {
@@ -447,6 +483,7 @@
         currentStep = 1;
         modal.querySelector("#applyCommunityCode").value = "";
         modal.querySelector("#applyHouseNo").value = "";
+        if (applyHouseNoListEl) applyHouseNoListEl.innerHTML = "";
         modal.querySelector("#applyName").value = "";
         modal.querySelector("#applyEmail").value = "";
         modal.querySelector("#applyPhone").value = "";

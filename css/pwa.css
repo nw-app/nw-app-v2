@@ -325,3 +325,18 @@ html.force-portrait .pwa-install {
   border-color: rgba(211, 47, 47, 0.42);
   box-shadow: 0 0 0 4px rgba(211, 47, 47, 0.14);
 }
+.profile-edit-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+}
+.profile-input {
+  flex: 1;
+  min-width: 0;
+}
+#profileHouseNoItem .profile-label {
+  display: block;
+  margin-bottom: 4px;
+}

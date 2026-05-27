@@ -118,6 +118,9 @@
     const headerAvatarImg = document.getElementById("userAvatarImg");
     const greetingEl = document.getElementById("userGreeting");
     const switchEl = document.getElementById("profileSwitch");
+    const houseNoInput = document.getElementById("profileHouseNoInput");
+    const btnUpdateHouseNo = document.getElementById("btnUpdateHouseNo");
+    const houseNoItem = document.getElementById("profileHouseNoItem");
 
     const getRoleText = () => {
       const r = String(sessionStorage.getItem("csp_role") || "").trim().toLowerCase();
@@ -455,6 +458,32 @@
       } catch {}
     };
 
+    if (btnUpdateHouseNo && houseNoInput) {
+      btnUpdateHouseNo.onclick = async () => {
+        const newVal = houseNoInput.value.trim();
+        if (!newVal) {
+          showToast("請輸入戶號", "error");
+          return;
+        }
+        const user = auth.currentUser;
+        if (!user) return;
+        try {
+          btnUpdateHouseNo.disabled = true;
+          btnUpdateHouseNo.textContent = "更新中...";
+          await db.collection("users").doc(user.uid).update({
+            houseNo: newVal
+          });
+          showToast("戶號已更新", "success");
+        } catch (e) {
+          console.error(e);
+          showToast("更新失敗: " + e.message, "error");
+        } finally {
+          btnUpdateHouseNo.disabled = false;
+          btnUpdateHouseNo.textContent = "更新";
+        }
+      };
+    }
+
     const loadProfile = async (user) => {
       if (!user) return;
       if (roleEl) roleEl.textContent = getRoleText();
@@ -555,12 +584,17 @@
           communityTextEl.textContent = cname;
           communityItemEl.hidden = false;
           communityItemEl.classList.add("single");
+          if (houseNoItem) houseNoItem.hidden = true;
           if (roleEl) {
             roleEl.textContent = "";
             roleEl.style.display = "none";
           }
         } else {
           communityItemEl.classList.remove("single");
+          if (houseNoItem) {
+            houseNoItem.hidden = false;
+            if (houseNoInput) houseNoInput.value = String(data.houseNo || "").trim();
+          }
           if (roleEl) {
             roleEl.style.display = "";
             roleEl.textContent = getRoleText();

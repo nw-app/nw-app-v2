@@ -5058,7 +5058,182 @@
     });
   };
   bindSignOut();
-  document.addEventListener("DOMContentLoaded", bindSignOut);
+
+  function openAppDownloadModal80() {
+    const cid = resolveActiveCommunityId();
+    const community = state.communities.find(c => c.id === cid) || { id: cid, name: "預設社區" };
+    const communityKey = community.username || community.id;
+
+    let modal = document.getElementById("appDownloadModal");
+    if (modal) {
+      const infoEl = modal.querySelector(".a4-community-info");
+      if (infoEl) {
+        infoEl.innerHTML = `
+          <span class="cid"><span class="prefix">社區代號：</span>${escapeHtml(communityKey)}</span>
+          <span class="cname">${escapeHtml(community.name)}</span>
+        `;
+      }
+    }
+
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.className = "modal";
+      modal.id = "appDownloadModal";
+      modal.hidden = true;
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-modal-close="1"></div>
+        <div class="modal-dialog a4-preview-dialog" role="dialog" aria-modal="true">
+          <div class="modal-hd">
+            <h3 class="modal-title">西北守護星 APP 下載說明</h3>
+            <div class="modal-actions">
+              <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+            </div>
+          </div>
+          <div class="modal-body a4-body">
+            <div class="a4-page-scaler" id="appGuideScaler">
+              <div class="a4-page" id="appGuidePage">
+                <div class="a4-decor a4-decor-tl"></div>
+                <div class="a4-decor a4-decor-br"></div>
+                <div class="a4-illustration">
+                  <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="100" cy="100" r="80" stroke="#d32f2f" stroke-width="2" stroke-dasharray="10 10" opacity="0.2"/>
+                    <path d="M100 20V180M20 100H180" stroke="#d32f2f" stroke-width="1" opacity="0.1"/>
+                  </svg>
+                </div>
+                <div class="a4-content">
+                  <div class="a4-header">
+                    <img src="logo.svg" class="a4-logo" alt="西北守護星" />
+                    <h1 class="a4-title">西北守護星</h1>
+                    <p class="a4-subtitle">智慧社區服務系統｜住戶端 APP</p>
+                  </div>
+                  
+                  <div class="a4-section">
+                    <h2 class="a4-sec-title">立即下載體驗</h2>
+                    <div class="a4-qr-wrap">
+                      <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https://nw-app.github.io/nw-app-v2/" class="a4-qr" alt="APP QR Code" />
+                      <p class="a4-qr-hint">掃描上方 QR Code 開啟下載頁面</p>
+                    </div>
+                    <div class="a4-community-info">
+                      <span class="cid"><span class="prefix">社區代號：</span>${escapeHtml(communityKey)}</span>
+                      <span class="cname">${escapeHtml(community.name)}</span>
+                    </div>
+                  </div>
+
+                  <div class="a4-section instructions">
+                    <h2 class="a4-sec-title">下載與安裝說明</h2>
+                    <div class="instruction-steps">
+                      <div class="step">
+                        <div class="step-num">1</div>
+                        <div class="step-text">使用手機相機或掃描器掃描上方 QR Code。</div>
+                      </div>
+                      <div class="step">
+                        <div class="step-num">2</div>
+                        <div class="step-text">點擊連結進入「西北守護星」官方下載頁面。</div>
+                      </div>
+                      <div class="step">
+                        <div class="step-num">3</div>
+                        <div class="step-text">依據您的裝置系統（iOS / Android）點擊下載並安裝。</div>
+                      </div>
+                      <div class="step">
+                        <div class="step-num">4</div>
+                        <div class="step-text">安裝完成後，開啟 APP 並使用社區提供的帳號登入。</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="a4-footer">
+                    <p>如有任何安裝問題，請洽社區管理室。</p>
+                    <p class="copyright">© 2026 西北守護星｜西北保全 & 西北物業</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" id="btnPrintAppGuide">列印</button>
+            <button class="btn" type="button" data-modal-close="1">關閉</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      const printBtn = modal.querySelector("#btnPrintAppGuide");
+      if (printBtn) {
+        printBtn.onclick = () => {
+          const content = modal.querySelector("#appGuidePage").innerHTML;
+          const win = window.open("", "_blank");
+          win.document.write(`
+            <html>
+              <head>
+                <title>西北守護星 APP 下載說明</title>
+                <link rel="stylesheet" href="css/admin.css">
+                <style>
+                  body { margin: 0; padding: 0; }
+                  .a4-page { width: 210mm; height: 297mm; padding: 20mm; margin: 0 auto; box-sizing: border-box; background: white; }
+                  @media print {
+                    .a4-page { width: 100%; height: 100%; margin: 0; padding: 15mm; border: none; }
+                  }
+                </style>
+              </head>
+              <body onload="window.print();window.close()">
+                <div class="a4-page">${content}</div>
+              </body>
+            </html>
+          `);
+          win.document.close();
+        };
+      }
+    }
+
+    bindModalClose(modal);
+
+    const updateAppGuideScale = () => {
+      const scaler = modal.querySelector("#appGuideScaler");
+      const page = modal.querySelector("#appGuidePage");
+      const body = modal.querySelector(".a4-body");
+      if (!scaler || !page || !body || modal.hidden) return;
+
+      const bodyW = body.clientWidth;
+      const bodyH = body.clientHeight;
+      const pageW = page.offsetWidth;
+      const pageH = page.offsetHeight;
+
+      const scaleW = bodyW / pageW;
+      const scaleH = bodyH / pageH;
+      const scale = Math.min(scaleW, scaleH, 1) * 0.95; // 保持 5% 邊距
+
+      scaler.style.transform = `scale(${scale})`;
+    };
+
+    const oldHidden = modal.hidden;
+    Object.defineProperty(modal, "hidden", {
+      get: () => modal.getAttribute("hidden") !== null,
+      set: (val) => {
+        if (val) modal.setAttribute("hidden", "");
+        else {
+          modal.removeAttribute("hidden");
+          setTimeout(updateAppGuideScale, 0);
+        }
+      }
+    });
+
+    window.addEventListener("resize", updateAppGuideScale);
+
+    modal.hidden = false;
+  }
+
+  const bindTitleClick = () => {
+    const titleEl = document.querySelector("header .brand .meta .title");
+    if (titleEl) {
+      titleEl.style.cursor = "pointer";
+      titleEl.onclick = () => openAppDownloadModal80();
+    }
+  };
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bindSignOut();
+    bindTitleClick();
+  });
 
   auth.onAuthStateChanged(async (user) => {
     const redirectToIndex = () => {
