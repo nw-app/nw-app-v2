@@ -69,6 +69,46 @@
       setStatus("缺少社區代碼。", true);
       return;
     }
+
+    // 暫存 Key 定義
+    const STORAGE_KEY_PREFIX = `nwapp_v2_visitor_${cKey}`;
+    const FORM_CACHE_KEY = `${STORAGE_KEY_PREFIX}_form`;
+    const PASS_CACHE_KEY = `${STORAGE_KEY_PREFIX}_pass`;
+
+    const saveFormCache = () => {
+      const formData = {
+        name: qs("#v_name")?.value || "",
+        party: qs("#v_party")?.value || "",
+        unit: qs("#v_unit")?.value || "",
+        phone: qs("#v_phone")?.value || "",
+        plate: qs("#v_plate")?.value || "",
+        email: qs("#v_email")?.value || "",
+        purposeType: qs("#v_purposeType")?.value || "",
+        purposeOther: qs("#v_purposeOther")?.value || "",
+        note: qs("#v_note")?.value || "",
+        timestamp: Date.now()
+      };
+      localStorage.setItem(FORM_CACHE_KEY, JSON.stringify(formData));
+    };
+
+    const loadFormCache = () => {
+      try {
+        const cached = localStorage.getItem(FORM_CACHE_KEY);
+        if (cached) {
+          const data = JSON.parse(cached);
+          if (qs("#v_name")) qs("#v_name").value = data.name || "";
+          if (qs("#v_party")) qs("#v_party").value = data.party || "1";
+          if (qs("#v_unit")) qs("#v_unit").value = data.unit || "";
+          if (qs("#v_phone")) qs("#v_phone").value = data.phone || "";
+          if (qs("#v_plate")) qs("#v_plate").value = data.plate || "";
+          if (qs("#v_email")) qs("#v_email").value = data.email || "";
+          if (qs("#v_purposeType")) qs("#v_purposeType").value = data.purposeType || "親友拜訪";
+          if (qs("#v_purposeOther")) qs("#v_purposeOther").value = data.purposeOther || "";
+          if (qs("#v_note")) qs("#v_note").value = data.note || "";
+        }
+      } catch (e) { console.error("Load cache failed", e); }
+    };
+
     if (!window.firebase || !firebase.apps) {
       setStatus("系統初始化失敗。", true);
       return;
@@ -132,6 +172,12 @@
     if (pageTitle) pageTitle.textContent = `訪客登記-${cname}`;
     fillUnitList(community.data && Array.isArray(community.data.units) ? community.data.units : []);
 
+    // 載入表單暫存
+    loadFormCache();
+
+    // 監聽輸入以自動暫存
+    form?.addEventListener("input", saveFormCache);
+
     try {
       await ensureAnonAuth(auth);
     } catch {
@@ -161,6 +207,11 @@
       if (hint) hint.textContent = "請出示此 QR code 作為訪客證。";
       if (urlEl) urlEl.textContent = deep;
       show(passBox, true);
+      
+      // 暫存訪客證資訊
+      localStorage.setItem(PASS_CACHE_KEY, JSON.stringify({
+        deep, qr, vid: current.vid, cid: current.cid, timestamp: Date.now()
+      }));
     };
 
     const setPassReady = (ready) => {
@@ -196,6 +247,13 @@
           if (resultMsg) {
             resultMsg.textContent = authorized ? "已授權，可查看訪客證。" : "已送出登記，等待授權。";
           }
+          // 如果已授權，自動更新暫存
+          if (authorized && current.vid) {
+            const pass = buildPassPayload({ cid: current.cid, vid: current.vid });
+            localStorage.setItem(PASS_CACHE_KEY, JSON.stringify({
+              ...pass, vid: current.vid, cid: current.cid, timestamp: Date.now()
+            }));
+          }
         },
         () => {
           setPassReady(false);
@@ -203,6 +261,33 @@
         }
       );
     };
+
+    // 嘗試恢復訪客證暫存
+    const tryRestorePass = () => {
+      try {
+        const cached = localStorage.getItem(PASS_CACHE_KEY);
+        if (cached) {
+          const data = JSON.parse(cached);
+          // 檢查是否為同一社區
+          if (data.cid === cid) {
+            current.vid = data.vid;
+            current.passAuthorized = true;
+            setPassReady(true);
+            
+            // 重新掛載監聽以確保狀態同步
+            const docRef = db.collection("communities").doc(cid).collection("visitors").doc(data.vid);
+            attachDoc(docRef);
+
+            // 如果已經是在結果畫面，顯示訪客證
+            if (resultBox && !resultBox.hidden) {
+              showPass(data);
+            }
+          }
+        }
+      } catch (e) { console.error("Restore pass failed", e); }
+    };
+
+    tryRestorePass();
 
     setPassReady(false);
     if (btnFooterAuth) {
@@ -336,6 +421,10 @@
 
       try {
         await docRef.set(payload, { merge: true });
+        
+        // 送出後清除表單暫存，但保留訪客證暫存
+        localStorage.removeItem(FORM_CACHE_KEY);
+        
         current.vid = vid;
         current.passAuthorized = false;
         setPassReady(false);
