@@ -34,24 +34,26 @@
     return { id: doc.id, data: doc.data() || {} };
   };
 
-  const ensureAnonAuth = async (auth) => {
+  const ensureAnonAuth = async (auth, silent = false) => {
     const pill = qs("#authPill");
-    if (pill) { pill.textContent = "連線中…"; show(pill, true); }
+    if (pill && !silent) { pill.textContent = "連線中…"; show(pill, true); }
     try {
       if (auth.currentUser) {
-        if (pill) { pill.textContent = "已連線"; show(pill, false); }
+        if (pill) show(pill, false);
         return auth.currentUser;
       }
       const res = await auth.signInAnonymously();
-      if (pill) { pill.textContent = "已連線"; show(pill, false); }
+      if (pill) show(pill, false);
       return res && res.user ? res.user : auth.currentUser;
     } catch (err) {
-      if (pill) { pill.textContent = "無法連線"; show(pill, true); }
-      const code = String(err && err.code ? err.code : "");
-      if (code.includes("auth/unauthorized-domain") || code.includes("unauthorized-domain")) {
-        setStatus("無法連線：網域未授權。請使用官方網址開啟。", true);
-      } else {
-        setStatus("無法建立連線，請稍後再試。", true);
+      if (pill && !silent) { pill.textContent = "無法連線"; show(pill, true); }
+      if (!silent) {
+        const code = String(err && err.code ? err.code : "");
+        if (code.includes("auth/unauthorized-domain") || code.includes("unauthorized-domain")) {
+          setStatus("無法連線：網域未授權。請使用官方網址開啟。", true);
+        } else {
+          setStatus("無法建立連線，請稍後再試。", true);
+        }
       }
       throw err;
     }
@@ -178,11 +180,10 @@
     // 監聽輸入以自動暫存
     form?.addEventListener("input", saveFormCache);
 
-    try {
-      await ensureAnonAuth(auth);
-    } catch {
-      return;
-    }
+    // 嘗試靜默進行匿名驗證，但不阻塞頁面載入，也不顯示任何錯誤
+    ensureAnonAuth(auth, true).catch(err => {
+      console.warn("Initial background auth failed, will retry on submit:", err);
+    });
 
     const updatePurposeOther = () => {
       const v = String(purposeTypeEl ? purposeTypeEl.value : "").trim();
@@ -381,14 +382,20 @@
 
       if (!name || !unit) {
         setStatus("請填寫訪客姓名與拜訪戶號。", true);
-        if (btnSubmit) btnSubmit.disabled = false;
+        if (btnFooterSubmit) btnFooterSubmit.disabled = false;
         return;
       }
-      const user = auth.currentUser;
+      
+      let user = auth.currentUser;
       if (!user) {
-        setStatus("尚未連線，請稍後再試。", true);
-        if (btnSubmit) btnSubmit.disabled = false;
-        return;
+        try {
+          setStatus("正在提交...", false);
+          user = await ensureAnonAuth(auth, false);
+        } catch (err) {
+          setStatus("提交失敗：無法建立安全連線，請檢查網路後再試一次。", true);
+          if (btnFooterSubmit) btnFooterSubmit.disabled = false;
+          return;
+        }
       }
 
       const docRef = db.collection("communities").doc(cid).collection("visitors").doc();
