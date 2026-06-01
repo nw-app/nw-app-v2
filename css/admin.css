@@ -1129,6 +1129,22 @@ a { color: inherit; text-decoration: none; }
 #visitorQrModal .visitor-qr-img a { display: inline-grid; place-items: center; }
 #visitorQrModal .visitor-qr-img img { width: min(260px, 100%); height: auto; image-rendering: pixelated; cursor: pointer; }
 
+#visitorTokenModal .modal-dialog { width: min(920px, 80vw); max-height: 80vh; overflow: auto; }
+#visitorTokenModal .field { display: grid; gap: 6px; }
+#visitorTokenModal label { font-size: 12px; color: var(--muted); font-weight: 900; }
+#visitorTokenModal input[type="text"] { height: 44px; padding: 0 12px; border-radius: 14px; border: 1px solid rgba(17, 24, 39, 0.14); background: #fff; outline: none; font: inherit; }
+#visitorTokenModal input[type="text"]:focus { border-color: rgba(211, 47, 47, 0.42); box-shadow: 0 0 0 4px rgba(211, 47, 47, 0.14); }
+#visitorTokenModal .visitor-qr-box { margin-top: 12px; display: grid; place-items: center; padding: 14px; border-radius: 14px; background: rgba(17, 24, 39, 0.03); border: 1px dashed rgba(17, 24, 39, 0.22); }
+#visitorTokenModal .visitor-qr-img img { width: min(260px, 100%); height: auto; image-rendering: pixelated; }
+
+#residentTokenModal .modal-dialog { width: min(920px, 80vw); max-height: 80vh; overflow: auto; }
+#residentTokenModal .field { display: grid; gap: 6px; }
+#residentTokenModal label { font-size: 12px; color: var(--muted); font-weight: 900; }
+#residentTokenModal input[type="text"] { height: 44px; padding: 0 12px; border-radius: 14px; border: 1px solid rgba(17, 24, 39, 0.14); background: #fff; outline: none; font: inherit; }
+#residentTokenModal input[type="text"]:focus { border-color: rgba(211, 47, 47, 0.42); box-shadow: 0 0 0 4px rgba(211, 47, 47, 0.14); }
+#residentTokenModal .visitor-qr-box { margin-top: 12px; display: grid; place-items: center; padding: 14px; border-radius: 14px; background: rgba(17, 24, 39, 0.03); border: 1px dashed rgba(17, 24, 39, 0.22); }
+#residentTokenModal .visitor-qr-img img { width: min(260px, 100%); height: auto; image-rendering: pixelated; }
+
 #visitorScanModal .scan-stage {
   position: relative;
   width: 100%;

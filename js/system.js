@@ -1726,11 +1726,20 @@
       const cfg = unitConfigCache || {};
       const buttons = Array.isArray(cfg[storeKey]) ? cfg[storeKey] : defaultButtons.map(b => ({ ...b }));
 
+      // 內部連結選項
+      const internalLinks = [
+        { value: "parcel.html", label: "包裹郵件" }
+      ];
+
       let html = "";
       for (let i = 0; i < 8; i++) {
         const b = buttons[i] || { name: "", icon: "", url: "", data: "", openExternal: false };
         const def = defaultButtons[i] || { name: "", icon: "" };
         const displayName = b.name || def.name || "";
+        
+        // 檢查是否為內部連結
+        const isInternalLink = internalLinks.some(link => link.value === b.url);
+        
         html += `
           <div class="button-slot" data-slot-index="${i}">
             <div class="btn-slot-preview" id="${containerId}_preview_${i}" ${b.data ? `data-slot-data="${b.data}"` : ""}>
@@ -1744,7 +1753,11 @@
               <div class="btn-slot-row">
                 <label>連結網址</label>
                 <div class="url-with-check">
-                  <input type="text" value="${b.url || ""}" placeholder="#" data-btn-url="${i}" />
+                  <select data-btn-internal="${i}">
+                    <option value="">自訂連結</option>
+                    ${internalLinks.map(link => `<option value="${link.value}" ${b.url === link.value ? "selected" : ""}>${link.label}</option>`).join("")}
+                  </select>
+                  <input type="text" value="${isInternalLink ? "" : (b.url || "")}" placeholder="#" data-btn-url="${i}" ${isInternalLink ? "disabled" : ""} />
                   <label class="check-inline">
                     <input type="checkbox" data-btn-external="${i}" ${b.openExternal ? "checked" : ""} />
                     <span>另開</span>
@@ -1762,6 +1775,23 @@
         `;
       }
       container.innerHTML = html;
+
+      // Bind events for internal link select
+      container.querySelectorAll("[data-btn-internal]").forEach(select => {
+        select.addEventListener("change", () => {
+          const idx = select.getAttribute("data-btn-internal");
+          const urlInput = container.querySelector(`[data-btn-url="${idx}"]`);
+          const selectedValue = select.value;
+          
+          if (selectedValue) {
+            urlInput.value = selectedValue;
+            urlInput.disabled = true;
+          } else {
+            urlInput.value = "";
+            urlInput.disabled = false;
+          }
+        });
+      });
 
       // Bind events
       container.querySelectorAll("[data-btn-upload]").forEach(btn => {
@@ -1797,6 +1827,8 @@
           container.querySelector(`[data-btn-icon="${idx}"]`).value = "";
           container.querySelector(`[data-btn-name="${idx}"]`).value = def.name || "";
           container.querySelector(`[data-btn-url="${idx}"]`).value = "#";
+          container.querySelector(`[data-btn-internal="${idx}"]`).value = "";
+          container.querySelector(`[data-btn-url="${idx}"]`).disabled = false;
           const externalCheck = container.querySelector(`[data-btn-external="${idx}"]`);
           if (externalCheck) externalCheck.checked = false;
         });

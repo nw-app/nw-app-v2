@@ -118,9 +118,51 @@
     const headerAvatarImg = document.getElementById("userAvatarImg");
     const greetingEl = document.getElementById("userGreeting");
     const switchEl = document.getElementById("profileSwitch");
-    const houseNoInput = document.getElementById("profileHouseNoInput");
-    const btnUpdateHouseNo = document.getElementById("btnUpdateHouseNo");
+    const btnEditAvatar = document.getElementById("btnEditAvatar");
+    const avatarFileInput = document.getElementById("profileAvatarFile");
+    const houseNoText = document.getElementById("profileHouseNoText");
     const houseNoItem = document.getElementById("profileHouseNoItem");
+    const defaultProfileQrToken = "A000ADDT";
+
+    const ensureProfileHouseNoQr = () => {
+      if (!houseNoText || !houseNoItem) return null;
+      let wrap = document.getElementById("profileHouseNoQrWrap");
+      if (wrap && houseNoItem.contains(wrap)) return wrap;
+      wrap = document.createElement("div");
+      wrap.id = "profileHouseNoQrWrap";
+      wrap.className = "profile-qr-wrap";
+      wrap.hidden = true;
+      wrap.innerHTML = `<img id="profileHouseNoQrImg" alt="QR Code" />`;
+      houseNoText.insertAdjacentElement("afterend", wrap);
+      return wrap;
+    };
+
+    const renderProfileHouseNoQr = (token) => {
+      const wrap = ensureProfileHouseNoQr();
+      if (!wrap) return;
+      const img = wrap.querySelector("#profileHouseNoQrImg");
+      const t = String(token || "").trim() || defaultProfileQrToken;
+      if (!t) {
+        wrap.hidden = true;
+        wrap.style.display = "none";
+        return;
+      }
+      wrap.hidden = false;
+      wrap.style.display = "";
+      if (!img) {
+        wrap.innerHTML = `<div class="status error">QR code 顯示失敗</div>`;
+        return;
+      }
+      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(t)}`;
+      img.decoding = "async";
+      img.loading = "eager";
+      if (!img._boundProfileQrError) {
+        img._boundProfileQrError = true;
+        img.addEventListener("error", () => {
+          try { wrap.innerHTML = `<div class="status error">QR code 產生失敗</div>`; } catch {}
+        });
+      }
+    };
 
     const getRoleText = () => {
       const r = String(sessionStorage.getItem("csp_role") || "").trim().toLowerCase();
@@ -296,6 +338,15 @@
       statusEl.hidden = !msg;
       statusEl.classList.toggle("error", Boolean(isError));
     };
+    const notify = (msg, isError) => {
+      try {
+        if (typeof window.toast === "function") {
+          window.toast(String(msg || "").trim(), isError ? "error" : "success");
+          return;
+        }
+      } catch {}
+      showStatus(String(msg || "").trim(), Boolean(isError));
+    };
 
     const ensureDb = () => {
       const fb = window.firebase;
@@ -458,32 +509,6 @@
       } catch {}
     };
 
-    if (btnUpdateHouseNo && houseNoInput) {
-      btnUpdateHouseNo.onclick = async () => {
-        const newVal = houseNoInput.value.trim();
-        if (!newVal) {
-          showToast("請輸入戶號", "error");
-          return;
-        }
-        const user = auth.currentUser;
-        if (!user) return;
-        try {
-          btnUpdateHouseNo.disabled = true;
-          btnUpdateHouseNo.textContent = "更新中...";
-          await db.collection("users").doc(user.uid).update({
-            houseNo: newVal
-          });
-          showToast("戶號已更新", "success");
-        } catch (e) {
-          console.error(e);
-          showToast("更新失敗: " + e.message, "error");
-        } finally {
-          btnUpdateHouseNo.disabled = false;
-          btnUpdateHouseNo.textContent = "更新";
-        }
-      };
-    }
-
     const loadProfile = async (user) => {
       if (!user) return;
       if (roleEl) roleEl.textContent = getRoleText();
@@ -585,6 +610,11 @@
           communityItemEl.hidden = false;
           communityItemEl.classList.add("single");
           if (houseNoItem) houseNoItem.hidden = true;
+          const qrWrap = document.getElementById("profileHouseNoQrWrap");
+          if (qrWrap) {
+            qrWrap.hidden = true;
+            qrWrap.style.display = "none";
+          }
           if (roleEl) {
             roleEl.textContent = "";
             roleEl.style.display = "none";
@@ -593,7 +623,11 @@
           communityItemEl.classList.remove("single");
           if (houseNoItem) {
             houseNoItem.hidden = false;
-            if (houseNoInput) houseNoInput.value = String(data.houseNo || "").trim();
+            const base = String(data.houseNo || data.unit || "").trim();
+            const sub = String(data.subHouseNo || data.subUnit || data.sub || "").trim();
+            const full = base ? (sub ? `${base}-${sub}` : base) : "—";
+            if (houseNoText) houseNoText.textContent = full;
+            renderProfileHouseNoQr(String(data.qrToken || "").trim());
           }
           if (roleEl) {
             roleEl.style.display = "";
@@ -618,6 +652,59 @@
         }
       }
     };
+    const updateAvatarDataUrl = async (user, dataUrl) => {
+      const db = ensureDb();
+      if (!db || !user || !user.uid) throw new Error("Firestore 尚未初始化");
+      await db.collection("users").doc(String(user.uid)).set({ avatarDataUrl: String(dataUrl || "") }, { merge: true });
+    };
+
+    if (btnEditAvatar && avatarFileInput && !btnEditAvatar._boundEditAvatar) {
+      btnEditAvatar._boundEditAvatar = true;
+      btnEditAvatar.addEventListener("click", () => {
+        try { avatarFileInput.click(); } catch {}
+      });
+      avatarFileInput.addEventListener("change", async () => {
+        const fb = window.firebase;
+        const user = fb && fb.auth ? fb.auth().currentUser : null;
+        const f = avatarFileInput.files && avatarFileInput.files[0] ? avatarFileInput.files[0] : null;
+        if (!user || !f) return;
+        if (!String(f.type || "").startsWith("image/")) {
+          notify("請選擇圖片檔案", true);
+          return;
+        }
+        try {
+          btnEditAvatar.disabled = true;
+          notify("上傳中...", false);
+          const dataUrl = await new Promise((resolve, reject) => {
+            try {
+              const reader = new FileReader();
+              reader.onerror = () => reject(new Error("讀取失敗"));
+              reader.onload = () => resolve(String(reader.result || ""));
+              reader.readAsDataURL(f);
+            } catch (e) {
+              reject(e);
+            }
+          });
+          await updateAvatarDataUrl(user, dataUrl);
+          if (profileAvatarImg) {
+            profileAvatarImg.src = dataUrl;
+            profileAvatarImg.style.display = "block";
+          }
+          if (profileAvatar) profileAvatar.style.display = "none";
+          if (headerAvatarImg) {
+            headerAvatarImg.src = dataUrl;
+            headerAvatarImg.style.display = "block";
+          }
+          if (headerAvatar) headerAvatar.style.display = "none";
+          notify("大頭照已更新", false);
+        } catch (e) {
+          notify("更新失敗，請稍後再試。", true);
+        } finally {
+          try { avatarFileInput.value = ""; } catch {}
+          btnEditAvatar.disabled = false;
+        }
+      });
+    }
 
     let detachKeydown = () => {};
 

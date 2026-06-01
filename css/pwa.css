@@ -208,15 +208,45 @@ html.force-portrait .pwa-install {
   border-color: rgba(0, 0, 0, 0);
 }
 .modal-hd {
-  display: grid;
-  grid-template-columns: 1fr auto;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   padding: 12px 12px;
   border-bottom: 1px solid rgba(17, 24, 39, 0.1);
   min-height: 52px;
 }
-.modal-title { margin: 0; font-size: 16px; font-weight: 900; letter-spacing: 0.2px; }
+.modal-hd-left {
+  width: 0;
+  visibility: hidden;
+}
+.modal-hd .community-name {
+  font-size: 16px;
+  color: var(--brand);
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  margin-right: 8px;
+}
+.modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.modal-hd-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+.modal-hd-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
 .modal-close {
   width: 40px;
   height: 40px;
@@ -302,7 +332,7 @@ html.force-portrait .pwa-install {
 #profileModal .modal-body { align-items: center; text-align: center; }
 #profileModal .profile-item { justify-items: center; width: 100%; }
 #profileModal .profile-label { display: none; }
-#profileModal .profile-avatar { justify-content: center; width: 100%; }
+#profileModal .profile-avatar { position: relative; width: 120px; height: 120px; margin: 0 auto; display: grid; place-items: center; }
 #profileModal #profileAvatarImg {
   width: 120px;
   height: 120px;
@@ -312,6 +342,22 @@ html.force-portrait .pwa-install {
   border: 1px solid rgba(17, 24, 39, 0.12);
   background: rgba(17, 24, 39, 0.04);
 }
+#profileModal .avatar-edit-btn {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  width: 36px;
+  height: 36px;
+  border-radius: 14px;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  background: rgba(255, 255, 255, 0.92);
+  color: rgba(31, 41, 55, 0.85);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+#profileModal .avatar-edit-btn:hover { background: #fff; }
+#profileModal .avatar-edit-btn svg { width: 18px; height: 18px; }
 #profileModal .profile-avatar .user-avatar-fallback { width: 120px; height: 120px; font-size: 34px; }
 .modal-body input[type="text"] {
   height: 44px;
@@ -339,4 +385,20 @@ html.force-portrait .pwa-install {
 #profileHouseNoItem .profile-label {
   display: block;
   margin-bottom: 4px;
+}
+
+#profileHouseNoQrWrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+#profileHouseNoQrWrap img {
+  width: 160px;
+  height: 160px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 0;
+  border: 1px solid rgba(17, 24, 39, 0.12);
 }

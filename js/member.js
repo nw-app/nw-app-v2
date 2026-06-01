@@ -351,6 +351,7 @@
     const openNewBtn = document.getElementById("btnExternalPageOpenNew");
     const errorContainer = document.getElementById("externalPageError");
     const errorOpenBtn = document.getElementById("btnExternalPageErrorOpen");
+    const communityNameEl = document.getElementById("externalPageModalCommunityName");
 
     if (!modal || !iframe || !title) return;
 
@@ -359,17 +360,41 @@
     if (openNewBtn) openNewBtn.href = url;
     if (errorOpenBtn) errorOpenBtn.href = url;
 
-    // 檢查是否為已知無法嵌入的網站
+    // 獲取並顯示社區名稱
+    const accounts = loadAccounts();
+    const cid = resolveActiveCommunityId();
+    const c = accounts.communities.find((x) => x && x.id === cid) || null;
+    const urlC = readUrlCommunityKey();
+    const cname = c ? String(c.name || "").trim() : "";
+    const displayCommunityName = cname || urlC || cid || "";
+    if (communityNameEl) {
+      communityNameEl.textContent = displayCommunityName;
+    }
+
+    // 先確保錯誤區塊被完全隱藏
+    if (errorContainer) {
+      errorContainer.hidden = true;
+      errorContainer.style.display = "none";
+    }
+
+    // 檢查是否為本地頁面（.html 結尾或本地路徑）
+    const isLocalPage = url.endsWith('.html') || !url.startsWith('http');
+    
+    // 檢查是否為已知無法嵌入的外部網站
     const blockedDomains = ["google.com", "gemini.google.com", "facebook.com", "youtube.com", "line.me"];
-    const isBlocked = blockedDomains.some(domain => url.toLowerCase().includes(domain));
+    const isBlocked = !isLocalPage && blockedDomains.some(domain => url.toLowerCase().includes(domain));
 
     if (isBlocked) {
       iframe.hidden = true;
+      iframe.style.display = "none";
       iframe.src = "";
-      if (errorContainer) errorContainer.hidden = false;
+      if (errorContainer) {
+        errorContainer.hidden = false;
+        errorContainer.style.display = "block";
+      }
     } else {
-      if (errorContainer) errorContainer.hidden = true;
       iframe.hidden = false;
+      iframe.style.display = "block";
       iframe.src = url;
     }
 

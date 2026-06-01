@@ -794,6 +794,355 @@
     });
   }
 
+  function ensureVisitorTokenModal80() {
+    let modal = document.getElementById("visitorTokenModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "visitorTokenModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="visitorTokenModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="visitorTokenModalTitle">編輯 QR Code</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label for="visitorTokenInput">QR code 碼</label>
+            <input id="visitorTokenInput" type="text" autocomplete="off" />
+          </div>
+          <div class="visitor-qr-box">
+            <div class="visitor-qr-img" id="visitorTokenQrWrap"></div>
+          </div>
+          <div class="status" id="visitorTokenStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" id="btnCopyVisitorToken">複製</button>
+          <button class="btn" type="button" id="btnCopyVisitorTokenUrl">複製連結</button>
+          <button class="btn btn-primary" type="button" id="btnSaveVisitorToken">儲存</button>
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openVisitorTokenModal80({ cid, communityName, visitorId, qrToken, onSaved }) {
+    const modal = ensureVisitorTokenModal80();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const titleEl = modal.querySelector("#visitorTokenModalTitle");
+    const inputEl = modal.querySelector("#visitorTokenInput");
+    const qrWrap = modal.querySelector("#visitorTokenQrWrap");
+    const statusEl = modal.querySelector("#visitorTokenStatus");
+    const btnCopy = modal.querySelector("#btnCopyVisitorToken");
+    const btnCopyUrl = modal.querySelector("#btnCopyVisitorTokenUrl");
+    const btnSave = modal.querySelector("#btnSaveVisitorToken");
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    if (titleEl) titleEl.textContent = `編輯 QR Code｜${String(communityName || "").trim() || "—"}`;
+    const vid = String(visitorId || "").trim();
+    const tokenDefault = String(qrToken || vid).trim();
+    if (inputEl) inputEl.value = tokenDefault;
+
+    const buildDeepLink = (token) => {
+      const t = String(token || "").trim();
+      return `nwapp://visitor-pass?cid=${encodeURIComponent(String(cid || ""))}&vid=${encodeURIComponent(vid)}&t=${encodeURIComponent(t || vid)}`;
+    };
+
+    const renderQr = () => {
+      if (!qrWrap) return;
+      const token = String(inputEl ? inputEl.value : "").trim();
+      qrWrap.innerHTML = "";
+      if (!vid) {
+        qrWrap.innerHTML = `<div class="status error">缺少訪客 ID</div>`;
+        return;
+      }
+      const deep = buildDeepLink(token);
+      const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(deep)}`;
+      const img = document.createElement("img");
+      img.alt = "QR Code";
+      img.src = qrSrc;
+      img.decoding = "async";
+      img.loading = "eager";
+      img.addEventListener("error", () => {
+        try { qrWrap.innerHTML = `<div class="status error">QR code 產生失敗</div>`; } catch {}
+      });
+      qrWrap.appendChild(img);
+    };
+    renderQr();
+    setStatus("", false);
+
+    if (inputEl && !inputEl._boundVisitorTokenInput) {
+      inputEl._boundVisitorTokenInput = true;
+      inputEl.addEventListener("input", () => {
+        renderQr();
+        setStatus("", false);
+      });
+    }
+
+    const copyText = async (t) => {
+      const val = String(t || "").trim();
+      if (!val) return;
+      try {
+        if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+          await navigator.clipboard.writeText(val);
+          toast("已複製");
+          return;
+        }
+      } catch {}
+      try { window.prompt("複製內容", val); } catch {}
+    };
+
+    const onCopy = () => copyText(String(inputEl ? inputEl.value : "").trim());
+    const onCopyUrl = () => copyText(buildDeepLink(String(inputEl ? inputEl.value : "").trim()));
+
+    const onSave = async () => {
+      const token = String(inputEl ? inputEl.value : "").trim();
+      if (!token) {
+        setStatus("請輸入 QR code 碼", true);
+        return;
+      }
+      if (btnSave) btnSave.disabled = true;
+      setStatus("儲存中...", false);
+      try {
+        await db.collection("communities").doc(String(cid || "default")).collection("visitors").doc(String(vid)).set(
+          {
+            qrToken: token,
+            qrInvalidated: false,
+            qrInvalidatedAt: firebase.firestore.FieldValue.delete(),
+            qrReissuedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        setStatus("已儲存。", false);
+        toast("已儲存");
+        if (typeof onSaved === "function") onSaved(token);
+      } catch (err) {
+        const code = String(err && err.code ? err.code : "");
+        setStatus(code.includes("permission-denied") ? "沒有權限儲存。" : "儲存失敗，請稍後再試。", true);
+      } finally {
+        if (btnSave) btnSave.disabled = false;
+      }
+    };
+
+    if (btnCopy) btnCopy.addEventListener("click", onCopy);
+    if (btnCopyUrl) btnCopyUrl.addEventListener("click", onCopyUrl);
+    if (btnSave) btnSave.addEventListener("click", onSave);
+    const oldDetach = detach;
+    detach = () => {
+      try { if (btnCopy) btnCopy.removeEventListener("click", onCopy); } catch {}
+      try { if (btnCopyUrl) btnCopyUrl.removeEventListener("click", onCopyUrl); } catch {}
+      try { if (btnSave) btnSave.removeEventListener("click", onSave); } catch {}
+      oldDetach();
+    };
+
+    modal.hidden = false;
+    requestAnimationFrame(() => {
+      if (inputEl && inputEl.focus) inputEl.focus();
+    });
+  }
+
+  function ensureResidentTokenModal80() {
+    let modal = document.getElementById("residentTokenModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "residentTokenModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="residentTokenModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="residentTokenModalTitle">編輯 QR Code</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label for="residentTokenInput">QR code 碼</label>
+            <input id="residentTokenInput" type="text" autocomplete="off" />
+          </div>
+          <div class="visitor-qr-box">
+            <div class="visitor-qr-img" id="residentTokenQrWrap"></div>
+          </div>
+          <div class="status" id="residentTokenStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" id="btnCopyResidentToken">複製</button>
+          <button class="btn btn-primary" type="button" id="btnSaveResidentToken">儲存</button>
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openResidentTokenModal80({ communityId, uid, displayName, qrToken, onSaved }) {
+    const modal = ensureResidentTokenModal80();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const titleEl = modal.querySelector("#residentTokenModalTitle");
+    const inputEl = modal.querySelector("#residentTokenInput");
+    const qrWrap = modal.querySelector("#residentTokenQrWrap");
+    const statusEl = modal.querySelector("#residentTokenStatus");
+    const btnCopy = modal.querySelector("#btnCopyResidentToken");
+    const btnSave = modal.querySelector("#btnSaveResidentToken");
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    if (titleEl) titleEl.textContent = `編輯 QR Code｜${String(displayName || "").trim() || "—"}`;
+    const id = String(uid || "").trim();
+    const defaultToken = "A000ADDT";
+    const originalToken = String(qrToken || "").trim();
+    if (inputEl) inputEl.value = originalToken || defaultToken;
+
+    const renderQr = () => {
+      if (!qrWrap) return;
+      const token = String(inputEl ? inputEl.value : "").trim();
+      qrWrap.innerHTML = "";
+      if (!token) {
+        qrWrap.innerHTML = `<div class="status error">請輸入 QR code 碼</div>`;
+        return;
+      }
+      const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(token)}`;
+      const img = document.createElement("img");
+      img.alt = "QR Code";
+      img.src = qrSrc;
+      img.decoding = "async";
+      img.loading = "eager";
+      img.addEventListener("error", () => {
+        try { qrWrap.innerHTML = `<div class="status error">QR code 產生失敗</div>`; } catch {}
+      });
+      qrWrap.appendChild(img);
+    };
+
+    renderQr();
+    setStatus("", false);
+
+    if (inputEl && !inputEl._boundResidentTokenInput) {
+      inputEl._boundResidentTokenInput = true;
+      inputEl.addEventListener("input", () => {
+        renderQr();
+        setStatus("", false);
+      });
+    }
+
+    const copyText = async (t) => {
+      const val = String(t || "").trim();
+      if (!val) return;
+      try {
+        if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+          await navigator.clipboard.writeText(val);
+          toast("已複製");
+          return;
+        }
+      } catch {}
+      try { window.prompt("複製內容", val); } catch {}
+    };
+
+    const onCopy = () => copyText(String(inputEl ? inputEl.value : "").trim());
+
+    const onSave = async () => {
+      const token = String(inputEl ? inputEl.value : "").trim();
+      if (!token) {
+        setStatus("請輸入 QR code 碼", true);
+        return;
+      }
+      if (btnSave) btnSave.disabled = true;
+      setStatus("儲存中...", false);
+      try {
+        if (token !== defaultToken && token !== originalToken) {
+          const cid = String(communityId || "").trim() || String(resolveActiveCommunityId() || "").trim() || "default";
+          try {
+            const dupSnap = await db.collection("users")
+              .where("community", "==", cid)
+              .where("qrToken", "==", token)
+              .get();
+            const dup = dupSnap && Array.isArray(dupSnap.docs) ? dupSnap.docs.find((d) => d && String(d.id || "") !== id) : null;
+            if (dup) {
+              setStatus("此社區 QR code 碼不可重複（A000ADDT 除外）。", true);
+              return;
+            }
+          } catch (err) {
+            const code = String(err && err.code ? err.code : "");
+            if (code.includes("permission-denied")) {
+              setStatus("沒有權限查詢查重。", true);
+              return;
+            }
+            try {
+              const allSnap = await db.collection("users").where("community", "==", cid).get();
+              const dup = allSnap && Array.isArray(allSnap.docs)
+                ? allSnap.docs.find((d) => {
+                    if (!d || String(d.id || "") === id) return false;
+                    const v = d.data ? (d.data() || {}) : {};
+                    return String(v.qrToken || "").trim() === token;
+                  })
+                : null;
+              if (dup) {
+                setStatus("此社區 QR code 碼不可重複（A000ADDT 除外）。", true);
+                return;
+              }
+            } catch (err2) {
+              const code2 = String(err2 && err2.code ? err2.code : "");
+              setStatus(code2.includes("permission-denied") ? "沒有權限查詢查重。" : "查重失敗，請稍後再試。", true);
+              return;
+            }
+          }
+        }
+        await db.collection("users").doc(String(id)).set(
+          {
+            qrToken: token,
+            qrUpdatedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        setStatus("已儲存。", false);
+        toast("已儲存");
+        if (typeof onSaved === "function") onSaved(token);
+      } catch (err) {
+        const code = String(err && err.code ? err.code : "");
+        setStatus(code.includes("permission-denied") ? "沒有權限儲存。" : "儲存失敗，請稍後再試。", true);
+      } finally {
+        if (btnSave) btnSave.disabled = false;
+      }
+    };
+
+    if (btnCopy) btnCopy.addEventListener("click", onCopy);
+    if (btnSave) btnSave.addEventListener("click", onSave);
+    const oldDetach = detach;
+    detach = () => {
+      try { if (btnCopy) btnCopy.removeEventListener("click", onCopy); } catch {}
+      try { if (btnSave) btnSave.removeEventListener("click", onSave); } catch {}
+      oldDetach();
+    };
+
+    modal.hidden = false;
+    requestAnimationFrame(() => {
+      if (inputEl && inputEl.focus) inputEl.focus();
+    });
+  }
+
   function toDateAny(v) {
     if (!v) return null;
     if (v instanceof Date) return v;
@@ -819,7 +1168,7 @@
     });
   }
 
-  function openVisitorPassModal80({ cid, communityName, visitorId, name, unit, purpose, phone, plate, email, partySize, keep, createdAt, createdByName, inAt, outAt, autoSendEmail }) {
+  function openVisitorPassModal80({ cid, communityName, visitorId, qrToken, name, unit, purpose, phone, plate, email, partySize, keep, createdAt, createdByName, inAt, outAt, autoSendEmail }) {
     const modal = ensureVisitorPassModal();
     let detach = () => {};
     detach = bindModalClose(modal, () => detach());
@@ -874,7 +1223,8 @@
         .join("");
     }
 
-    const qrData = `nwapp://visitor-pass?cid=${String(cid || "")}&vid=${String(visitorId || "")}&t=${String(visitorId || "")}`;
+    const tok = String(qrToken || visitorId || "").trim();
+    const qrData = `nwapp://visitor-pass?cid=${String(cid || "")}&vid=${String(visitorId || "")}&t=${String(tok || String(visitorId || ""))}`;
     const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(qrData)}`;
 
     const shareText = [
@@ -1258,8 +1608,9 @@
     const pick = (u) => {
       const cid = String(u.searchParams.get("cid") || "").trim();
       const vid = String(u.searchParams.get("vid") || "").trim();
+      const token = String(u.searchParams.get("t") || "").trim();
       if (!cid || !vid) return null;
-      return { cid, vid };
+      return { cid, vid, token };
     };
     try {
       if (raw.startsWith("nwapp://")) {
@@ -1275,11 +1626,13 @@
     } catch {}
     const mCid = raw.match(/[?&]cid=([^&]+)/i);
     const mVid = raw.match(/[?&]vid=([^&]+)/i);
+    const mTok = raw.match(/[?&]t=([^&]+)/i);
     if (!mCid || !mVid) return null;
     const cid = decodeURIComponent(String(mCid[1] || "").trim());
     const vid = decodeURIComponent(String(mVid[1] || "").trim());
+    const token = mTok ? decodeURIComponent(String(mTok[1] || "").trim()) : "";
     if (!cid || !vid) return null;
-    return { cid, vid };
+    return { cid, vid, token };
   }
 
   function formatYmdHms(d) {
@@ -1428,6 +1781,7 @@
           return;
         }
         const vid = String(parsed.vid || "").trim();
+        const tokenFromQr = String(parsed.token || "").trim();
         if (!vid) {
           setStatus("無法辨識", true);
           speak("無法辨識QR code");
@@ -1444,6 +1798,8 @@
             const hasIn = Boolean(data.inAt);
             const hasOut = Boolean(data.outAt);
             const invalidated = Boolean(data.qrInvalidated);
+            const expectedToken = String(data.qrToken || vid).trim();
+            if (tokenFromQr && expectedToken && tokenFromQr !== expectedToken) return { kind: "missing" };
             if (invalidated || hasOut) return { kind: "invalid" };
 
             if (!hasIn) {
@@ -2289,15 +2645,26 @@
             </div>
             <div class="field">
               <label for="p_company">物流公司</label>
-              <input id="p_company" type="text" placeholder="例：黑貓宅急便" required />
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input id="p_company" type="text" placeholder="例：黑貓宅急便" required list="p_company_list" style="flex:1;" />
+                <datalist id="p_company_list"></datalist>
+              </div>
             </div>
             <div class="field">
               <label for="p_trackNo">物流單號</label>
-              <input id="p_trackNo" type="text" placeholder="請輸入或掃描單號" required />
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input id="p_trackNo" type="text" placeholder="請輸入或掃描單號" required style="flex:1;" />
+                <button type="button" id="btnQuickScan" class="icon-btn" style="width:44px;height:44px;border-radius:10px;border:1px solid var(--border);background:#fff;" title="掃描條碼">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M4 4h2v16H4zM8 4h2v16H8zM12 4h1v16h-1zM16 4h2v16h-2zM20 4h1v16h-1zM4 20h16"></path></svg>
+                </button>
+              </div>
             </div>
             <div class="field">
               <label for="p_unit">收件戶號</label>
-              <input id="p_unit" type="text" placeholder="例：A-1203" required />
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input id="p_unit" type="text" placeholder="例：A-1203" required list="p_unit_list" style="flex:1;" />
+                <datalist id="p_unit_list"></datalist>
+              </div>
             </div>
             <div class="field">
               <label for="p_recipient">收件人姓名</label>
@@ -2334,6 +2701,7 @@
     const statusEl = modal.querySelector("#parcelModalStatus");
     const btnSubmit = modal.querySelector("#btnSubmitParcel");
     const btnScan = modal.querySelector("#btnScanParcel");
+    const btnQuickScan = modal.querySelector("#btnQuickScan");
 
     const inputCompany = modal.querySelector("#p_company");
     const inputTrackNo = modal.querySelector("#p_trackNo");
@@ -2341,6 +2709,8 @@
     const inputRecipient = modal.querySelector("#p_recipient");
     const inputAddress = modal.querySelector("#p_address");
     const inputNote = modal.querySelector("#p_note");
+    const listCompany = modal.querySelector("#p_company_list");
+    const listUnit = modal.querySelector("#p_unit_list");
 
     if (titleEl) titleEl.textContent = isEdit ? "編輯包裹" : "登記包裹";
     if (btnSubmit) btnSubmit.textContent = isEdit ? "更新" : "登記";
@@ -2357,6 +2727,68 @@
       form.reset();
     }
 
+    // 載入物流清單到 datalist
+    const unsubCouriers = db.collection("communities").doc(cid).collection("settings").doc("parcel_config")
+      .onSnapshot(doc => {
+        let couriers = doc.exists ? (doc.data().couriers || []) : [];
+        listCompany.innerHTML = couriers.map(name => `<option value="${escapeHtml(name)}"></option>`).join("");
+      });
+
+    // 載入戶號清單
+    const unsubUnits = db.collection("communities").doc(cid)
+      .onSnapshot(doc => {
+        const data = doc.data() || {};
+        const units = Array.isArray(data.units) ? data.units.map(u => (typeof u === "object" && u !== null) ? u.id || "" : u || "").filter(Boolean) : [];
+        listUnit.innerHTML = units.map(u => `<option value="${escapeHtml(u)}"></option>`).join("");
+      });
+
+    // 建立姓名與戶號的對應關係
+    let residentMap = {};
+    const unsubResidents = db.collection("communities").doc(cid).collection("residents")
+      .onSnapshot(snap => {
+        residentMap = {};
+        snap.forEach(doc => {
+          const data = doc.data() || {};
+          const name = data.displayName || data.name || "";
+          const unit = data.unit || "";
+          if (name && unit) {
+            if (!residentMap[name]) {
+              residentMap[name] = [];
+            }
+            if (!residentMap[name].includes(unit)) {
+              residentMap[name].push(unit);
+            }
+          }
+        });
+      });
+
+    // 姓名輸入後自動帶入戶號
+    if (inputRecipient) {
+      inputRecipient.oninput = () => {
+        const name = inputRecipient.value.trim();
+        if (name && residentMap[name]) {
+          if (residentMap[name].length === 1) {
+            inputUnit.value = residentMap[name][0];
+          }
+        }
+      };
+    }
+
+    // 快速掃描按鈕
+    if (btnQuickScan) {
+      btnQuickScan.onclick = () => {
+        openParcelScanModal80({
+          onDetected: (data) => {
+            if (data.company) inputCompany.value = data.company;
+            if (data.trackNo) inputTrackNo.value = data.trackNo;
+            if (data.recipient) inputRecipient.value = data.recipient;
+            if (data.address) inputAddress.value = data.address;
+            toast("辨識完成");
+          }
+        });
+      };
+    }
+
     if (btnScan) {
       btnScan.onclick = () => {
         openParcelScanModal80({
@@ -2370,6 +2802,14 @@
         });
       };
     }
+
+    const oldDetach = detach;
+    detach = () => {
+      unsubCouriers();
+      unsubUnits();
+      unsubResidents();
+      oldDetach();
+    };
 
     form.onsubmit = async (e) => {
       e.preventDefault();
@@ -2970,6 +3410,15 @@
                   <input type="checkbox" data-toggle ${enabled ? "checked" : ""} />
                   <span class="slider"></span>
                 </label>
+                <button class="icon-btn" type="button" data-qr aria-label="編輯QR code" title="編輯QR code">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4.5 4.5h6v6h-6v-6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M13.5 4.5h6v6h-6v-6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M4.5 13.5h6v6h-6v-6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M13.5 13.5h2.5v2.5h-2.5v-2.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M16 16h3.5v3.5H16V16Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                  </svg>
+                </button>
                 <button class="icon-btn" type="button" data-edit aria-label="編輯" title="編輯">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-2.8l-.2-.2a2 2 0 0 0-2.8 0L5 17v3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
@@ -3012,6 +3461,7 @@
                   avatarDataUrl: String(v.avatarDataUrl || ""),
                   phoneNormalized: String(v.phoneNormalized || ""),
                   status: String(v.status || ""),
+                  qrToken: String(v.qrToken || ""),
                 };
               })
               .filter((x) => isResidentRole(x.role) && x.status !== "pending");
@@ -3661,6 +4111,21 @@
         const r = residents.find((x) => String(x.id || "") === String(id || "")) || null;
         if (!id || !r) return;
 
+        const qrBtn = e.target.closest("[data-qr]");
+        if (qrBtn) {
+          openResidentTokenModal80({
+            communityId: cid,
+            uid: id,
+            displayName: String(r.displayName || r.email || id),
+            qrToken: String(r.qrToken || "").trim(),
+            onSaved: (token) => {
+              r.qrToken = token;
+              renderList();
+            },
+          });
+          return;
+        }
+
         const editBtn = e.target.closest("[data-edit]");
         if (editBtn) {
           openResidentEditor("edit", r);
@@ -4115,6 +4580,15 @@
                       <path d="M15.4 14.2a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0Z" stroke="currentColor" stroke-width="1.7"/>
                     </svg>
                   `}
+                </button>
+                <button class="icon-btn" type="button" data-qr aria-label="編輯QR code" title="編輯QR code">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4.5 4.5h6v6h-6v-6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M13.5 4.5h6v6h-6v-6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M4.5 13.5h6v6h-6v-6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M13.5 13.5h2.5v2.5h-2.5v-2.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M16 16h3.5v3.5H16V16Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                  </svg>
                 </button>
                 <button class="icon-btn" type="button" data-edit aria-label="編輯" title="編輯">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -4593,6 +5067,21 @@
         const v = visitors.find((x) => String(x.id || "") === String(id || "")) || null;
         if (!id || !v) return;
 
+        const qrBtn = e.target.closest("[data-qr]");
+        if (qrBtn) {
+          openVisitorTokenModal80({
+            cid: visitorCommunitySlug,
+            communityName: cname,
+            visitorId: id,
+            qrToken: String(v.qrToken || "").trim(),
+            onSaved: (token) => {
+              v.qrToken = token;
+              renderList();
+            },
+          });
+          return;
+        }
+
         const editBtn = e.target.closest("[data-edit]");
         if (editBtn) {
           openVisitorEditor("edit", v);
@@ -4624,6 +5113,7 @@
                 cid: visitorCommunitySlug,
                 communityName: cname,
                 visitorId: id,
+                qrToken: String(v.qrToken || "").trim(),
                 name: String(v.name || ""),
                 unit: String(v.unit || ""),
                 purpose: String(v.purpose || ""),
@@ -4675,6 +5165,7 @@
                   cid: visitorCommunitySlug,
                   communityName: cname,
                   visitorId: id,
+                  qrToken: String(v.qrToken || "").trim(),
                   name: String(v.name || ""),
                   unit: String(v.unit || ""),
                   purpose: String(v.purpose || ""),
@@ -4704,6 +5195,7 @@
             cid: visitorCommunitySlug,
             communityName: cname,
             visitorId: id,
+            qrToken: String(v.qrToken || "").trim(),
             name: String(v.name || ""),
             unit: String(v.unit || ""),
             purpose: String(v.purpose || ""),

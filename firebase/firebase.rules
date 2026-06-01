@@ -220,8 +220,14 @@ service cloud.firestore {
         allow read, write: if request.auth != null && (
           isAdmin() || 
           (isCommunityStaff() && slug == getUserData().community) ||
-          (getUserData().houseNo == resource.data.unit)
+          (getUserData().houseNo == resource.data.unit) ||
+          (getUserData().houseNo == resource.data.houseNo)
         );
+      }
+      
+      // 允許列出包裹集合（用於調試）
+      match /parcels {
+        allow list: if request.auth != null;
       }
 
       match /visitors/{visitorId} {
