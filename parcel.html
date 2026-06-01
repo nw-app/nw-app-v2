@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>包裹郵件｜社區系統</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#d32f2f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <link rel="stylesheet" href="css/parcel.css" />
+    <link rel="stylesheet" href="css/pwa.css" />
+  </head>
+  <body>
+    <div class="parcel-layout">
+      <header class="parcel-hd">
+        <div class="parcel-hd-content">
+          <div class="parcel-title" id="communityParcelTitle">&lt;戶號&gt; &lt;姓名&gt;</div>
+        </div>
+      </header>
+
+      <div class="parcel-midtop">
+        <div class="parcel-tabs">
+          <button class="tab-btn active" type="button" data-tab="unclaimed">未領取</button>
+          <button class="tab-btn" type="button" data-tab="claimed">已領取</button>
+        </div>
+      </div>
+
+      <main class="parcel-bd">
+        <div class="parcel-list" id="unclaimedList">
+          <div class="status">載入中...</div>
+        </div>
+
+        <div class="parcel-list hidden" id="claimedList">
+          <div class="status">載入中...</div>
+        </div>
+      </main>
+
+      <footer class="parcel-ft"></footer>
+    </div>
+
+    <div class="modal" id="profileModal" hidden>
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="profileModalTitle">個人資訊</h3>
+          <button class="modal-close" type="button" id="btnCloseProfileModal" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="profile-row" id="profileCommunityItem" hidden>
+            <div class="profile-value community" id="profileCommunityText">—</div>
+            <div class="profile-value" id="profileRole">—</div>
+          </div>
+          <div class="profile-item">
+            <div class="profile-avatar">
+              <img id="profileAvatarImg" alt="" />
+              <span class="user-avatar-fallback" id="profileAvatarFallback" aria-hidden="true">U</span>
+              <button type="button" class="avatar-edit-btn" id="btnEditAvatar" aria-label="更換大頭照" title="更換大頭照">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 20h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <input type="file" id="profileAvatarFile" accept="image/*" hidden />
+            </div>
+          </div>
+          <div class="profile-item">
+            <div class="profile-label">姓名</div>
+            <div class="profile-value" id="profileNameText">—</div>
+          </div>
+          <div class="profile-item" id="profileHouseNoItem">
+            <div class="profile-label">戶號</div>
+            <div class="profile-value" id="profileHouseNoText">—</div>
+          </div>
+          <div class="status" id="profileStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <div class="profile-switch" id="profileSwitch" hidden></div>
+          <button class="btn" type="button" id="btnCloseProfileModalFt">關閉</button>
+          <button class="btn btn-primary" type="button" id="btnSignOut">登出</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/parcel.js"></script>
+    <script src="js/pwa.js?v=1"></script>
+  </body>
+</html>

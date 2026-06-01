@@ -75,7 +75,11 @@
       <div class="modal-backdrop" id="btnExternalPageModalBackdrop"></div>
       <div class="modal-dialog full" role="dialog" aria-modal="true" aria-labelledby="externalPageModalTitle">
         <div class="modal-hd">
-          <h3 class="modal-title" id="externalPageModalTitle">頁面名稱</h3>
+          <div class="modal-hd-left"></div>
+          <div class="modal-hd-center">
+            <span class="community-name" id="externalPageModalCommunityName">社區名稱</span>
+            <h3 class="modal-title" id="externalPageModalTitle">頁面名稱</h3>
+          </div>
           <div class="modal-hd-actions">
             <a href="#" target="_blank" class="btn-icon-only" id="btnExternalPageOpenNew" title="在新視窗開啟">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
@@ -114,6 +118,13 @@
               <div class="profile-avatar">
                 <img id="profileAvatarImg" alt="" />
                 <span class="user-avatar-fallback" id="profileAvatarFallback" aria-hidden="true">U</span>
+                <button type="button" class="avatar-edit-btn" id="btnEditAvatar" aria-label="更換大頭照" title="更換大頭照">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 20h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                <input type="file" id="profileAvatarFile" accept="image/*" hidden />
               </div>
             </div>
             <div class="profile-item">
@@ -122,10 +133,7 @@
             </div>
             <div class="profile-item" id="profileHouseNoItem">
               <div class="profile-label">戶號</div>
-              <div class="profile-edit-row">
-                <input type="text" id="profileHouseNoInput" class="profile-input" placeholder="例如: A1-10F" />
-                <button type="button" id="btnUpdateHouseNo" class="btn btn-sm btn-primary">更新</button>
-              </div>
+              <div class="profile-value" id="profileHouseNoText">—</div>
             </div>
             <div class="status" id="profileStatus" hidden></div>
           </div>
@@ -143,6 +151,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="js/firebase-config.js"></script>
     <script src="js/member.js"></script>
-    <script src="js/pwa.js"></script>
+    <script src="js/pwa.js?v=1"></script>
   </body>
 </html>
