@@ -415,6 +415,8 @@
     });
   }
 
+  let authWaitTimer = null;
+
   function init() {
     loadUserInfo();
 
@@ -429,6 +431,16 @@
 
     // 檢查登入狀態
     auth.onAuthStateChanged(async (user) => {
+      const isEmbedded = (() => {
+        try { return window.self !== window.top; } catch { return true; }
+      })();
+
+      const showNeedLogin = () => {
+        const html = `<div class="status error">請先在主頁登入後再開啟此頁面</div>`;
+        if (unclaimedList) unclaimedList.innerHTML = html;
+        if (claimedList) claimedList.innerHTML = "";
+      };
+
       const redirectToIndex = () => {
         if (window.__nw_redirecting) return;
         window.__nw_redirecting = true;
@@ -436,8 +448,22 @@
       };
 
       if (!user) {
-        redirectToIndex();
+        if (authWaitTimer) return;
+        authWaitTimer = setTimeout(() => {
+          authWaitTimer = null;
+          const u = auth.currentUser;
+          if (u) {
+            try { loadProfile(u); } catch {}
+            return;
+          }
+          if (isEmbedded) showNeedLogin();
+          else redirectToIndex();
+        }, 2500);
         return;
+      }
+      if (authWaitTimer) {
+        clearTimeout(authWaitTimer);
+        authWaitTimer = null;
       }
 
       try {

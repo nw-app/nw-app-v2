@@ -355,10 +355,48 @@
 
     if (!modal || !iframe || !title) return;
 
+    const normalizeModalUrl = (raw) => {
+      const input = String(raw || "").trim();
+      if (!input) return { url: "", parsed: null };
+      try {
+        const parsed = new URL(input, location.href);
+        const host = String(parsed.hostname || "").toLowerCase();
+        const isLocalDevHost = host === "localhost" || host === "127.0.0.1";
+        if (isLocalDevHost) {
+          const cur = new URL(location.href);
+          parsed.protocol = cur.protocol;
+          parsed.host = cur.host;
+          const baseDir = String(cur.pathname || "/").replace(/\/[^\/]*$/, "/");
+          const p = String(parsed.pathname || "/");
+          if (baseDir && baseDir !== "/" && p.startsWith("/") && !p.startsWith(baseDir)) {
+            parsed.pathname = `${baseDir}${p.replace(/^\//, "")}`;
+          }
+        }
+        return { url: parsed.toString(), parsed };
+      } catch {
+        return { url: input, parsed: null };
+      }
+    };
+
+    const resolved = normalizeModalUrl(url);
+    let resolvedUrl = resolved.url;
+    if (resolved.parsed) {
+      const sameOrigin = String(resolved.parsed.origin || "") === String(location.origin || "");
+      const pathname = String(resolved.parsed.pathname || "");
+      const isLocalHtml = sameOrigin && pathname.toLowerCase().endsWith(".html");
+      if (isLocalHtml) {
+        const cKey = String(readUrlCommunityKey() || localStorage.getItem("csp_active_community_v1") || "").trim();
+        if (cKey && cKey !== "default") resolved.parsed.searchParams.set("c", cKey);
+        resolved.parsed.searchParams.set("embed", "1");
+        resolved.parsed.searchParams.set("v", "1");
+        resolvedUrl = resolved.parsed.toString();
+      }
+    }
+
     // 更新標題與按鈕網址
     title.textContent = name || "頁面";
-    if (openNewBtn) openNewBtn.href = url;
-    if (errorOpenBtn) errorOpenBtn.href = url;
+    if (openNewBtn) openNewBtn.href = resolvedUrl || url;
+    if (errorOpenBtn) errorOpenBtn.href = resolvedUrl || url;
 
     // 獲取並顯示社區名稱
     const accounts = loadAccounts();
@@ -378,11 +416,14 @@
     }
 
     // 檢查是否為本地頁面（.html 結尾或本地路徑）
-    const isLocalPage = url.endsWith('.html') || !url.startsWith('http');
+    const sameOrigin = Boolean(resolved.parsed && resolved.parsed.origin === location.origin);
+    const pathname = resolved.parsed ? String(resolved.parsed.pathname || "") : "";
+    const isLocalPage = sameOrigin && pathname.toLowerCase().endsWith(".html");
     
     // 檢查是否為已知無法嵌入的外部網站
     const blockedDomains = ["google.com", "gemini.google.com", "facebook.com", "youtube.com", "line.me"];
-    const isBlocked = !isLocalPage && blockedDomains.some(domain => url.toLowerCase().includes(domain));
+    const host = resolved.parsed ? String(resolved.parsed.hostname || "").toLowerCase() : "";
+    const isBlocked = !isLocalPage && blockedDomains.some(domain => host === domain || host.endsWith(`.${domain}`));
 
     if (isBlocked) {
       iframe.hidden = true;
@@ -395,7 +436,7 @@
     } else {
       iframe.hidden = false;
       iframe.style.display = "block";
-      iframe.src = url;
+      iframe.src = resolvedUrl || url;
     }
 
     modal.hidden = false;
