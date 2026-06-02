@@ -74,16 +74,110 @@
     return db;
   }
 
-  function getActiveCommunityId() {
+  function fromFirestoreValue(v) {
+    if (!v || typeof v !== "object") return null;
+    if (Object.prototype.hasOwnProperty.call(v, "stringValue")) return String(v.stringValue || "");
+    if (Object.prototype.hasOwnProperty.call(v, "integerValue")) return Number(v.integerValue);
+    if (Object.prototype.hasOwnProperty.call(v, "doubleValue")) return Number(v.doubleValue);
+    if (Object.prototype.hasOwnProperty.call(v, "booleanValue")) return Boolean(v.booleanValue);
+    if (Object.prototype.hasOwnProperty.call(v, "nullValue")) return null;
+    if (Object.prototype.hasOwnProperty.call(v, "timestampValue")) {
+      const s = String(v.timestampValue || "").trim();
+      const d = s ? new Date(s) : null;
+      return d && !Number.isNaN(d.getTime()) ? d : s;
+    }
+    if (Object.prototype.hasOwnProperty.call(v, "mapValue")) {
+      const fields = v.mapValue && v.mapValue.fields ? v.mapValue.fields : {};
+      const out = {};
+      for (const k of Object.keys(fields || {})) out[k] = fromFirestoreValue(fields[k]);
+      return out;
+    }
+    if (Object.prototype.hasOwnProperty.call(v, "arrayValue")) {
+      const values = v.arrayValue && Array.isArray(v.arrayValue.values) ? v.arrayValue.values : [];
+      return values.map(fromFirestoreValue);
+    }
+    return null;
+  }
+
+  async function fetchParcelsViaRest(communityId) {
+    const cfg = window.FIREBASE_CONFIG || {};
+    const projectId = String(cfg.projectId || "").trim();
+    const user = auth.currentUser;
+    if (!projectId || !user || typeof user.getIdToken !== "function") throw new Error("rest-precheck-failed");
+    const idToken = await user.getIdToken();
+    const base = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents`;
+    const url = `${base}/communities/${encodeURIComponent(String(communityId || ""))}/parcels?pageSize=200`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } });
+    if (!res.ok) {
+      const err = new Error(`rest-${res.status}`);
+      if (res.status === 401 || res.status === 403) err.code = "permission-denied";
+      throw err;
+    }
+    const json = await res.json();
+    const docs = Array.isArray(json && json.documents) ? json.documents : [];
+    return docs.map((d) => {
+      const name = String(d && d.name ? d.name : "");
+      const id = name ? name.split("/").pop() : "";
+      const fields = d && d.fields ? d.fields : {};
+      const data = {};
+      for (const k of Object.keys(fields || {})) data[k] = fromFirestoreValue(fields[k]);
+      return { id, ...data };
+    });
+  }
+
+  async function resolveCommunityId(keyOverride) {
+    const STORAGE_ACTIVE_COMMUNITY = 'csp_active_community_v1';
+    const keyFromUrl = (() => {
+      try {
+        const urlParams = new URLSearchParams(location.search);
+        return String(urlParams.get('c') || '').trim();
+      } catch {
+        return '';
+      }
+    })();
+    const saved = (() => {
+      try { return String(localStorage.getItem(STORAGE_ACTIVE_COMMUNITY) || '').trim(); } catch { return ''; }
+    })();
+    const key = String(keyOverride || '').trim() || keyFromUrl || saved;
+    if (!key) return 'default';
+    if (saved && saved === key) return saved;
+
     try {
-      const urlParams = new URLSearchParams(location.search);
-      const urlC = urlParams.get('c');
-      if (urlC) return urlC;
-      
-      const saved = localStorage.getItem('csp_active_community_v1');
-      if (saved) return saved;
+      const byIdSnap = await db.collection('communities').where('id', '==', key).limit(1).get();
+      const byId = byIdSnap && byIdSnap.docs && byIdSnap.docs[0] ? byIdSnap.docs[0] : null;
+      if (byId && byId.exists) {
+        const v = byId.data() || {};
+        const cid = String(v.id || byId.id || '').trim() || 'default';
+        try { localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, cid); } catch {}
+        return cid;
+      }
     } catch {}
-    return 'default';
+    try {
+      const byUserSnap = await db.collection('communities').where('username', '==', key).limit(1).get();
+      const byUser = byUserSnap && byUserSnap.docs && byUserSnap.docs[0] ? byUserSnap.docs[0] : null;
+      if (byUser && byUser.exists) {
+        const v = byUser.data() || {};
+        const cid = String(v.id || byUser.id || '').trim() || 'default';
+        try { localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, cid); } catch {}
+        return cid;
+      }
+    } catch {}
+    return key;
+  }
+
+  function readCommunityCandidates(userData) {
+    const out = [];
+    const push = (v) => {
+      const s = String(v || '').trim();
+      if (!s) return;
+      if (out.includes(s)) return;
+      out.push(s);
+    };
+    push(userData?.__communityId);
+    push(userData?.community);
+    try { push(new URLSearchParams(location.search).get('c')); } catch {}
+    try { push(localStorage.getItem('csp_active_community_v1')); } catch {}
+    return out.length ? out : ['default'];
   }
 
   function renderParcelItem(parcel) {
@@ -165,71 +259,172 @@
   }
 
   async function loadParcels(userData) {
-    const communityId = getActiveCommunityId();
-    const houseNo = String(userData?.houseNo || '').trim();
+    const candidates = readCommunityCandidates(userData);
+    const normalizeDash = (s) => String(s || "").replace(/[－–—]/g, "-").trim();
+    const normalizeKey = (s) => normalizeDash(s).replace(/\s+/g, "");
+    const houseNo = normalizeDash(userData?.houseNo || userData?.unit || '');
+    const subHouseNo = normalizeDash(userData?.subHouseNo || userData?.subUnit || userData?.sub || '');
+    const fullHouseNo = houseNo ? (subHouseNo ? `${houseNo}-${subHouseNo}` : houseNo) : "";
+    const variants = new Set();
+    [houseNo, fullHouseNo].forEach((x) => {
+      const v = normalizeDash(x);
+      if (!v) return;
+      variants.add(v);
+      const idx = v.indexOf("-");
+      if (idx > 0) {
+        const base = normalizeDash(v.slice(0, idx));
+        if (base) variants.add(base);
+      }
+    });
+    const houseKeys = Array.from(variants);
+    const houseQueryKeys = Array.from(new Set(houseKeys.flatMap((k) => {
+      const v = String(k || "").trim();
+      if (!v) return [];
+      return [v, v.replace(/-/g, "－")];
+    })));
+    const houseMatchKeys = Array.from(new Set(houseKeys.flatMap((k) => {
+      const v = normalizeKey(k);
+      if (!v) return [];
+      return [v, normalizeKey(String(k || "").replace(/-/g, "－"))];
+    })));
+    const recipientKey = normalizeDash(userData?.__displayName || userData?.displayName || userData?.name || '');
+    const baseKey = (() => {
+      const base = String(houseNo || fullHouseNo || "").trim();
+      const idx = base.indexOf("-");
+      const v = idx > 0 ? base.slice(0, idx) : base;
+      return normalizeKey(v);
+    })();
     
-    console.log('Loading parcels for community:', communityId, 'houseNo:', houseNo);
+    console.log('Loading parcels candidates:', candidates, 'houseNo:', houseNo);
     
-    if (!communityId || !houseNo) {
+    if (!houseKeys.length) {
       unclaimedList.innerHTML = '<div class="status">請先設定戶號</div>';
       claimedList.innerHTML = '';
       return;
     }
 
-    try {
+    const tryLoadByCommunityId = async (communityId) => {
       const parcelsRef = db.collection('communities').doc(communityId).collection('parcels');
       
-      let parcels = [];
-      
-      // 先簡單嘗試獲取該集合的所有文檔（先不篩選）
-      // 這樣可以幫助我們調試，確定問題所在
-      try {
-        console.log('Fetching all parcels for debugging...');
-        const allSnapshot = await parcelsRef.limit(20).get();
-        console.log('Total parcels in collection:', allSnapshot.size);
-        
-        allSnapshot.forEach(doc => {
-          const data = doc.data();
-          const parcelHouseNo = data.unit || data.houseNo || '';
-          console.log('Parcel doc:', doc.id, 'data:', data, 'houseNo/unit:', parcelHouseNo, 'status:', data.status);
-          
-          // 檢查是否屬於當前用戶
-          if (parcelHouseNo === houseNo) {
-            parcels.push({ id: doc.id, ...data });
-          }
-        });
-      } catch (err) {
-        console.log('Error fetching all parcels:', err);
-      }
-      
-      // 如果上面的方式沒有找到，嘗試用 where 查詢
-      if (parcels.length === 0) {
-        console.log('No parcels found in all docs, trying where query...');
-        
-        // 先嘗試用 unit
-        try {
-          console.log('Trying query with unit field...');
-          const snapshot = await parcelsRef.where('unit', '==', houseNo).get();
-          console.log('Found with unit:', snapshot.size);
-          snapshot.forEach(doc => parcels.push({ id: doc.id, ...doc.data() }));
-        } catch (err) {
-          console.log('Unit query failed:', err);
+      let lastCode = "";
+      let pendingTotal = 0;
+      let didFetch = false;
+
+      const matchesParcel = (data) => {
+        const unitRaw = data ? (data.unit || data.houseNo || "") : "";
+        const unitKey = normalizeKey(unitRaw);
+        const unitUpper = normalizeDash(unitRaw).toUpperCase().replace(/\s+/g, "");
+        const recipientRaw = data ? String(data.recipient || "") : "";
+        const recipientNorm = normalizeDash(recipientRaw);
+        const recipientMatch = Boolean(recipientKey) && recipientNorm === recipientKey;
+        const baseUpper = String(baseKey || "").toUpperCase();
+        const fullUpper = normalizeDash(fullHouseNo).toUpperCase().replace(/\s+/g, "");
+
+        const containsKey = (hay, needle) => {
+          const h = String(hay || "");
+          const n = String(needle || "");
+          if (!h || !n) return false;
+          const idx = h.indexOf(n);
+          if (idx < 0) return false;
+          const prev = idx > 0 ? h.charAt(idx - 1) : "";
+          const next = idx + n.length < h.length ? h.charAt(idx + n.length) : "";
+          if (prev && /[A-Z0-9]/.test(prev)) return false;
+          if (next && /[0-9]/.test(next)) return false;
+          return true;
+        };
+
+        if (unitKey && houseMatchKeys.includes(unitKey)) return true;
+        if (baseKey && (unitKey === baseKey || unitKey.startsWith(`${baseKey}-`))) return true;
+        if (baseKey && unitKey.startsWith(baseKey) && unitKey.length > baseKey.length) {
+          const ch = unitKey.charAt(baseKey.length);
+          if (ch && !/[0-9]/.test(ch)) return true;
         }
-        
-        // 如果 unit 也失敗，嘗試 houseNo
-        if (parcels.length === 0) {
-          try {
-            console.log('Trying query with houseNo field...');
-            const snapshot = await parcelsRef.where('houseNo', '==', houseNo).get();
-            console.log('Found with houseNo:', snapshot.size);
-            snapshot.forEach(doc => parcels.push({ id: doc.id, ...doc.data() }));
-          } catch (err) {
-            console.log('HouseNo query failed:', err);
-          }
+        if (containsKey(unitUpper, fullUpper)) return true;
+        if (containsKey(unitUpper, baseUpper)) return true;
+        if (recipientMatch) {
+          if (!unitKey) return true;
+          if (baseKey && unitKey.startsWith(baseKey)) return true;
+        }
+        return false;
+      };
+
+      const parcels = [];
+      const seen = new Set();
+      const push = (doc) => {
+        if (!doc || !doc.id || seen.has(doc.id)) return;
+        const data = doc.data ? (doc.data() || {}) : {};
+        if (!matchesParcel(data)) return;
+        seen.add(doc.id);
+        if (String(data.status || "") === "pending") pendingTotal += 1;
+        parcels.push({ id: doc.id, ...data });
+      };
+
+      const fetchByFieldEq = async (field, value) => {
+        try {
+          const snap = await parcelsRef.where(field, '==', value).limit(200).get();
+          didFetch = true;
+          if (snap && snap.forEach) snap.forEach(push);
+        } catch (err) {
+          lastCode = String(err && err.code ? err.code : lastCode);
+        }
+      };
+
+      for (const k of houseQueryKeys) {
+        await fetchByFieldEq('unit', k);
+        await fetchByFieldEq('houseNo', k);
+      }
+      if (recipientKey) {
+        await fetchByFieldEq('recipient', recipientKey);
+      }
+
+      if (!parcels.length) {
+        try {
+          const restDocs = await fetchParcelsViaRest(communityId);
+          restDocs.forEach((d) => {
+            const fake = { id: String(d.id || ""), data: () => d };
+            push(fake);
+          });
+        } catch (e) {
+          lastCode = String(e && (e.code || e.message) ? (e.code || e.message) : lastCode);
         }
       }
       
       console.log('Total matching parcels found:', parcels.length);
+      if (!parcels.length && String(lastCode || "").includes("permission-denied")) {
+        return { parcels: [], pendingTotal, error: "permission-denied" };
+      }
+      return { parcels, pendingTotal, error: "" };
+    };
+    
+    try {
+      let resolvedCommunityId = "";
+      let result = { parcels: [], pendingTotal: 0, error: "" };
+      for (const key of candidates) {
+        const cid = await resolveCommunityId(key);
+        if (!cid) continue;
+        const r = await tryLoadByCommunityId(cid);
+        if (r.error === "permission-denied") {
+          result = r;
+          resolvedCommunityId = cid;
+          break;
+        }
+        if (r.parcels && r.parcels.length) {
+          result = r;
+          resolvedCommunityId = cid;
+          break;
+        }
+        if (!resolvedCommunityId) {
+          result = r;
+          resolvedCommunityId = cid;
+        }
+      }
+      const parcels = result.parcels || [];
+      const pendingTotal = result.pendingTotal || 0;
+      if (!parcels.length && result.error === "permission-denied") {
+        unclaimedList.innerHTML = '<div class="status error">沒有權限讀取包裹資料</div>';
+        claimedList.innerHTML = '';
+        return;
+      }
       
       // 按建立時間排序（最新在前）
       parcels.sort((a, b) => {
@@ -256,7 +451,8 @@
       
       // 渲染未領取列表
       if (unclaimed.length === 0) {
-        unclaimedList.innerHTML = '<div class="status">目前沒有未領取的包裹</div>';
+        const hint = pendingTotal > 0 ? '（社區有待領取，但未匹配到此帳號）' : '';
+        unclaimedList.innerHTML = `<div class="status">目前沒有未領取的包裹${hint}</div>`;
       } else {
         unclaimedList.innerHTML = unclaimed.map(renderParcelItem).join('');
       }
@@ -354,7 +550,7 @@
     }
     
     // 載入包裹資料
-    await loadParcels(data);
+    await loadParcels({ ...data, __displayName: displayName || '', __communityId: String(data.community || '').trim() });
   }
 
   function showToast(message, isError) {

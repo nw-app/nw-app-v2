@@ -94,6 +94,7 @@
     try {
       const fromSession = String(sessionStorage.getItem("csp_last_cid") || "").trim();
       if (fromSession) {
+        try { localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, fromSession); } catch {}
         const u = new URL(location.href);
         u.searchParams.set("c", fromSession);
         history.replaceState(null, "", u.toString());
@@ -107,16 +108,12 @@
       const udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
       const cid = String(udata.community || "").trim();
       if (!cid || cid === "default") return "";
-      const cdoc = await db.collection("communities").doc(cid).get();
-      const cdata = cdoc && cdoc.exists ? (cdoc.data() || {}) : {};
-      const code = String(cdata.username || "").trim();
-      const key = code || cid;
-      if (!key) return "";
-      try { sessionStorage.setItem("csp_last_cid", key); } catch {}
+      try { localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, cid); } catch {}
+      try { sessionStorage.setItem("csp_last_cid", cid); } catch {}
       const u = new URL(location.href);
-      u.searchParams.set("c", key);
+      u.searchParams.set("c", cid);
       history.replaceState(null, "", u.toString());
-      return key;
+      return cid;
     } catch {
       return "";
     }
@@ -140,7 +137,7 @@
 
     const saved = localStorage.getItem(STORAGE_ACTIVE_COMMUNITY);
     const first = list.find((x) => x && x.enabled)?.id || list[0]?.id || "";
-    if (saved && list.some((x) => x && x.id === saved)) return saved;
+    if (saved && (!list.length || list.some((x) => x && x.id === saved))) return saved;
     if (first) {
       localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, first);
       return first;
@@ -385,10 +382,11 @@
       const pathname = String(resolved.parsed.pathname || "");
       const isLocalHtml = sameOrigin && pathname.toLowerCase().endsWith(".html");
       if (isLocalHtml) {
-        const cKey = String(readUrlCommunityKey() || localStorage.getItem("csp_active_community_v1") || "").trim();
+        const activeCid = String(localStorage.getItem("csp_active_community_v1") || "").trim();
+        const cKey = String(activeCid || readUrlCommunityKey() || "").trim();
         if (cKey && cKey !== "default") resolved.parsed.searchParams.set("c", cKey);
         resolved.parsed.searchParams.set("embed", "1");
-        resolved.parsed.searchParams.set("v", "1");
+        resolved.parsed.searchParams.set("v", "16");
         resolvedUrl = resolved.parsed.toString();
       }
     }
