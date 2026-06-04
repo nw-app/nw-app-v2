@@ -8025,7 +8025,7 @@
         <div class="modal-backdrop" data-modal-close="1"></div>
         <div class="modal-dialog a4-preview-dialog" role="dialog" aria-modal="true">
           <div class="modal-hd">
-            <h3 class="modal-title">Qai守護星 APP 下載說明</h3>
+            <h3 class="modal-title">QAI生活網 APP 下載說明</h3>
             <div class="modal-actions">
               <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
             </div>
@@ -8043,8 +8043,8 @@
                 </div>
                 <div class="a4-content">
                   <div class="a4-header">
-                    <img src="logo.svg" class="a4-logo" alt="Qai守護星" />
-                    <h1 class="a4-title">Qai守護星</h1>
+                    <img src="logo.svg" class="a4-logo" alt="QAI生活網" />
+                    <h1 class="a4-title">QAI生活網</h1>
                     <p class="a4-subtitle">智慧社區服務系統｜住戶端 APP</p>
                   </div>
                   
@@ -8069,7 +8069,7 @@
                       </div>
                       <div class="step">
                         <div class="step-num">2</div>
-                        <div class="step-text">點擊連結進入「Qai守護星」官方下載頁面。</div>
+                        <div class="step-text">點擊連結進入「QAI生活網」官方下載頁面。</div>
                       </div>
                       <div class="step">
                         <div class="step-num">3</div>
@@ -8084,7 +8084,7 @@
 
                   <div class="a4-footer">
                     <p>如有任何安裝問題，請洽社區管理室。</p>
-                    <p class="copyright">© 2026 Qai守護星｜西北保全 & 西北物業</p>
+                    <p class="copyright">© 2026 QAI生活網｜西北保全 & 西北物業</p>
                   </div>
                 </div>
               </div>
@@ -8106,7 +8106,7 @@
           win.document.write(`
             <html>
               <head>
-                <title>Qai守護星 APP 下載說明</title>
+                <title>QAI生活網 APP 下載說明</title>
                 <link rel="stylesheet" href="css/admin.css">
                 <style>
                   body { margin: 0; padding: 0; }
