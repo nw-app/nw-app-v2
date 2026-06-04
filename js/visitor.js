@@ -34,6 +34,18 @@
     return { id: doc.id, data: doc.data() || {} };
   };
 
+  const buildConnectErrorMessage = (err) => {
+    const code = String(err && err.code ? err.code : "");
+    const host = String(location.hostname || "");
+    if (code.includes("auth/unauthorized-domain") || code.includes("unauthorized-domain")) {
+      return `網域未授權（${host || "unknown"}）。請到 Firebase Console → Authentication → Settings → Authorized domains 新增此網域。`;
+    }
+    if (location.protocol !== "https:" && host !== "localhost" && host !== "127.0.0.1") {
+      return "目前不是 HTTPS，請改用 HTTPS 網址開啟。";
+    }
+    return "無法建立安全連線，請檢查網路後再試一次。";
+  };
+
   const ensureAnonAuth = async (auth, silent = false) => {
     const pill = qs("#authPill");
     if (pill && !silent) { pill.textContent = "連線中…"; show(pill, true); }
@@ -48,12 +60,7 @@
     } catch (err) {
       if (pill && !silent) { pill.textContent = "無法連線"; show(pill, true); }
       if (!silent) {
-        const code = String(err && err.code ? err.code : "");
-        if (code.includes("auth/unauthorized-domain") || code.includes("unauthorized-domain")) {
-          setStatus("無法連線：網域未授權。請使用官方網址開啟。", true);
-        } else {
-          setStatus("無法建立連線，請稍後再試。", true);
-        }
+        setStatus(`無法連線：${buildConnectErrorMessage(err)}`, true);
       }
       throw err;
     }
@@ -188,10 +195,7 @@
     // 監聽輸入以自動暫存
     form?.addEventListener("input", saveFormCache);
 
-    // 嘗試靜默進行匿名驗證，但不阻塞頁面載入，也不顯示任何錯誤
-    ensureAnonAuth(auth, true).catch(err => {
-      console.warn("Initial background auth failed, will retry on submit:", err);
-    });
+    ensureAnonAuth(auth, false).catch(() => {});
 
     const updatePurposeOther = () => {
       const v = String(purposeTypeEl ? purposeTypeEl.value : "").trim();
@@ -400,7 +404,7 @@
           setStatus("正在提交...", false);
           user = await ensureAnonAuth(auth, false);
         } catch (err) {
-          setStatus("提交失敗：無法建立安全連線，請檢查網路後再試一次。", true);
+          setStatus(`提交失敗：${buildConnectErrorMessage(err)}`, true);
           if (btnFooterSubmit) btnFooterSubmit.disabled = false;
           return;
         }

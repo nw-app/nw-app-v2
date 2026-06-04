@@ -6942,7 +6942,21 @@
         return;
       }
 
-      listEl.innerHTML = filtered
+      const statusGroup = (v) => {
+        const s = String(v && v.status ? v.status : "").toLowerCase();
+        if (s === "pending") return 0;
+        if (s === "approved") return 1;
+        return 2;
+      };
+      const sortTime = (v) => (toDate(v && v.inAt) || toDate(v && v.createdAt) || new Date(0)).getTime();
+      const ordered = [...filtered].sort((a, b) => {
+        const ga = statusGroup(a);
+        const gb = statusGroup(b);
+        if (ga !== gb) return ga - gb;
+        return sortTime(b) - sortTime(a);
+      });
+
+      listEl.innerHTML = ordered
         .map((v) => {
           const name = String(v.name || "—");
           const unit = String(v.unit || "").trim();
@@ -6970,9 +6984,11 @@
             `<span class="field-k">拜訪人數：</span>${escapeHtml(party)}`,
             `<span class="field-k">電子郵件：</span>${escapeHtml(email || "—")}`,
           ].join("｜");
-          const isPending = String(v.status || "").toLowerCase() === "pending";
+          const status = String(v.status || "").toLowerCase();
+          const isPending = status === "pending";
+          const isApproved = status === "approved";
           return `
-            <div class="visitor-item ${isPending ? "pending" : ""}" data-id="${String(v.id || "")}">
+            <div class="visitor-item ${isPending ? "pending" : ""} ${isApproved ? "approved" : ""}" data-id="${String(v.id || "")}">
               <div class="visitor-left">
                 <div class="visitor-text">
                   <div class="visitor-name">${name}</div>
@@ -6987,14 +7003,6 @@
                 </div>
               </div>
               <div class="visitor-actions">
-                ${isPending ? `
-                  <button class="icon-btn primary" type="button" data-auth aria-label="授權" title="授權">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                      <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </button>
-                ` : ""}
                 <button class="icon-btn ${isPending ? "warning" : ""}" type="button" data-pass aria-label="${isPending ? "待審核" : "訪客證"}" title="${isPending ? "待審核" : "訪客證"}">
                   ${isPending ? `
                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -7010,32 +7018,6 @@
                       <path d="M15.4 14.2a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0Z" stroke="currentColor" stroke-width="1.7"/>
                     </svg>
                   `}
-                </button>
-                <button class="icon-btn" type="button" data-parking aria-label="車位" title="車位">
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M7 4h5.6a4.4 4.4 0 0 1 0 8.8H7V4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                    <path d="M7 12.8V20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                    <path d="M14.5 20h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                    <path d="M14.5 14.5h4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                    <path d="M14.5 11.2h4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                    <path d="M14.5 7.9h4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                  </svg>
-                </button>
-                <button class="icon-btn" type="button" data-control aria-label="管制" title="管制">
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M12 2.5 20 6v6c0 5.2-3.4 9.2-8 9.5C7.4 21.2 4 17.2 4 12V6l8-3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                    <path d="M9 12h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                    <path d="M12 9v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                  </svg>
-                </button>
-                <button class="icon-btn" type="button" data-qr aria-label="編輯QR code" title="編輯QR code">
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M4.5 4.5h6v6h-6v-6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                    <path d="M13.5 4.5h6v6h-6v-6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                    <path d="M4.5 13.5h6v6h-6v-6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                    <path d="M13.5 13.5h2.5v2.5h-2.5v-2.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                    <path d="M16 16h3.5v3.5H16V16Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                  </svg>
                 </button>
                 <button class="icon-btn" type="button" data-edit aria-label="編輯" title="編輯">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -7118,6 +7100,9 @@
             (snap) => {
               const list = (snap && snap.docs ? snap.docs : []).map((d) => {
                 const v = d.data() || {};
+                const rawStatus = String(v.status || "").trim().toLowerCase();
+                const passAuthorized = Boolean(v.passAuthorized);
+                const status = rawStatus || (passAuthorized ? "approved" : "");
                 return {
                   id: d.id,
                   qrToken: String(v.qrToken || ""),
@@ -7139,6 +7124,8 @@
                   createdByName: String(v.createdByName || ""),
                   createdAt: v.createdAt || null,
                   updatedAt: v.updatedAt || null,
+                  status,
+                  passAuthorized,
                 };
               });
               visitors = list;
@@ -7514,70 +7501,9 @@
         const v = visitors.find((x) => String(x.id || "") === String(id || "")) || null;
         if (!id || !v) return;
 
-        const qrBtn = e.target.closest("[data-qr]");
-        if (qrBtn) {
-          openVisitorTokenModal80({
-            cid: visitorCommunitySlug,
-            communityName: cname,
-            visitorId: id,
-            qrToken: String(v.qrToken || "").trim(),
-            onSaved: (token) => {
-              v.qrToken = token;
-              renderList();
-            },
-          });
-          return;
-        }
-
         const editBtn = e.target.closest("[data-edit]");
         if (editBtn) {
           openVisitorEditor("edit", v);
-          return;
-        }
-
-        const authBtn = e.target.closest("[data-auth]");
-        if (authBtn) {
-          const ok = await (window.nwConfirm ? window.nwConfirm({
-            title: "訪客核准",
-            message: `是否同意訪客「${String(v.name || "")}」的登記並核發訪客證？`,
-            okText: "同意",
-            cancelText: "不同意",
-            danger: false,
-          }) : Promise.resolve(window.confirm("是否同意核准？")));
-          
-          if (ok) {
-            try {
-              await collRef().doc(String(id)).update({
-                status: "approved",
-                passAuthorized: true,
-                updatedAt: FieldValue.serverTimestamp(),
-              });
-              v.status = "approved";
-              v.passAuthorized = true;
-              renderList();
-              // 同意後自動開啟訪客證
-              openVisitorPassModal80({
-                cid: visitorCommunitySlug,
-                communityName: cname,
-                visitorId: id,
-                qrToken: String(v.qrToken || "").trim(),
-                name: String(v.name || ""),
-                unit: String(v.unit || ""),
-                purpose: String(v.purpose || ""),
-                phone: String(v.phone || ""),
-                plate: String(v.plate || ""),
-                email: String(v.email || ""),
-                partySize: v.partySize != null ? Number(v.partySize) : 1,
-                keep: v.keep || null,
-                createdAt: v.createdAt || null,
-                createdByName: String(v.createdByName || "").trim(),
-                inAt: v.inAt || null,
-                outAt: v.outAt || null,
-              });
-            } catch (err) {
-              toast("核准失敗");
-            }
-          }
           return;
         }
 
@@ -7585,11 +7511,6 @@
         if (passBtn) {
           const isPending = String(v.status || "").toLowerCase() === "pending";
           if (isPending) {
-            // 如果是待核准，點擊訪客證按鈕也可觸核准 (保留原邏輯或改為提示？)
-            // 這裡選擇保留原邏輯以相容操作習慣，但主要引導使用授權按鈕
-            authBtn ? authBtn.click() : null; 
-            // 由於 authBtn 是從 e.target 找的，這裡可能拿不到。直接呼叫 auth 邏輯或提示。
-            // 為了簡化，我們讓 data-pass 在 pending 時依然可以觸發核准。
             const ok = await (window.nwConfirm ? window.nwConfirm({
               title: "訪客核准",
               message: `是否同意訪客「${String(v.name || "")}」的登記並核發訪客證？`,

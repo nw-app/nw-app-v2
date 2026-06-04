@@ -599,6 +599,10 @@ a { color: inherit; text-decoration: none; }
   background-color: #fff5f5 !important;
   border-color: rgba(211, 47, 47, 0.18) !important;
 }
+.visitor-item.approved {
+  background-color: rgba(46, 125, 50, 0.12) !important;
+  border-color: rgba(46, 125, 50, 0.22) !important;
+}
 .icon-btn.warning {
   color: #f59e0b;
   border-color: rgba(245, 158, 11, 0.24);
