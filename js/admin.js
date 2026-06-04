@@ -349,7 +349,7 @@
 
     const mods = orderedModules();
     const items = [
-      { id: "community-dashboard", label: "總覽", url: "admin.html#community/community-dashboard", icon: homeSvg() },
+      { id: "community-dashboard", label: "總覽", url: "#community/community-dashboard", icon: homeSvg() },
       ...mods.map((m) => {
         const cfg = resolveUrl(m.id);
         const url = cfg && cfg.enabled && cfg.url ? cfg.url : `#community/${m.id}`;
@@ -376,9 +376,15 @@
     nav.innerHTML = items.map((x) => `
       <a href="${String(x.url)}" data-nav="${String(x.id)}">
         ${x.icon}
+        ${x.id === "parcel" ? `<span class="nav-badge" id="badgeNavParcel" hidden>0</span>` : ""}
+        ${x.id === "residents" ? `<span class="nav-badge" id="badgeNavResidents" hidden>0</span>` : ""}
+        ${x.id === "visitor" ? `<span class="nav-badge" id="badgeNavVisitor" hidden>0</span>` : ""}
         <span class="label">${String(x.label)}</span>
       </a>
     `.trim()).join("");
+    ensureParcelPendingCountSubscription(resolveActiveCommunityId());
+    ensureResidentsPendingCountSubscription(resolveActiveCommunityId());
+    ensureVisitorsPendingCountSubscription(resolveActiveCommunityId());
   }
 
   function normalizeText(v) {
@@ -389,6 +395,13 @@
     const u = user || {};
     const dn = String(u.displayName || "").trim();
     if (dn) return dn;
+    const email = String(u.email || "").trim();
+    if (email && email.includes("@")) return String(email.split("@")[0] || "").trim() || email;
+    return email || "—";
+  }
+
+  function inferUserAccount80(user) {
+    const u = user || {};
     const email = String(u.email || "").trim();
     if (email && email.includes("@")) return String(email.split("@")[0] || "").trim() || email;
     return email || "—";
@@ -630,11 +643,158 @@
        try { state.unsubResidents(); } catch {}
        state.unsubResidents = null;
      }
-     if (state.unsubPendingBadge) {
-       try { state.unsubPendingBadge(); } catch {}
-       state.unsubPendingBadge = null;
-     }
    }
+
+  function stopParcelsSubscription() {
+    if (_unsubParcels) {
+      try { _unsubParcels(); } catch {}
+      _unsubParcels = null;
+    }
+  }
+
+  let _unsubResidentsPendingCount = null;
+  let _residentsPendingCountCid = null;
+  let _lastResidentsPendingCount = 0;
+  function stopResidentsPendingCountSubscription() {
+    if (_unsubResidentsPendingCount) {
+      try { _unsubResidentsPendingCount(); } catch {}
+      _unsubResidentsPendingCount = null;
+    }
+    _residentsPendingCountCid = null;
+    _lastResidentsPendingCount = 0;
+  }
+  function updateResidentsPendingBadges(count) {
+    const n = Number.isFinite(Number(count)) ? Number(count) : 0;
+    _lastResidentsPendingCount = n;
+    const subnavBadge = document.getElementById("pendingBadge");
+    if (subnavBadge) {
+      subnavBadge.textContent = String(n);
+      subnavBadge.hidden = n === 0;
+    }
+    const navBadge = document.getElementById("badgeNavResidents");
+    if (navBadge) {
+      navBadge.textContent = String(n);
+      navBadge.hidden = n === 0;
+    }
+  }
+  function ensureResidentsPendingCountSubscription(cid) {
+    const communityId = String(cid || "").trim();
+    if (!communityId) return;
+    if (_residentsPendingCountCid === communityId && _unsubResidentsPendingCount) {
+      updateResidentsPendingBadges(_lastResidentsPendingCount);
+      return;
+    }
+    stopResidentsPendingCountSubscription();
+    _residentsPendingCountCid = communityId;
+    try {
+      _unsubResidentsPendingCount = db
+        .collection("users")
+        .where("community", "==", communityId)
+        .where("role", "==", "resident")
+        .where("status", "==", "pending")
+        .onSnapshot((snap) => {
+          updateResidentsPendingBadges(snap && typeof snap.size === "number" ? snap.size : 0);
+        }, () => {});
+    } catch {
+      stopResidentsPendingCountSubscription();
+    }
+  }
+
+  let _unsubVisitorsPendingCount = null;
+  let _visitorsPendingCountCid = null;
+  let _lastVisitorsPendingCount = 0;
+  function stopVisitorsPendingCountSubscription() {
+    if (_unsubVisitorsPendingCount) {
+      try { _unsubVisitorsPendingCount(); } catch {}
+      _unsubVisitorsPendingCount = null;
+    }
+    _visitorsPendingCountCid = null;
+    _lastVisitorsPendingCount = 0;
+  }
+  function updateVisitorsPendingBadges(count) {
+    const n = Number.isFinite(Number(count)) ? Number(count) : 0;
+    _lastVisitorsPendingCount = n;
+    const subnavBadge = document.getElementById("pendingVisitorsBadge");
+    if (subnavBadge) {
+      subnavBadge.textContent = String(n);
+      subnavBadge.hidden = n === 0;
+    }
+    const navBadge = document.getElementById("badgeNavVisitor");
+    if (navBadge) {
+      navBadge.textContent = String(n);
+      navBadge.hidden = n === 0;
+    }
+  }
+  function ensureVisitorsPendingCountSubscription(cid) {
+    const communityId = String(cid || "").trim();
+    if (!communityId) return;
+    if (_visitorsPendingCountCid === communityId && _unsubVisitorsPendingCount) {
+      updateVisitorsPendingBadges(_lastVisitorsPendingCount);
+      return;
+    }
+    stopVisitorsPendingCountSubscription();
+    _visitorsPendingCountCid = communityId;
+    try {
+      _unsubVisitorsPendingCount = db
+        .collection("communities")
+        .doc(communityId)
+        .collection("visitors")
+        .where("status", "==", "pending")
+        .onSnapshot((snap) => {
+          updateVisitorsPendingBadges(snap && typeof snap.size === "number" ? snap.size : 0);
+        }, () => {});
+    } catch {
+      stopVisitorsPendingCountSubscription();
+    }
+  }
+
+  let _unsubParcelPendingCount = null;
+  let _parcelPendingCountCid = null;
+  let _lastParcelPendingCount = 0;
+  function stopParcelPendingCountSubscription() {
+    if (_unsubParcelPendingCount) {
+      try { _unsubParcelPendingCount(); } catch {}
+      _unsubParcelPendingCount = null;
+    }
+    _parcelPendingCountCid = null;
+    _lastParcelPendingCount = 0;
+  }
+  function updateParcelPendingBadges(count) {
+    const n = Number.isFinite(Number(count)) ? Number(count) : 0;
+    _lastParcelPendingCount = n;
+    const subnavBadge = document.getElementById("parcelPendingBadge");
+    if (subnavBadge) {
+      subnavBadge.textContent = String(n);
+      subnavBadge.hidden = n === 0;
+    }
+    const navBadge = document.getElementById("badgeNavParcel");
+    if (navBadge) {
+      navBadge.textContent = String(n);
+      navBadge.hidden = n === 0;
+    }
+  }
+  function ensureParcelPendingCountSubscription(cid) {
+    const communityId = String(cid || "").trim();
+    if (!communityId) return;
+    if (_parcelPendingCountCid === communityId && _unsubParcelPendingCount) {
+      updateParcelPendingBadges(_lastParcelPendingCount);
+      return;
+    }
+    stopParcelPendingCountSubscription();
+    _parcelPendingCountCid = communityId;
+    try {
+      _unsubParcelPendingCount = db
+        .collection("communities")
+        .doc(communityId)
+        .collection("parcels")
+        .where("status", "==", "pending")
+        .onSnapshot((snap) => {
+          updateParcelPendingBadges(snap && typeof snap.size === "number" ? snap.size : 0);
+        }, () => {});
+    } catch {
+      stopParcelPendingCountSubscription();
+    }
+  }
 
   function ensureVisitorPassModal() {
     let modal = document.getElementById("visitorPassModal");
@@ -1141,6 +1301,391 @@
     requestAnimationFrame(() => {
       if (inputEl && inputEl.focus) inputEl.focus();
     });
+  }
+
+  function ensureResidentParkingModal80() {
+    const modal = ensureModal("residentParkingModal80", "modal-resident-parking", "80%");
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="residentParkingModalTitle80">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="residentParkingModalTitle80">車位資訊</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="status" id="residentParkingStatus80" hidden></div>
+          <div class="table-wrap">
+            <table class="units-table" id="residentParkingTable80">
+              <thead>
+                <tr>
+                  <th style="width: 150px;">車位類型</th>
+                  <th style="width: 220px;">車主姓名</th>
+                  <th>車位號碼</th>
+                  <th style="width: 160px;">操作</th>
+                </tr>
+              </thead>
+              <tbody id="residentParkingTbody80"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn btn-sm" type="button" id="btnAddParkingRow80">新增</button>
+          <button class="btn btn-primary btn-sm" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    return modal;
+  }
+
+  async function openResidentParkingModal80({ cid, uid, unit, displayName }) {
+    const modal = ensureResidentParkingModal80();
+    const titleEl = modal.querySelector("#residentParkingModalTitle80");
+    const statusEl = modal.querySelector("#residentParkingStatus80");
+    const tbody = modal.querySelector("#residentParkingTbody80");
+    const btnAdd = modal.querySelector("#btnAddParkingRow80");
+
+    const residentUid = String(uid || "").trim();
+    const communityId = String(cid || "").trim() || String(resolveActiveCommunityId() || "").trim() || "default";
+    const residentUnit = String(unit || "").trim();
+    const residentName = String(displayName || "").trim();
+
+    if (titleEl) {
+      const suffix = [residentUnit, residentName].filter(Boolean).join("｜");
+      titleEl.textContent = suffix ? `車位資訊｜${suffix}` : "車位資訊";
+    }
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    const rowHtml = (row) => {
+      const id = String(row.id || "");
+      const type = String(row.type || "汽車");
+      const ownerName = String(row.ownerName || residentName || "").trim();
+      const slotNo = String(row.slotNo || "").trim();
+      const isNew = Boolean(row._isNew);
+      return `
+        <tr data-id="${escapeHtml(id)}" data-new="${isNew ? "1" : "0"}" data-editing="${isNew ? "1" : "0"}">
+          <td>
+            <select data-field="type" ${isNew ? "" : "disabled"}>
+              <option value="汽車" ${type === "汽車" ? "selected" : ""}>汽車</option>
+              <option value="機車" ${type === "機車" ? "selected" : ""}>機車</option>
+            </select>
+          </td>
+          <td><input type="text" data-field="ownerName" value="${escapeHtml(ownerName)}" ${isNew ? "" : "disabled"} /></td>
+          <td><input type="text" data-field="slotNo" value="${escapeHtml(slotNo)}" ${isNew ? "" : "disabled"} /></td>
+          <td style="padding: 10px 12px;">
+            <div style="display:flex; gap:8px; justify-content:flex-end;">
+              <button class="btn btn-sm btn-primary" type="button" data-action="edit">${isNew ? "新增" : "編輯"}</button>
+              <button class="btn btn-sm" type="button" data-action="delete">刪除</button>
+            </div>
+          </td>
+        </tr>
+      `.trim();
+    };
+
+    let rows = [];
+    const render = () => {
+      if (!tbody) return;
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="4"><div class="status">尚無車位資料。</div></td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map(rowHtml).join("");
+    };
+
+    const load = async () => {
+      if (!residentUid) {
+        setStatus("缺少住戶 UID。", true);
+        return;
+      }
+      setStatus("讀取中...", false);
+      try {
+        const snap = await db.collection("communities").doc(communityId).collection("parking_residents")
+          .where("uid", "==", residentUid)
+          .limit(200)
+          .get();
+        rows = (snap && snap.docs ? snap.docs : []).map((d) => {
+          const v = d.data() || {};
+          return {
+            id: d.id,
+            type: String(v.type || "汽車"),
+            ownerName: String(v.ownerName || residentName || ""),
+            slotNo: String(v.slotNo || ""),
+            createdAt: v.createdAt || null,
+          };
+        });
+        render();
+        setStatus("", false);
+      } catch (e) {
+        const code = String(e && e.code ? e.code : "");
+        setStatus(code.includes("permission-denied") ? "沒有權限讀取車位資料。" : "讀取失敗，請稍後再試。", true);
+      }
+    };
+
+    const addRow = () => {
+      rows.unshift({ id: `__new__${Date.now()}`, type: "汽車", ownerName: residentName || "", slotNo: "", _isNew: true });
+      render();
+    };
+
+    const getRowEl = (target) => {
+      const tr = target && target.closest ? target.closest("tr[data-id]") : null;
+      return tr || null;
+    };
+
+    const getRowValues = (tr) => {
+      const type = String(tr.querySelector('[data-field="type"]')?.value || "汽車").trim() || "汽車";
+      const ownerName = String(tr.querySelector('[data-field="ownerName"]')?.value || "").trim();
+      const slotNo = String(tr.querySelector('[data-field="slotNo"]')?.value || "").trim();
+      return { type, ownerName, slotNo };
+    };
+
+    const setRowEditing = (tr, editing) => {
+      const on = Boolean(editing);
+      tr.setAttribute("data-editing", on ? "1" : "0");
+      tr.querySelectorAll("input, select").forEach((el) => {
+        el.disabled = !on;
+      });
+      const editBtn = tr.querySelector('[data-action="edit"]');
+      const isNew = tr.getAttribute("data-new") === "1";
+      if (editBtn) editBtn.textContent = on ? "儲存" : (isNew ? "新增" : "編輯");
+    };
+
+    const saveRow = async (tr) => {
+      const isNew = tr.getAttribute("data-new") === "1";
+      const rowId = String(tr.getAttribute("data-id") || "");
+      const v = getRowValues(tr);
+      if (!v.ownerName || !v.slotNo) {
+        toast("請填寫車主姓名與車位號碼");
+        return;
+      }
+      try {
+        const ref = isNew
+          ? db.collection("communities").doc(communityId).collection("parking_residents").doc()
+          : db.collection("communities").doc(communityId).collection("parking_residents").doc(rowId);
+        const payload = {
+          uid: residentUid,
+          unit: residentUnit,
+          residentName,
+          type: v.type,
+          ownerName: v.ownerName,
+          slotNo: v.slotNo,
+          updatedAt: FieldValue.serverTimestamp(),
+        };
+        if (isNew) payload.createdAt = FieldValue.serverTimestamp();
+        await ref.set(payload, { merge: true });
+        toast(isNew ? "已新增" : "已更新");
+        await load();
+      } catch (e) {
+        const code = String(e && e.code ? e.code : "");
+        toast(code.includes("permission-denied") ? "沒有權限儲存。" : "儲存失敗");
+      }
+    };
+
+    const deleteRow = async (tr) => {
+      const isNew = tr.getAttribute("data-new") === "1";
+      const rowId = String(tr.getAttribute("data-id") || "");
+      if (isNew) {
+        rows = rows.filter((x) => String(x.id || "") !== rowId);
+        render();
+        return;
+      }
+      const ok = await (window.nwConfirm ? window.nwConfirm({
+        title: "刪除車位",
+        message: "確認是否刪除此筆資料？",
+        okText: "刪除",
+        cancelText: "取消",
+        danger: true,
+      }) : Promise.resolve(confirm("確認是否刪除此筆資料？")));
+      if (!ok) return;
+      try {
+        await db.collection("communities").doc(communityId).collection("parking_residents").doc(rowId).delete();
+        toast("已刪除");
+        await load();
+      } catch (e) {
+        const code = String(e && e.code ? e.code : "");
+        toast(code.includes("permission-denied") ? "沒有權限刪除。" : "刪除失敗");
+      }
+    };
+
+    const onClick = async (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest("button[data-action]") : null;
+      if (!btn) return;
+      const tr = getRowEl(btn);
+      if (!tr) return;
+      const action = String(btn.getAttribute("data-action") || "");
+      if (action === "delete") {
+        await deleteRow(tr);
+        return;
+      }
+      if (action === "edit") {
+        const editing = tr.getAttribute("data-editing") === "1";
+        if (!editing) {
+          setRowEditing(tr, true);
+          return;
+        }
+        await saveRow(tr);
+        return;
+      }
+    };
+
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    if (btnAdd) btnAdd.onclick = addRow;
+    if (tbody) tbody.addEventListener("click", onClick);
+
+    const oldDetach = detach;
+    detach = () => {
+      try { if (tbody) tbody.removeEventListener("click", onClick); } catch {}
+      try { if (btnAdd) btnAdd.onclick = null; } catch {}
+      oldDetach();
+    };
+
+    modal.hidden = false;
+    await load();
+  }
+
+  function ensureResidentControlModal80() {
+    const modal = ensureModal("residentControlModal80", "modal-resident-control", "80%");
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="residentControlModalTitle80">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="residentControlModalTitle80">管制</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="status" id="residentControlStatus80" hidden></div>
+          <div class="control-grid">
+            <div class="control-block">
+              <h4>人口管制</h4>
+              <div class="control-options">
+                <label class="control-option"><input type="checkbox" data-control-pop value="一般戶">一般戶</label>
+                <label class="control-option"><input type="checkbox" data-control-pop value="空屋戶">空屋戶</label>
+                <label class="control-option"><input type="checkbox" data-control-pop value="承租戶">承租戶</label>
+                <label class="control-option"><input type="checkbox" data-control-pop value="關懷戶">關懷戶</label>
+              </div>
+            </div>
+            <div class="control-block">
+              <h4>秩序管制</h4>
+              <div class="control-options">
+                <label class="control-option"><input type="checkbox" data-control-order value="噪音戶">噪音戶</label>
+                <label class="control-option"><input type="checkbox" data-control-order value="臭氣戶">臭氣戶</label>
+                <label class="control-option"><input type="checkbox" data-control-order value="寵物戶">寵物戶</label>
+                <label class="control-option"><input type="checkbox" data-control-order value="違規戶">違規戶</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn btn-primary btn-sm" type="button" id="btnSaveResidentControl80">儲存</button>
+          <button class="btn btn-sm" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    return modal;
+  }
+
+  async function openResidentControlModal80({ cid, uid, unit, displayName }) {
+    const modal = ensureResidentControlModal80();
+    const titleEl = modal.querySelector("#residentControlModalTitle80");
+    const statusEl = modal.querySelector("#residentControlStatus80");
+    const btnSave = modal.querySelector("#btnSaveResidentControl80");
+
+    const residentUid = String(uid || "").trim();
+    const communityId = String(cid || "").trim() || String(resolveActiveCommunityId() || "").trim() || "default";
+    const residentUnit = String(unit || "").trim();
+    const residentName = String(displayName || "").trim();
+
+    if (titleEl) {
+      const suffix = [residentUnit, residentName].filter(Boolean).join("｜");
+      titleEl.textContent = suffix ? `管制｜${suffix}` : "管制";
+    }
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    const setChecked = (selector, values) => {
+      const list = Array.isArray(values) ? values.map((x) => String(x || "").trim()).filter(Boolean) : [];
+      modal.querySelectorAll(selector).forEach((el) => {
+        const v = String(el.value || "").trim();
+        el.checked = list.includes(v);
+      });
+    };
+
+    const collectChecked = (selector) => {
+      const out = [];
+      modal.querySelectorAll(selector).forEach((el) => {
+        if (el && el.checked) out.push(String(el.value || "").trim());
+      });
+      return out.filter(Boolean);
+    };
+
+    const load = async () => {
+      if (!residentUid) {
+        setStatus("缺少住戶 UID。", true);
+        return;
+      }
+      setStatus("讀取中...", false);
+      try {
+        const udoc = await db.collection("users").doc(residentUid).get();
+        const udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
+        const pop = (udata.control && Array.isArray(udata.control.population) ? udata.control.population : udata.controlPopulation);
+        const ord = (udata.control && Array.isArray(udata.control.order) ? udata.control.order : udata.controlOrder);
+        setChecked('input[data-control-pop]', pop);
+        setChecked('input[data-control-order]', ord);
+        setStatus("", false);
+      } catch (e) {
+        const code = String(e && e.code ? e.code : "");
+        setStatus(code.includes("permission-denied") ? "沒有權限讀取。" : "讀取失敗，請稍後再試。", true);
+      }
+    };
+
+    const onSave = async () => {
+      if (!residentUid) return;
+      if (btnSave) btnSave.disabled = true;
+      setStatus("儲存中...", false);
+      try {
+        const pop = collectChecked('input[data-control-pop]');
+        const ord = collectChecked('input[data-control-order]');
+        await db.collection("users").doc(residentUid).set({
+          community: communityId,
+          controlPopulation: pop,
+          controlOrder: ord,
+          controlUpdatedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        toast("已儲存");
+        setStatus("已儲存。", false);
+      } catch (e) {
+        const code = String(e && e.code ? e.code : "");
+        setStatus(code.includes("permission-denied") ? "沒有權限儲存。" : "儲存失敗，請稍後再試。", true);
+      } finally {
+        if (btnSave) btnSave.disabled = false;
+      }
+    };
+
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+    if (btnSave) btnSave.addEventListener("click", onSave);
+    const oldDetach = detach;
+    detach = () => {
+      try { if (btnSave) btnSave.removeEventListener("click", onSave); } catch {}
+      oldDetach();
+    };
+
+    modal.hidden = false;
+    await load();
   }
 
   function toDateAny(v) {
@@ -2199,7 +2744,9 @@
                 <table class="units-table">
                   <thead>
                     <tr>
+                      <th style="width: 180px;">QR code碼</th>
                       <th style="width: 100px;">戶號</th>
+                      <th style="width: 180px;">區分所有權人</th>
                       <th>地址</th>
                       <th style="width: 100px;">坪數</th>
                       <th style="width: 120px;">所有權人%</th>
@@ -2479,11 +3026,11 @@
     
     if (subnavEl) {
       subnavEl.innerHTML = `
-        <button class="btn btn-sm btn-primary" data-filter="all">全部包裹</button>
-        <button class="btn btn-sm" data-filter="pending">待領取</button>
+        <button class="btn btn-sm btn-primary" data-filter="pending">
+          <span class="badge-inline" id="parcelPendingBadge" hidden>0</span>
+          待領取
+        </button>
         <button class="btn btn-sm" data-filter="received">已領取</button>
-        <button class="btn btn-sm" id="btnCourierConfig">物流設定</button>
-        <button class="btn btn-primary btn-sm" id="btnRegisterParcel">登記包裹</button>
       `;
       
       subnavEl.querySelectorAll("[data-filter]").forEach(btn => {
@@ -2491,32 +3038,1734 @@
           subnavEl.querySelectorAll("[data-filter]").forEach(b => b.classList.remove("btn-primary"));
           btn.classList.add("btn-primary");
           const filter = btn.getAttribute("data-filter");
-          renderParcelList(filter);
+          renderParcelList(filter, readParcelFilters());
         };
       });
-
-      const btnCourierConfig = subnavEl.querySelector("#btnCourierConfig");
-      if (btnCourierConfig) {
-        btnCourierConfig.onclick = () => openCourierConfigModal80({ cid });
-      }
-
-      const btnRegister = subnavEl.querySelector("#btnRegisterParcel");
-      if (btnRegister) {
-        btnRegister.onclick = () => openParcelModal80({ cid, communityName });
-      }
     }
 
     contentEl.innerHTML = `
-      <div class="parcel-list-container" id="parcelList">
-        <div class="status">讀取中...</div>
-      </div>
+      <section class="card parcel-page">
+        <div class="card-hd">
+          <div class="left">
+            <div class="chip" aria-hidden="true">${iconSvg("parcel")}</div>
+            <div style="min-width:0;">
+              <h2>包裹郵件${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+              <p>登記到貨、通知住戶、領取簽收</p>
+            </div>
+          </div>
+          <button class="icon-btn sm" type="button" id="btnCourierConfig" aria-label="物流設定" title="物流設定">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.7"></path>
+              <path d="M19.2 12a7.2 7.2 0 0 0-.12-1.3l2.05-1.6-2-3.46-2.47 1a7.3 7.3 0 0 0-2.25-1.3L13 2h-4l-.43 3.34a7.3 7.3 0 0 0-2.25 1.3l-2.47-1-2 3.46 2.05 1.6A7.2 7.2 0 0 0 4.8 12c0 .44.04.88.12 1.3l-2.05 1.6 2 3.46 2.47-1a7.3 7.3 0 0 0 2.25 1.3L9 22h4l.43-3.34a7.3 7.3 0 0 0 2.25-1.3l2.47 1 2-3.46-2.05-1.6c.08-.42.12-.86.12-1.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="card-bd">
+          <div class="parcel-filter-bar" id="parcelFilterBar">
+            <div class="field">
+              <label for="parcelFilterDate">日期</label>
+              <input id="parcelFilterDate" type="date" />
+            </div>
+            <div class="field">
+              <label for="parcelFilterUnit">戶號</label>
+              <input id="parcelFilterUnit" type="text" autocomplete="off" placeholder="例如 A1-1" />
+            </div>
+            <div class="field">
+              <label for="parcelFilterName">姓名</label>
+              <input id="parcelFilterName" type="text" autocomplete="off" placeholder="例如 王小明" />
+            </div>
+            <button class="icon-btn sm" type="button" id="btnScanResidentParcel" aria-label="掃描住戶 QR Code" title="掃描住戶 QR Code">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M7 4H5a1 1 0 0 0-1 1v2M17 4h2a1 1 0 0 1 1 1v2M7 20H5a1 1 0 0 1-1-1v-2M17 20h2a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M7 9h10M7 12h10M7 15h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <button class="btn btn-sm" type="button" id="btnParcelFilterClear">清除</button>
+            <button class="btn btn-sm" type="button" id="btnRegisterParcel">登記包裹</button>
+          </div>
+          <div class="parcel-list-container" id="parcelList">
+            <div class="status">讀取中...</div>
+          </div>
+        </div>
+      </section>
     `;
 
-    renderParcelList("all");
+    bindParcelFilterBar();
+
+    const btnCourierConfig = document.getElementById("btnCourierConfig");
+    if (btnCourierConfig) {
+      btnCourierConfig.onclick = () => openCourierConfigModal80({ cid });
+    }
+
+    const btnRegister = document.getElementById("btnRegisterParcel");
+    if (btnRegister) {
+      btnRegister.onclick = () => openParcelModal80({ cid, communityName });
+    }
+
+    ensureParcelPendingCountSubscription(cid);
+    renderParcelList("pending", readParcelFilters());
+  }
+
+  function bindParcelFilterBar() {
+    const dateEl = document.getElementById("parcelFilterDate");
+    const unitEl = document.getElementById("parcelFilterUnit");
+    const nameEl = document.getElementById("parcelFilterName");
+    const clearBtn = document.getElementById("btnParcelFilterClear");
+    const scanBtn = document.getElementById("btnScanResidentParcel");
+    const apply = () => {
+      const activeBtn = subnavEl ? subnavEl.querySelector("[data-filter].btn-primary") : null;
+      const filter = activeBtn ? String(activeBtn.getAttribute("data-filter") || "pending") : "pending";
+      renderParcelList(filter, readParcelFilters());
+    };
+    const onEnter = (e) => {
+      if (!e || e.key !== "Enter") return;
+      try { e.preventDefault(); } catch {}
+      apply();
+    };
+    if (dateEl) dateEl.addEventListener("change", apply);
+    if (unitEl) {
+      unitEl.addEventListener("input", apply);
+      unitEl.addEventListener("keydown", onEnter);
+    }
+    if (nameEl) {
+      nameEl.addEventListener("input", apply);
+      nameEl.addEventListener("keydown", onEnter);
+    }
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        if (dateEl) dateEl.value = "";
+        if (unitEl) unitEl.value = "";
+        if (nameEl) nameEl.value = "";
+        apply();
+      });
+    }
+    if (scanBtn) {
+      scanBtn.addEventListener("click", () => {
+        openResidentParcelScanModal80();
+      });
+    }
+  }
+
+  function readParcelFilters() {
+    const dateEl = document.getElementById("parcelFilterDate");
+    const unitEl = document.getElementById("parcelFilterUnit");
+    const nameEl = document.getElementById("parcelFilterName");
+    const date = dateEl ? String(dateEl.value || "").trim() : "";
+    const unit = unitEl ? String(unitEl.value || "").trim() : "";
+    const name = nameEl ? String(nameEl.value || "").trim() : "";
+    return { date, unit, name };
+  }
+
+  function ymd80(d) {
+    const dt = d instanceof Date ? d : new Date();
+    return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+  }
+
+  function parseHm80(hm) {
+    const s = String(hm || "").trim();
+    const m = s.match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    const hh = Math.max(0, Math.min(23, Number(m[1])));
+    const mm = Math.max(0, Math.min(59, Number(m[2])));
+    return { hh, mm };
+  }
+
+  function makeDateTime80(dateStr, timeStr) {
+    const d = String(dateStr || "").trim();
+    const t = String(timeStr || "").trim();
+    const p = parseHm80(t);
+    if (!d || !p) return null;
+    const dt = new Date(`${d}T00:00:00`);
+    if (Number.isNaN(dt.getTime())) return null;
+    dt.setHours(p.hh, p.mm, 0, 0);
+    return dt;
+  }
+
+  function addMinutes80(d, minutes) {
+    const dt = d instanceof Date ? new Date(d.getTime()) : null;
+    if (!dt) return null;
+    dt.setMinutes(dt.getMinutes() + Number(minutes || 0));
+    return dt;
+  }
+
+  function formatHm80(d) {
+    if (!(d instanceof Date) || Number.isNaN(d.getTime())) return "";
+    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  }
+
+  function normalizeFacilityConfig80(v, id) {
+    const data = v && typeof v === "object" ? v : {};
+    const name = String(data.name || id || "").trim() || "設施";
+    const imageDataUrl = String(data.imageDataUrl || data.image || data.imageUrl || "").trim();
+    const usageTime = String(data.usageTime || data.usage || "").trim();
+    const chargeMethod = String(data.chargeMethod || data.charge || data.pricing || "").trim();
+    const orderRaw = Number(data.order);
+    const order = Number.isFinite(orderRaw) ? orderRaw : null;
+    const slotMinutes = Math.max(15, Math.min(240, Number(data.slotMinutes || data.slot || 60) || 60));
+    const openTime = String(data.openTime || "09:00").trim() || "09:00";
+    const closeTime = String(data.closeTime || "21:00").trim() || "21:00";
+    const capacity = Math.max(1, Math.min(500, Number(data.capacity || data.quota || 1) || 1));
+    const requireApproval = Boolean(data.requireApproval !== false);
+    const enabled = Boolean(data.enabled !== false);
+    return { id: String(id || "").trim(), name, imageDataUrl, usageTime, chargeMethod, order, slotMinutes, openTime, closeTime, capacity, requireApproval, enabled };
+  }
+
+  async function loadFacilityConfigs80(cid) {
+    const communityId = String(cid || "").trim() || "default";
+    try {
+      const snap = await db.collection("communities").doc(communityId).collection("facility_configs").get();
+      const list = (snap && snap.docs ? snap.docs : []).map((d) => normalizeFacilityConfig80(d.data() || {}, d.id));
+      list.sort((a, b) => {
+        const ao = Number.isFinite(Number(a.order)) ? Number(a.order) : 1e9;
+        const bo = Number.isFinite(Number(b.order)) ? Number(b.order) : 1e9;
+        return ao - bo || String(a.name || "").localeCompare(String(b.name || "")) || String(a.id || "").localeCompare(String(b.id || ""));
+      });
+      return list;
+    } catch {
+      return [];
+    }
+  }
+
+  async function persistFacilityOrder80(cid, orderedIds) {
+    const communityId = String(cid || "").trim() || "default";
+    const ids = Array.isArray(orderedIds) ? orderedIds.map((x) => String(x || "").trim()).filter(Boolean) : [];
+    if (!ids.length) return false;
+    try {
+      const batch = db.batch();
+      ids.forEach((id, idx) => {
+        const ref = db.collection("communities").doc(communityId).collection("facility_configs").doc(id);
+        batch.set(ref, { order: idx + 1, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      });
+      await batch.commit();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function facilitySlotList80(dateStr, cfg) {
+    const dateKey = String(dateStr || "").trim();
+    const c = cfg || {};
+    const openP = parseHm80(c.openTime);
+    const closeP = parseHm80(c.closeTime);
+    const slotMin = Math.max(15, Number(c.slotMinutes || 60) || 60);
+    if (!dateKey || !openP || !closeP) return [];
+    const startBase = new Date(`${dateKey}T00:00:00`);
+    if (Number.isNaN(startBase.getTime())) return [];
+    const open = new Date(startBase.getTime());
+    open.setHours(openP.hh, openP.mm, 0, 0);
+    const close = new Date(startBase.getTime());
+    close.setHours(closeP.hh, closeP.mm, 0, 0);
+    if (close.getTime() <= open.getTime()) return [];
+    const out = [];
+    for (let t = open.getTime(); t + slotMin * 60 * 1000 <= close.getTime(); t += slotMin * 60 * 1000) {
+      const s = new Date(t);
+      const e = new Date(t + slotMin * 60 * 1000);
+      out.push({ startTime: formatHm80(s), endTime: formatHm80(e) });
+    }
+    return out;
+  }
+
+  async function loadReservationsByFacilityDate80({ cid, facilityId, dateKey }) {
+    const communityId = String(cid || "").trim() || "default";
+    const fid = String(facilityId || "").trim();
+    const dk = String(dateKey || "").trim();
+    if (!fid || !dk) return [];
+    try {
+      const snap = await db.collection("communities").doc(communityId).collection("reservations")
+        .where("facilityId", "==", fid)
+        .where("dateKey", "==", dk)
+        .get();
+      const list = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
+      list.sort((a, b) => String(a.startTime || "").localeCompare(String(b.startTime || "")) || String(a.unit || "").localeCompare(String(b.unit || "")));
+      return list;
+    } catch {
+      return [];
+    }
+  }
+
+  async function loadPendingReservations80({ cid, limit = 50 }) {
+    const communityId = String(cid || "").trim() || "default";
+    const n = Math.max(1, Math.min(200, Number(limit) || 50));
+    try {
+      const snap = await db.collection("communities").doc(communityId).collection("reservations")
+        .where("status", "==", "pending")
+        .orderBy("createdAt", "desc")
+        .limit(n)
+        .get();
+      return (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
+    } catch {
+      return [];
+    }
+  }
+
+  function getAdminDisplayName80() {
+    const el = document.getElementById("profileNameText");
+    const name = el ? String(el.textContent || "").trim() : "";
+    if (name) return name;
+    const u = auth && auth.currentUser ? auth.currentUser : null;
+    const email = u && u.email ? String(u.email) : "";
+    return email ? email.split("@")[0] : "—";
+  }
+
+  function ensureFacilityConfigModal80() {
+    const modal = ensureModal("facilityConfigModal80", "modal-facility-config", "min(980px, 92vw)");
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="facilityConfigModalTitle80">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="facilityConfigModalTitle80">設施設定</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="facilityConfigForm80">
+          <div class="modal-body" style="padding: 0;">
+            <div class="status" id="facilityConfigStatus80" hidden style="margin: 16px;"></div>
+            <div style="display:flex; justify-content: space-between; align-items:center; padding: 16px; background:#f9fafb; border-bottom:1px solid var(--border);">
+              <div class="profile-label" style="margin-bottom:0;">設施清單</div>
+              <button class="btn btn-sm btn-primary" type="button" id="btnAddFacilityRow80">+ 新增行</button>
+            </div>
+            <div class="units-table-container" style="max-height: 520px; overflow-y: auto;">
+              <table class="units-table">
+                <thead>
+                  <tr>
+                    <th style="width: 240px;">上傳圖片</th>
+                    <th style="width: 190px;">名稱</th>
+                    <th style="width: 110px;">開始</th>
+                    <th style="width: 110px;">結束</th>
+                    <th style="width: 110px;">時段(分)</th>
+                    <th style="width: 110px;">名額</th>
+                    <th style="width: 200px;">消費方式</th>
+                    <th style="width: 110px;">需審核</th>
+                    <th style="width: 110px;">啟用</th>
+                    <th style="width: 50px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="facilityConfigTbody80"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">取消</button>
+            <button class="btn btn-primary" type="submit" id="btnSaveFacilityConfig80">儲存</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    return modal;
+  }
+
+  async function openFacilityConfigModal80({ cid, onSaved }) {
+    const communityId = String(cid || "").trim() || "default";
+    const modal = ensureFacilityConfigModal80();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const form = modal.querySelector("#facilityConfigForm80");
+    const tbody = modal.querySelector("#facilityConfigTbody80");
+    const st = modal.querySelector("#facilityConfigStatus80");
+    const btnAdd = modal.querySelector("#btnAddFacilityRow80");
+    const btnSave = modal.querySelector("#btnSaveFacilityConfig80");
+
+    const setStatus = (msg, isError) => {
+      if (!st) return;
+      const t = String(msg || "").trim();
+      st.textContent = t;
+      st.hidden = !t;
+      st.classList.toggle("error", Boolean(isError));
+    };
+
+    const createRow = (cfg) => {
+      const c = cfg || {};
+      const tr = document.createElement("tr");
+      tr.dataset.id = String(c.id || "");
+      const img = String(c.imageDataUrl || "").trim();
+      const chargeMethod = String(c.chargeMethod || "").trim();
+      const imgStyle = img ? `background-image:url('${img.replace(/'/g, "%27")}');` : "";
+      tr.innerHTML = `
+        <td style="padding: 10px 12px;">
+          <div class="facility-img-cell">
+            <div class="facility-img-preview" style="${imgStyle}"></div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <button class="btn btn-sm" type="button" data-action="upload">上傳</button>
+              <input type="file" accept="image/*" class="f-img-file" hidden />
+              <input type="hidden" class="f-img-data" value="${escapeHtml(img)}" />
+            </div>
+          </div>
+        </td>
+        <td><input type="text" class="f-name" value="${escapeHtml(String(c.name || ""))}" placeholder="名稱" /></td>
+        <td><input type="time" class="f-open" value="${escapeHtml(String(c.openTime || "09:00"))}" step="300" /></td>
+        <td><input type="time" class="f-close" value="${escapeHtml(String(c.closeTime || "21:00"))}" step="300" /></td>
+        <td><input type="number" class="f-slot" value="${escapeHtml(String(c.slotMinutes || 60))}" min="15" step="5" /></td>
+        <td><input type="number" class="f-cap" value="${escapeHtml(String(c.capacity || 1))}" min="1" step="1" /></td>
+        <td><input type="text" class="f-charge" value="${escapeHtml(chargeMethod)}" placeholder="例如 每小時100元/次" /></td>
+        <td style="padding: 0 12px;"><input type="checkbox" class="f-approve" ${c.requireApproval !== false ? "checked" : ""} /></td>
+        <td style="padding: 0 12px;"><input type="checkbox" class="f-enabled" ${c.enabled !== false ? "checked" : ""} /></td>
+        <td><div class="remove-row" title="刪除">&times;</div></td>
+      `.trim();
+      const uploadBtn = tr.querySelector("button[data-action='upload']");
+      const uploadInput = tr.querySelector("input.f-img-file");
+      const uploadHidden = tr.querySelector("input.f-img-data");
+      const uploadPreview = tr.querySelector(".facility-img-preview");
+      if (uploadBtn && uploadInput) {
+        uploadBtn.onclick = () => uploadInput.click();
+        uploadInput.onchange = async () => {
+          const file = uploadInput.files && uploadInput.files[0] ? uploadInput.files[0] : null;
+          const dataUrl = await fileToImageDataUrl80(file);
+          if (uploadHidden) uploadHidden.value = String(dataUrl || "");
+          if (uploadPreview) uploadPreview.style.backgroundImage = dataUrl ? `url('${String(dataUrl).replace(/'/g, "%27")}')` : "";
+        };
+      }
+      const rm = tr.querySelector(".remove-row");
+      if (rm) {
+        rm.onclick = async () => {
+          const id = String(tr.dataset.id || "").trim();
+          if (id) {
+            const ok = await (window.nwConfirm ? window.nwConfirm({
+              title: "刪除設施",
+              message: "確認是否刪除此設施？",
+              okText: "刪除",
+              cancelText: "取消",
+              danger: true,
+            }) : Promise.resolve(confirm("確認是否刪除此設施？")));
+            if (!ok) return;
+            try {
+              await db.collection("communities").doc(communityId).collection("facility_configs").doc(id).delete();
+              toast("已刪除");
+            } catch {
+              toast("刪除失敗");
+              return;
+            }
+          }
+          tr.remove();
+        };
+      }
+      return tr;
+    };
+
+    setStatus("讀取中...", false);
+    modal.hidden = false;
+    const list = await loadFacilityConfigs80(communityId);
+    if (tbody) {
+      tbody.innerHTML = "";
+      if (!list.length) tbody.appendChild(createRow(normalizeFacilityConfig80({}, "")));
+      else list.forEach((x) => tbody.appendChild(createRow(x)));
+    }
+    setStatus("", false);
+
+    const onAdd = () => {
+      if (!tbody) return;
+      const row = createRow(normalizeFacilityConfig80({}, ""));
+      tbody.appendChild(row);
+      const inp = row.querySelector("input.f-name");
+      if (inp && inp.focus) inp.focus();
+    };
+
+    const onSubmit = async (e) => {
+      e.preventDefault();
+      if (!tbody) return;
+      if (btnSave) btnSave.disabled = true;
+      setStatus("儲存中...", false);
+      try {
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        const tasks = [];
+        for (const tr of rows) {
+          const name = String(tr.querySelector(".f-name")?.value || "").trim();
+          if (!name) continue;
+          const imageDataUrl = String(tr.querySelector(".f-img-data")?.value || "").trim();
+          const openTime = String(tr.querySelector(".f-open")?.value || "09:00").trim() || "09:00";
+          const closeTime = String(tr.querySelector(".f-close")?.value || "21:00").trim() || "21:00";
+          const slotMinutes = Math.max(15, Math.min(240, Number(tr.querySelector(".f-slot")?.value || 60) || 60));
+          const capacity = Math.max(1, Math.min(500, Number(tr.querySelector(".f-cap")?.value || 1) || 1));
+          const chargeMethod = String(tr.querySelector(".f-charge")?.value || "").trim();
+          const requireApproval = Boolean(tr.querySelector(".f-approve")?.checked);
+          const enabled = Boolean(tr.querySelector(".f-enabled")?.checked);
+          let id = String(tr.dataset.id || "").trim();
+          if (!id) {
+            id = `f_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+            tr.dataset.id = id;
+          }
+          tasks.push(db.collection("communities").doc(communityId).collection("facility_configs").doc(id).set({
+            name,
+            imageDataUrl,
+            openTime,
+            closeTime,
+            slotMinutes,
+            capacity,
+            chargeMethod,
+            requireApproval,
+            enabled,
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true }));
+        }
+        if (!tasks.length) {
+          setStatus("請至少輸入 1 個設施名稱。", true);
+          return;
+        }
+        await Promise.all(tasks);
+        setStatus("已儲存。", false);
+        toast("已儲存");
+        if (typeof onSaved === "function") onSaved();
+        modal.hidden = true;
+        detach();
+      } catch (err) {
+        const code = String(err && err.code ? err.code : "");
+        setStatus(code.includes("permission-denied") ? "沒有權限儲存。" : "儲存失敗，請稍後再試。", true);
+      } finally {
+        if (btnSave) btnSave.disabled = false;
+      }
+    };
+
+    if (btnAdd) btnAdd.addEventListener("click", onAdd);
+    if (form) form.addEventListener("submit", onSubmit);
+    const oldDetach = detach;
+    detach = () => {
+      try { if (btnAdd) btnAdd.removeEventListener("click", onAdd); } catch {}
+      try { if (form) form.removeEventListener("submit", onSubmit); } catch {}
+      oldDetach();
+    };
+  }
+
+  function fileToImageDataUrl80(file) {
+    return new Promise((resolve) => {
+      if (!file) return resolve("");
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function ensureFacilityManageModal80() {
+    const modal = ensureModal("facilityManageModal80", "modal-facility-manage", "80%");
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="facilityManageModalTitle80">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="facilityManageModalTitle80">新增設施</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body" style="padding: 0;">
+          <div class="status" id="facilityManageStatus80" hidden style="margin: 16px;"></div>
+          <div class="units-table-container" style="max-height: 560px; overflow-y: auto;">
+            <table class="units-table">
+              <thead>
+                <tr>
+                  <th style="width: 240px;">設施圖片</th>
+                  <th style="width: 200px;">設施名稱</th>
+                  <th style="width: 180px;">使用時間</th>
+                  <th>消費方式</th>
+                  <th style="width: 180px;">操作</th>
+                </tr>
+              </thead>
+              <tbody id="facilityManageTbody80"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn btn-sm" type="button" id="btnAddFacilityRow80">新增</button>
+          <button class="btn btn-primary btn-sm" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    return modal;
+  }
+
+  async function openFacilityManageModal80({ cid, onSaved }) {
+    const communityId = String(cid || "").trim() || "default";
+    const modal = ensureFacilityManageModal80();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const st = modal.querySelector("#facilityManageStatus80");
+    const tbody = modal.querySelector("#facilityManageTbody80");
+    const btnAdd = modal.querySelector("#btnAddFacilityRow80");
+
+    const setStatus = (msg, isError) => {
+      if (!st) return;
+      const t = String(msg || "").trim();
+      st.textContent = t;
+      st.hidden = !t;
+      st.classList.toggle("error", Boolean(isError));
+    };
+
+    let rows = [];
+
+    const rowHtml = (row) => {
+      const id = String(row.id || "");
+      const isNew = Boolean(row._isNew);
+      const editing = Boolean(row._editing);
+      const img = String(row.imageDataUrl || "").trim();
+      const name = String(row.name || "").trim();
+      const usageTime = String(row.usageTime || "").trim();
+      const chargeMethod = String(row.chargeMethod || "").trim();
+      const imgStyle = img ? `background-image:url('${img.replace(/'/g, "%27")}');` : "";
+      return `
+        <tr data-id="${escapeHtml(id)}" data-new="${isNew ? "1" : "0"}" data-editing="${editing ? "1" : "0"}">
+          <td style="padding: 10px 12px;">
+            <div class="facility-img-cell">
+              <div class="facility-img-preview" style="${imgStyle}"></div>
+              <div style="display:flex; flex-direction:column; gap:8px;">
+                <button class="btn btn-sm" type="button" data-action="upload" ${editing ? "" : "disabled"}>上傳</button>
+                <input type="file" accept="image/*" data-field="imageFile" hidden />
+                <input type="hidden" data-field="imageDataUrl" value="${escapeHtml(img)}" />
+              </div>
+            </div>
+          </td>
+          <td><input type="text" data-field="name" value="${escapeHtml(name)}" placeholder="例如 交誼廳" ${editing ? "" : "disabled"} /></td>
+          <td><input type="text" data-field="usageTime" value="${escapeHtml(usageTime)}" placeholder="例如 09:00-21:00" ${editing ? "" : "disabled"} /></td>
+          <td><input type="text" data-field="chargeMethod" value="${escapeHtml(chargeMethod)}" placeholder="例如 每小時100元/次" ${editing ? "" : "disabled"} /></td>
+          <td style="padding: 10px 12px;">
+            <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+              <button class="btn btn-sm btn-primary" type="button" data-action="edit">${editing ? "儲存" : "編輯"}</button>
+              <button class="btn btn-sm danger" type="button" data-action="delete">刪除</button>
+            </div>
+          </td>
+        </tr>
+      `.trim();
+    };
+
+    const render = () => {
+      if (!tbody) return;
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="5"><div class="status">尚無設施資料。</div></td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map(rowHtml).join("");
+    };
+
+    const load = async () => {
+      setStatus("讀取中...", false);
+      rows = await loadFacilityConfigs80(communityId);
+      rows = rows.map((r) => ({ ...r, _isNew: false, _editing: false }));
+      setStatus("", false);
+      render();
+    };
+
+    const addRow = () => {
+      rows.unshift({
+        id: `__new__${Date.now()}`,
+        name: "",
+        imageDataUrl: "",
+        usageTime: "",
+        chargeMethod: "",
+        slotMinutes: 60,
+        openTime: "09:00",
+        closeTime: "21:00",
+        capacity: 1,
+        requireApproval: true,
+        enabled: true,
+        _isNew: true,
+        _editing: true,
+      });
+      render();
+    };
+
+    const getRowEl = (target) => {
+      const tr = target && target.closest ? target.closest("tr[data-id]") : null;
+      return tr || null;
+    };
+
+    const setEditing = (tr, on) => {
+      const editing = Boolean(on);
+      tr.setAttribute("data-editing", editing ? "1" : "0");
+      const inputs = tr.querySelectorAll("input, button[data-action='upload']");
+      for (let i = 0; i < inputs.length; i++) {
+        const el = inputs[i];
+        if (el && el.tagName === "BUTTON") el.disabled = !editing;
+        else el.disabled = !editing;
+      }
+      const editBtn = tr.querySelector("button[data-action='edit']");
+      if (editBtn) editBtn.textContent = editing ? "儲存" : "編輯";
+    };
+
+    const updateRowImgPreview = (tr, dataUrl) => {
+      const preview = tr.querySelector(".facility-img-preview");
+      if (preview) {
+        preview.style.backgroundImage = dataUrl ? `url('${String(dataUrl).replace(/'/g, "%27")}')` : "";
+      }
+      const hidden = tr.querySelector("input[data-field='imageDataUrl']");
+      if (hidden) hidden.value = String(dataUrl || "");
+    };
+
+    const collectRowValues = (tr) => {
+      const name = String(tr.querySelector("input[data-field='name']") ? tr.querySelector("input[data-field='name']").value : "").trim();
+      const usageTime = String(tr.querySelector("input[data-field='usageTime']") ? tr.querySelector("input[data-field='usageTime']").value : "").trim();
+      const chargeMethod = String(tr.querySelector("input[data-field='chargeMethod']") ? tr.querySelector("input[data-field='chargeMethod']").value : "").trim();
+      const imageDataUrl = String(tr.querySelector("input[data-field='imageDataUrl']") ? tr.querySelector("input[data-field='imageDataUrl']").value : "").trim();
+      return { name, usageTime, chargeMethod, imageDataUrl };
+    };
+
+    const saveRow = async (tr) => {
+      const isNew = tr.getAttribute("data-new") === "1";
+      const rowId = String(tr.getAttribute("data-id") || "").trim();
+      const v = collectRowValues(tr);
+      if (!v.name) {
+        toast("請輸入設施名稱");
+        return;
+      }
+      let id = rowId;
+      if (isNew) id = `f_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+      const payload = {
+        name: v.name,
+        imageDataUrl: v.imageDataUrl,
+        usageTime: v.usageTime,
+        chargeMethod: v.chargeMethod,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      if (isNew) {
+        payload.createdAt = FieldValue.serverTimestamp();
+        payload.slotMinutes = 60;
+        payload.openTime = "09:00";
+        payload.closeTime = "21:00";
+        payload.capacity = 1;
+        payload.requireApproval = true;
+        payload.enabled = true;
+      }
+      setStatus("儲存中...", false);
+      try {
+        await db.collection("communities").doc(communityId).collection("facility_configs").doc(id).set(payload, { merge: true });
+        toast("已儲存");
+        if (typeof onSaved === "function") onSaved();
+        await load();
+      } catch (err) {
+        const code = String(err && err.code ? err.code : "");
+        setStatus(code.includes("permission-denied") ? "沒有權限儲存。" : "儲存失敗，請稍後再試。", true);
+      } finally {
+        setStatus("", false);
+      }
+    };
+
+    const deleteRow = async (tr) => {
+      const isNew = tr.getAttribute("data-new") === "1";
+      const id = String(tr.getAttribute("data-id") || "").trim();
+      if (isNew) {
+        rows = rows.filter((x) => String(x.id || "") !== id);
+        render();
+        return;
+      }
+      const ok = await (window.nwConfirm ? window.nwConfirm({
+        title: "刪除設施",
+        message: "確認是否刪除此筆資料？",
+        okText: "刪除",
+        cancelText: "取消",
+        danger: true,
+      }) : Promise.resolve(confirm("確認是否刪除此筆資料？")));
+      if (!ok) return;
+      setStatus("刪除中...", false);
+      try {
+        await db.collection("communities").doc(communityId).collection("facility_configs").doc(id).delete();
+        toast("已刪除");
+        if (typeof onSaved === "function") onSaved();
+        await load();
+      } catch (err) {
+        const code = String(err && err.code ? err.code : "");
+        setStatus(code.includes("permission-denied") ? "沒有權限刪除。" : "刪除失敗，請稍後再試。", true);
+      } finally {
+        setStatus("", false);
+      }
+    };
+
+    const onTableClick = async (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest("button[data-action]") : null;
+      if (!btn) return;
+      const tr = getRowEl(btn);
+      if (!tr) return;
+      const action = String(btn.getAttribute("data-action") || "");
+
+      if (action === "upload") {
+        const fileInput = tr.querySelector("input[type='file'][data-field='imageFile']");
+        if (fileInput) fileInput.click();
+        return;
+      }
+      if (action === "delete") {
+        await deleteRow(tr);
+        return;
+      }
+      if (action === "edit") {
+        const editing = tr.getAttribute("data-editing") === "1";
+        if (!editing) {
+          setEditing(tr, true);
+          return;
+        }
+        await saveRow(tr);
+        return;
+      }
+    };
+
+    const onFileChange = async (e) => {
+      const input = e.target;
+      if (!input || input.type !== "file") return;
+      const tr = getRowEl(input);
+      if (!tr) return;
+      const file = input.files && input.files[0] ? input.files[0] : null;
+      input.value = "";
+      if (!file) return;
+      const dataUrl = await fileToImageDataUrl80(file);
+      if (dataUrl) updateRowImgPreview(tr, dataUrl);
+    };
+
+    if (btnAdd) btnAdd.addEventListener("click", addRow);
+    if (tbody) tbody.addEventListener("click", onTableClick);
+    if (tbody) tbody.addEventListener("change", onFileChange);
+    const oldDetach = detach;
+    detach = () => {
+      try { if (btnAdd) btnAdd.removeEventListener("click", addRow); } catch {}
+      try { if (tbody) tbody.removeEventListener("click", onTableClick); } catch {}
+      try { if (tbody) tbody.removeEventListener("change", onFileChange); } catch {}
+      oldDetach();
+    };
+
+    modal.hidden = false;
+    await load();
+  }
+
+  function ensureReservationModal80() {
+    const modal = ensureModal("reservationModal80", "modal-reservation", "min(720px, 92vw)");
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="reservationModalTitle80">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="reservationModalTitle80">新增預約</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="reservationForm80">
+          <div class="modal-body">
+            <div class="field">
+              <label for="r_facility">設施</label>
+              <select id="r_facility" required></select>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <div class="field" style="flex:1;">
+                <label for="r_date">日期</label>
+                <input id="r_date" type="date" required />
+              </div>
+              <div class="field" style="flex:1;">
+                <label for="r_slot">時段</label>
+                <select id="r_slot" required></select>
+              </div>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <div class="field" style="flex:1;">
+                <label for="r_unit">戶號</label>
+                <input id="r_unit" type="text" autocomplete="off" placeholder="例如 A1-1" required />
+              </div>
+              <div class="field" style="flex:1;">
+                <label for="r_name">姓名</label>
+                <input id="r_name" type="text" autocomplete="off" placeholder="例如 王小明" required />
+              </div>
+            </div>
+            <div class="field">
+              <label for="r_note">備註</label>
+              <input id="r_note" type="text" autocomplete="off" placeholder="選填" />
+            </div>
+            <div class="status" id="reservationStatus80" hidden></div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">取消</button>
+            <button class="btn btn-primary" type="submit" id="btnSubmitReservation80">建立</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    return modal;
+  }
+
+  async function openReservationModal80({ cid, facilities, presetFacilityId, presetDateKey, onSaved }) {
+    const communityId = String(cid || "").trim() || "default";
+    const list = Array.isArray(facilities) ? facilities : [];
+    const modal = ensureReservationModal80();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const form = modal.querySelector("#reservationForm80");
+    const st = modal.querySelector("#reservationStatus80");
+    const selFacility = modal.querySelector("#r_facility");
+    const inputDate = modal.querySelector("#r_date");
+    const selSlot = modal.querySelector("#r_slot");
+    const inputUnit = modal.querySelector("#r_unit");
+    const inputName = modal.querySelector("#r_name");
+    const inputNote = modal.querySelector("#r_note");
+    const btnSubmit = modal.querySelector("#btnSubmitReservation80");
+
+    const setStatus = (msg, isError) => {
+      if (!st) return;
+      const t = String(msg || "").trim();
+      st.textContent = t;
+      st.hidden = !t;
+      st.classList.toggle("error", Boolean(isError));
+    };
+
+    const fillFacilities = () => {
+      if (!selFacility) return;
+      selFacility.innerHTML = list.filter((x) => x && x.enabled !== false).map((f) => {
+        return `<option value="${escapeHtml(String(f.id || ""))}">${escapeHtml(String(f.name || f.id || ""))}</option>`;
+      }).join("");
+      const target = String(presetFacilityId || "");
+      if (target) selFacility.value = target;
+    };
+
+    const fillSlots = () => {
+      if (!selFacility || !inputDate || !selSlot) return;
+      const fid = String(selFacility.value || "").trim();
+      const dateKey = String(inputDate.value || "").trim();
+      const cfg = list.find((x) => String(x.id || "") === fid) || null;
+      const slots = cfg ? facilitySlotList80(dateKey, cfg) : [];
+      selSlot.innerHTML = slots.map((s) => `<option value="${escapeHtml(String(s.startTime || ""))}">${escapeHtml(`${s.startTime} - ${s.endTime}`)}</option>`).join("");
+    };
+
+    fillFacilities();
+    if (inputDate) inputDate.value = String(presetDateKey || "").trim() || ymd80(new Date());
+    fillSlots();
+    setStatus("", false);
+
+    const onChange = () => fillSlots();
+    if (selFacility) selFacility.addEventListener("change", onChange);
+    if (inputDate) inputDate.addEventListener("change", onChange);
+
+    const onSubmit = async (e) => {
+      e.preventDefault();
+      const fid = selFacility ? String(selFacility.value || "").trim() : "";
+      const dateKey = inputDate ? String(inputDate.value || "").trim() : "";
+      const startTime = selSlot ? String(selSlot.value || "").trim() : "";
+      const unit = inputUnit ? String(inputUnit.value || "").trim() : "";
+      const name = inputName ? String(inputName.value || "").trim() : "";
+      const note = inputNote ? String(inputNote.value || "").trim() : "";
+      const cfg = list.find((x) => String(x.id || "") === fid) || null;
+      if (!cfg || !fid) {
+        setStatus("請選擇設施。", true);
+        return;
+      }
+      if (!dateKey || !startTime || !unit || !name) {
+        setStatus("請完整填寫必填欄位。", true);
+        return;
+      }
+      const slots = facilitySlotList80(dateKey, cfg);
+      const s = slots.find((x) => String(x.startTime) === startTime) || null;
+      if (!s) {
+        setStatus("時段無效。", true);
+        return;
+      }
+      const startAt = makeDateTime80(dateKey, s.startTime);
+      const endAt = makeDateTime80(dateKey, s.endTime);
+      if (!startAt || !endAt) {
+        setStatus("時段日期時間無效。", true);
+        return;
+      }
+
+      if (btnSubmit) btnSubmit.disabled = true;
+      setStatus("建立中...", false);
+      try {
+        const exist = await loadReservationsByFacilityDate80({ cid: communityId, facilityId: fid, dateKey });
+        const used = exist.filter((x) => String(x.startTime || "") === startTime && ["pending", "approved"].includes(String(x.status || "pending"))).length;
+        if (used >= Number(cfg.capacity || 1)) {
+          setStatus("此時段名額已滿。", true);
+          return;
+        }
+
+        const u = auth && auth.currentUser ? auth.currentUser : null;
+        const createdBy = u ? String(u.uid || "") : "";
+        const createdByName = getAdminDisplayName80();
+        const status = cfg.requireApproval ? "pending" : "approved";
+        const payload = {
+          facilityId: fid,
+          facilityName: cfg.name,
+          dateKey,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          startAt: firebase.firestore.Timestamp.fromDate(startAt),
+          endAt: firebase.firestore.Timestamp.fromDate(endAt),
+          unit,
+          name,
+          note,
+          status,
+          createdBy,
+          createdByName,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        };
+        if (status === "approved") {
+          payload.approvedAt = FieldValue.serverTimestamp();
+          payload.approvedBy = createdBy;
+          payload.approvedByName = createdByName;
+        }
+        await db.collection("communities").doc(communityId).collection("reservations").add(payload);
+        toast(status === "pending" ? "已送出待審核" : "已建立預約");
+        if (typeof onSaved === "function") onSaved();
+        modal.hidden = true;
+        detach();
+      } catch (err) {
+        const code = String(err && err.code ? err.code : "");
+        setStatus(code.includes("permission-denied") ? "沒有權限建立。" : "建立失敗，請稍後再試。", true);
+      } finally {
+        if (btnSubmit) btnSubmit.disabled = false;
+      }
+    };
+
+    if (form) form.addEventListener("submit", onSubmit);
+    const oldDetach = detach;
+    detach = () => {
+      try { if (selFacility) selFacility.removeEventListener("change", onChange); } catch {}
+      try { if (inputDate) inputDate.removeEventListener("change", onChange); } catch {}
+      try { if (form) form.removeEventListener("submit", onSubmit); } catch {}
+      oldDetach();
+    };
+
+    modal.hidden = false;
+  }
+
+  async function updateReservationStatus80({ cid, id, status, extra }) {
+    const communityId = String(cid || "").trim() || "default";
+    const rid = String(id || "").trim();
+    const st = String(status || "").trim();
+    if (!rid || !st) return false;
+    const u = auth && auth.currentUser ? auth.currentUser : null;
+    const by = u ? String(u.uid || "") : "";
+    const byName = getAdminDisplayName80();
+    const patch = { status: st, updatedAt: FieldValue.serverTimestamp() };
+    const e = extra && typeof extra === "object" ? extra : {};
+    Object.keys(e).forEach((k) => { patch[k] = e[k]; });
+    if (st === "approved") {
+      patch.approvedAt = FieldValue.serverTimestamp();
+      patch.approvedBy = by;
+      patch.approvedByName = byName;
+    }
+    if (st === "rejected") {
+      patch.rejectedAt = FieldValue.serverTimestamp();
+      patch.rejectedBy = by;
+      patch.rejectedByName = byName;
+    }
+    if (st === "canceled") {
+      patch.canceledAt = FieldValue.serverTimestamp();
+      patch.canceledBy = by;
+      patch.canceledByName = byName;
+    }
+    try {
+      await db.collection("communities").doc(communityId).collection("reservations").doc(rid).set(patch, { merge: true });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function deleteReservation80({ cid, id }) {
+    const communityId = String(cid || "").trim() || "default";
+    const rid = String(id || "").trim();
+    if (!rid) return false;
+    try {
+      await db.collection("communities").doc(communityId).collection("reservations").doc(rid).delete();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function renderFacilityModule() {
+    const cid = resolveActiveCommunityId();
+    const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
+    if (subnavEl) {
+      subnavEl.innerHTML = `
+        <div id="facilitySubnavButtons80" style="display:flex; gap:0; align-items:center; flex-wrap:nowrap;"></div>
+      `.trim();
+    }
+
+    contentEl.innerHTML = `
+      <section class="card">
+        <div class="card-hd">
+          <div class="left">
+            <div class="chip" aria-hidden="true">${iconSvg("facility")}</div>
+            <div style="min-width:0;">
+              <h2>設施預約${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+              <p>時段控管、名額與審核流程</p>
+            </div>
+          </div>
+          <button class="icon-btn sm" type="button" id="btnFacilityManage80" aria-label="設施設定" title="設施設定">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.7"/>
+              <path d="M19.2 12a7.2 7.2 0 0 0-.12-1.3l2.05-1.6-2-3.46-2.47 1a7.3 7.3 0 0 0-2.25-1.3L13 2h-4l-.43 3.34a7.3 7.3 0 0 0-2.25 1.3l-2.47-1-2 3.46 2.05 1.6A7.2 7.2 0 0 0 4.8 12c0 .44.04.88.12 1.3l-2.05 1.6 2 3.46 2.47-1a7.3 7.3 0 0 0 2.25 1.3L9 22h4l.43-3.34a7.3 7.3 0 0 0 2.25-1.3l2.47 1 2-3.46-2.05-1.6c.08-.42.12-.86.12-1.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="card-bd">
+          <div class="parcel-filter-bar" id="facilityFilterBar">
+            <div class="field">
+              <label for="facilitySelect80">設施</label>
+              <select id="facilitySelect80"></select>
+            </div>
+            <div class="field">
+              <label for="facilityDate80">日期</label>
+              <input id="facilityDate80" type="date" />
+            </div>
+            <div class="field">
+              <label for="facilitySearch80">搜尋</label>
+              <input id="facilitySearch80" type="text" autocomplete="off" placeholder="戶號/姓名" />
+            </div>
+            <button class="btn btn-primary btn-sm" type="button" id="btnFacilityNew80">新增預約</button>
+          </div>
+          <div class="status" id="facilityStatus80" hidden></div>
+          <div class="table-wrap">
+            <table class="units-table" id="facilityReservationTable80">
+              <thead>
+                <tr>
+                  <th style="width: 140px;">時段</th>
+                  <th style="width: 160px;">戶號</th>
+                  <th>姓名</th>
+                  <th style="width: 120px;">狀態</th>
+                  <th style="width: 160px;">建立</th>
+                  <th style="width: 220px;">操作</th>
+                </tr>
+              </thead>
+              <tbody id="facilityReservationTbody80">
+                <tr><td colspan="6"><div class="status">讀取中...</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    `;
+
+    const selFacility = document.getElementById("facilitySelect80");
+    const inputDate = document.getElementById("facilityDate80");
+    const inputSearch = document.getElementById("facilitySearch80");
+    const btnManage = document.getElementById("btnFacilityManage80");
+    const btnNew = document.getElementById("btnFacilityNew80");
+    const subnavButtonsWrap = document.getElementById("facilitySubnavButtons80");
+    const statusEl = document.getElementById("facilityStatus80");
+    const tbody = document.getElementById("facilityReservationTbody80");
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    let facilities = [];
+    let currentReservations = [];
+
+    const fillFacilitySelect = () => {
+      if (!selFacility) return;
+      const enabled = facilities.filter((f) => f && f.enabled !== false);
+      selFacility.innerHTML = enabled.map((f) => `<option value="${escapeHtml(String(f.id || ""))}">${escapeHtml(String(f.name || f.id || ""))}</option>`).join("");
+    };
+
+    const renderFacilityButtons = () => {
+      if (!subnavButtonsWrap) return;
+      const enabled = facilities.filter((f) => f && f.enabled !== false);
+      const activeId = selFacility ? String(selFacility.value || "").trim() : "";
+      subnavButtonsWrap.innerHTML = enabled.map((f) => {
+        const id = String(f.id || "");
+        const name = String(f.name || id || "設施");
+        const cls = `btn btn-sm ${id === activeId ? "btn-primary" : ""}`;
+        return `<button class="${cls}" type="button" data-facility-id="${escapeHtml(id)}" draggable="true">${escapeHtml(name)}</button>`;
+      }).join("");
+    };
+
+    const renderReservations = () => {
+      if (!tbody) return;
+      const q = String(inputSearch ? inputSearch.value : "").trim();
+      const list = q
+        ? currentReservations.filter((r) => {
+          const unit = String(r.unit || "");
+          const name = String(r.name || "");
+          return unit.includes(q) || name.includes(q);
+        })
+        : currentReservations.slice();
+
+      const fid = selFacility ? String(selFacility.value || "").trim() : "";
+      const cfg = facilities.find((f) => String(f.id || "") === fid) || null;
+      const cap = cfg ? Number(cfg.capacity || 1) : 1;
+      const used = {};
+      currentReservations.forEach((r) => {
+        const st = String(r.status || "pending");
+        if (!["pending", "approved"].includes(st)) return;
+        const k = String(r.startTime || "");
+        used[k] = (used[k] || 0) + 1;
+      });
+
+      if (!facilities.length) {
+        tbody.innerHTML = `<tr><td colspan="6"><div class="status">尚未建立設施，請先到「設施設定」新增。</div></td></tr>`;
+        return;
+      }
+      if (!list.length) {
+        tbody.innerHTML = `<tr><td colspan="6"><div class="status">目前沒有預約資料。</div></td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = list.map((r) => {
+        const id = String(r.id || "");
+        const st = String(r.status || "pending");
+        const stText = st === "approved" ? "已核准" : (st === "rejected" ? "已拒絕" : (st === "canceled" ? "已取消" : "待審核"));
+        const tagClass = st === "approved" ? "green" : (st === "rejected" ? "red" : (st === "canceled" ? "gray" : "yellow"));
+        const createdAt = r.createdAt ? (r.createdAt.toDate ? r.createdAt.toDate() : new Date(r.createdAt)) : null;
+        const createdText = createdAt ? `${pad2(createdAt.getMonth() + 1)}/${pad2(createdAt.getDate())} ${pad2(createdAt.getHours())}:${pad2(createdAt.getMinutes())}` : "—";
+        const slotUsed = used[String(r.startTime || "")] || 0;
+        const capText = cfg ? `${slotUsed}/${cap}` : "";
+        const capHint = cfg && slotUsed >= cap && ["pending", "approved"].includes(st) ? `<span class="tag red" style="margin-left:8px;">已滿</span>` : "";
+
+        const actions = st === "pending"
+          ? `
+              <button class="btn btn-sm btn-primary" type="button" data-action="approve" data-id="${escapeHtml(id)}">核准</button>
+              <button class="btn btn-sm danger" type="button" data-action="reject" data-id="${escapeHtml(id)}">拒絕</button>
+              <button class="btn btn-sm" type="button" data-action="delete" data-id="${escapeHtml(id)}">刪除</button>
+            `
+          : `
+              ${st === "approved" ? `<button class="btn btn-sm" type="button" data-action="cancel" data-id="${escapeHtml(id)}">取消</button>` : ``}
+              <button class="btn btn-sm" type="button" data-action="delete" data-id="${escapeHtml(id)}">刪除</button>
+            `;
+
+        return `
+          <tr>
+            <td style="padding: 10px 12px;">${escapeHtml(`${String(r.startTime || "—")} - ${String(r.endTime || "—")}`)} ${capHint}</td>
+            <td style="padding: 10px 12px;">${escapeHtml(String(r.unit || "—"))}</td>
+            <td style="padding: 10px 12px;">${escapeHtml(String(r.name || "—"))}</td>
+            <td style="padding: 10px 12px;"><span class="tag ${tagClass}">${escapeHtml(stText)}</span>${cfg ? `<span class="muted" style="margin-left:8px;">${escapeHtml(capText)}</span>` : ""}</td>
+            <td style="padding: 10px 12px;">${escapeHtml(createdText)}</td>
+            <td style="padding: 10px 12px;"><div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">${actions}</div></td>
+          </tr>
+        `.trim();
+      }).join("");
+    };
+
+    const refreshReservations = async () => {
+      const dateKey = inputDate ? String(inputDate.value || "").trim() : "";
+      const fid = selFacility ? String(selFacility.value || "").trim() : "";
+      if (!dateKey || !fid) {
+        currentReservations = [];
+        renderReservations();
+        return;
+      }
+      setStatus("讀取中...", false);
+      currentReservations = await loadReservationsByFacilityDate80({ cid, facilityId: fid, dateKey });
+      setStatus("", false);
+      renderReservations();
+    };
+
+    const refreshFacilities = async () => {
+      facilities = await loadFacilityConfigs80(cid);
+      fillFacilitySelect();
+      renderFacilityButtons();
+    };
+
+    const init = async () => {
+      await refreshFacilities();
+      if (inputDate) inputDate.value = ymd80(new Date());
+      await refreshReservations();
+    };
+
+    const onFilter = () => {
+      renderReservations();
+    };
+
+    const onDateOrFacility = async () => {
+      renderFacilityButtons();
+      await refreshReservations();
+    };
+
+    const onActionClick = async (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest("button[data-action][data-id]") : null;
+      if (!btn) return;
+      const id = String(btn.getAttribute("data-id") || "").trim();
+      const action = String(btn.getAttribute("data-action") || "").trim();
+      if (!id || !action) return;
+
+      if (action === "approve") {
+        const ok = await (window.nwConfirm ? window.nwConfirm({
+          title: "核准預約",
+          message: "是否核准此筆預約？",
+          okText: "核准",
+          cancelText: "取消",
+        }) : Promise.resolve(confirm("是否核准？")));
+        if (!ok) return;
+        const done = await updateReservationStatus80({ cid, id, status: "approved" });
+        if (!done) toast("操作失敗");
+        await refreshReservations();
+        return;
+      }
+
+      if (action === "reject") {
+        const ok = await (window.nwConfirm ? window.nwConfirm({
+          title: "拒絕預約",
+          message: "是否拒絕此筆預約？",
+          okText: "拒絕",
+          cancelText: "取消",
+          danger: true,
+        }) : Promise.resolve(confirm("是否拒絕？")));
+        if (!ok) return;
+        const done = await updateReservationStatus80({ cid, id, status: "rejected" });
+        if (!done) toast("操作失敗");
+        await refreshReservations();
+        return;
+      }
+
+      if (action === "cancel") {
+        const ok = await (window.nwConfirm ? window.nwConfirm({
+          title: "取消預約",
+          message: "是否取消此筆預約？",
+          okText: "取消預約",
+          cancelText: "返回",
+          danger: true,
+        }) : Promise.resolve(confirm("是否取消？")));
+        if (!ok) return;
+        const done = await updateReservationStatus80({ cid, id, status: "canceled" });
+        if (!done) toast("操作失敗");
+        await refreshReservations();
+        return;
+      }
+
+      if (action === "delete") {
+        const ok = await (window.nwConfirm ? window.nwConfirm({
+          title: "刪除預約",
+          message: "確認是否刪除此筆資料？",
+          okText: "刪除",
+          cancelText: "取消",
+          danger: true,
+        }) : Promise.resolve(confirm("確認是否刪除此筆資料？")));
+        if (!ok) return;
+        const done = await deleteReservation80({ cid, id });
+        if (!done) toast("刪除失敗");
+        await refreshReservations();
+      }
+    };
+
+    if (inputSearch) inputSearch.addEventListener("input", onFilter);
+    if (inputDate) inputDate.addEventListener("change", onDateOrFacility);
+    if (selFacility) selFacility.addEventListener("change", onDateOrFacility);
+    if (tbody) tbody.addEventListener("click", onActionClick);
+    if (subnavButtonsWrap) {
+      let draggingId = "";
+      let draggingMoved = false;
+      const getEnabledOrderedIdsFromDom = () => {
+        return Array.from(subnavButtonsWrap.querySelectorAll("button[data-facility-id]"))
+          .map((b) => String(b.getAttribute("data-facility-id") || "").trim())
+          .filter(Boolean);
+      };
+      const syncFacilityOrderFromDom = async () => {
+        const enabledIds = getEnabledOrderedIdsFromDom();
+        if (!enabledIds.length) return;
+        const enabledSet = new Set(enabledIds);
+        const rest = facilities.map((f) => String(f && f.id ? f.id : "")).filter(Boolean).filter((id) => !enabledSet.has(id));
+        const nextIds = enabledIds.concat(rest);
+        const byId = new Map(facilities.map((f) => [String(f && f.id ? f.id : ""), f]));
+        facilities = nextIds.map((id) => byId.get(id)).filter(Boolean);
+        const keep = selFacility ? String(selFacility.value || "").trim() : "";
+        fillFacilitySelect();
+        if (selFacility && keep) selFacility.value = keep;
+        renderFacilityButtons();
+        const ok = await persistFacilityOrder80(cid, nextIds);
+        if (!ok) toast("排序儲存失敗");
+      };
+      subnavButtonsWrap.addEventListener("click", async (e) => {
+        const btn = e.target && e.target.closest ? e.target.closest("button[data-facility-id]") : null;
+        if (!btn) return;
+        if (draggingMoved) return;
+        const id = String(btn.getAttribute("data-facility-id") || "").trim();
+        if (!id || !selFacility) return;
+        selFacility.value = id;
+        renderFacilityButtons();
+        await refreshReservations();
+      });
+      subnavButtonsWrap.addEventListener("dragstart", (e) => {
+        const btn = e.target && e.target.closest ? e.target.closest("button[data-facility-id]") : null;
+        if (!btn) return;
+        draggingId = String(btn.getAttribute("data-facility-id") || "").trim();
+        draggingMoved = false;
+        try {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", draggingId);
+        } catch {}
+      });
+      subnavButtonsWrap.addEventListener("dragover", (e) => {
+        if (!draggingId) return;
+        const overBtn = e.target && e.target.closest ? e.target.closest("button[data-facility-id]") : null;
+        if (!overBtn) return;
+        const overId = String(overBtn.getAttribute("data-facility-id") || "").trim();
+        if (!overId || overId === draggingId) return;
+        e.preventDefault();
+        const draggingBtn = subnavButtonsWrap.querySelector(`button[data-facility-id="${CSS.escape(draggingId)}"]`);
+        if (!draggingBtn) return;
+        const rect = overBtn.getBoundingClientRect();
+        const before = e.clientX < rect.left + rect.width / 2;
+        if (before) subnavButtonsWrap.insertBefore(draggingBtn, overBtn);
+        else subnavButtonsWrap.insertBefore(draggingBtn, overBtn.nextSibling);
+        draggingMoved = true;
+      });
+      subnavButtonsWrap.addEventListener("drop", async (e) => {
+        if (!draggingId) return;
+        e.preventDefault();
+        const moved = draggingMoved;
+        draggingId = "";
+        draggingMoved = false;
+        if (moved) await syncFacilityOrderFromDom();
+      });
+      subnavButtonsWrap.addEventListener("dragend", async () => {
+        const moved = draggingMoved;
+        draggingId = "";
+        draggingMoved = false;
+        if (moved) await syncFacilityOrderFromDom();
+      });
+    }
+
+    if (btnManage) {
+      btnManage.addEventListener("click", () => {
+        openFacilityConfigModal80({
+          cid,
+          onSaved: async () => {
+            await refreshFacilities();
+            await refreshReservations();
+          }
+        });
+      });
+    }
+
+    if (btnNew) {
+      btnNew.addEventListener("click", () => {
+        const fid = selFacility ? String(selFacility.value || "").trim() : "";
+        const dateKey = inputDate ? String(inputDate.value || "").trim() : ymd80(new Date());
+        openReservationModal80({
+          cid,
+          facilities,
+          presetFacilityId: fid,
+          presetDateKey: dateKey,
+          onSaved: async () => {
+            await refreshReservations();
+          },
+        });
+      });
+    }
+
+    if (communityName) {}
+    init();
+    updateFooterActiveNav();
+  }
+
+  function ensureNoticeModal80() {
+    const modal = ensureModal("noticeModal80", "modal-notice", "min(520px, 92vw)");
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="noticeModalTitle80">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="noticeModalTitle80">提示</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="status" id="noticeModalMsg80"></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn btn-primary" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    return modal;
+  }
+
+  function openNotice80(message) {
+    const modal = ensureNoticeModal80();
+    const detach = bindModalClose(modal, () => detach());
+    const msgEl = modal.querySelector("#noticeModalMsg80");
+    if (msgEl) msgEl.textContent = String(message || "").trim();
+    modal.hidden = false;
+  }
+
+  function ensureResidentParcelScanModal80() {
+    const modal = ensureModal("residentParcelScanModal80", "modal-resident-parcel-scan", "min(920px, 92vw)");
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="residentParcelScanModalTitle80">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="residentParcelScanModalTitle80">掃描住戶 QR Code</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="scan-responsive-container">
+            <div class="scan-stage">
+              <div id="residentParcelScanReader80"></div>
+              <div class="scan-overlay">
+                <div class="scan-frame"></div>
+              </div>
+            </div>
+            <div class="scan-results-side">
+              <div class="field">
+                <label for="residentParcelScanInput80">掃碼槍輸入</label>
+                <input id="residentParcelScanInput80" type="text" autocomplete="off" placeholder="請掃描住戶 QR code" />
+              </div>
+              <div class="scan-hint" id="residentParcelScanHint80">可使用相機或掃碼槍掃描住戶 QR code</div>
+              <div class="status" id="residentParcelScanStatus80" hidden></div>
+              <div id="residentParcelScanResult80" hidden>
+                <div class="scan-results-preview" style="margin-top:10px;">
+                  <div class="scan-result-item"><span>戶號</span><span id="rpUnit80">—</span></div>
+                  <div class="scan-result-item"><span>姓名</span><span id="rpName80">—</span></div>
+                </div>
+                <div class="scan-hint" style="margin-top:10px;">未領取</div>
+                <div class="parcel-grid" id="rpPendingList80"></div>
+                <div class="scan-hint" style="margin-top:10px;">已領取</div>
+                <div class="parcel-grid" id="rpReceivedList80"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" id="btnResidentParcelRescan80">重新掃描</button>
+          <button class="btn btn-primary" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    return modal;
+  }
+
+  function normalizeUnitKey80(v) {
+    return String(v || "").replace(/\s+/g, "").trim().toUpperCase();
+  }
+
+  function unitMatches80(parcelUnit, userUnit) {
+    const p = normalizeUnitKey80(parcelUnit);
+    const u = normalizeUnitKey80(userUnit);
+    if (!p || !u) return false;
+    if (p === u) return true;
+    return p.startsWith(`${u}-`);
+  }
+
+  async function openResidentParcelScanModal80() {
+    const modal = ensureResidentParcelScanModal80();
+    const statusEl = modal.querySelector("#residentParcelScanStatus80");
+    const inputEl = modal.querySelector("#residentParcelScanInput80");
+    const resultWrap = modal.querySelector("#residentParcelScanResult80");
+    const unitEl = modal.querySelector("#rpUnit80");
+    const nameEl = modal.querySelector("#rpName80");
+    const pendingEl = modal.querySelector("#rpPendingList80");
+    const receivedEl = modal.querySelector("#rpReceivedList80");
+    const btnRescan = modal.querySelector("#btnResidentParcelRescan80");
+
+    let scanner = null;
+    let busy = false;
+
+    const setStatus = (msg, isError) => {
+      const t = String(msg || "").trim();
+      if (!statusEl) return;
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    const stopScanner = async () => {
+      if (!scanner) return;
+      try {
+        await scanner.stop();
+        await scanner.clear();
+      } catch {}
+      scanner = null;
+    };
+
+    let detach = () => {};
+    detach = bindModalClose(modal, async () => {
+      try {
+        if (inputEl && inputEl._rpHandler) {
+          inputEl.removeEventListener("keydown", inputEl._rpHandler);
+          inputEl._rpHandler = null;
+        }
+      } catch {}
+      try {
+        if (btnRescan && btnRescan._rpHandler) {
+          btnRescan.removeEventListener("click", btnRescan._rpHandler);
+          btnRescan._rpHandler = null;
+        }
+      } catch {}
+      await stopScanner();
+      detach();
+    });
+
+    const closeNow = async () => {
+      try { modal.hidden = true; } catch {}
+      try {
+        if (inputEl && inputEl._rpHandler) {
+          inputEl.removeEventListener("keydown", inputEl._rpHandler);
+          inputEl._rpHandler = null;
+        }
+      } catch {}
+      try {
+        if (btnRescan && btnRescan._rpHandler) {
+          btnRescan.removeEventListener("click", btnRescan._rpHandler);
+          btnRescan._rpHandler = null;
+        }
+      } catch {}
+      await stopScanner();
+      try { detach(); } catch {}
+    };
+
+    const applyScannedToFilters = (unit, name) => {
+      const unitInput = document.getElementById("parcelFilterUnit");
+      const nameInput = document.getElementById("parcelFilterName");
+      if (unitInput) unitInput.value = String(unit || "").trim();
+      if (nameInput) nameInput.value = String(name || "").trim();
+      const activeBtn = subnavEl ? subnavEl.querySelector("[data-filter].btn-primary") : null;
+      const filter = activeBtn ? String(activeBtn.getAttribute("data-filter") || "pending") : "pending";
+      renderParcelList(filter, readParcelFilters());
+    };
+
+    const renderParcelLine = (p, id) => {
+      const company = escapeHtml(p.company || "其他物流");
+      const trackNo = escapeHtml(p.trackNo || "—");
+      const time = p.createdAt ? (p.createdAt.toDate ? p.createdAt.toDate() : new Date(p.createdAt)) : null;
+      const timeText = time ? `${pad2(time.getMonth()+1)}/${pad2(time.getDate())} ${pad2(time.getHours())}:${pad2(time.getMinutes())}` : "—";
+      return `
+        <div class="parcel-card" data-id="${String(id || "")}">
+          <div class="parcel-card-hd">
+            <div class="parcel-company">${company}</div>
+          </div>
+          <div class="parcel-card-bd">
+            <div class="parcel-info">
+              <div class="parcel-track">單號：${trackNo}</div>
+              <div class="parcel-time">到貨：${timeText}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    const clearResult = () => {
+      if (unitEl) unitEl.textContent = "—";
+      if (nameEl) nameEl.textContent = "—";
+      if (pendingEl) pendingEl.innerHTML = "";
+      if (receivedEl) receivedEl.innerHTML = "";
+      if (resultWrap) resultWrap.hidden = true;
+    };
+
+    const processToken = async (rawToken) => {
+      if (busy) return;
+      const token = String(rawToken || "").trim();
+      if (!token) return;
+      busy = true;
+      setStatus("查詢住戶中...", false);
+      clearResult();
+
+      const cid = String(resolveActiveCommunityId() || "").trim() || "default";
+      let userDoc = null;
+      try {
+        const snap = await db.collection("users").where("qrToken", "==", token).limit(1).get();
+        userDoc = snap && snap.docs && snap.docs[0] ? snap.docs[0] : null;
+      } catch (e) {
+        setStatus("查詢失敗，請稍後再試。", true);
+        busy = false;
+        return;
+      }
+
+      if (!userDoc || !userDoc.exists) {
+        setStatus("", false);
+        await closeNow();
+        openNotice80("非本社區住戶");
+        busy = false;
+        return;
+      }
+
+      const udata = userDoc.data() || {};
+      const uCommunity = String(udata.community || "").trim();
+      if (!uCommunity || uCommunity !== cid) {
+        setStatus("", false);
+        await closeNow();
+        openNotice80("非本社區住戶");
+        busy = false;
+        return;
+      }
+
+      const uUnit = String(udata.houseNo || udata.unit || "").trim();
+      const uName = String(udata.displayName || udata.name || "").trim() || inferUserName({ email: udata.email });
+      if (unitEl) unitEl.textContent = uUnit || "—";
+      if (nameEl) nameEl.textContent = uName || "—";
+
+      setStatus("查詢包裹中...", false);
+      let parcelDocs = [];
+      try {
+        const psnap = await db.collection("communities").doc(cid).collection("parcels").orderBy("createdAt", "desc").limit(200).get();
+        parcelDocs = psnap && psnap.docs ? psnap.docs : [];
+      } catch (e) {
+        setStatus("讀取包裹失敗。", true);
+        busy = false;
+        return;
+      }
+
+      const matched = parcelDocs.map((d) => ({ id: d.id, p: d.data() || {} }))
+        .filter((x) => unitMatches80(x.p.unit || x.p.houseNo || "", uUnit) || String(x.p.recipient || "").trim() === uName);
+
+      const pending = matched.filter((x) => String(x.p.status || "pending") !== "received");
+      const received = matched.filter((x) => String(x.p.status || "") === "received");
+
+      if (!pending.length && !received.length) {
+        setStatus("", false);
+        await closeNow();
+        openNotice80("目前無包裹");
+        busy = false;
+        return;
+      }
+
+      applyScannedToFilters(uUnit, uName);
+      await closeNow();
+      busy = false;
+    };
+
+    const startScanner = async () => {
+      await stopScanner();
+      setStatus("啟動相機中...", false);
+      clearResult();
+      try {
+        scanner = new Html5Qrcode("residentParcelScanReader80");
+      } catch {
+        scanner = null;
+      }
+      if (!scanner) {
+        setStatus("無法啟動相機，請改用掃碼槍輸入。", true);
+        return;
+      }
+      try {
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 20,
+            qrbox: (w, h) => {
+              const size = Math.min(w, h) * 0.8;
+              return { width: size, height: size };
+            },
+            aspectRatio: 1.0,
+            experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+          },
+          (decodedText) => {
+            const t = String(decodedText || "").trim();
+            if (!t) return;
+            stopScanner().finally(() => processToken(t));
+          },
+          () => {}
+        );
+        setStatus("", false);
+      } catch (e) {
+        setStatus("相機啟動失敗，請確認已允許相機權限。", true);
+      }
+    };
+
+    if (inputEl) {
+      inputEl.value = "";
+      inputEl._rpHandler = (e) => {
+        if (!e || e.key !== "Enter") return;
+        try { e.preventDefault(); } catch {}
+        const v = String(inputEl.value || "").trim();
+        inputEl.value = "";
+        processToken(v);
+      };
+      inputEl.addEventListener("keydown", inputEl._rpHandler);
+    }
+
+    if (btnRescan) {
+      btnRescan._rpHandler = () => startScanner();
+      btnRescan.addEventListener("click", btnRescan._rpHandler);
+    }
+
+    modal.hidden = false;
+    requestAnimationFrame(() => {
+      try { if (inputEl && inputEl.focus) inputEl.focus(); } catch {}
+    });
+    startScanner();
   }
 
   let _unsubParcels = null;
-  function renderParcelList(filter = "all") {
+  function renderParcelList(filter = "all", filters = {}) {
     const cid = resolveActiveCommunityId();
     const listEl = document.getElementById("parcelList");
     if (!listEl) return;
@@ -2540,6 +4789,24 @@
         docs = docs.filter(doc => doc.data().status === filter);
       }
 
+      const f = filters && typeof filters === "object" ? filters : {};
+      const fDate = String(f.date || "").trim();
+      const fUnit = String(f.unit || "").trim().toLowerCase();
+      const fName = String(f.name || "").trim().toLowerCase();
+      if (fDate || fUnit || fName) {
+        docs = docs.filter((doc) => {
+          const p = doc.data() || {};
+          const unit = String(p.unit || p.houseNo || "").trim().toLowerCase();
+          const name = String(p.recipient || p.name || "").trim().toLowerCase();
+          const dt = p.createdAt ? (p.createdAt.toDate ? p.createdAt.toDate() : new Date(p.createdAt)) : null;
+          const ymd = dt ? `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}` : "";
+          if (fDate && ymd !== fDate) return false;
+          if (fUnit && !unit.includes(fUnit)) return false;
+          if (fName && !name.includes(fName)) return false;
+          return true;
+        });
+      }
+
       if (docs.length === 0) {
         listEl.innerHTML = `<div class="status">沒有符合條件的包裹。</div>`;
         return;
@@ -2554,6 +4821,17 @@
             const statusClass = p.status === "received" ? "tag green" : "tag yellow";
             const time = p.createdAt ? (p.createdAt.toDate ? p.createdAt.toDate() : new Date(p.createdAt)) : null;
             const timeText = time ? `${pad2(time.getMonth()+1)}/${pad2(time.getDate())} ${pad2(time.getHours())}:${pad2(time.getMinutes())}` : "—";
+            const rtime = p.receivedAt ? (p.receivedAt.toDate ? p.receivedAt.toDate() : new Date(p.receivedAt)) : null;
+            const rtimeText = rtime ? `${pad2(rtime.getMonth()+1)}/${pad2(rtime.getDate())} ${pad2(rtime.getHours())}:${pad2(rtime.getMinutes())}` : "";
+            const receivedLine = (p.status === "received" && rtimeText) ? `<div class="parcel-received">領取：${rtimeText}</div>` : "";
+            const handlerAccountRaw = String(p.receivedByAccount || "").trim();
+            const handlerNameRaw = String(p.receivedByDisplayName || p.receivedByName || "").trim();
+            const handlerAccount = handlerAccountRaw || "";
+            const handlerName = handlerNameRaw || handlerAccount;
+            const handlerText =
+              handlerAccount && handlerName && handlerAccount !== handlerName ? `${handlerAccount}<${handlerName}>` :
+              handlerName || handlerAccount;
+            const handlerLine = (p.status === "received" && handlerText) ? `<div class="parcel-handler">處理：${escapeHtml(handlerText)}</div>` : "";
             
             return `
               <div class="parcel-card" data-id="${id}">
@@ -2565,11 +4843,38 @@
                   <div class="parcel-info">
                     <div class="parcel-recipient"><strong>${escapeHtml(p.unit || "—")}</strong> ${escapeHtml(p.recipient || "—")}</div>
                     <div class="parcel-track">單號：${escapeHtml(p.trackNo || "—")}</div>
+                    <div class="parcel-type">類型：${escapeHtml(p.type || "一般包裹")}</div>
                     <div class="parcel-time">到貨：${timeText}</div>
+                    ${receivedLine}
+                    ${handlerLine}
                   </div>
                   <div class="parcel-actions">
-                    ${p.status === "pending" ? `<button class="btn btn-sm btn-primary" data-receive="${id}">簽收</button>` : ""}
-                    <button class="btn btn-sm" data-detail="${id}">詳情</button>
+                    ${p.status === "pending" ? `
+                      <button class="icon-btn primary sm" type="button" data-receive="${id}" aria-label="簽收" title="簽收">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                      </button>
+                    ` : ""}
+                    ${p.status === "received" ? `
+                      <button class="icon-btn danger sm" type="button" data-delete="${id}" aria-label="刪除" title="刪除">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M4 7h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                          <path d="M10 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                          <path d="M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                          <path d="M6 7l1 14h10l1-14" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                          <path d="M9 7V4h6v3" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                        </svg>
+                      </button>
+                    ` : `
+                      <button class="icon-btn sm" type="button" data-detail="${id}" aria-label="詳情" title="詳情">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M12 8.6h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+                          <path d="M11 11.2h1v6.2h-1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                          <path d="M12 21.5a9.5 9.5 0 1 0 0-19 9.5 9.5 0 0 0 0 19Z" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                      </button>
+                    `}
                   </div>
                 </div>
               </div>
@@ -2590,7 +4895,29 @@
         btn.onclick = () => {
           const id = btn.getAttribute("data-detail");
           const p = snap.docs.find(d => d.id === id).data();
-          openParcelModal80({ cid, parcelId: id, parcelData: p, isEdit: true });
+          const readOnly = String((p && p.status) || "") === "received";
+          openParcelModal80({ cid, parcelId: id, parcelData: p, isEdit: !readOnly });
+        };
+      });
+
+      listEl.querySelectorAll("[data-delete]").forEach(btn => {
+        btn.onclick = async (e) => {
+          try { e.stopPropagation(); } catch {}
+          const id = String(btn.getAttribute("data-delete") || "").trim();
+          if (!id) return;
+          const ok = await (window.nwConfirm ? window.nwConfirm({
+            title: "刪除包裹",
+            message: "確認是否刪除此筆資料？",
+            okText: "刪除",
+            cancelText: "取消"
+          }) : Promise.resolve(confirm("確認是否刪除此筆資料？")));
+          if (!ok) return;
+          try {
+            await db.collection("communities").doc(cid).collection("parcels").doc(id).delete();
+            toast("已刪除");
+          } catch (err) {
+            toast("刪除失敗：" + (err && err.message ? err.message : "未知錯誤"));
+          }
         };
       });
     }, (err) => {
@@ -2609,9 +4936,32 @@
 
     if (ok) {
       try {
+        const receivedByUid = String((auth.currentUser && auth.currentUser.uid) || "");
+        const receivedByAccount = inferUserAccount80(auth.currentUser);
+        let receivedByDisplayName = "";
+        if (receivedByUid) {
+          try {
+            const udoc = await db.collection("users").doc(receivedByUid).get();
+            const udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
+            receivedByDisplayName = String(udata.displayName || udata.name || "").trim();
+          } catch {}
+        }
+        if (!receivedByDisplayName) {
+          try {
+            const domName = String(document.getElementById("profileNameText")?.textContent || "").trim();
+            if (domName && domName !== "—") receivedByDisplayName = domName;
+          } catch {}
+        }
+        if (!receivedByDisplayName) receivedByDisplayName = String((auth.currentUser && auth.currentUser.displayName) || "").trim();
+        if (!receivedByDisplayName) receivedByDisplayName = receivedByAccount;
+        const receivedByName = receivedByDisplayName;
         await db.collection("communities").doc(cid).collection("parcels").doc(id).update({
           status: "received",
           receivedAt: FieldValue.serverTimestamp(),
+          receivedBy: receivedByUid,
+          receivedByAccount,
+          receivedByName,
+          receivedByDisplayName,
           updatedAt: FieldValue.serverTimestamp()
         });
         toast("已完成簽收");
@@ -2642,6 +4992,18 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
                 掃描辨識
               </button>
+            </div>
+            <div class="field">
+              <label for="p_type">類型</label>
+              <select id="p_type">
+                <option value="一般包裹">一般包裹</option>
+                <option value="常溫包裹">常溫包裹</option>
+                <option value="冷藏包裹">冷藏包裹</option>
+                <option value="冷凍包裹">冷凍包裹</option>
+                <option value="掛號信件">掛號信件</option>
+                <option value="託收">託收</option>
+                <option value="其他">其他</option>
+              </select>
             </div>
             <div class="field">
               <label for="p_company">物流公司</label>
@@ -2681,6 +5043,7 @@
             <div class="status" id="parcelModalStatus" hidden></div>
           </div>
           <div class="modal-ft">
+            <button class="btn" type="button" id="btnDeleteParcel" hidden>刪除</button>
             <button class="btn" type="button" data-modal-close="1">取消</button>
             <button class="btn btn-primary" type="submit" id="btnSubmitParcel">儲存</button>
           </div>
@@ -2702,6 +5065,7 @@
     const btnSubmit = modal.querySelector("#btnSubmitParcel");
     const btnScan = modal.querySelector("#btnScanParcel");
     const btnQuickScan = modal.querySelector("#btnQuickScan");
+    const btnDelete = modal.querySelector("#btnDeleteParcel");
 
     const inputCompany = modal.querySelector("#p_company");
     const inputTrackNo = modal.querySelector("#p_trackNo");
@@ -2709,12 +5073,27 @@
     const inputRecipient = modal.querySelector("#p_recipient");
     const inputAddress = modal.querySelector("#p_address");
     const inputNote = modal.querySelector("#p_note");
+    const inputType = modal.querySelector("#p_type");
     const listCompany = modal.querySelector("#p_company_list");
     const listUnit = modal.querySelector("#p_unit_list");
 
-    if (titleEl) titleEl.textContent = isEdit ? "編輯包裹" : "登記包裹";
+    const readOnly = Boolean(!isEdit && parcelId);
+    if (titleEl) titleEl.textContent = readOnly ? "包裹資訊" : (isEdit ? "編輯包裹" : "登記包裹");
     if (btnSubmit) btnSubmit.textContent = isEdit ? "更新" : "登記";
     if (statusEl) { statusEl.hidden = true; statusEl.textContent = ""; }
+    if (btnDelete) btnDelete.hidden = !parcelId;
+    if (btnSubmit) btnSubmit.hidden = readOnly;
+    if (btnScan) btnScan.hidden = readOnly;
+    if (btnQuickScan) btnQuickScan.hidden = readOnly;
+
+    const setFormDisabled = (disabled) => {
+      const on = Boolean(disabled);
+      modal.querySelectorAll("input, select, textarea").forEach((el) => {
+        if (!el) return;
+        el.disabled = on;
+      });
+    };
+    setFormDisabled(readOnly);
 
     if (isEdit && parcelData) {
       inputCompany.value = parcelData.company || "";
@@ -2723,8 +5102,10 @@
       inputRecipient.value = parcelData.recipient || "";
       inputAddress.value = parcelData.address || "";
       inputNote.value = parcelData.note || "";
+      if (inputType) inputType.value = parcelData.type || "一般包裹";
     } else {
       form.reset();
+      if (inputType) inputType.value = "一般包裹";
     }
 
     // 載入物流清單到 datalist
@@ -2811,8 +5192,30 @@
       oldDetach();
     };
 
+    if (btnDelete) {
+      btnDelete.onclick = async () => {
+        if (!isEdit || !parcelId) return;
+        const ok = await (window.nwConfirm ? window.nwConfirm({
+          title: "刪除包裹",
+          message: "確認是否刪除此筆資料？",
+          okText: "刪除",
+          cancelText: "取消"
+        }) : Promise.resolve(confirm("確認是否刪除此筆資料？")));
+        if (!ok) return;
+        try {
+          await db.collection("communities").doc(cid).collection("parcels").doc(parcelId).delete();
+          toast("已刪除");
+          modal.hidden = true;
+          detach();
+        } catch (err) {
+          toast("刪除失敗：" + (err && err.message ? err.message : "未知錯誤"));
+        }
+      };
+    }
+
     form.onsubmit = async (e) => {
       e.preventDefault();
+      if (readOnly) return;
       const payload = {
         company: inputCompany.value.trim(),
         trackNo: inputTrackNo.value.trim(),
@@ -2820,6 +5223,7 @@
         recipient: inputRecipient.value.trim(),
         address: inputAddress.value.trim(),
         note: inputNote.value.trim(),
+        type: inputType ? String(inputType.value || "一般包裹").trim() : "一般包裹",
         updatedAt: FieldValue.serverTimestamp()
       };
 
@@ -3266,12 +5670,10 @@
 
     if (subnavEl) {
       subnavEl.innerHTML = `
-        <div class="btn-with-badge">
-          <button class="btn btn-sm" type="button" id="btnPendingResidents">待審帳號</button>
-          <span class="badge" id="pendingBadge" hidden>0</span>
-        </div>
-        <button class="btn btn-sm" type="button" id="btnUnits">戶號列表</button>
-        <button class="btn btn-primary btn-sm" type="button" id="btnAddResident">新增帳號</button>
+        <button class="btn btn-sm" type="button" id="btnPendingResidents">
+          <span class="badge-inline" id="pendingBadge" hidden>0</span>
+          待審帳號
+        </button>
       `.trim();
       
       // 獲取按鈕引用 (因為剛剛 innerHTML 重置了)
@@ -3291,6 +5693,12 @@
               <p>${cname || "—"}</p>
             </div>
           </div>
+          <button class="icon-btn sm" type="button" id="btnUnits" aria-label="戶號列表" title="戶號列表">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M8 7h12M8 12h12M8 17h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+            </svg>
+          </button>
         </div>
         <div class="card-bd">
           <div class="resident-toolbar">
@@ -3301,6 +5709,7 @@
             <div class="search resident-search">
               <input id="residentSearch" type="text" placeholder="搜尋 戶號 / 姓名 / 手機 / Email" autocomplete="off" />
             </div>
+            <button class="btn btn-primary btn-sm" type="button" id="btnAddResident">新增帳號</button>
           </div>
           <div class="status" id="residentStatus" hidden></div>
           <div class="resident-list" id="residentList"></div>
@@ -3316,21 +5725,7 @@
     const unitTotalEl = document.getElementById("unitTotal");
     const peopleTotalEl = document.getElementById("peopleTotal");
 
-    // 監聽待審核帳號數量
-    if (cid) {
-      state.unsubPendingBadge = db.collection("users")
-        .where("community", "==", cid)
-        .where("role", "==", "resident")
-        .where("status", "==", "pending")
-        .onSnapshot((snap) => {
-          const badge = document.getElementById("pendingBadge");
-          if (badge) {
-            const count = snap.size;
-            badge.textContent = count;
-            badge.hidden = count === 0;
-          }
-        });
-    }
+    ensureResidentsPendingCountSubscription(cid);
 
     const setStatus = (msg, isError) => {
       if (!statusEl) return;
@@ -3410,6 +5805,24 @@
                   <input type="checkbox" data-toggle ${enabled ? "checked" : ""} />
                   <span class="slider"></span>
                 </label>
+                <button class="icon-btn" type="button" data-parking aria-label="車位" title="車位">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M7 4h5.6a4.4 4.4 0 0 1 0 8.8H7V4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M7 12.8V20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M17 20V7.5a3.5 3.5 0 0 1 7 0V20" stroke="currentColor" stroke-width="0" />
+                    <path d="M14.5 20h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M14.5 14.5h4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M14.5 11.2h4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M14.5 7.9h4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" type="button" data-control aria-label="管制" title="管制">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 2.5 20 6v6c0 5.2-3.4 9.2-8 9.5C7.4 21.2 4 17.2 4 12V6l8-3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M9 12h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M12 9v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
                 <button class="icon-btn" type="button" data-qr aria-label="編輯QR code" title="編輯QR code">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M4.5 4.5h6v6h-6v-6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
@@ -3916,8 +6329,12 @@
 
       const createRow = (u = {}) => {
         const tr = document.createElement("tr");
+        const qrToken = String(u.qrToken || u.qr || u.qrCode || "").trim();
+        const ownerName = String(u.ownerName || u.owner || u.ownerText || "").trim();
         tr.innerHTML = `
+          <td><input type="text" class="u-qr" value="${qrToken}" placeholder="QR code碼" /></td>
           <td><input type="text" class="u-id" value="${u.id || ""}" placeholder="戶號" /></td>
+          <td><input type="text" class="u-owner" value="${ownerName}" placeholder="區分所有權人" /></td>
           <td><input type="text" class="u-address" value="${u.address || ""}" placeholder="地址" /></td>
           <td><input type="text" class="u-area" value="${u.area || ""}" placeholder="坪數" /></td>
           <td><input type="text" class="u-ownership" value="${u.ownership || ""}" placeholder="%" /></td>
@@ -3979,7 +6396,9 @@
         const rows = Array.from(tbody.querySelectorAll("tr"));
         
         for (const tr of rows) {
+          const qrToken = tr.querySelector(".u-qr").value.trim();
           const id = tr.querySelector(".u-id").value.trim();
+          const ownerName = tr.querySelector(".u-owner").value.trim();
           const address = tr.querySelector(".u-address").value.trim();
           const area = tr.querySelector(".u-area").value.trim();
           const ownership = tr.querySelector(".u-ownership").value.trim();
@@ -3988,7 +6407,7 @@
           if (seen.has(id)) continue;
           seen.add(id);
 
-          uniq.push({ id, address, area, ownership });
+          uniq.push({ qrToken, id, ownerName, address, area, ownership });
         }
 
         if (uniq.length === 0) {
@@ -4024,10 +6443,12 @@
         // 從目前表格抓取資料（包含尚未儲存的變更）
         const rows = Array.from(tbody.querySelectorAll("tr"));
         const data = rows.map(tr => ({
+          "QR code碼": tr.querySelector(".u-qr").value.trim(),
           "戶號": tr.querySelector(".u-id").value.trim(),
+          "區分所有權人": tr.querySelector(".u-owner").value.trim(),
           "地址": tr.querySelector(".u-address").value.trim(),
           "坪數": tr.querySelector(".u-area").value.trim(),
-          "區分所有權人%": tr.querySelector(".u-ownership").value.trim()
+          "所有權人%": tr.querySelector(".u-ownership").value.trim()
         })).filter(x => x["戶號"]);
 
         const ws = XLSX.utils.json_to_sheet(data);
@@ -4061,11 +6482,20 @@
             if (tbody) {
               tbody.innerHTML = "";
               json.forEach(row => {
+                const values = Object.values(row || {});
+                const qrToken = String(row["QR code碼"] || row["qrToken"] || row["qr"] || row["qrcode"] || row["QRCode"] || "").trim();
                 const id = String(row["戶號"] || row["id"] || row["戶"] || Object.values(row)[0] || "").trim();
-                const addr = String(row["地址"] || row["address"] || Object.values(row)[1] || "").trim();
-                const area = String(row["坪數"] || row["area"] || Object.values(row)[2] || "").trim();
-                const own = String(row["區分所有權人%"] || row["ownership"] || Object.values(row)[3] || "").trim();
-                if (id) tbody.appendChild(createRow({ id, address: addr, area, ownership: own }));
+                let ownerName = String(row["區分所有權人"] || row["所有權人"] || row["ownerName"] || row["owner"] || "").trim();
+                let addr = String(row["地址"] || row["address"] || "").trim();
+                let area = String(row["坪數"] || row["area"] || "").trim();
+                let own = String(row["所有權人%"] || row["區分所有權人%"] || row["ownership"] || "").trim();
+
+                if (!addr && !ownerName && values.length >= 2) addr = String(values[1] || "").trim();
+                if (!area && values.length >= 3) area = String(values[2] || "").trim();
+                if (!own && values.length >= 4) own = String(values[3] || "").trim();
+                if (!ownerName && values.length >= 5) ownerName = String(values[4] || "").trim();
+
+                if (id) tbody.appendChild(createRow({ qrToken, id, ownerName, address: addr, area, ownership: own }));
               });
               updateCount();
             }
@@ -4110,6 +6540,28 @@
         const id = row.getAttribute("data-id");
         const r = residents.find((x) => String(x.id || "") === String(id || "")) || null;
         if (!id || !r) return;
+
+        const parkingBtn = e.target.closest("[data-parking]");
+        if (parkingBtn) {
+          openResidentParkingModal80({
+            cid,
+            uid: id,
+            unit: String(r.houseNo || r.unit || "").trim(),
+            displayName: String(r.displayName || r.email || id),
+          });
+          return;
+        }
+
+        const controlBtn = e.target.closest("[data-control]");
+        if (controlBtn) {
+          openResidentControlModal80({
+            cid,
+            uid: id,
+            unit: String(r.houseNo || r.unit || "").trim(),
+            displayName: String(r.displayName || r.email || id),
+          });
+          return;
+        }
 
         const qrBtn = e.target.closest("[data-qr]");
         if (qrBtn) {
@@ -4358,43 +6810,18 @@
 
     if (subnavEl) {
       subnavEl.innerHTML = `
-        <div class="btn-with-badge">
-          <button class="btn btn-sm" type="button" id="btnPendingVisitors">待審訪客</button>
-          <span class="badge" id="pendingVisitorsBadge" hidden>0</span>
-        </div>
+        <button class="btn btn-sm" type="button" id="btnPendingVisitors">
+          <span class="badge-inline" id="pendingVisitorsBadge" hidden>0</span>
+          待審訪客
+        </button>
         <button class="btn btn-sm" type="button" id="btnVisitorQr">訪客QR Code</button>
         <button class="btn btn-sm" type="button" id="btnScanVisitor">掃碼登記</button>
-        <button class="btn btn-primary btn-sm" type="button" id="btnAddVisitor">新增訪客</button>
       `.trim();
       
       const pendingBtn = document.getElementById("btnPendingVisitors");
       if (pendingBtn) {
         pendingBtn.onclick = () => openPendingVisitorsModal80({ communityId: cid, communityName: cname });
       }
-    }
-
-    // 監聽待審核訪客數量
-    if (cid) {
-      // 清理舊的監聽
-      if (state.unsubPendingVisitorsBadge) {
-        try { state.unsubPendingVisitorsBadge(); } catch {}
-      }
-      
-      // 這裡需要支援多路徑監聽嗎？通常 pending 應該在正確的 cid 下
-      state.unsubPendingVisitorsBadge = db.collection("communities").doc(cid).collection("visitors")
-        .where("status", "==", "pending")
-        .onSnapshot((snap) => {
-          const badge = document.getElementById("pendingVisitorsBadge");
-          if (badge) {
-            const count = snap.size;
-            badge.textContent = count;
-            badge.hidden = count === 0;
-          }
-        }, (err) => {
-          console.error("Pending visitors badge error:", err);
-          // 如果 cid 失敗，嘗試用 slug? 
-          // 暫不複雜化，除非使用者回報
-        });
     }
 
     contentEl.innerHTML = `
@@ -4423,6 +6850,7 @@
             <div class="search visitor-search">
               <input id="visitorSearch" type="text" placeholder="搜尋 姓名 / 手機 / 車牌 / 事由" autocomplete="off" />
             </div>
+            <button class="btn btn-primary btn-sm" type="button" id="btnAddVisitor">新增訪客</button>
           </div>
           <div class="status" id="visitorStatus" hidden></div>
           <div class="visitor-list" id="visitorList"></div>
@@ -4441,6 +6869,8 @@
     const scanBtn = document.getElementById("btnScanVisitor");
     const addBtn = document.getElementById("btnAddVisitor");
     const totalEl = document.getElementById("visitorTotal");
+
+    ensureVisitorsPendingCountSubscription(cid);
 
     const setStatus = (msg, isError) => {
       if (!statusEl) return;
@@ -4580,6 +7010,23 @@
                       <path d="M15.4 14.2a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0Z" stroke="currentColor" stroke-width="1.7"/>
                     </svg>
                   `}
+                </button>
+                <button class="icon-btn" type="button" data-parking aria-label="車位" title="車位">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M7 4h5.6a4.4 4.4 0 0 1 0 8.8H7V4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M7 12.8V20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M14.5 20h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M14.5 14.5h4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M14.5 11.2h4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M14.5 7.9h4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" type="button" data-control aria-label="管制" title="管制">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 2.5 20 6v6c0 5.2-3.4 9.2-8 9.5C7.4 21.2 4 17.2 4 12V6l8-3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M9 12h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M12 9v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
                 </button>
                 <button class="icon-btn" type="button" data-qr aria-label="編輯QR code" title="編輯QR code">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -5449,6 +7896,7 @@
   function renderModule(moduleId) {
     if (moduleId !== "visitor") stopVisitorsSubscription();
     if (moduleId !== "residents") stopResidentsSubscription();
+    if (moduleId !== "parcel") stopParcelsSubscription();
     const gate = getButtonConfig(moduleId);
     if (gate && gate.enabled === false) {
       toast("此功能未開放（示意）");
@@ -5465,6 +7913,10 @@
     }
     if (moduleId === "parcel") {
       renderParcelModule();
+      return;
+    }
+    if (moduleId === "facility") {
+      renderFacilityModule();
       return;
     }
     if (subnavEl) subnavEl.innerHTML = "";
@@ -5576,7 +8028,7 @@
         <div class="modal-backdrop" data-modal-close="1"></div>
         <div class="modal-dialog a4-preview-dialog" role="dialog" aria-modal="true">
           <div class="modal-hd">
-            <h3 class="modal-title">西北守護星 APP 下載說明</h3>
+            <h3 class="modal-title">Qai守護星 APP 下載說明</h3>
             <div class="modal-actions">
               <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
             </div>
@@ -5594,8 +8046,8 @@
                 </div>
                 <div class="a4-content">
                   <div class="a4-header">
-                    <img src="logo.svg" class="a4-logo" alt="西北守護星" />
-                    <h1 class="a4-title">西北守護星</h1>
+                    <img src="logo.svg" class="a4-logo" alt="Qai守護星" />
+                    <h1 class="a4-title">Qai守護星</h1>
                     <p class="a4-subtitle">智慧社區服務系統｜住戶端 APP</p>
                   </div>
                   
@@ -5620,7 +8072,7 @@
                       </div>
                       <div class="step">
                         <div class="step-num">2</div>
-                        <div class="step-text">點擊連結進入「西北守護星」官方下載頁面。</div>
+                        <div class="step-text">點擊連結進入「Qai守護星」官方下載頁面。</div>
                       </div>
                       <div class="step">
                         <div class="step-num">3</div>
@@ -5635,7 +8087,7 @@
 
                   <div class="a4-footer">
                     <p>如有任何安裝問題，請洽社區管理室。</p>
-                    <p class="copyright">© 2026 西北守護星｜西北保全 & 西北物業</p>
+                    <p class="copyright">© 2026 Qai守護星｜西北保全 & 西北物業</p>
                   </div>
                 </div>
               </div>
@@ -5657,7 +8109,7 @@
           win.document.write(`
             <html>
               <head>
-                <title>西北守護星 APP 下載說明</title>
+                <title>Qai守護星 APP 下載說明</title>
                 <link rel="stylesheet" href="css/admin.css">
                 <style>
                   body { margin: 0; padding: 0; }

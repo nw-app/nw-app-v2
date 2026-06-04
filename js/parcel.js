@@ -242,6 +242,34 @@
     if (!dateTimeStr) {
       dateTimeStr = '—';
     }
+
+    const receivedDate = parcel.receivedAt || parcel.claimedAt || parcel['領取日期'] || parcel['領取時間'] || parcel.receivedTime;
+    let receivedDateTimeStr = '';
+    if (receivedDate) {
+      try {
+        let dateObj;
+        if (receivedDate.toDate) {
+          dateObj = receivedDate.toDate();
+        } else if (typeof receivedDate === 'string') {
+          dateObj = new Date(receivedDate);
+        } else {
+          dateObj = new Date(receivedDate);
+        }
+        if (dateObj && !isNaN(dateObj.getTime())) {
+          receivedDateTimeStr = dateObj.toLocaleString('zh-TW', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        }
+      } catch {}
+    }
+    if (!receivedDateTimeStr) {
+      receivedDateTimeStr = '—';
+    }
+    const isReceived = (parcel.status === 'received' || parcel.claimed);
     
     return `
       <div class="parcel-item">
@@ -250,9 +278,10 @@
           <div class="parcel-desc">物流公司：${logisticsCompany}</div>
           <div class="parcel-type">類型：${type}</div>
           <div class="parcel-date">建立日期時間：${dateTimeStr}</div>
+          ${isReceived ? `<div class="parcel-date">領取日期時間：${receivedDateTimeStr}</div>` : ''}
         </div>
-        <div class="parcel-status ${(parcel.status === 'received' || parcel.claimed) ? 'claimed' : 'unclaimed'}">
-          ${(parcel.status === 'received' || parcel.claimed) ? '已領取' : '未領取'}
+        <div class="parcel-status ${isReceived ? 'claimed' : 'unclaimed'}">
+          ${isReceived ? '已領取' : '未領取'}
         </div>
       </div>
     `;
@@ -628,6 +657,10 @@
     // 檢查登入狀態
     auth.onAuthStateChanged(async (user) => {
       const isEmbedded = (() => {
+        try {
+          const qs = new URLSearchParams(location.search || "");
+          if (String(qs.get("embed") || "") === "1") return true;
+        } catch {}
         try { return window.self !== window.top; } catch { return true; }
       })();
 

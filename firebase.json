@@ -10,6 +10,12 @@
       "**/node_modules/**",
       "firebase/**"
     ],
+    "rewrites": [
+      { "source": "/admin", "destination": "/admin.html" },
+      { "source": "/community", "destination": "/admin.html" },
+      { "source": "/system", "destination": "/system.html" },
+      { "source": "/member", "destination": "/member.html" }
+    ],
     "headers": [
       {
         "source": "/manifest.webmanifest",

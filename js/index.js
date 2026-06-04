@@ -30,7 +30,12 @@
   }
   if (db) {
     try {
-      db.settings({ experimentalAutoDetectLongPolling: true, ignoreUndefinedProperties: true });
+      db.settings({
+        experimentalAutoDetectLongPolling: true,
+        experimentalForceLongPolling: true,
+        useFetchStreams: false,
+        ignoreUndefinedProperties: true
+      });
     } catch {}
   }
 
@@ -66,6 +71,15 @@
     const raw = String(url || "").trim();
     const cleaned = raw ? raw.replace(/\/+$/, "") : "";
     const lower = cleaned.toLowerCase();
+    const ensureHtmlForRoute = () => {
+      const m = cleaned.match(/^\/?(admin|community|system)(\.html)?(#.*)?$/i);
+      if (!m) return "";
+      const base = String(m[1] || "").toLowerCase();
+      const hash = String(m[3] || "");
+      if (base === "system") return `system.html${hash}`;
+      return `admin.html${hash || "#community/community-dashboard"}`;
+    };
+    const fixedRoute = ensureHtmlForRoute();
     const target =
       !cleaned ? "index.html" :
       cleaned.startsWith("http://") || cleaned.startsWith("https://") ? cleaned :
@@ -73,6 +87,7 @@
       lower === "system" || lower === "/system" || lower === "system.html" || lower === "/system.html" ? routes.admin :
       lower === "community" || lower === "/community" || lower === "admin" || lower === "/admin" ? routes.community :
       lower === "member" || lower === "/member" || lower === "resident" || lower === "/resident" ? routes.resident :
+      fixedRoute ? fixedRoute :
       cleaned.startsWith("/") ? cleaned.slice(1) :
       cleaned;
     if (window.__nw_redirecting) return;

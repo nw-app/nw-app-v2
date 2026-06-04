@@ -129,6 +129,14 @@
     }
     const auth = firebase.auth();
     const db = firebase.firestore();
+    try {
+      db.settings({
+        experimentalAutoDetectLongPolling: true,
+        experimentalForceLongPolling: true,
+        useFetchStreams: false,
+        ignoreUndefinedProperties: true,
+      });
+    } catch {}
 
     const form = qs("#visitorForm");
     const resultBox = qs("#resultBox");

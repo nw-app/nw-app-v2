@@ -345,7 +345,6 @@
     const modal = document.getElementById("externalPageModal");
     const iframe = document.getElementById("externalPageIframe");
     const title = document.getElementById("externalPageModalTitle");
-    const openNewBtn = document.getElementById("btnExternalPageOpenNew");
     const errorContainer = document.getElementById("externalPageError");
     const errorOpenBtn = document.getElementById("btnExternalPageErrorOpen");
     const communityNameEl = document.getElementById("externalPageModalCommunityName");
@@ -393,7 +392,6 @@
 
     // 更新標題與按鈕網址
     title.textContent = name || "頁面";
-    if (openNewBtn) openNewBtn.href = resolvedUrl || url;
     if (errorOpenBtn) errorOpenBtn.href = resolvedUrl || url;
 
     // 獲取並顯示社區名稱

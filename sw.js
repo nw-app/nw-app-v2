@@ -1,4 +1,4 @@
-const CACHE_VERSION = "nwapp-v117";
+const CACHE_VERSION = "nwapp-v127";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -52,6 +52,25 @@ self.addEventListener("fetch", (event) => {
   const accept = req.headers.get("accept") || "";
   const isHtml = req.mode === "navigate" || accept.includes("text/html");
   const path = url.pathname || "";
+  const cleanPath = (path || "/").replace(/\/+$/, "") || "/";
+  if (req.mode === "navigate") {
+    if (cleanPath === "/admin" || cleanPath === "/community") {
+      const to = new URL("./admin.html", url);
+      to.hash = "#community/community-dashboard";
+      event.respondWith(Response.redirect(to.toString(), 302));
+      return;
+    }
+    if (cleanPath === "/system") {
+      const to = new URL("./system.html", url);
+      event.respondWith(Response.redirect(to.toString(), 302));
+      return;
+    }
+    if (cleanPath === "/member" || cleanPath === "/resident") {
+      const to = new URL("./member.html", url);
+      event.respondWith(Response.redirect(to.toString(), 302));
+      return;
+    }
+  }
   const isCss = path.endsWith(".css") || req.destination === "style";
   const isJs = path.endsWith(".js") || path.endsWith(".mjs") || req.destination === "script";
 

@@ -5,6 +5,16 @@ const path = require('path');
 const server = http.createServer((req, res) => {
   // 移除查詢字串以獲取正確的檔案路徑
   let requestUrl = req.url.split('?')[0];
+  requestUrl = String(requestUrl || "/");
+  if (requestUrl.includes("#")) requestUrl = requestUrl.split("#")[0];
+
+  const cleanPath = requestUrl.replace(/\/+$/, "") || "/";
+  if (cleanPath === "/admin") requestUrl = "/admin/index.html";
+  if (cleanPath === "/community") requestUrl = "/community/index.html";
+  if (cleanPath === "/system") requestUrl = "/system/index.html";
+  if (cleanPath === "/member") requestUrl = "/member/index.html";
+  if (cleanPath === "/resident") requestUrl = "/resident/index.html";
+
   let filePath = '.' + requestUrl;
   if (filePath === './') filePath = './index.html';
 

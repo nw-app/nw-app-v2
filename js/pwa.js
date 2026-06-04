@@ -87,7 +87,7 @@
       <div class="row1">
         <div class="logo" aria-hidden="true"><img src="logo.svg" alt="" /></div>
         <div class="meta">
-          <div class="title">安裝「西北守護星」</div>
+          <div class="title">安裝「Qai守護星」</div>
           <div class="sub">加入主畫面後可像 App 一樣使用</div>
         </div>
       </div>
@@ -226,7 +226,7 @@
 
     const isCommunityPickerSupportedPage = () => {
       const page = String(location.pathname || "").split("/").pop().toLowerCase();
-      return page === "admin.html" || page === "member.html" || page === "system.html" || page === "system";
+      return page === "admin.html" || page === "member.html" || page === "system.html";
     };
 
     const ensureCommunityPickerModal = () => {
@@ -381,9 +381,9 @@
 
     const resolveSwitchTargets = () => {
       const page = String(location.pathname || "").split("/").pop().toLowerCase();
-      if (page === "system.html" || page === "system") return ["admin", "member"];
-      if (page === "admin.html" || page === "admin") return ["system", "member"];
-      if (page === "member.html" || page === "member") return ["system", "admin"];
+      if (page === "system.html") return ["admin", "member"];
+      if (page === "admin.html") return ["system", "member"];
+      if (page === "member.html") return ["system", "admin"];
       return [];
     };
 
@@ -416,7 +416,7 @@
       const user = fb && fb.auth ? fb.auth().currentUser : null;
       const sessionRole = getSessionRole();
       const page = String(location.pathname || "").split("/").pop().toLowerCase();
-      const isSystemPage = page === "system.html" || page === "system";
+      const isSystemPage = page === "system.html";
       if (sessionRole === "admin") markSystemAdminSession(user, true);
       const canSwitch = Boolean(
         isSystemAdminAccount(user, switchEl._profileData || {}) ||
@@ -443,7 +443,7 @@
     const bindCommunityNameSubPicker = () => {
       if (!communityNameSub) return;
       const page = String(location.pathname || "").split("/").pop().toLowerCase();
-      const isSystemPage = page === "system.html" || page === "system";
+      const isSystemPage = page === "system.html";
       const sessionRole = getSessionRole();
       const fb = window.firebase;
       const user = fb && fb.auth ? fb.auth().currentUser : null;
@@ -460,7 +460,7 @@
         let ok = Boolean(isSystemAdminFlag() || isSystemAdminSession(u));
         if (!ok) {
           const p = String(location.pathname || "").split("/").pop().toLowerCase();
-          if (p === "system.html" || p === "system") ok = true;
+          if (p === "system.html") ok = true;
         }
         if (!ok) {
           const r = getSessionRole();
@@ -484,7 +484,7 @@
         }
         if (!ok) return;
         const p = String(location.pathname || "").split("/").pop().toLowerCase();
-        const target = p === "member.html" || p === "member" ? "member" : "admin";
+        const target = p === "member.html" ? "member" : "admin";
         openCommunityPicker(
           ensureDb(),
           target,
@@ -563,7 +563,7 @@
       }
       const sessionRole = getSessionRole();
       const page = String(location.pathname || "").split("/").pop().toLowerCase();
-      if (sessionRole === "admin" || page === "system.html" || page === "system" || isSystemAdminSession(user) || isSystemAdminFlag()) sysAdmin = true;
+      if (sessionRole === "admin" || page === "system.html" || isSystemAdminSession(user) || isSystemAdminFlag()) sysAdmin = true;
       if (switchEl) {
         switchEl._profileData = data || {};
         switchEl._isSystemAdmin = sysAdmin;
@@ -921,30 +921,6 @@
     window.nwConfirm = confirmDialog;
 
     if (!("serviceWorker" in navigator)) return;
-    if (isLocalhost()) {
-      Promise.all([
-        navigator.serviceWorker.getRegistrations().catch(() => []),
-        "caches" in window ? caches.keys().catch(() => []) : Promise.resolve([]),
-      ]).then(([regs, keys]) => {
-        const hasSw = Array.isArray(regs) && regs.length > 0;
-        const hasCache = Array.isArray(keys) && keys.length > 0;
-        if (!hasSw && !hasCache) return;
-        const params = new URLSearchParams(location.search || "");
-        if (params.get("swreset") === "1") return;
-        Promise.all([
-          hasSw ? Promise.all(regs.map((r) => r.unregister().catch(() => false))) : Promise.resolve([]),
-          hasCache && "caches" in window ? Promise.all(keys.map((k) => caches.delete(k))).catch(() => []) : Promise.resolve([]),
-        ]).finally(() => {
-          try {
-            params.set("swreset", "1");
-            const u = new URL(location.href);
-            u.search = params.toString() ? `?${params.toString()}` : "";
-            location.replace(u.toString());
-          } catch {}
-        });
-      });
-      return;
-    }
     navigator.serviceWorker.register("./sw.js").then((reg) => {
         const isLocal = isLocalhost();
         if (!isLocal) reg.update().catch(() => {});
