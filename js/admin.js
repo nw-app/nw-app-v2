@@ -891,16 +891,25 @@
       return String((byUsername && byUsername.username) || cid).trim() || cid;
     })();
     const publicBase = (() => {
+      const host = String(location.hostname || "").trim().toLowerCase();
+      const isLocal =
+        host === "localhost" ||
+        host === "127.0.0.1" ||
+        host.startsWith("192.168.") ||
+        host.startsWith("10.") ||
+        host.startsWith("172.16.") ||
+        host.startsWith("172.17.") ||
+        host.startsWith("172.18.") ||
+        host.startsWith("172.19.") ||
+        host.startsWith("172.2") ||
+        host.startsWith("172.3");
+      if (isLocal) return "https://nw-app.github.io/nw-app-v2/";
+
       const origin = location.origin.endsWith("/") ? location.origin.slice(0, -1) : location.origin;
       const pathParts = location.pathname.split("/");
-      pathParts.pop(); // 移除目前的檔名 (如 admin.html)
+      pathParts.pop();
       const basePath = pathParts.join("/");
-      const fullBase = `${origin}${basePath}/`;
-
-      const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname.startsWith("192.168.");
-      // 如果是在本地開發且有設定 projectId，提供正式網址選項，方便手機掃碼測試
-      // 但預設仍使用目前的網址，確保在任何環境下都能運作
-      return fullBase;
+      return `${origin}${basePath}/`;
     })();
     const u = new URL("visitor.html", publicBase);
     u.searchParams.set("c", key);
@@ -2018,6 +2027,10 @@
                 <div class="scan-frame"></div>
               </div>
             </div>
+            <div class="field scan-gun-field">
+              <label for="visitorScanGunInput">掃碼槍輸入</label>
+              <input id="visitorScanGunInput" type="text" autocomplete="off" inputmode="text" placeholder="請使用掃碼槍掃描（或貼上）後按 Enter" />
+            </div>
             <div class="status" id="visitorScanStatus" hidden></div>
             <div class="scan-hint" id="visitorScanHint">請將訪客證 QR code 對準框線。</div>
           </div>
@@ -2215,6 +2228,7 @@
     const modal = ensureVisitorScanModal();
     const stageEl = modal.querySelector(".scan-stage");
     const video = modal.querySelector("#visitorScanVideo");
+    const gunInput = modal.querySelector("#visitorScanGunInput");
     const statusEl = modal.querySelector("#visitorScanStatus");
     const hintEl = modal.querySelector("#visitorScanHint");
 
@@ -2285,17 +2299,122 @@
       oldDetach();
     };
 
+    const handleScanText = async (rawValue) => {
+      const parsed = parseVisitorQrText(rawValue);
+      if (!parsed) {
+        setStatus("無法辨識", true);
+        speak("無法辨識QR code");
+        return;
+      }
+      if (String(parsed.cid || "") !== String(cid || "")) {
+        setStatus("無法辨識", true);
+        speak("無法辨識QR code");
+        return;
+      }
+      const vid = String(parsed.vid || "").trim();
+      const tokenFromQr = String(parsed.token || "").trim();
+      if (!vid) {
+        setStatus("無法辨識", true);
+        speak("無法辨識QR code");
+        return;
+      }
+      const nowDate = new Date();
+      const Timestamp = firebase.firestore.Timestamp;
+      try {
+        const docRef = db.collection("communities").doc(String(cid || "default")).collection("visitors").doc(String(vid));
+        const res = await db.runTransaction(async (tx) => {
+          const snap = await tx.get(docRef);
+          if (!snap || !snap.exists) return { kind: "missing" };
+          const data = snap.data() || {};
+          const hasIn = Boolean(data.inAt);
+          const hasOut = Boolean(data.outAt);
+          const invalidated = Boolean(data.qrInvalidated);
+          const expectedToken = String(data.qrToken || vid).trim();
+          if (tokenFromQr && expectedToken && tokenFromQr !== expectedToken) return { kind: "missing" };
+          if (invalidated || hasOut) return { kind: "invalid" };
+
+          if (!hasIn) {
+            const inAt = Timestamp.fromDate(nowDate);
+            tx.set(
+              docRef,
+              {
+                inAt,
+                updatedAt: FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+            return { kind: "in", inAt };
+          }
+
+          const outAt = Timestamp.fromDate(nowDate);
+          tx.set(
+            docRef,
+            {
+              outAt,
+              qrInvalidated: true,
+              qrInvalidatedAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+          return { kind: "out", outAt };
+        });
+
+        if (res.kind === "missing") {
+          setStatus("無法辨識", true);
+          speak("無法辨識QR code");
+          return;
+        }
+        if (res.kind === "invalid") {
+          stop();
+          if (stageEl) stageEl.hidden = true;
+          setStatus("此 QR code 已失效，不能再重複使用。", true);
+          if (hintEl) hintEl.textContent = "請關閉視窗。";
+          return;
+        }
+        if (res.kind === "in") {
+          stop();
+          if (stageEl) stageEl.hidden = true;
+          if (typeof onApplied === "function") onApplied(vid, { inAt: res.inAt });
+          const tt = formatYmdHms(nowDate);
+          showScanResult("in", tt);
+          speak("訪客登記成功，歡迎光臨");
+          if (hintEl) hintEl.textContent = "已完成來訪登記。離開時請再次按「掃碼登記」並掃描同一張訪客證。";
+          return;
+        }
+        if (res.kind === "out") {
+          stop();
+          if (stageEl) stageEl.hidden = true;
+          if (typeof onApplied === "function") onApplied(vid, { outAt: res.outAt, qrInvalidated: true });
+          const tt = formatYmdHms(nowDate);
+          showScanResult("out", tt);
+          speak("訪客登記成功，期待您再次光臨");
+          if (hintEl) hintEl.textContent = "已完成離開登記。此 QR code 已失效。";
+          return;
+        }
+      } catch (err) {
+        const code = String(err && err.code ? err.code : "");
+        setStatus(code.includes("permission-denied") ? "沒有權限執行此操作。" : "更新失敗，請稍後再試。", true);
+      }
+    };
+
     const start = async () => {
       setStatus("", false);
-      if (hintEl) hintEl.textContent = "請將訪客證 QR code 對準框線。";
+      if (hintEl) hintEl.textContent = "請將訪客證 QR code 對準框線，或使用掃碼槍輸入。";
       if (stageEl) stageEl.hidden = false;
 
+      running = true;
+
+      const schedule = (fn) => {
+        loopTimer = window.setTimeout(fn, 180);
+      };
+
       if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
-        setStatus("此瀏覽器不支援相機功能。", true);
+        if (stageEl) stageEl.hidden = true;
+        setStatus("相機不可用，可使用掃碼槍輸入。", false);
         return;
       }
 
-      running = true;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" } },
@@ -2307,114 +2426,10 @@
           try { await video.play(); } catch {}
         }
       } catch {
-        setStatus("無法開啟相機，請確認已允許相機權限。", true);
-        running = false;
-        stop();
+        if (stageEl) stageEl.hidden = true;
+        setStatus("無法開啟相機，可使用掃碼槍輸入。", false);
         return;
       }
-
-      const handleScan = async (rawValue) => {
-        const parsed = parseVisitorQrText(rawValue);
-        if (!parsed) {
-          setStatus("無法辨識", true);
-          speak("無法辨識QR code");
-          return;
-        }
-        if (String(parsed.cid || "") !== String(cid || "")) {
-          setStatus("無法辨識", true);
-          speak("無法辨識QR code");
-          return;
-        }
-        const vid = String(parsed.vid || "").trim();
-        const tokenFromQr = String(parsed.token || "").trim();
-        if (!vid) {
-          setStatus("無法辨識", true);
-          speak("無法辨識QR code");
-          return;
-        }
-        const nowDate = new Date();
-        const Timestamp = firebase.firestore.Timestamp;
-        try {
-          const docRef = db.collection("communities").doc(String(cid || "default")).collection("visitors").doc(String(vid));
-          const res = await db.runTransaction(async (tx) => {
-            const snap = await tx.get(docRef);
-            if (!snap || !snap.exists) return { kind: "missing" };
-            const data = snap.data() || {};
-            const hasIn = Boolean(data.inAt);
-            const hasOut = Boolean(data.outAt);
-            const invalidated = Boolean(data.qrInvalidated);
-            const expectedToken = String(data.qrToken || vid).trim();
-            if (tokenFromQr && expectedToken && tokenFromQr !== expectedToken) return { kind: "missing" };
-            if (invalidated || hasOut) return { kind: "invalid" };
-
-            if (!hasIn) {
-              const inAt = Timestamp.fromDate(nowDate);
-              tx.set(
-                docRef,
-                {
-                  inAt,
-                  updatedAt: FieldValue.serverTimestamp(),
-                },
-                { merge: true }
-              );
-              return { kind: "in", inAt };
-            }
-
-            const outAt = Timestamp.fromDate(nowDate);
-            tx.set(
-              docRef,
-              {
-                outAt,
-                qrInvalidated: true,
-                qrInvalidatedAt: FieldValue.serverTimestamp(),
-                updatedAt: FieldValue.serverTimestamp(),
-              },
-              { merge: true }
-            );
-            return { kind: "out", outAt };
-          });
-
-          if (res.kind === "missing") {
-            setStatus("無法辨識", true);
-            speak("無法辨識QR code");
-            return;
-          }
-          if (res.kind === "invalid") {
-            stop();
-            if (stageEl) stageEl.hidden = true;
-            setStatus("此 QR code 已失效，不能再重複使用。", true);
-            if (hintEl) hintEl.textContent = "請關閉視窗。";
-            return;
-          }
-          if (res.kind === "in") {
-            stop();
-            if (stageEl) stageEl.hidden = true;
-            if (typeof onApplied === "function") onApplied(vid, { inAt: res.inAt });
-            const tt = formatYmdHms(nowDate);
-            showScanResult("in", tt);
-            speak("訪客登記成功，歡迎光臨");
-            if (hintEl) hintEl.textContent = "已完成來訪登記。離開時請再次按「掃碼登記」並掃描同一張訪客證。";
-            return;
-          }
-          if (res.kind === "out") {
-            stop();
-            if (stageEl) stageEl.hidden = true;
-            if (typeof onApplied === "function") onApplied(vid, { outAt: res.outAt, qrInvalidated: true });
-            const tt = formatYmdHms(nowDate);
-            showScanResult("out", tt);
-            speak("訪客登記成功，期待您再次光臨");
-            if (hintEl) hintEl.textContent = "已完成離開登記。此 QR code 已失效。";
-            return;
-          }
-        } catch (err) {
-          const code = String(err && err.code ? err.code : "");
-          setStatus(code.includes("permission-denied") ? "沒有權限執行此操作。" : "更新失敗，請稍後再試。", true);
-        }
-      };
-
-      const schedule = (fn) => {
-        loopTimer = window.setTimeout(fn, 180);
-      };
 
       const createBarcodeDetector = async () => {
         const Ctor = window.BarcodeDetector;
@@ -2446,7 +2461,7 @@
                   lastValue = rawValue;
                   lastValueAt = now;
                   ignoreUntil = now + 2500;
-                  await handleScan(rawValue);
+                  await handleScanText(rawValue);
                 }
               }
             }
@@ -2489,7 +2504,7 @@
               lastValue = rawValue;
               lastValueAt = now;
               ignoreUntil = now + 2500;
-              await handleScan(rawValue);
+              await handleScanText(rawValue);
             }
           }
         } catch {}
@@ -2500,10 +2515,37 @@
 
     modal.hidden = false;
     requestAnimationFrame(() => {
-      const closeBtn = modal.querySelector(".modal-close");
-      if (closeBtn && closeBtn.focus) closeBtn.focus();
+      if (gunInput && gunInput.focus) gunInput.focus();
     });
     start();
+
+    const onGunKeyDown = (e) => {
+      if (!e) return;
+      const key = String(e.key || "");
+      if (key !== "Enter") return;
+      try { e.preventDefault(); } catch {}
+      const rawValue = String(gunInput ? gunInput.value : "").trim();
+      if (gunInput) gunInput.value = "";
+      if (!rawValue) return;
+      const now = Date.now();
+      if (now < ignoreUntil) return;
+      const isDup = rawValue === lastValue && (now - lastValueAt) < 4000;
+      if (isDup) return;
+      lastValue = rawValue;
+      lastValueAt = now;
+      ignoreUntil = now + 2500;
+      handleScanText(rawValue);
+    };
+
+    if (gunInput && !gunInput._scanGunBound) {
+      gunInput._scanGunBound = true;
+      gunInput.addEventListener("keydown", onGunKeyDown);
+      const oldDetach2 = detach;
+      detach = () => {
+        try { gunInput.removeEventListener("keydown", onGunKeyDown); } catch {}
+        oldDetach2();
+      };
+    }
   }
 
   function normalizePhoneDigits(input) {
@@ -6991,15 +7033,21 @@
             <div class="visitor-item ${isPending ? "pending" : ""} ${isApproved ? "approved" : ""}" data-id="${String(v.id || "")}">
               <div class="visitor-left">
                 <div class="visitor-text">
-                  <div class="visitor-name">${name}</div>
-                  <div class="visitor-sub">${subHtml}</div>
-                  <div class="visitor-sub2">${sub2Html}</div>
-                  <div class="visitor-keep"><span class="field-k">車牌：</span>${escapeHtml(plateText)}｜<span class="field-k">留存：</span>${escapeHtml(keepText || "無")}</div>
-                  <div class="visitor-created"><span class="field-k">建立：</span>${escapeHtml(createdText || "—")}｜<span class="field-k">建立者：</span>${escapeHtml(createdByName || "—")}</div>
-                  <div class="visitor-meta">
-                    <span class="time-pill in" role="button" tabindex="0" data-time-kind="in">來訪：${inText || "—"}</span>
-                    <span class="time-pill out" role="button" tabindex="0" data-time-kind="out">離開：${outText || "—"}</span>
+                  <div class="visitor-top-row">
+                    <div class="visitor-name">${name}</div>
+                    <div class="visitor-created"><span class="field-k">建立：</span>${escapeHtml(createdText || "—")}｜<span class="field-k">建立者：</span>${escapeHtml(createdByName || "—")}</div>
                   </div>
+                  <div class="visitor-sub-row">
+                    <div class="visitor-sub">${subHtml}</div>
+                    <div class="visitor-sub2">${sub2Html}</div>
+                    <div class="visitor-keep"><span class="field-k">車牌：</span>${escapeHtml(plateText)}｜<span class="field-k">留存：</span>${escapeHtml(keepText || "無")}</div>
+                  </div>
+                  ${isApproved ? `
+                    <div class="visitor-meta">
+                      <span class="time-pill in" role="button" tabindex="0" data-time-kind="in">來訪：${inText || "—"}</span>
+                      <span class="time-pill out" role="button" tabindex="0" data-time-kind="out">離開：${outText || "—"}</span>
+                    </div>
+                  ` : ""}
                 </div>
               </div>
               <div class="visitor-actions">

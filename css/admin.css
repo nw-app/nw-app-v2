@@ -635,10 +635,15 @@ a { color: inherit; text-decoration: none; }
 }
 .visitor-left { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
 .visitor-text { min-width: 0; }
+.visitor-top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; }
+.visitor-top-row .visitor-name { flex: 1 1 auto; min-width: 0; }
+.visitor-top-row .visitor-created { margin-top: 0; flex: 0 0 auto; text-align: right; }
 .visitor-name { font-weight: 900; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.visitor-sub-row { display: flex; align-items: flex-start; gap: 12px; min-width: 0; flex-wrap: wrap; }
+.visitor-sub-row .visitor-keep { margin-top: 0; }
 .visitor-sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .visitor-sub .field-k { font-weight: 900; color: rgba(31, 41, 55, 0.85); }
-.visitor-sub2 { margin-top: 2px; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.visitor-sub2 { margin-top: 0; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .visitor-sub2 .field-k { font-weight: 900; color: rgba(31, 41, 55, 0.85); }
 .visitor-meta { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
 .visitor-meta .time-pill {
@@ -1131,6 +1136,11 @@ a { color: inherit; text-decoration: none; }
 
 .visitor-keep { margin-top: 4px; font-size: 12px; color: rgba(31, 41, 55, 0.72); }
 .visitor-keep .field-k { font-weight: 900; color: rgba(31, 41, 55, 0.85); }
+.visitor-bottom-row { margin-top: 6px; display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }
+.visitor-bottom-row .visitor-meta { margin-top: 0; }
+.visitor-bottom-row .visitor-right-info { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; min-width: 0; }
+.visitor-bottom-row .visitor-keep { margin-top: 0; }
+.visitor-bottom-row .visitor-created { margin-top: 0; text-align: right; }
 .visitor-actions { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
 .collapse-btn svg { transition: transform 140ms ease; }
 .collapse-btn.open svg { transform: rotate(180deg); }
@@ -1431,6 +1441,7 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
 }
 #visitorScanModal .scan-hint { color: var(--muted); font-size: 13px; }
+#visitorScanModal .scan-gun-field { margin-top: 10px; }
 #visitorScanModal #visitorScanStatus.scan-result {
   font-size: 18px;
   font-weight: 900;
