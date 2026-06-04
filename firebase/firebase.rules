@@ -107,6 +107,75 @@ service cloud.firestore {
         && request.resource.data.updatedAt is timestamp;
     }
 
+    function isVisitorPublicCreate(visitorId, slug) {
+      let token = get(/databases/$(database)/documents/communities/$(slug)).data.get('visitorPublicToken', '');
+      return request.auth == null
+        && token is string
+        && token.size() >= 16
+        && request.resource.data.keys().hasOnly([
+          "publicToken",
+          "qrToken",
+          "name",
+          "email",
+          "phone",
+          "unit",
+          "partySize",
+          "plate",
+          "purpose",
+          "purposeType",
+          "purposeOther",
+          "note",
+          "inAt",
+          "outAt",
+          "keep",
+          "source",
+          "status",
+          "passAuthorized",
+          "passAuthorizedAt",
+          "createdAt",
+          "updatedAt",
+          "createdBy",
+          "createdByName"
+        ])
+        && request.resource.data.publicToken is string
+        && request.resource.data.publicToken == token
+        && request.resource.data.source == "self"
+        && request.resource.data.status == "pending"
+        && request.resource.data.createdBy == "public"
+        && request.resource.data.createdByName == "訪客自填"
+        && request.resource.data.qrToken == visitorId
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 1
+        && request.resource.data.name.size() <= 60
+        && request.resource.data.unit is string
+        && request.resource.data.unit.size() >= 1
+        && request.resource.data.unit.size() <= 20
+        && request.resource.data.phone is string
+        && request.resource.data.phone.size() <= 20
+        && request.resource.data.plate is string
+        && request.resource.data.plate.size() <= 20
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 80
+        && request.resource.data.partySize is int
+        && request.resource.data.partySize >= 1
+        && request.resource.data.partySize <= 20
+        && request.resource.data.purposeType is string
+        && request.resource.data.purposeType.size() <= 20
+        && request.resource.data.purposeOther is string
+        && request.resource.data.purposeOther.size() <= 40
+        && request.resource.data.purpose is string
+        && request.resource.data.purpose.size() <= 60
+        && request.resource.data.note is string
+        && request.resource.data.note.size() <= 200
+        && request.resource.data.keep == null
+        && request.resource.data.inAt == null
+        && request.resource.data.outAt == null
+        && request.resource.data.passAuthorized == false
+        && request.resource.data.passAuthorizedAt == null
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+    }
+
     function isVisitorSelfGet() {
       return request.auth != null
         && resource.data.get('source', '') == "self"
@@ -248,18 +317,22 @@ service cloud.firestore {
       }
 
       match /visitors/{visitorId} {
-        allow get: if request.auth != null && (
-          isAdmin()
-          || (
-            isCommunityStaff()
-            && (
-              slug == getUserData().community
-              || get(/databases/$(database)/documents/communities/$(slug)).data.get('username', '') == getUserData().community
-              || get(/databases/$(database)/documents/communities/$(slug)).data.get('id', '') == getUserData().community
+        allow get: if (request.auth != null && (
+            isAdmin()
+            || (
+              isCommunityStaff()
+              && (
+                slug == getUserData().community
+                || get(/databases/$(database)/documents/communities/$(slug)).data.get('username', '') == getUserData().community
+                || get(/databases/$(database)/documents/communities/$(slug)).data.get('id', '') == getUserData().community
+              )
             )
-          )
-          || isVisitorSelfGet()
-        );
+            || isVisitorSelfGet()
+          )) || (
+            request.auth == null
+            && resource.data.get('source', '') == "self"
+            && resource.data.get('publicToken', '') == get(/databases/$(database)/documents/communities/$(slug)).data.get('visitorPublicToken', '')
+          );
         allow list: if request.auth != null && (
           isAdmin()
           || (
@@ -271,18 +344,18 @@ service cloud.firestore {
             )
           )
         );
-        allow create: if request.auth != null && (
-          isAdmin()
-          || (
-            isCommunityStaff()
-            && (
-              slug == getUserData().community
-              || get(/databases/$(database)/documents/communities/$(slug)).data.get('username', '') == getUserData().community
-              || get(/databases/$(database)/documents/communities/$(slug)).data.get('id', '') == getUserData().community
+        allow create: if (request.auth != null && (
+            isAdmin()
+            || (
+              isCommunityStaff()
+              && (
+                slug == getUserData().community
+                || get(/databases/$(database)/documents/communities/$(slug)).data.get('username', '') == getUserData().community
+                || get(/databases/$(database)/documents/communities/$(slug)).data.get('id', '') == getUserData().community
+              )
             )
-          )
-          || isVisitorSelfCreate(visitorId)
-        );
+            || isVisitorSelfCreate(visitorId)
+          )) || isVisitorPublicCreate(visitorId, slug);
         allow update, delete: if request.auth != null && (
           isAdmin()
           || (

@@ -40,6 +40,9 @@
     if (code.includes("auth/unauthorized-domain") || code.includes("unauthorized-domain")) {
       return `網域未授權（${host || "unknown"}）。請到 Firebase Console → Authentication → Settings → Authorized domains 新增此網域。`;
     }
+    if (code.includes("auth/operation-not-allowed") || code.includes("auth/admin-restricted-operation")) {
+      return "匿名登入尚未啟用。請到 Firebase Console → Authentication → Sign-in method 啟用 Anonymous。";
+    }
     if (location.protocol !== "https:" && host !== "localhost" && host !== "127.0.0.1") {
       return "目前不是 HTTPS，請改用 HTTPS 網址開啟。";
     }
@@ -186,6 +189,8 @@
     }
     const cid = community.id;
     const cname = String((community.data && community.data.name) || "").trim() || "—";
+    const publicToken = String((community.data && community.data.visitorPublicToken) || "").trim();
+    const canPublicWrite = publicToken.length >= 16;
     if (pageTitle) pageTitle.textContent = `訪客登記-${cname}`;
     fillUnitList(community.data && Array.isArray(community.data.units) ? community.data.units : []);
 
@@ -195,7 +200,7 @@
     // 監聽輸入以自動暫存
     form?.addEventListener("input", saveFormCache);
 
-    ensureAnonAuth(auth, false).catch(() => {});
+    if (!canPublicWrite) ensureAnonAuth(auth, false).catch(() => {});
 
     const updatePurposeOther = () => {
       const v = String(purposeTypeEl ? purposeTypeEl.value : "").trim();
@@ -399,14 +404,16 @@
       }
       
       let user = auth.currentUser;
-      if (!user) {
-        try {
-          setStatus("正在提交...", false);
-          user = await ensureAnonAuth(auth, false);
-        } catch (err) {
-          setStatus(`提交失敗：${buildConnectErrorMessage(err)}`, true);
-          if (btnFooterSubmit) btnFooterSubmit.disabled = false;
-          return;
+      if (!canPublicWrite) {
+        if (!user) {
+          try {
+            setStatus("正在提交...", false);
+            user = await ensureAnonAuth(auth, false);
+          } catch (err) {
+            setStatus(`提交失敗：${buildConnectErrorMessage(err)}`, true);
+            if (btnFooterSubmit) btnFooterSubmit.disabled = false;
+            return;
+          }
         }
       }
 
@@ -434,9 +441,10 @@
         passAuthorizedAt: null,
         createdAt: nowTs,
         updatedAt: nowTs,
-        createdBy: user.uid,
+        createdBy: canPublicWrite ? "public" : user.uid,
         createdByName: "訪客自填",
       };
+      if (canPublicWrite) payload.publicToken = publicToken;
 
       try {
         await docRef.set(payload, { merge: true });
