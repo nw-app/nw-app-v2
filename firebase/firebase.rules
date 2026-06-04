@@ -108,12 +108,8 @@ service cloud.firestore {
     }
 
     function isVisitorPublicCreate(visitorId, slug) {
-      let token = get(/databases/$(database)/documents/communities/$(slug)/secrets/visitor_public).data.get('token', '');
       return request.auth == null
-        && token is string
-        && token.size() >= 16
         && request.resource.data.keys().hasOnly([
-          "publicToken",
           "qrToken",
           "name",
           "email",
@@ -137,8 +133,6 @@ service cloud.firestore {
           "createdBy",
           "createdByName"
         ])
-        && request.resource.data.publicToken is string
-        && request.resource.data.publicToken == token
         && request.resource.data.source == "self"
         && request.resource.data.status == "pending"
         && request.resource.data.createdBy == "public"
@@ -235,12 +229,6 @@ service cloud.firestore {
       allow read: if true;
       allow update: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
       allow create, delete: if isAdmin();
-
-      match /secrets/{docId} {
-        allow read, write: if request.auth != null && (
-          isAdmin() || (isCommunityStaff() && slug == getUserData().community)
-        );
-      }
       
       match /app_modules/{module} {
         allow read: if request.auth != null;
@@ -338,7 +326,6 @@ service cloud.firestore {
             request.auth == null
             && resource.data.get('source', '') == "self"
             && resource.data.get('createdBy', '') == "public"
-            && resource.data.get('publicToken', '') == get(/databases/$(database)/documents/communities/$(slug)/secrets/visitor_public).data.get('token', '')
           );
         allow list: if request.auth != null && (
           isAdmin()

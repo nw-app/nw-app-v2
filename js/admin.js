@@ -961,22 +961,12 @@
       }
     };
 
-    setStatus("載入中…", false);
-    ensurePublicToken().then((token) => {
-      if (!token) {
-        setStatus("無法取得訪客公開Token，請確認已登入且具備權限。", true);
-        if (inputEl) inputEl.value = "";
-        renderQr();
-        return;
-      }
-      const u = new URL("visitor.html", publicBase);
-      u.searchParams.set("c", key);
-      u.searchParams.set("t", token);
-      const fixedUrl = u.toString();
-      if (inputEl) inputEl.value = fixedUrl;
-      renderQr();
-      setStatus("提示：此網址為固定產生（依社區）。", false);
-    });
+    const u = new URL("visitor.html", publicBase);
+    u.searchParams.set("c", key);
+    const fixedUrl = u.toString();
+    if (inputEl) inputEl.value = fixedUrl;
+    renderQr();
+    setStatus("提示：此網址為固定產生（依社區）。", false);
 
     const onOpen = () => {
       const url = String(inputEl ? inputEl.value : "").trim();

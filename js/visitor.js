@@ -77,8 +77,6 @@
 
   const main = async () => {
     const cKey = getParam("c");
-    const publicToken = getParam("t");
-    const canPublicWrite = String(publicToken || "").trim().length >= 16;
     if (!cKey) {
       setStatus("缺少社區代碼。", true);
       return;
@@ -193,12 +191,6 @@
     const cname = String((community.data && community.data.name) || "").trim() || "—";
     if (pageTitle) pageTitle.textContent = `訪客登記-${cname}`;
     fillUnitList(community.data && Array.isArray(community.data.units) ? community.data.units : []);
-
-    if (!canPublicWrite) {
-      setStatus("此連結缺少驗證碼，請重新掃描社區提供的 QR code。", true);
-      try { if (btnFooterSubmit) btnFooterSubmit.disabled = true; } catch {}
-      return;
-    }
 
     // 載入表單暫存
     loadFormCache();
@@ -436,7 +428,6 @@
         createdBy: "public",
         createdByName: "訪客自填",
       };
-      payload.publicToken = String(publicToken || "").trim();
 
       try {
         await docRef.set(payload, { merge: true });
