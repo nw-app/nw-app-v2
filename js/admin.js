@@ -911,10 +911,6 @@
       const basePath = pathParts.join("/");
       return `${origin}${basePath}/`;
     })();
-    const u = new URL("visitor.html", publicBase);
-    u.searchParams.set("c", key);
-    const fixedUrl = u.toString();
-    if (inputEl) inputEl.value = fixedUrl;
 
     const renderQr = () => {
       const url = String(inputEl ? inputEl.value : "").trim();
@@ -941,8 +937,46 @@
       a.appendChild(img);
       imgWrap.appendChild(a);
     };
-    renderQr();
-    setStatus("提示：此網址為固定產生（依社區）。", false);
+    const toHex = (bytes) => Array.from(bytes || []).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const genToken = () => {
+      try {
+        const buf = new Uint8Array(16);
+        (crypto && crypto.getRandomValues ? crypto.getRandomValues(buf) : buf);
+        return toHex(buf);
+      } catch {
+        return `${Date.now()}${Math.random()}`.replace(/[^a-zA-Z0-9]/g, "").slice(0, 32).padEnd(32, "0");
+      }
+    };
+    const ensurePublicToken = async () => {
+      try {
+        const ref = db.collection("communities").doc(cid).collection("secrets").doc("visitor_public");
+        const snap = await ref.get();
+        const existing = snap && snap.exists ? String((snap.data() || {}).token || "").trim() : "";
+        if (existing.length >= 16) return existing;
+        const next = genToken();
+        await ref.set({ token: next }, { merge: true });
+        return next;
+      } catch {
+        return "";
+      }
+    };
+
+    setStatus("載入中…", false);
+    ensurePublicToken().then((token) => {
+      if (!token) {
+        setStatus("無法取得訪客公開Token，請確認已登入且具備權限。", true);
+        if (inputEl) inputEl.value = "";
+        renderQr();
+        return;
+      }
+      const u = new URL("visitor.html", publicBase);
+      u.searchParams.set("c", key);
+      u.searchParams.set("t", token);
+      const fixedUrl = u.toString();
+      if (inputEl) inputEl.value = fixedUrl;
+      renderQr();
+      setStatus("提示：此網址為固定產生（依社區）。", false);
+    });
 
     const onOpen = () => {
       const url = String(inputEl ? inputEl.value : "").trim();

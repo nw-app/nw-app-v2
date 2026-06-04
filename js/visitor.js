@@ -77,6 +77,8 @@
 
   const main = async () => {
     const cKey = getParam("c");
+    const publicToken = getParam("t");
+    const canPublicWrite = String(publicToken || "").trim().length >= 16;
     if (!cKey) {
       setStatus("缺少社區代碼。", true);
       return;
@@ -189,18 +191,20 @@
     }
     const cid = community.id;
     const cname = String((community.data && community.data.name) || "").trim() || "—";
-    const publicToken = String((community.data && community.data.visitorPublicToken) || "").trim();
-    const canPublicWrite = publicToken.length >= 16;
     if (pageTitle) pageTitle.textContent = `訪客登記-${cname}`;
     fillUnitList(community.data && Array.isArray(community.data.units) ? community.data.units : []);
+
+    if (!canPublicWrite) {
+      setStatus("此連結缺少驗證碼，請重新掃描社區提供的 QR code。", true);
+      try { if (btnFooterSubmit) btnFooterSubmit.disabled = true; } catch {}
+      return;
+    }
 
     // 載入表單暫存
     loadFormCache();
 
     // 監聽輸入以自動暫存
     form?.addEventListener("input", saveFormCache);
-
-    if (!canPublicWrite) ensureAnonAuth(auth, false).catch(() => {});
 
     const updatePurposeOther = () => {
       const v = String(purposeTypeEl ? purposeTypeEl.value : "").trim();
@@ -403,19 +407,7 @@
         return;
       }
       
-      let user = auth.currentUser;
-      if (!canPublicWrite) {
-        if (!user) {
-          try {
-            setStatus("正在提交...", false);
-            user = await ensureAnonAuth(auth, false);
-          } catch (err) {
-            setStatus(`提交失敗：${buildConnectErrorMessage(err)}`, true);
-            if (btnFooterSubmit) btnFooterSubmit.disabled = false;
-            return;
-          }
-        }
-      }
+      setStatus("正在提交...", false);
 
       const docRef = db.collection("communities").doc(cid).collection("visitors").doc();
       const vid = docRef.id;
@@ -441,10 +433,10 @@
         passAuthorizedAt: null,
         createdAt: nowTs,
         updatedAt: nowTs,
-        createdBy: canPublicWrite ? "public" : user.uid,
+        createdBy: "public",
         createdByName: "訪客自填",
       };
-      if (canPublicWrite) payload.publicToken = publicToken;
+      payload.publicToken = String(publicToken || "").trim();
 
       try {
         await docRef.set(payload, { merge: true });
