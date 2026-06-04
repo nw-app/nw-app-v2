@@ -7767,6 +7767,8 @@
   }
 
   function renderDashboard() {
+    const layoutEl = document.querySelector(".layout");
+    if (layoutEl) layoutEl.classList.remove("visitor-main-lock");
     if (subnavEl) subnavEl.innerHTML = "";
     stopVisitorsSubscription();
     contentEl.innerHTML = `
@@ -7815,6 +7817,8 @@
   }
 
   function renderModule(moduleId) {
+    const layoutEl = document.querySelector(".layout");
+    if (layoutEl) layoutEl.classList.toggle("visitor-main-lock", moduleId === "visitor");
     if (moduleId !== "visitor") stopVisitorsSubscription();
     if (moduleId !== "residents") stopResidentsSubscription();
     if (moduleId !== "parcel") stopParcelsSubscription();
