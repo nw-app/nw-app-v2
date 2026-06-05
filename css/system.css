@@ -950,6 +950,9 @@ input:focus, select:focus, textarea:focus {
   color: rgba(31, 41, 55, 0.78);
   font-weight: 900;
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .unit-tab-btn[aria-selected="true"] {
   background: #fff;

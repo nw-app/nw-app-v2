@@ -9,7 +9,7 @@
   "background_color": "#ffffff",
   "theme_color": "#d32f2f",
   "prefer_related_applications": false,
-  "orientation": "any",
+  "orientation": "portrait-primary",
   "icons": [
     {
       "src": "./icon-192.png",
@@ -24,7 +24,7 @@
       "purpose": "maskable"
     },
     {
-      "src": "./logo.svg",
+      "src": "./logo.svg?v=3",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"

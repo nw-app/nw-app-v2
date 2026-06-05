@@ -3273,7 +3273,8 @@
     const capacity = Math.max(1, Math.min(500, Number(data.capacity || data.quota || 1) || 1));
     const requireApproval = Boolean(data.requireApproval !== false);
     const enabled = Boolean(data.enabled !== false);
-    return { id: String(id || "").trim(), name, imageDataUrl, usageTime, chargeMethod, order, slotMinutes, openTime, closeTime, capacity, requireApproval, enabled };
+    const advanceBookingDays = Math.max(1, Math.min(365, Number(data.advanceBookingDays || 30) || 30));
+    return { id: String(id || "").trim(), name, imageDataUrl, usageTime, chargeMethod, order, slotMinutes, openTime, closeTime, capacity, requireApproval, enabled, advanceBookingDays };
   }
 
   async function loadFacilityConfigs80(cid) {
@@ -3401,6 +3402,7 @@
                     <th style="width: 110px;">時段(分)</th>
                     <th style="width: 110px;">名額</th>
                     <th style="width: 200px;">消費方式</th>
+                    <th style="width: 110px;">提前預約(天)</th>
                     <th style="width: 110px;">需審核</th>
                     <th style="width: 110px;">啟用</th>
                     <th style="width: 50px;"></th>
@@ -3464,6 +3466,7 @@
         <td><input type="number" class="f-slot" value="${escapeHtml(String(c.slotMinutes || 60))}" min="15" step="5" /></td>
         <td><input type="number" class="f-cap" value="${escapeHtml(String(c.capacity || 1))}" min="1" step="1" /></td>
         <td><input type="text" class="f-charge" value="${escapeHtml(chargeMethod)}" placeholder="例如 每小時100元/次" /></td>
+        <td><input type="number" class="f-advance" value="${escapeHtml(String(c.advanceBookingDays || 30))}" min="1" max="365" step="1" /></td>
         <td style="padding: 0 12px;"><input type="checkbox" class="f-approve" ${c.requireApproval !== false ? "checked" : ""} /></td>
         <td style="padding: 0 12px;"><input type="checkbox" class="f-enabled" ${c.enabled !== false ? "checked" : ""} /></td>
         <td><div class="remove-row" title="刪除">&times;</div></td>
@@ -3543,6 +3546,7 @@
           const slotMinutes = Math.max(15, Math.min(240, Number(tr.querySelector(".f-slot")?.value || 60) || 60));
           const capacity = Math.max(1, Math.min(500, Number(tr.querySelector(".f-cap")?.value || 1) || 1));
           const chargeMethod = String(tr.querySelector(".f-charge")?.value || "").trim();
+          const advanceBookingDays = Math.max(1, Math.min(365, Number(tr.querySelector(".f-advance")?.value || 30) || 30));
           const requireApproval = Boolean(tr.querySelector(".f-approve")?.checked);
           const enabled = Boolean(tr.querySelector(".f-enabled")?.checked);
           let id = String(tr.dataset.id || "").trim();
@@ -3558,6 +3562,7 @@
             slotMinutes,
             capacity,
             chargeMethod,
+            advanceBookingDays,
             requireApproval,
             enabled,
             updatedAt: FieldValue.serverTimestamp(),
@@ -8043,7 +8048,7 @@
                 </div>
                 <div class="a4-content">
                   <div class="a4-header">
-                    <img src="logo.svg" class="a4-logo" alt="QAI生活網" />
+                    <img src="logo.svg?v=3" class="a4-logo" alt="QAI生活網" />
                     <h1 class="a4-title">QAI生活網</h1>
                     <p class="a4-subtitle">智慧社區服務系統｜住戶端 APP</p>
                   </div>

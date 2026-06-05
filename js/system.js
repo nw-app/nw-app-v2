@@ -1728,7 +1728,8 @@
 
       // 內部連結選項
       const internalLinks = [
-        { value: "parcel.html", label: "包裹郵件" }
+        { value: "parcel.html", label: "包裹郵件" },
+        { value: "facility.html", label: "設施預約" }
       ];
 
       let html = "";

@@ -117,7 +117,7 @@
     el.hidden = true;
     el.innerHTML = `
       <div class="row1">
-        <div class="logo" aria-hidden="true"><img src="logo.svg" alt="" /></div>
+        <div class="logo" aria-hidden="true"><img src="logo.svg?v=3" alt="" /></div>
         <div class="meta">
           <div class="title">安裝「QAI生活網」</div>
           <div class="sub">加入主畫面後可像 App 一樣使用</div>
