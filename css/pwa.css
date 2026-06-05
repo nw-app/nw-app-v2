@@ -66,13 +66,17 @@ a, button {
 
 html.force-portrait body {
   background: #0b0f16;
+  overflow: hidden;
 }
 
 html.force-portrait .wrap,
-html.force-portrait .layout {
+html.force-portrait .layout,
+html.force-portrait .parcel-layout,
+html.force-portrait .v-page {
   max-width: min(520px, calc(100vh - 24px));
   margin-left: auto;
   margin-right: auto;
+  position: relative;
 }
 
 html.force-portrait .pwa-install {
@@ -80,6 +84,59 @@ html.force-portrait .pwa-install {
   right: auto;
   transform: translateX(-50%);
   width: min(520px, calc(100vh - 24px));
+}
+
+/* 強制直屏時的旋轉顯示效果 */
+html.force-portrait-rotate body {
+  background: #0b0f16;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  position: relative;
+}
+
+html.force-portrait-rotate .wrap,
+html.force-portrait-rotate .layout,
+html.force-portrait-rotate .parcel-layout,
+html.force-portrait-rotate .v-page {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: center center;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  width: 100vh;
+  height: 100vw;
+  max-width: none;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+html.force-portrait-rotate .pwa-install {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%) rotate(-90deg);
+  transform-origin: center bottom;
+  width: min(520px, calc(100vh - 24px));
+}
+
+/* 強制直屏時的額外樣式優化 - 非旋轉版本 */
+@media screen and (orientation: landscape) {
+  html.force-portrait:not(.force-portrait-rotate) body {
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  html.force-portrait:not(.force-portrait-rotate) .wrap,
+  html.force-portrait:not(.force-portrait-rotate) .layout,
+  html.force-portrait:not(.force-portrait-rotate) .parcel-layout,
+  html.force-portrait:not(.force-portrait-rotate) .v-page {
+    height: 100vh;
+    width: 100%;
+    max-width: min(520px, calc(100vh - 24px));
+  }
 }
 
 .user-avatar {

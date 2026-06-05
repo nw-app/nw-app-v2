@@ -22,16 +22,33 @@
   function isPhoneLike() {
     const hasTouch = typeof navigator !== "undefined" && Number(navigator.maxTouchPoints || 0) > 0;
     if (!hasTouch) return false;
+    
     const ua = typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "";
+    
+    // 檢查是否為平板：iPad 或 Android 平板
+    const isTablet = /iPad|Tablet|Android(?!.*Mobile)/i.test(ua);
+    if (isTablet) return false;
+    
+    // 檢查是否為手機
     const isMobileUa = /\bMobi\b|iPhone|iPod|Android.*Mobile/i.test(ua);
     if (!isMobileUa) return false;
+    
+    // 進一步根據螢幕尺寸判斷
     const shortest = Math.min(Number(window.innerWidth || 0), Number(window.innerHeight || 0));
-    return shortest > 0 && shortest <= 900;
-  }
+    const longest = Math.max(Number(window.innerWidth || 0), Number(window.innerHeight || 0));
+    
+    // 如果短邊超過 900px 或長寬比接近 1:1（接近正方形），可能是平板
+    if (shortest > 900) return false;
+    if (shortest > 0 && longest / shortest < 1.2) return false;
+    
+    return true;
+}
 
   function updateForcePortrait() {
     const isLandscape = window.innerWidth > window.innerHeight;
-    document.documentElement.classList.toggle("force-portrait", Boolean(isPhoneLike() && isLandscape));
+    const shouldForcePortrait = Boolean(isPhoneLike() && isLandscape);
+    
+    document.documentElement.classList.toggle("force-portrait", shouldForcePortrait);
   }
 
   function isStandalone() {
@@ -40,16 +57,31 @@
 
   async function updateOrientationLock() {
     if (!isStandalone()) return;
+    
     const o = window.screen && window.screen.orientation;
     if (!o || typeof o.lock !== "function") return;
 
     if (isPhoneLike()) {
+      // 在手機上，嘗試鎖定直屏
       try {
+        // 先解鎖以確保狀態正確
+        if (typeof o.unlock === "function") {
+          try { o.unlock(); } catch {}
+        }
+        // 嘗試鎖定 portrait-primary（豎屏，主方向）
         await o.lock("portrait-primary");
-      } catch {}
+      } catch (e1) {
+        // 如果失敗，嘗試鎖定任意 portrait 方向
+        try {
+          await o.lock("portrait");
+        } catch (e2) {
+          // 如果還是失敗，至少不報錯
+        }
+      }
       return;
     }
 
+    // 在平板上，解鎖以允許自由旋轉
     if (typeof o.unlock === "function") {
       try {
         o.unlock();
@@ -941,14 +973,24 @@
       }).catch(() => {});
   });
 
-  window.addEventListener("resize", () => {
-    updateForcePortrait();
-    updateOrientationLock();
+  // 多個事件監聽確保方向鎖定
+  const orientationEvents = ["resize", "orientationchange", "fullscreenchange", "webkitfullscreenchange"];
+  
+  orientationEvents.forEach(eventName => {
+    window.addEventListener(eventName, () => {
+      updateForcePortrait();
+      updateOrientationLock();
+    });
   });
-  window.addEventListener("orientationchange", () => {
-    updateForcePortrait();
-    updateOrientationLock();
-  });
+  
+  // 定期嘗試重新鎖定方向（防止某些瀏覽器解鎖）
+  if (isPhoneLike()) {
+    setInterval(() => {
+      if (isStandalone()) {
+        updateOrientationLock();
+      }
+    }, 2000); // 每 2 秒檢查一次
+  }
 
   let didReloadForSw = false;
   navigator.serviceWorker?.addEventListener?.("controllerchange", () => {
