@@ -34,7 +34,16 @@
         </div>
 
         <div class="parcel-list hidden" id="myBookingsList">
-          <div class="status">載入中...</div>
+          <div class="my-bookings-tabs" style="margin-bottom: 12px;">
+            <button class="my-bookings-tab-btn active" type="button" data-subtab="recent">近期預約</button>
+            <button class="my-bookings-tab-btn" type="button" data-subtab="history">歷史預約</button>
+          </div>
+          <div id="recentBookings" class="booking-list-container">
+            <div class="status">載入中...</div>
+          </div>
+          <div id="historyBookings" class="booking-list-container hidden">
+            <div class="status">載入中...</div>
+          </div>
         </div>
       </main>
 

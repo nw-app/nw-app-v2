@@ -4213,6 +4213,30 @@
 
     let facilities = [];
     let currentReservations = [];
+    let pendingReservationsByFacility = {}; // 按设施统计待审核预约
+    let totalPendingReservations = 0; // 总待审核数
+    let unsubscribePendingListener = null; // 实时监听器取消函数
+
+    // 更新底部导航栏的总数字泡泡
+    const updateBottomNavBadge = () => {
+      const bottomNav = document.querySelector('.frame-ft nav');
+      if (!bottomNav) return;
+      
+      const facilityLink = bottomNav.querySelector('a[href="#community/facility"]');
+      if (!facilityLink) return;
+      
+      // 移除旧的badge
+      const oldBadge = facilityLink.querySelector('.nav-badge');
+      if (oldBadge) oldBadge.remove();
+      
+      // 添加新的badge（如果有数据）
+      if (totalPendingReservations > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'nav-badge';
+        badge.textContent = String(totalPendingReservations);
+        facilityLink.appendChild(badge);
+      }
+    };
 
     const fillFacilitySelect = () => {
       if (!selFacility) return;
@@ -4227,9 +4251,32 @@
       subnavButtonsWrap.innerHTML = enabled.map((f) => {
         const id = String(f.id || "");
         const name = String(f.name || id || "設施");
+        const pendingCount = pendingReservationsByFacility[id] || 0;
         const cls = `btn btn-sm ${id === activeId ? "btn-primary" : ""}`;
-        return `<button class="${cls}" type="button" data-facility-id="${escapeHtml(id)}" draggable="true">${escapeHtml(name)}</button>`;
+        return `<button class="${cls}" type="button" data-facility-id="${escapeHtml(id)}" draggable="true">
+          ${pendingCount > 0 ? `<span class="badge-inline">${pendingCount}</span>` : ''}
+          ${escapeHtml(name)}
+        </button>`;
       }).join("");
+      
+      // 同时更新底部导航
+      updateBottomNavBadge();
+    };
+
+    const countPendingReservations = () => {
+      const stats = {};
+      let total = 0;
+      currentReservations.forEach(r => {
+        if (String(r.status || "pending") === "pending") {
+          const fid = String(r.facilityId || "").trim();
+          if (fid) {
+            stats[fid] = (stats[fid] || 0) + 1;
+            total++;
+          }
+        }
+      });
+      pendingReservationsByFacility = stats;
+      totalPendingReservations = total;
     };
 
     const renderReservations = () => {
@@ -4298,6 +4345,47 @@
       }).join("");
     };
 
+    // 使用 Firestore 实时监听器
+    const setupPendingListener = () => {
+      // 取消旧的监听器
+      if (unsubscribePendingListener) {
+        try { unsubscribePendingListener(); } catch {}
+      }
+      
+      try {
+        unsubscribePendingListener = db.collection("communities").doc(cid).collection("reservations")
+          .where("status", "==", "pending")
+          .onSnapshot((snap) => {
+            const list = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
+            
+            // 统计每个设施的待审核数量和总数
+            const stats = {};
+            let total = 0;
+            list.forEach(r => {
+              const fid = String(r.facilityId || "").trim();
+              if (fid) {
+                stats[fid] = (stats[fid] || 0) + 1;
+                total++;
+              }
+            });
+            
+            pendingReservationsByFacility = stats;
+            totalPendingReservations = total;
+            
+            // 重新渲染按钮和底部导航
+            renderFacilityButtons();
+          }, () => {
+            // 监听器出错时处理
+            pendingReservationsByFacility = {};
+            totalPendingReservations = 0;
+            renderFacilityButtons();
+          });
+      } catch {
+        pendingReservationsByFacility = {};
+        totalPendingReservations = 0;
+      }
+    };
+
     const refreshReservations = async () => {
       const dateKey = inputDate ? String(inputDate.value || "").trim() : "";
       const fid = selFacility ? String(selFacility.value || "").trim() : "";
@@ -4309,6 +4397,7 @@
       setStatus("讀取中...", false);
       currentReservations = await loadReservationsByFacilityDate80({ cid, facilityId: fid, dateKey });
       setStatus("", false);
+      // 重新渲染表格（数字泡泡由实时监听器处理）
       renderReservations();
     };
 
@@ -4320,6 +4409,8 @@
 
     const init = async () => {
       await refreshFacilities();
+      // 设置实时监听器
+      setupPendingListener();
       if (inputDate) inputDate.value = ymd80(new Date());
       await refreshReservations();
     };

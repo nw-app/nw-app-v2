@@ -1,6 +1,6 @@
 {
   "name": "QAI生活網",
-  "short_name": "守護星",
+  "short_name": "QAI生活網",
   "id": "./",
   "start_url": "./?source=pwa",
   "scope": "./",

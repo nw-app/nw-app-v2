@@ -1740,6 +1740,7 @@
         
         // 檢查是否為內部連結
         const isInternalLink = internalLinks.some(link => link.value === b.url);
+        const selectedInternalValue = isInternalLink ? b.url : "";
         
         html += `
           <div class="button-slot" data-slot-index="${i}">
@@ -1756,7 +1757,7 @@
                 <div class="url-with-check">
                   <select data-btn-internal="${i}">
                     <option value="">自訂連結</option>
-                    ${internalLinks.map(link => `<option value="${link.value}" ${b.url === link.value ? "selected" : ""}>${link.label}</option>`).join("")}
+                    ${internalLinks.map(link => `<option value="${link.value}" ${selectedInternalValue === link.value ? "selected" : ""}>${link.label}</option>`).join("")}
                   </select>
                   <input type="text" value="${isInternalLink ? "" : (b.url || "")}" placeholder="#" data-btn-url="${i}" ${isInternalLink ? "disabled" : ""} />
                   <label class="check-inline">
@@ -2168,7 +2169,15 @@
             const buttons = [];
             for (let i = 0; i < 8; i++) {
               const name = container.querySelector(`[data-btn-name="${i}"]`)?.value || "";
-              const url = container.querySelector(`[data-btn-url="${i}"]`)?.value || "";
+              // 優先從內部連結選擇框獲取，如果沒有再從 URL 輸入框獲取
+              const internalSelect = container.querySelector(`[data-btn-internal="${i}"]`);
+              const urlInput = container.querySelector(`[data-btn-url="${i}"]`);
+              let url = "";
+              if (internalSelect && internalSelect.value) {
+                url = internalSelect.value;
+              } else if (urlInput) {
+                url = urlInput.value || "";
+              }
               const openExternal = container.querySelector(`[data-btn-external="${i}"]`)?.checked || false;
               const iconUrl = container.querySelector(`[data-btn-icon="${i}"]`)?.value || "";
               const data = document.getElementById(`${containerId}_preview_${i}`)?.getAttribute("data-slot-data") || "";

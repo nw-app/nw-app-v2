@@ -39,6 +39,8 @@
   let currentUserId = null;
   let currentUserName = "";
   let currentUserHouseNo = "";
+  let pendingReservationsByFacility = {}; // 按设施统计待审核预约
+  let totalPendingReservations = 0;
 
   function switchTab(tab) {
     tabBtns.forEach(btn => {
@@ -51,6 +53,26 @@
     } else {
       bookList.classList.add('hidden');
       myBookingsList.classList.remove('hidden');
+    }
+  }
+
+  function switchMyBookingsTab(subtab) {
+    const myBookingsTabBtns = document.querySelectorAll('.my-bookings-tab-btn');
+    myBookingsTabBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.subtab === subtab);
+    });
+
+    const recentBookingsEl = document.getElementById('recentBookings');
+    const historyBookingsEl = document.getElementById('historyBookings');
+    
+    if (recentBookingsEl && historyBookingsEl) {
+      if (subtab === 'recent') {
+        recentBookingsEl.classList.remove('hidden');
+        historyBookingsEl.classList.add('hidden');
+      } else {
+        recentBookingsEl.classList.add('hidden');
+        historyBookingsEl.classList.remove('hidden');
+      }
     }
   }
 
@@ -180,6 +202,8 @@
       ? `background-image: url('${facility.imageDataUrl}'); background-size: cover; background-position: center;`
       : '';
     
+    const pendingCount = pendingReservationsByFacility[facility.id] || 0;
+    
     return `
       <div class="parcel-item facility-item">
         <div class="facility-preview facility-preview-responsive" style="${imageStyle}">
@@ -203,10 +227,11 @@
           ${facility.requireApproval ? `<div class="parcel-date" style="color: #d32f2f;">需要審核</div>` : '<div class="parcel-date" style="color: #10b981;">免審核</div>'}
         </div>
         <button class="btn btn-primary facility-book-btn" onclick="window.bookFacility && window.bookFacility('${facility.id}', '${facility.name}')">
+          ${pendingCount > 0 ? `<span class="badge-inline">${pendingCount}</span>` : ''}
           預約
         </button>
       </div>
-  `;
+    `;
 }
 
 function renderReservationItem(reservation) {
@@ -223,9 +248,34 @@ function renderReservationItem(reservation) {
     'rejected': 'error',
     'canceled': 'secondary'
   }[String(reservation.status || 'pending')] || 'warning';
+
+  // 确定预约状态样式
+  const now = new Date();
+  let itemClass = 'reservation-item';
+  let canCancel = false;
   
+  if (['pending', 'approved'].includes(String(reservation.status || ''))) {
+    const endDateTime = makeDateTime80(reservation.dateKey, reservation.endTime);
+    if (endDateTime && endDateTime < now) {
+      // 已结束
+      itemClass += ' self-used';
+    } else if (String(reservation.status) === 'approved') {
+      // 已预约且未结束，可取消
+      itemClass += ' self-booked';
+      canCancel = true;
+    } else if (String(reservation.status) === 'pending') {
+      // 待审核且未结束，可取消
+      itemClass += ' self-pending';
+      canCancel = true;
+    }
+  }
+
+  const onclickAttr = canCancel 
+    ? `onclick="openCancelReservationModal('${reservation.id}', '${escapeHtml(reservation.facilityName)}', '${reservation.dateKey}', '${reservation.startTime}', '${reservation.endTime}')"` 
+    : '';
+
   return `
-    <div class="parcel-item reservation-item">
+    <div class="parcel-item ${itemClass}" ${onclickAttr}>
       <div class="parcel-info">
         <div class="parcel-no" style="font-size: 18px; font-weight: 800;">${escapeHtml(reservation.facilityName || '設施')}</div>
         <div class="parcel-desc">日期：${escapeHtml(reservation.dateKey || '')}</div>
@@ -237,19 +287,51 @@ function renderReservationItem(reservation) {
 }
 
 async function loadAndRenderMyReservations() {
-  if (!myBookingsList) return;
+  const recentBookingsEl = document.getElementById('recentBookings');
+  const historyBookingsEl = document.getElementById('historyBookings');
+  if (!recentBookingsEl || !historyBookingsEl) return;
   
   try {
+    console.log('加载预约 - currentCommunityId:', currentCommunityId, 'currentUserId:', currentUserId);
     const reservations = await loadUserReservations(currentCommunityId, currentUserId);
+    console.log('找到的预约数量:', reservations.length);
+    console.log('预约数据:', reservations);
     
-    if (!reservations.length) {
-      myBookingsList.innerHTML = '<div class="status">目前沒有預約資料</div>';
+    const now = new Date();
+    
+    // 分离近期预约和历史预约
+    const recentReservations = [];
+    const historyReservations = [];
+    
+    reservations.forEach(reservation => {
+      const endDateTime = makeDateTime80(reservation.dateKey, reservation.endTime);
+      if (endDateTime && endDateTime >= now) {
+        // 未结束的预约
+        recentReservations.push(reservation);
+      } else {
+        // 已结束的预约
+        historyReservations.push(reservation);
+      }
+    });
+    
+    // 渲染近期预约
+    if (!recentReservations.length) {
+      recentBookingsEl.innerHTML = '<div class="status">目前沒有近期預約</div>';
     } else {
-      myBookingsList.innerHTML = reservations.map(renderReservationItem).join('');
+      recentBookingsEl.innerHTML = recentReservations.map(renderReservationItem).join('');
     }
+    
+    // 渲染历史预约
+    if (!historyReservations.length) {
+      historyBookingsEl.innerHTML = '<div class="status">目前沒有歷史預約</div>';
+    } else {
+      historyBookingsEl.innerHTML = historyReservations.map(renderReservationItem).join('');
+    }
+    
   } catch (e) {
     console.error('Error loading reservations:', e);
-    myBookingsList.innerHTML = '<div class="status error">載入預約失敗，請稍後再試</div>';
+    recentBookingsEl.innerHTML = '<div class="status error">載入預約失敗，請稍後再試</div>';
+    historyBookingsEl.innerHTML = '<div class="status error">載入預約失敗，請稍後再試</div>';
   }
 }
 
@@ -310,6 +392,13 @@ async function loadFacilities(userData) {
         facilitiesData[f.id] = f;
       });
       
+      // 加载预约统计
+      if (currentCommunityId) {
+        await loadReservationsByFacility(currentCommunityId);
+      }
+      
+      // 渲染设施列表
+      if (!bookList) return;
       if (!facilities.length) {
         bookList.innerHTML = '<div class="status">目前沒有開放預約的設施</div>';
       } else {
@@ -418,16 +507,95 @@ async function loadFacilities(userData) {
   async function loadUserReservations(cid, userId) {
     const communityId = String(cid || "").trim() || "default";
     const uid = String(userId || "").trim();
+    console.log('loadUserReservations - communityId:', communityId, 'userId:', uid);
     if (!uid) return [];
     try {
-      const snap = await db.collection("communities").doc(communityId).collection("reservations")
-        .where("createdBy", "==", uid)
-        .orderBy("createdAt", "desc")
-        .limit(50)
-        .get();
-      return (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
-    } catch {
+      // 先尝试获取该社区的所有预约，然后在本地过滤（避免索引问题）
+      console.log('尝试获取社区所有预约...');
+      let snap;
+      try {
+        snap = await db.collection("communities").doc(communityId).collection("reservations")
+          .get();
+      } catch (error) {
+        console.log('查询失败，尝试其他方式');
+        snap = { size: 0, docs: [] };
+      }
+      
+      // 在本地过滤出该用户的预约
+      const allReservations = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
+      console.log('该社区的所有预约数量:', allReservations.length);
+      console.log('所有预约数据:', allReservations);
+      
+      const userReservations = allReservations.filter(r => {
+        // 尝试多种可能的用户ID字段
+        const matchById = String(r.createdBy || r.uid || r.userId || r.userUid || '') === uid;
+        const matchByName = String(r.createdByName || r.userName || r.name || '') === currentUserName;
+        const matchByUnit = String(r.unit || '') === currentUserHouseNo;
+        return matchById || matchByName || matchByUnit;
+      });
+      
+      // 按创建时间排序（新的在前）
+      userReservations.sort((a, b) => {
+        const timeA = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
+        const timeB = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
+        return timeB - timeA;
+      });
+      
+      console.log('本地过滤后的预约数量:', userReservations.length);
+      console.log('本地过滤后的预约记录:', userReservations);
+      return userReservations;
+    } catch (e) {
+      console.error('loadUserReservations error:', e);
       return [];
+    }
+  }
+
+  async function loadReservationsByFacility(cid) {
+    const communityId = String(cid || "").trim() || "default";
+    try {
+      const snap = await db.collection("communities").doc(communityId).collection("reservations")
+        .where("status", "in", ["pending", "approved"])
+        .get();
+      const list = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
+      
+      // 获取当前时间
+      const now = new Date();
+      
+      // 统计每个设施的预约数量（包括待审核和免审核，但只统计未过期的预约
+      const stats = {};
+      let total = 0;
+      list.forEach(r => {
+        const fid = String(r.facilityId || "").trim();
+        if (fid) {
+          // 检查预约时间是否已过
+          let isExpired = false;
+          
+          if (r.endAt) {
+            const endDate = r.endAt.toDate ? r.endAt.toDate() : new Date(r.endAt);
+            if (endDate < now) {
+              isExpired = true;
+            }
+          } else if (r.dateKey && r.endTime) {
+            // 如果没有 endAt，尝试用 dateKey 和 endTime 构建时间
+            const endDateTime = makeDateTime80(r.dateKey, r.endTime);
+            if (endDateTime && endDateTime < now) {
+              isExpired = true;
+            }
+          }
+          
+          if (!isExpired) {
+            stats[fid] = (stats[fid] || 0);
+            stats[fid]++;
+            total++;
+          }
+        }
+      });
+      
+      pendingReservationsByFacility = stats;
+      totalPendingReservations = total;
+    } catch {
+      pendingReservationsByFacility = {};
+      totalPendingReservations = 0;
     }
   }
 
@@ -461,7 +629,7 @@ async function loadFacilities(userData) {
     return slots;
   }
 
-  function openBookingModal(facilityId, facilityName) {
+  async function openBookingModal(facilityId, facilityName) {
     const facility = facilitiesData[facilityId];
     if (!facility) return;
     
@@ -483,25 +651,76 @@ async function loadFacilities(userData) {
     updateBookingDateDisplay();
     
     // 生成时间段
-    renderTimeSlots(facility);
+    await renderTimeSlots(facility);
     
     // 显示弹窗
     modal.hidden = false;
   }
 
-  function renderTimeSlots(facility) {
+  async function renderTimeSlots(facility) {
     const timesContainer = document.getElementById('bookingTimesContainer');
     if (!timesContainer) return;
-    
+
+    // 加载预约数据
+    const dateKey = ymd80(selectedDate);
+    const existingReservations = await loadReservationsByFacilityDate(
+      currentCommunityId,
+      facility.id,
+      dateKey
+    );
+
     // 生成时间段
     const slots = generateTimeSlots(facility);
+    const now = new Date();
+    const selectedDateStr = ymd80(selectedDate);
+    const todayStr = ymd80(new Date());
+
     const timesHtml = `
       <div class="booking-times-grid">
-        ${slots.map(slot => `
-          <button class="booking-time-btn" data-start="${slot.start}" data-end="${slot.end}">
-            ${slot.start} - ${slot.end}
-          </button>
-        `).join('')}
+        ${slots.map(slot => {
+          let status = 'available';
+          let reservationData = null;
+          const slotDateTime = makeDateTime80(dateKey, slot.start);
+          
+          // 检查时间是否已过
+          const isPast = selectedDateStr < todayStr || 
+            (selectedDateStr === todayStr && slotDateTime < now);
+          
+          if (isPast) {
+            status = 'past';
+          } else {
+            // 查找该时段的预约
+            const reservation = existingReservations.find(r => 
+              String(r.startTime) === slot.start && 
+              ['pending', 'approved'].includes(String(r.status))
+            );
+            
+            if (reservation) {
+              reservationData = reservation;
+              if (String(reservation.createdBy) === String(currentUserId)) {
+                // 自己的预约
+                // 这里简化处理，实际可以添加已使用/未使用的逻辑
+                status = 'self-booked';
+              } else {
+                // 他人预约
+                status = 'other-booked';
+              }
+            }
+          }
+
+          let className = 'booking-time-btn';
+          if (status === 'past') className += ' past';
+          else if (status === 'other-booked') className += ' other-booked';
+          else if (status === 'self-booked') className += ' self-booked';
+          else if (status === 'self-used') className += ' self-used';
+          else if (status === 'self-unused') className += ' self-unused';
+
+          return `
+            <button class="${className}" data-start="${slot.start}" data-end="${slot.end}" data-status="${status}" data-reservation-id="${reservationData ? reservationData.id : ''}">
+              ${slot.start} - ${slot.end}
+            </button>
+          `;
+        }).join('')}
       </div>
     `;
     timesContainer.innerHTML = timesHtml;
@@ -510,14 +729,18 @@ async function loadFacilities(userData) {
     const timeBtns = timesContainer.querySelectorAll('.booking-time-btn');
     timeBtns.forEach(btn => {
       btn.addEventListener('click', () => {
-        // 先移除所有选中状态
-        timeBtns.forEach(b => b.classList.remove('selected'));
-        // 添加当前按钮选中状态
-        btn.classList.add('selected');
-        
+        const status = btn.dataset.status;
         const start = btn.dataset.start;
         const end = btn.dataset.end;
-        handleTimeSlotSelect(facility, start, end);
+        const reservationId = btn.dataset.reservationId;
+        
+        if (status === 'self-booked' && reservationId) {
+          // 自己预约的，显示取消确认
+          openCancelConfirmModal(facility, start, end, reservationId);
+        } else if (status === 'available') {
+          // 可用时段，显示预约确认
+          handleTimeSlotSelect(facility, start, end);
+        }
       });
     });
   }
@@ -581,14 +804,14 @@ async function loadFacilities(userData) {
     document.getElementById('btnCloseDatePicker').addEventListener('click', closeDatePicker);
     document.getElementById('btnCancelDatePicker').addEventListener('click', closeDatePicker);
     
-    document.getElementById('btnConfirmDatePicker').addEventListener('click', () => {
+    document.getElementById('btnConfirmDatePicker').addEventListener('click', async () => {
       const selectedValue = datePickerInput.value;
       if (selectedValue) {
         const [year, month, day] = selectedValue.split('-').map(Number);
         selectedDate = new Date(year, month - 1, day);
         updateBookingDateDisplay();
         if (currentFacility) {
-          renderTimeSlots(currentFacility);
+          await renderTimeSlots(currentFacility);
         }
       }
       closeDatePicker();
@@ -744,6 +967,96 @@ async function loadFacilities(userData) {
     modal.hidden = false;
   }
 
+  function openCancelConfirmModal(facility, start, end, reservationId) {
+    const confirmHtml = `
+      <div class="booking-confirm-modal" id="cancelConfirmModal">
+        <div class="booking-confirm-backdrop" id="cancelConfirmBackdrop"></div>
+        <div class="booking-confirm-dialog">
+          <div class="booking-confirm-header">
+            <h3>確認取消預約</h3>
+            <button class="modal-close" type="button" id="btnCloseCancelConfirm" aria-label="關閉">×</button>
+          </div>
+          <div class="booking-confirm-body">
+            <div class="booking-confirm-info">
+              <div class="booking-confirm-row">
+                <span class="booking-confirm-label">設施名稱</span>
+                <span class="booking-confirm-value">${escapeHtml(facility.name)}</span>
+              </div>
+              <div class="booking-confirm-row">
+                <span class="booking-confirm-label">預約日期</span>
+                <span class="booking-confirm-value">${formatDateDisplay(selectedDate)}</span>
+              </div>
+              <div class="booking-confirm-row">
+                <span class="booking-confirm-label">預約時段</span>
+                <span class="booking-confirm-value">${start} - ${end}</span>
+              </div>
+            </div>
+          </div>
+          <div class="booking-confirm-footer">
+            <button class="btn" type="button" id="btnCancelCancel">返回</button>
+            <button class="btn btn-primary" type="button" id="btnConfirmCancel" style="background: #ef4444;">確認取消</button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // 添加到 body
+    const existing = document.getElementById('cancelConfirmModal');
+    if (existing) existing.remove();
+    
+    document.body.insertAdjacentHTML('beforeend', confirmHtml);
+    
+    const modal = document.getElementById('cancelConfirmModal');
+    const closeBtn = document.getElementById('btnCloseCancelConfirm');
+    const cancelBtn = document.getElementById('btnCancelCancel');
+    const confirmBtn = document.getElementById('btnConfirmCancel');
+    const backdrop = document.getElementById('cancelConfirmBackdrop');
+    
+    const closeModal = () => {
+      const el = document.getElementById('cancelConfirmModal');
+      if (el) el.remove();
+    };
+    
+    closeBtn.addEventListener('click', closeModal);
+    cancelBtn.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', closeModal);
+    
+    confirmBtn.addEventListener('click', async () => {
+      try {
+        // 取消预约
+        await db.collection('communities').doc(currentCommunityId).collection('reservations').doc(reservationId).update({
+          status: 'canceled',
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        alert('預約已取消');
+        closeModal();
+        
+        // 重新渲染时间槽
+        if (currentFacility) {
+          renderTimeSlots(currentFacility);
+        }
+        
+        // 重新加载预约列表
+        if (currentCommunityId && currentUserId) {
+          loadAndRenderMyReservations();
+        }
+        
+        // 重新加载设施预约统计
+        if (currentCommunityId) {
+          loadReservationsByFacility(currentCommunityId);
+        }
+        
+      } catch (e) {
+        console.error('Error canceling booking:', e);
+        alert('取消預約失敗，請稍後再試');
+      }
+    });
+    
+    // 显示弹窗
+    modal.hidden = false;
+  }
+
   async function loadProfile(user) {
     if (!user) return;
 
@@ -886,12 +1199,29 @@ async function loadFacilities(userData) {
     openBookingModal(facilityId, facilityName);
   };
 
+  // 全局取消预约函数
+  window.openCancelReservationModal = function (reservationId, facilityName, dateKey, startTime, endTime) {
+    const facility = {
+      id: '',
+      name: facilityName
+    };
+    openCancelConfirmModal(facility, startTime, endTime, reservationId);
+  };
+
   let authWaitTimer = null;
 
   function init() {
     tabBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         switchTab(btn.dataset.tab);
+      });
+    });
+
+    // 绑定我的预约的分页按钮
+    const myBookingsTabBtns = document.querySelectorAll('.my-bookings-tab-btn');
+    myBookingsTabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        switchMyBookingsTab(btn.dataset.subtab);
       });
     });
 

@@ -198,13 +198,30 @@ html.force-portrait-rotate .pwa-install {
   font-weight: 800;
   box-shadow: none;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 0;
   line-height: 1;
   border: none;
   background: #d32f2f;
   color: #fff;
+}
+
+.facility-book-btn .badge-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #9f1c1c;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .facility-book-btn:hover {
@@ -772,8 +789,77 @@ html.force-portrait-rotate .pwa-install {
   color: #fff;
 }
 
+.booking-time-btn.past {
+  background: #9ca3af;
+  border-color: #6b7280;
+  color: #fff;
+  cursor: not-allowed;
+}
+
+.booking-time-btn.other-booked {
+  background: #fed7aa;
+  border-color: #fdba74;
+  color: #9a3412;
+  cursor: not-allowed;
+}
+
+.booking-time-btn.self-booked {
+  background: #bfdbfe;
+  border-color: #93c5fd;
+  color: #1e40af;
+  cursor: pointer;
+}
+
+.booking-time-btn.self-used {
+  background: #bbf7d0;
+  border-color: #86efac;
+  color: #166534;
+  cursor: not-allowed;
+}
+
+.booking-time-btn.self-unused {
+  background: #fecaca;
+  border-color: #fca5a5;
+  color: #991b1b;
+  cursor: not-allowed;
+}
+
 .reservation-item {
-  margin-bottom: 12px;
+  margin-bottom: 6px;
+}
+
+.reservation-item.self-booked {
+  background-color: #bfdbfe;
+  border-color: #93c5fd;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reservation-item.self-booked:hover {
+  background-color: #93c5fd;
+}
+
+.reservation-item.self-used {
+  background-color: #bbf7d0;
+  border-color: #86efac;
+  cursor: not-allowed;
+}
+
+.reservation-item.self-unused {
+  background-color: #fecaca;
+  border-color: #fca5a5;
+  cursor: not-allowed;
+}
+
+.reservation-item.self-pending {
+  background-color: #fef3c7;
+  border-color: #fcd34d;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reservation-item.self-pending:hover {
+  background-color: #fcd34d;
 }
 
 .tag.success {
