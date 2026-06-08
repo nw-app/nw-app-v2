@@ -1,6 +1,6 @@
 {
-  "name": "QAI生活網",
-  "short_name": "QAI生活網",
+  "name": "生活網",
+  "short_name": "生活網",
   "id": "./",
   "start_url": "./?source=pwa",
   "scope": "./",

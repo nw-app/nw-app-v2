@@ -32,14 +32,14 @@
   ];
 
   const defaultRowFButtons = [
-    { name: "福利通", icon: "photo/b09.png", url: "#" },
-    { name: "銀髮族", icon: "photo/b10.png", url: "#" },
-    { name: "美食街", icon: "photo/b11.png", url: "#" },
-    { name: "購物樂", icon: "photo/b12.png", url: "#" },
-    { name: "聽音樂", icon: "photo/b13.png", url: "#" },
-    { name: "影視台", icon: "photo/b14.png", url: "#" },
-    { name: "電子書", icon: "photo/b15.png", url: "#" },
-    { name: "遊戲網", icon: "photo/b16.png", url: "#" },
+    { name: "福利通", icon: "photo/b09.png", url: "https://info.talk.tw/", openExternal: true },
+    { name: "銀髮族", icon: "photo/b10.png", url: "https://www.hpa.gov.tw/Pages/List.aspx?nodeid=39", openExternal: true },
+    { name: "美食街", icon: "photo/b11.png", url: "https://www.dachu.co/node/dishes", openExternal: false },
+    { name: "購物樂", icon: "photo/b12.png", url: "https://www.gomaji.com/?city=1", openExternal: true },
+    { name: "聽音樂", icon: "photo/b13.png", url: "https://tradio.gov.taipei/", openExternal: true },
+    { name: "影視台", icon: "photo/b14.png", url: "https://m.4gtv.tv/", openExternal: false },
+    { name: "電子書", icon: "photo/b15.png", url: "https://www.pubu.com.tw/", openExternal: true },
+    { name: "遊戲網", icon: "photo/b16.png", url: "https://www.pubu.com.tw/", openExternal: false },
   ];
 
   const state = {

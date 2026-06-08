@@ -2,6 +2,33 @@ a, button {
   cursor: pointer !important;
 }
 
+/* 隐藏垂直滚动条但保留滚动功能 */
+html, body {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+/* 隐藏Chrome, Safari和Opera的滚动条 */
+::-webkit-scrollbar {
+  display: none;
+}
+
+/* 确保所有可滚动元素也隐藏滚动条 */
+.scrollable,
+.scroll-container,
+.overflow-y-auto,
+.overflow-x-auto {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.scrollable::-webkit-scrollbar,
+.scroll-container::-webkit-scrollbar,
+.overflow-y-auto::-webkit-scrollbar,
+.overflow-x-auto::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
+
 :root {
   --brand: #d32f2f;
 }
@@ -29,8 +56,8 @@ a, button {
   min-width: 0;
 }
 .pwa-install .logo {
-  width: 42px;
-  height: 42px;
+  width: 56px;
+  height: 56px;
   border-radius: 14px;
   border: 1px solid rgba(17, 24, 39, 0.12);
   background: #fff;
@@ -39,7 +66,7 @@ a, button {
   overflow: hidden;
   flex: 0 0 auto;
 }
-.pwa-install .logo img { width: 32px; height: 32px; display: block; }
+.pwa-install .logo img { width: 44px; height: 44px; display: block; }
 .pwa-install .meta { min-width: 0; }
 .pwa-install .title { font-weight: 900; letter-spacing: 0.2px; }
 .pwa-install .sub { font-size: 12px; color: rgba(31, 41, 55, 0.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -391,8 +418,10 @@ html.force-portrait-rotate .pwa-install {
   position: fixed;
   inset: 0;
   z-index: 100;
-  display: grid;
-  place-items: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
 }
 .modal-backdrop {
   position: absolute;
@@ -403,8 +432,10 @@ html.force-portrait-rotate .pwa-install {
 .modal-dialog {
   position: relative;
   z-index: 1;
-  width: 80vw;
-  height: 80vh;
+  width: 90vw;
+  height: 90vh;
+  max-width: 90vw;
+  max-height: 90vh;
   background: rgba(255, 255, 255, 0.98);
   border: 1px solid rgba(17, 24, 39, 0.14);
   border-radius: 16px;
@@ -412,11 +443,17 @@ html.force-portrait-rotate .pwa-install {
   display: grid;
   grid-template-rows: auto 1fr;
   overflow: hidden;
-  margin: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+/* 确保模态框对话框可以容纳滚动内容 */
+.modal-dialog > * {
+  min-width: 0;
+  box-sizing: border-box;
 }
 .modal-dialog.large {
-  width: 80vw;
-  height: 80vh;
+  width: min(1100px, 95vw);
+  height: 85vh;
 }
 .modal-dialog.full {
   width: 100vw;
@@ -446,6 +483,8 @@ html.force-portrait-rotate .pwa-install {
   padding: 12px 12px;
   border-bottom: 1px solid rgba(17, 24, 39, 0.1);
   min-height: 52px;
+  box-sizing: border-box;
+  width: 100%;
 }
 .modal-hd-left {
   width: 0;
@@ -896,8 +935,35 @@ html.force-portrait-rotate .pwa-install {
   cursor: pointer;
 }
 .modal-close:hover { background: rgba(17, 24, 39, 0.06); }
-.modal-dialog form { min-height: 0; display: grid; grid-template-rows: 1fr auto; }
-.modal-body { padding: 12px 12px; overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 16px; }
+.modal-dialog form { min-height: 0; display: grid; grid-template-rows: 1fr auto; width: 100%; box-sizing: border-box; }
+.modal-body {
+  padding: 12px 12px;
+  overflow-x: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  /* 确保内容可以溢出并滚动 */
+}
+
+/* 确保模态框内容不会被压缩 */
+.modal-body > * {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* 确保表格等宽内容可以水平滚动 */
+.modal-body table,
+.modal-body .wide-content {
+  max-width: 100%;
+  overflow-x: auto;
+  display: block;
+}
 .modal-body.no-padding { padding: 0; }
 .modal-body .image-uploader { flex: 0 0 auto; }
 .modal-ft {
@@ -1036,4 +1102,63 @@ html.force-portrait-rotate .pwa-install {
   background: #fff;
   border-radius: 0;
   border: 1px solid rgba(17, 24, 39, 0.12);
+}
+
+/* 手机竖屏模态框响应式样式 */
+@media (max-width: 768px) {
+  .modal-dialog {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    height: 85vh;
+    border-radius: 12px;
+    margin: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
+  }
+  
+  .modal-dialog.large {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+  }
+  
+  .modal-hd {
+    padding: 10px 10px;
+    gap: 8px;
+  }
+  
+  .modal-body {
+    padding: 10px 10px;
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .modal-ft {
+    padding: 10px 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-dialog {
+    width: calc(100vw - 12px);
+    max-width: calc(100vw - 12px);
+    height: 90vh;
+    border-radius: 10px;
+    margin: max(6px, env(safe-area-inset-top)) 6px max(6px, env(safe-area-inset-bottom));
+  }
+  
+  .modal-dialog.large {
+    width: calc(100vw - 12px);
+    max-width: calc(100vw - 12px);
+  }
+  
+  .modal-hd {
+    padding: 8px 8px;
+  }
+  
+  .modal-body {
+    padding: 8px 8px;
+  }
+  
+  .modal-ft {
+    padding: 8px 8px;
+  }
 }

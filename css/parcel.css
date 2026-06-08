@@ -14,19 +14,36 @@
 
 * {
   box-sizing: border-box;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
 }
 
-*::-webkit-scrollbar {
-  display: none;
-}
-
+/* 隐藏垂直滚动条但保留滚动功能 */
 html,
 body {
   height: 100%;
-  overflow: hidden;
   margin: 0;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+/* 隐藏Chrome, Safari和Opera的滚动条 */
+::-webkit-scrollbar {
+  display: none;
+}
+
+/* 确保所有可滚动元素也隐藏滚动条 */
+.scrollable,
+.scroll-container,
+.overflow-y-auto,
+.overflow-x-auto {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.scrollable::-webkit-scrollbar,
+.scroll-container::-webkit-scrollbar,
+.overflow-y-auto::-webkit-scrollbar,
+.overflow-x-auto::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
 }
 
 body {
@@ -110,6 +127,18 @@ a {
   border-radius: 999px;
   width: 100%;
   max-width: 300px;
+  /* 添加水平滚动支持 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  /* 隐藏滚动条但保留功能 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.parcel-tabs::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
 }
 
 .tab-btn {
@@ -124,6 +153,9 @@ a {
   cursor: pointer;
   transition: all 0.2s;
   padding: 0;
+  /* 防止按钮被压缩 */
+  flex-shrink: 0;
+  min-width: fit-content;
 }
 
 .tab-btn.active {
@@ -142,6 +174,18 @@ a {
   max-width: 300px;
   margin-left: auto;
   margin-right: auto;
+  /* 添加水平滚动支持 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  /* 隐藏滚动条但保留功能 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.my-bookings-tabs::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
 }
 
 .my-bookings-tab-btn {
@@ -156,6 +200,9 @@ a {
   cursor: pointer;
   transition: all 0.2s;
   padding: 0;
+  /* 防止按钮被压缩 */
+  flex-shrink: 0;
+  min-width: fit-content;
 }
 
 .my-bookings-tab-btn.active {
