@@ -1,4 +1,4 @@
-const CACHE_VERSION = "nwapp-v135";
+const CACHE_VERSION = "nwapp-v137";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -18,9 +18,9 @@ const PRECACHE = [
   "./js/pwa.js",
   "./css/pwa.css",
   "./js/firebase-config.js",
-  "./logo.svg",
-  "./icon-192.png",
-  "./icon-512.png",
+  "./logo.svg?v=4",
+  "./icon-192.png?v=2",
+  "./icon-512.png?v=2",
   "./manifest.webmanifest",
 ];
 

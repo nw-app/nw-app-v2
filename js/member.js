@@ -446,7 +446,7 @@
         <div class="button-grid">
           ${buttons.map(b => {
             const isRemoteIcon = b.icon && (b.icon.startsWith("http") || b.icon.startsWith("//"));
-            const imgSrc = isRemoteIcon ? b.icon : (b.data || b.icon || "photo/logo.png");
+            const imgSrc = isRemoteIcon ? b.icon : (b.data || b.icon || "photo/logo.png?v=2");
             const isExternal = b.openExternal ? "1" : "";
             return `
               <a href="${b.url || "#"}" class="grid-btn" data-url="${b.url || ""}" data-name="${b.name || ""}" data-external="${isExternal}">

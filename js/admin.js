@@ -8139,7 +8139,7 @@
                 </div>
                 <div class="a4-content">
                   <div class="a4-header">
-                    <img src="logo.svg?v=3" class="a4-logo" alt="QAI生活網" />
+                    <img src="logo.svg?v=4" class="a4-logo" alt="QAI生活網" />
                     <h1 class="a4-title">QAI生活網</h1>
                     <p class="a4-subtitle">智慧社區服務系統｜住戶端 APP</p>
                   </div>
