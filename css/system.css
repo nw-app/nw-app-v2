@@ -657,6 +657,11 @@ input:focus, select:focus, textarea:focus {
   align-items: center;
   padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
 }
+
+/* 確認對話框需要更高的層級，確保顯示在最上層 */
+#confirmModal {
+  z-index: 9999;
+}
 .modal-backdrop {
   position: absolute;
   inset: 0;

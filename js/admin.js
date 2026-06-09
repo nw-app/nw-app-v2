@@ -3140,14 +3140,14 @@
               <label for="parcelFilterName">姓名</label>
               <input id="parcelFilterName" type="text" autocomplete="off" placeholder="例如 王小明" />
             </div>
+            <button class="btn btn-sm" type="button" id="btnParcelFilterClear">清除</button>
+            <button class="btn btn-sm danger" type="button" id="btnRegisterParcel">登記包裹</button>
             <button class="icon-btn sm" type="button" id="btnScanResidentParcel" aria-label="掃描住戶 QR Code" title="掃描住戶 QR Code">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M7 4H5a1 1 0 0 0-1 1v2M17 4h2a1 1 0 0 1 1 1v2M7 20H5a1 1 0 0 1-1-1v-2M17 20h2a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 <path d="M7 9h10M7 12h10M7 15h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               </svg>
             </button>
-            <button class="btn btn-sm" type="button" id="btnParcelFilterClear">清除</button>
-            <button class="btn btn-sm" type="button" id="btnRegisterParcel">登記包裹</button>
           </div>
           <div class="parcel-list-container" id="parcelList">
             <div class="status">讀取中...</div>
@@ -6977,7 +6977,6 @@
           待審訪客
         </button>
         <button class="btn btn-sm" type="button" id="btnVisitorQr">訪客QR Code</button>
-        <button class="btn btn-sm" type="button" id="btnScanVisitor">掃碼登記</button>
       `.trim();
       
       const pendingBtn = document.getElementById("btnPendingVisitors");
@@ -6996,41 +6995,39 @@
               <p>${visitorDesc}</p>
             </div>
           </div>
+          <button class="btn btn-sm icon-btn" type="button" id="btnScanVisitor" aria-label="掃碼登記">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 5h4v4H3V5zm6 0h4v4H9V5zm6 0h4v4h-4V5zM3 11h4v4H3v-4zm6 0h4v4H9v-4zm6 0h4v4h-4v-4zM3 17h4v4H3v-4zm6 0h4v4H9v-4zm6 0h4v4h-4v-4z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
         </div>
         <div class="card-bd" id="visitorPanel">
-          <div class="visitor-date-filter" style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-            <button class="icon-btn" type="button" id="btnPrevDate" title="前一天">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
-            <input id="visitorDate" type="date" value="${todayStr}" max="${todayStr}" style="height:44px; padding:0 12px; border-radius:14px; border:1px solid rgba(17,24,39,0.14); background:#fff; outline:none; font:inherit; flex:1; text-align:center;" />
-            <button class="icon-btn" type="button" id="btnNextDate" title="後一天">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
-          </div>
           <div class="visitor-toolbar">
-            <div class="visitor-total" id="visitorTotal">總筆數：—</div>
-            <div class="search visitor-search">
+            <div class="field">
+              <label for="visitorDate">日期</label>
+              <input id="visitorDate" type="date" />
+            </div>
+            <div class="field">
+              <label for="visitorSearch">搜尋</label>
               <input id="visitorSearch" type="text" placeholder="搜尋 姓名 / 手機 / 車牌 / 事由" autocomplete="off" />
             </div>
-            <button class="btn btn-primary btn-sm" type="button" id="btnAddVisitor">新增訪客</button>
+            <button class="btn btn-sm danger" type="button" id="btnAddVisitor">新增訪客</button>
           </div>
           <div class="status" id="visitorStatus" hidden></div>
-          <div class="visitor-list" id="visitorList"></div>
+          <div class="visitor-list-container" id="visitorList">
+            <div class="visitor-grid"></div>
+          </div>
         </div>
       </section>
     `.trim();
 
     const panelEl = document.getElementById("visitorPanel");
-    const listEl = document.getElementById("visitorList");
+    const listContainerEl = document.getElementById("visitorList");
+    const listEl = listContainerEl.querySelector(".visitor-grid");
     const statusEl = document.getElementById("visitorStatus");
     const searchEl = document.getElementById("visitorSearch");
     const dateEl = document.getElementById("visitorDate");
-    const prevDateBtn = document.getElementById("btnPrevDate");
-    const nextDateBtn = document.getElementById("btnNextDate");
     const visitorQrBtn = document.getElementById("btnVisitorQr");
     const scanBtn = document.getElementById("btnScanVisitor");
     const addBtn = document.getElementById("btnAddVisitor");
-    const totalEl = document.getElementById("visitorTotal");
 
     ensureVisitorsPendingCountSubscription(cid);
 
@@ -7085,36 +7082,41 @@
 
     const renderList = () => {
       const q = String(searchEl ? searchEl.value : "").trim().toLowerCase();
-      const filtered = q
-        ? visitors.filter((x) => {
-            const n = String(x.name || "").toLowerCase();
-            const p = String(x.phone || "").toLowerCase();
-            const em = String(x.email || "").toLowerCase();
-            const unit = String(x.unit || "").toLowerCase();
-            const plate = String(x.plate || "").toLowerCase();
-            const purpose = String(x.purpose || "").toLowerCase();
-            return n.includes(q) || p.includes(q) || em.includes(q) || unit.includes(q) || plate.includes(q) || purpose.includes(q);
-          })
-        : visitors;
+      const dateVal = String(dateEl ? dateEl.value : "").trim();
+      
+      let filtered = visitors;
+      
+      // 日期筛选
+      if (dateVal) {
+        filtered = filtered.filter((x) => {
+          const vDate = toDate(x.inAt) || toDate(x.createdAt);
+          if (!vDate) return false;
+          const vDateStr = `${vDate.getFullYear()}-${pad2(vDate.getMonth()+1)}-${pad2(vDate.getDate())}`;
+          return vDateStr === dateVal;
+        });
+      }
+      
+      // 关键词筛选
+      if (q) {
+        filtered = filtered.filter((x) => {
+          const n = String(x.name || "").toLowerCase();
+          const p = String(x.phone || "").toLowerCase();
+          const em = String(x.email || "").toLowerCase();
+          const unit = String(x.unit || "").toLowerCase();
+          const plate = String(x.plate || "").toLowerCase();
+          const purpose = String(x.purpose || "").toLowerCase();
+          return n.includes(q) || p.includes(q) || em.includes(q) || unit.includes(q) || plate.includes(q) || purpose.includes(q);
+        });
+      }
 
-      if (totalEl) totalEl.textContent = `總筆數：${visitors.length}`;
       if (!listEl) return;
       if (!filtered.length) {
         listEl.innerHTML = `<div class="status">尚無訪客登記。</div>`;
         return;
       }
 
-      const statusGroup = (v) => {
-        const s = String(v && v.status ? v.status : "").toLowerCase();
-        if (s === "pending") return 0;
-        if (s === "approved") return 1;
-        return 2;
-      };
       const sortTime = (v) => (toDate(v && v.inAt) || toDate(v && v.createdAt) || new Date(0)).getTime();
       const ordered = [...filtered].sort((a, b) => {
-        const ga = statusGroup(a);
-        const gb = statusGroup(b);
-        if (ga !== gb) return ga - gb;
         return sortTime(b) - sortTime(a);
       });
 
@@ -7235,34 +7237,12 @@
 
     const subscribeVisitors = () => {
       setStatus("讀取中...", false);
-      const Timestamp = firebase.firestore.Timestamp;
-      const dateVal = dateEl ? dateEl.value : "";
-      let selectedDate = new Date();
-      if (dateVal) {
-        const parts = dateVal.split("-");
-        selectedDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-      }
-      const start = new Date(selectedDate);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(selectedDate);
-      end.setHours(23, 59, 59, 999);
-
-      // 檢查是否為今天，限制「後一天」按鈕
-      if (nextDateBtn) {
-        const now = new Date();
-        const isToday = selectedDate.getFullYear() === now.getFullYear() &&
-                        selectedDate.getMonth() === now.getMonth() &&
-                        selectedDate.getDate() === now.getDate();
-        nextDateBtn.disabled = isToday;
-      }
 
       try {
         const startAt = (slug) => {
           stopVisitorsSubscription();
           visitorCommunitySlug = String(slug || "").trim() || visitorCommunitySlug || "default";
           state.unsubVisitors = collRef()
-            .where("createdAt", ">=", Timestamp.fromDate(start))
-            .where("createdAt", "<=", Timestamp.fromDate(end))
             .orderBy("createdAt", "desc")
             .onSnapshot(
             (snap) => {
@@ -7618,27 +7598,7 @@
     };
 
     if (searchEl) searchEl.addEventListener("input", renderList);
-    if (dateEl) dateEl.addEventListener("change", subscribeVisitors);
-
-    const changeDate = (offset) => {
-      if (!dateEl) return;
-      const cur = dateEl.value;
-      if (!cur) return;
-      const parts = cur.split("-");
-      const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-      d.setDate(d.getDate() + offset);
-      
-      // 不允許超過今天
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-      if (d > now) return;
-
-      dateEl.value = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-      subscribeVisitors();
-    };
-
-    if (prevDateBtn) prevDateBtn.addEventListener("click", () => changeDate(-1));
-    if (nextDateBtn) nextDateBtn.addEventListener("click", () => changeDate(1));
+    if (dateEl) dateEl.addEventListener("change", renderList);
 
     if (addBtn) addBtn.addEventListener("click", () => openVisitorEditor("create"));
     if (scanBtn) scanBtn.addEventListener("click", () => openVisitorScanModal80({ cid: visitorCommunitySlug, onApplied: applyLocalVisitorPatch }));

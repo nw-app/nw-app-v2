@@ -22,7 +22,7 @@
       .v-brand { display: flex; align-items: center; gap: 10px; font-weight: 900; }
       .v-brand img { width: 28px; height: 28px; display: block; }
       .v-title { font-size: 14px; font-weight: 900; color: rgba(31, 41, 55, 0.92); }
-      .v-main { display: grid; place-items: center; padding: 16px; overflow: auto; overflow-x: hidden; }
+      .v-main { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 16px; overflow-y: auto; overflow-x: hidden; }
       .v-card { width: 100%; max-width: 520px; background: var(--panel); border-radius: 24px; border: 1px solid rgba(17, 24, 39, 0.08); box-shadow: 0 14px 36px rgba(17, 24, 39, 0.10); padding: clamp(16px, 4vw, 24px); display: grid; gap: 16px; overflow: hidden; min-width: 0; }
       .v-card *, .v-card *::before, .v-card *::after { box-sizing: border-box; }
       .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; min-width: 0; }
@@ -46,7 +46,9 @@
       <div class="v-page">
         <header class="v-hd">
           <div class="v-brand">
-            <img src="./logo.svg?v=4" alt="LOGO" />
+            <a href="https://qailifeweb-h9keujwr.manus.space/" target="_blank" rel="noopener noreferrer">
+              <img src="./logo.svg?v=4" alt="LOGO" style="cursor: pointer;" />
+            </a>
             <div>生活網</div>
             <div class="pill" id="authPill" hidden>連線中…</div>
           </div>
