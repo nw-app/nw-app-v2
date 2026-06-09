@@ -6972,17 +6972,32 @@
 
     if (subnavEl) {
       subnavEl.innerHTML = `
-        <button class="btn btn-sm" type="button" id="btnPendingVisitors">
+        <button class="btn btn-sm btn-primary" type="button" id="btnPendingVisitors" data-filter="pending">
           <span class="badge-inline" id="pendingVisitorsBadge" hidden>0</span>
           待審訪客
         </button>
-        <button class="btn btn-sm" type="button" id="btnVisitorQr">訪客QR Code</button>
+        <button class="btn btn-sm" type="button" id="btnApprovedVisitors" data-filter="approved">
+          <span class="badge-inline" id="approvedVisitorsBadge" hidden>0</span>
+          核准訪客
+        </button>
+        <button class="btn btn-sm" type="button" id="btnInsideVisitors" data-filter="inside">
+          <span class="badge-inline" id="insideVisitorsBadge" hidden>0</span>
+          入內訪客
+        </button>
+        <button class="btn btn-sm" type="button" id="btnHistoryVisitors" data-filter="history">
+          歷史訪客
+        </button>
       `.trim();
       
-      const pendingBtn = document.getElementById("btnPendingVisitors");
-      if (pendingBtn) {
-        pendingBtn.onclick = () => openPendingVisitorsModal80({ communityId: cid, communityName: cname });
-      }
+      const filterBtns = subnavEl.querySelectorAll('[data-filter]');
+      filterBtns.forEach(btn => {
+        btn.onclick = () => {
+          filterBtns.forEach(b => b.classList.remove('btn-primary'));
+          btn.classList.add('btn-primary');
+          currentFilter = btn.getAttribute('data-filter') || 'pending';
+          renderList();
+        };
+      });
     }
 
     contentEl.innerHTML = `
@@ -6995,8 +7010,8 @@
               <p>${visitorDesc}</p>
             </div>
           </div>
-          <button class="btn btn-sm icon-btn" type="button" id="btnScanVisitor" aria-label="掃碼登記">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 5h4v4H3V5zm6 0h4v4H9V5zm6 0h4v4h-4V5zM3 11h4v4H3v-4zm6 0h4v4H9v-4zm6 0h4v4h-4v-4zM3 17h4v4H3v-4zm6 0h4v4H9v-4zm6 0h4v4h-4v-4z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <button class="btn btn-sm icon-btn" type="button" id="btnVisitorQr" aria-label="訪客QR Code">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 9h4v4h-4V9zM8 8h2v2H8V8zm6 0h2v2h-2V8zm-6 6h2v2H8v-2zm6 0h2v2h-2v-2z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </div>
         <div class="card-bd" id="visitorPanel">
@@ -7010,6 +7025,12 @@
               <input id="visitorSearch" type="text" placeholder="搜尋 姓名 / 手機 / 車牌 / 事由" autocomplete="off" />
             </div>
             <button class="btn btn-sm danger" type="button" id="btnAddVisitor">新增訪客</button>
+            <button class="icon-btn sm" type="button" id="btnScanVisitor" aria-label="掃碼登記" title="掃碼登記">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 7V4h3M20 7V4h-3M4 17v3h3M20 17v3h-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M9 12h6M12 9v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
           </div>
           <div class="status" id="visitorStatus" hidden></div>
           <div class="visitor-list-container" id="visitorList">
@@ -7063,6 +7084,7 @@
     };
 
     let visitors = [];
+    let currentFilter = 'pending'; // pending, approved, inside, history
     const hydrateCreatorLabels = async (list) => {
       const ids = Array.from(
         new Set(
@@ -7081,10 +7103,57 @@
     };
 
     const renderList = () => {
+      // 计算并更新各筛选条件的数字泡泡
+      const pendingCount = visitors.filter(x => String(x.status || "").toLowerCase() === 'pending').length;
+      const approvedCount = visitors.filter(x => String(x.status || "").toLowerCase() === 'approved' && !x.inAt).length;
+      const insideCount = visitors.filter(x => {
+        const status = String(x.status || "").toLowerCase();
+        const hasInTime = x.inAt != null;
+        const hasOutTime = x.outAt != null;
+        return status === 'approved' && hasInTime && !hasOutTime;
+      }).length;
+
+      // 更新数字泡泡
+      const pendingBadge = document.getElementById("pendingVisitorsBadge");
+      if (pendingBadge) {
+        pendingBadge.textContent = String(pendingCount);
+        pendingBadge.hidden = pendingCount === 0;
+      }
+      const approvedBadge = document.getElementById("approvedVisitorsBadge");
+      if (approvedBadge) {
+        approvedBadge.textContent = String(approvedCount);
+        approvedBadge.hidden = approvedCount === 0;
+      }
+      const insideBadge = document.getElementById("insideVisitorsBadge");
+      if (insideBadge) {
+        insideBadge.textContent = String(insideCount);
+        insideBadge.hidden = insideCount === 0;
+      }
+
       const q = String(searchEl ? searchEl.value : "").trim().toLowerCase();
       const dateVal = String(dateEl ? dateEl.value : "").trim();
       
       let filtered = visitors;
+      
+      // 根据筛选按钮过滤
+      if (currentFilter === 'pending') {
+        filtered = filtered.filter(x => String(x.status || "").toLowerCase() === 'pending');
+      } else if (currentFilter === 'approved') {
+        filtered = filtered.filter(x => String(x.status || "").toLowerCase() === 'approved' && !x.inAt);
+      } else if (currentFilter === 'inside') {
+        filtered = filtered.filter(x => {
+          const status = String(x.status || "").toLowerCase();
+          const hasInTime = x.inAt != null;
+          const hasOutTime = x.outAt != null;
+          return status === 'approved' && hasInTime && !hasOutTime;
+        });
+      } else if (currentFilter === 'history') {
+        filtered = filtered.filter(x => {
+          const status = String(x.status || "").toLowerCase();
+          const hasOutTime = x.outAt != null;
+          return (status === 'approved' && hasOutTime) || (status !== 'pending' && hasOutTime);
+        });
+      }
       
       // 日期筛选
       if (dateVal) {
@@ -7111,7 +7180,12 @@
 
       if (!listEl) return;
       if (!filtered.length) {
-        listEl.innerHTML = `<div class="status">尚無訪客登記。</div>`;
+        const emptyText = 
+          currentFilter === 'pending' ? '尚無待審訪客。' :
+          currentFilter === 'approved' ? '尚無核准訪客。' :
+          currentFilter === 'inside' ? '尚無入內訪客。' :
+          '尚無歷史訪客。';
+        listEl.innerHTML = `<div class="status">${emptyText}</div>`;
         return;
       }
 

@@ -2,6 +2,20 @@ a, button {
   cursor: pointer !important;
 }
 
+/* 确保在 iOS 上正确处理安全区域 */
+:root {
+  --brand: #d32f2f;
+}
+
+/* 全局安全区域适配 */
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  box-sizing: border-box;
+}
+
 /* 隐藏垂直滚动条但保留滚动功能 */
 html, body {
   scrollbar-width: none; /* Firefox */
@@ -29,8 +43,60 @@ html, body {
   display: none; /* Chrome, Safari and Opera */
 }
 
-:root {
-  --brand: #d32f2f;
+/* iOS PWA 特定样式 - 防止状态栏和安全区域问题 */
+@media (display-mode: standalone) {
+  html, body {
+    height: 100%;
+    width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+  
+  /* 为 iOS standalone 模式添加安全区域 */
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  
+  /* 确保布局容器正确处理安全区域 */
+  .wrap,
+  .layout,
+  .parcel-layout,
+  .v-page {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* iOS 浏览器下的安全区域适配（非 standalone 模式） */
+@supports (-webkit-touch-callout: none) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  
+  /* 为所有页面元素添加安全区域适配 */
+  .wrap,
+  .layout,
+  .parcel-layout,
+  .v-page,
+  .card {
+    padding-top: max(0px, env(safe-area-inset-top));
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+  
+  /* 确保卡片头部不会被刘海屏遮挡 */
+  .card-hd {
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
 }
 
 .pwa-install[hidden] { display: none; }
@@ -89,6 +155,56 @@ html, body {
   background: #d32f2f;
   color: #fff;
   border-color: rgba(0, 0, 0, 0);
+}
+
+/* iOS 特定的安装提示样式 */
+.ios-install-guide {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ios-install-guide.show {
+  display: flex;
+}
+
+.ios-install-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.ios-step-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #d32f2f;
+  color: white;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.ios-step-content {
+  flex: 1;
+  font-size: 14px;
+  color: rgba(31, 41, 55, 0.9);
+}
+
+.ios-share-icon {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+  margin: 0 4px;
+}
+
+/* 确保 PWA 安装提示在 iOS 上正确处理安全区域 */
+.pwa-install {
+  padding-bottom: max(12px, calc(12px + env(safe-area-inset-bottom)));
 }
 
 html.force-portrait body {

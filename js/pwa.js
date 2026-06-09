@@ -123,9 +123,28 @@
           <div class="sub">加入主畫面後可像 App 一樣使用</div>
         </div>
       </div>
-      <div class="row2">
+      <!-- Android/Chrome 安装按钮 -->
+      <div class="row2 android-install" id="androidInstallButtons">
         <button class="btn" type="button" data-action="later">稍後</button>
         <button class="btn btn-primary" type="button" data-action="install">安裝應用程式</button>
+      </div>
+      <!-- iOS 安装指引 -->
+      <div class="ios-install-guide" id="iosInstallGuide" style="display: none;">
+        <div class="ios-install-step">
+          <div class="ios-step-number">1</div>
+          <div class="ios-step-content">點擊瀏覽器底部的分享按鈕</div>
+        </div>
+        <div class="ios-install-step">
+          <div class="ios-step-number">2</div>
+          <div class="ios-step-content">向下滑動並點擊「加入主畫面」</div>
+        </div>
+        <div class="ios-install-step">
+          <div class="ios-step-number">3</div>
+          <div class="ios-step-content">點擊「加入」即可完成安裝</div>
+        </div>
+        <div class="row2">
+          <button class="btn" type="button" data-action="later">關閉</button>
+        </div>
       </div>
     `;
     document.body.appendChild(el);
@@ -913,6 +932,21 @@
     if (isStandalone()) return;
     if (!shouldShow()) return;
     const banner = ensureBanner();
+    
+    // 根据设备显示不同的内容
+    const androidButtons = banner.querySelector("#androidInstallButtons");
+    const iosGuide = banner.querySelector("#iosInstallGuide");
+    
+    if (isIOSSafari()) {
+      // iOS Safari - 显示安装指引
+      if (androidButtons) androidButtons.style.display = "none";
+      if (iosGuide) iosGuide.style.display = "flex";
+    } else {
+      // Android/其他 - 显示安装按钮
+      if (androidButtons) androidButtons.style.display = "flex";
+      if (iosGuide) iosGuide.style.display = "none";
+    }
+    
     banner.hidden = false;
 
     const onClick = async (e) => {
@@ -936,11 +970,41 @@
     };
     banner.addEventListener("click", onClick);
   }
+  
+  // 为 iOS 设备显示 PWA 安装提示（iOS 不支持 beforeinstallprompt 事件）
+  function showIOSInstallPrompt() {
+    if (!isIOSSafari()) return;
+    if (isStandalone()) return;
+    if (!shouldShow()) return;
+    
+    // 延迟一小段时间显示，让页面先加载完成
+    setTimeout(() => {
+      showBanner(null);
+    }, 1500);
+  }
 
   function isLocalhost() {
     try {
       const h = String(location.hostname || "").trim().toLowerCase();
       return h === "localhost" || h === "127.0.0.1";
+    } catch {
+      return false;
+    }
+  }
+  
+  function isIOS() {
+    try {
+      const ua = String(navigator.userAgent || "").toLowerCase();
+      return /iphone|ipad|ipod/.test(ua);
+    } catch {
+      return false;
+    }
+  }
+  
+  function isIOSSafari() {
+    try {
+      const ua = String(navigator.userAgent || "").toLowerCase();
+      return isIOS() && /safari/.test(ua) && !/crios|fxios|opios|edgios/.test(ua);
     } catch {
       return false;
     }
@@ -951,6 +1015,9 @@
     updateOrientationLock();
     initProfileModal();
     window.nwConfirm = confirmDialog;
+
+    // 为 iOS 设备显示安装提示
+    showIOSInstallPrompt();
 
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.register("./sw.js").then((reg) => {
