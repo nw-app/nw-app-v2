@@ -339,3 +339,25 @@ a {
 .parcel-list .status.error {
   color: var(--brand);
 }
+
+/* 包裹页面响应式优化 */
+@media (max-width: 480px) {
+  .parcel-item {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .parcel-no {
+    font-size: 14px;
+  }
+  .parcel-desc,
+  .parcel-type {
+    font-size: 12px;
+  }
+  .parcel-date {
+    font-size: 11px;
+  }
+  .parcel-status {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+}

@@ -240,6 +240,11 @@ service cloud.firestore {
         allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
       }
 
+      match /bulletins/{bulletinId} {
+        allow read: if true;
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+      }
+
       match /settings/{settingId} {
         allow read: if true;
         allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
@@ -422,6 +427,15 @@ service cloud.firestore {
     match /mail/{mailId} {
       allow create: if request.auth != null && (isAdmin() || isCommunityStaff());
       allow read, update, delete: if isAdmin();
+    }
+
+    // --- 點數歷史紀錄 ---
+    match /pointsHistory/{historyId} {
+      allow read, write: if request.auth != null && (
+        isAdmin() || 
+        (isCommunityStaff() && resource.data.communityId == getUserData().community) ||
+        resource.data.userId == request.auth.uid
+      );
     }
 
     match /{document=**} {

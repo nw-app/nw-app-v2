@@ -55,13 +55,17 @@ button, input, select { font: inherit; }
   margin: 0;
   padding: 0;
   align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .mast-inner {
   width: min(520px, 100%);
   text-align: center;
   display: grid;
   justify-items: center;
-  gap: 10px;
+  gap: 16px;
+  padding: 8px 0;
 }
 .mark {
   width: 96px;
@@ -90,11 +94,13 @@ button, input, select { font: inherit; }
 }
 .wrap {
   flex: 1;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
-  justify-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
   min-height: 100dvh;
-  padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
+  padding: calc(24px + env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom));
+  gap: 28px;
   background: radial-gradient(900px 520px at 20% 15%, rgba(211, 47, 47, 0.18), transparent 60%),
     radial-gradient(760px 520px at 80% 30%, rgba(17, 24, 39, 0.08), transparent 60%),
     radial-gradient(820px 560px at 55% 85%, rgba(211, 47, 47, 0.12), transparent 58%);
@@ -115,7 +121,6 @@ button, input, select { font: inherit; }
   border-radius: 26px;
   border: 1px solid rgba(17, 24, 39, 0.08);
   box-shadow: 0 22px 60px rgba(17, 24, 39, 0.14);
-  grid-row: 2;
 }
 .card h2 {
   margin: 0;
@@ -291,8 +296,9 @@ input:focus, select:focus {
   position: fixed;
   inset: 0;
   background: rgba(17, 24, 39, 0.55);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 18px;
   z-index: 50;
 }
@@ -301,6 +307,7 @@ input:focus, select:focus {
   position: relative;
   inset: auto;
   width: min(520px, 100%);
+  height: auto;
   background: #fff;
   border-radius: 22px;
   border: 1px solid rgba(17, 24, 39, 0.12);
@@ -308,10 +315,14 @@ input:focus, select:focus {
   padding: 22px 20px;
   display: grid;
   gap: 14px;
+  pointer-events: auto;
 }
 @media (max-width: 420px), (max-height: 740px) {
-  .wrap { padding: calc(12px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom)); }
-  .mast-inner { gap: 6px; }
+  .wrap { 
+    padding: calc(16px + env(safe-area-inset-top)) 14px calc(16px + env(safe-area-inset-bottom));
+    gap: 20px;
+  }
+  .mast-inner { gap: 10px; }
   .mark { width: 72px; height: 72px; }
   .mark img { width: 72px; height: 72px; }
   .mast-title { font-size: 26px; }

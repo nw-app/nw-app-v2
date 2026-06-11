@@ -379,12 +379,14 @@
         ${x.id === "parcel" ? `<span class="nav-badge" id="badgeNavParcel" hidden>0</span>` : ""}
         ${x.id === "residents" ? `<span class="nav-badge" id="badgeNavResidents" hidden>0</span>` : ""}
         ${x.id === "visitor" ? `<span class="nav-badge" id="badgeNavVisitor" hidden>0</span>` : ""}
+        ${x.id === "facility" ? `<span class="nav-badge" id="badgeNavFacility" hidden>0</span>` : ""}
         <span class="label">${String(x.label)}</span>
       </a>
     `.trim()).join("");
     ensureParcelPendingCountSubscription(resolveActiveCommunityId());
     ensureResidentsPendingCountSubscription(resolveActiveCommunityId());
     ensureVisitorsPendingCountSubscription(resolveActiveCommunityId());
+    ensureFacilityPendingCountSubscription(resolveActiveCommunityId());
   }
 
   function normalizeText(v) {
@@ -793,6 +795,50 @@
         }, () => {});
     } catch {
       stopParcelPendingCountSubscription();
+    }
+  }
+
+  // Facility pending count subscription
+  let _unsubFacilityPendingCount = null;
+  let _facilityPendingCountCid = null;
+  let _lastFacilityPendingCount = 0;
+  function stopFacilityPendingCountSubscription() {
+    if (_unsubFacilityPendingCount) {
+      try { _unsubFacilityPendingCount(); } catch {}
+      _unsubFacilityPendingCount = null;
+    }
+    _facilityPendingCountCid = null;
+    _lastFacilityPendingCount = 0;
+  }
+  function updateFacilityPendingBadges(count) {
+    const n = Number.isFinite(Number(count)) ? Number(count) : 0;
+    _lastFacilityPendingCount = n;
+    const navBadge = document.getElementById("badgeNavFacility");
+    if (navBadge) {
+      navBadge.textContent = String(n);
+      navBadge.hidden = n === 0;
+    }
+  }
+  function ensureFacilityPendingCountSubscription(cid) {
+    const communityId = String(cid || "").trim();
+    if (!communityId) return;
+    if (_facilityPendingCountCid === communityId && _unsubFacilityPendingCount) {
+      updateFacilityPendingBadges(_lastFacilityPendingCount);
+      return;
+    }
+    stopFacilityPendingCountSubscription();
+    _facilityPendingCountCid = communityId;
+    try {
+      _unsubFacilityPendingCount = db
+        .collection("communities")
+        .doc(communityId)
+        .collection("reservations")
+        .where("status", "==", "pending")
+        .onSnapshot((snap) => {
+          updateFacilityPendingBadges(snap && typeof snap.size === "number" ? snap.size : 0);
+        }, () => {});
+    } catch {
+      stopFacilityPendingCountSubscription();
     }
   }
 
@@ -3337,16 +3383,39 @@
     const communityId = String(cid || "").trim() || "default";
     const fid = String(facilityId || "").trim();
     const dk = String(dateKey || "").trim();
-    if (!fid || !dk) return [];
+    if (!fid) return [];
     try {
+      console.log('loadReservationsByFacilityDate80 - 开始加载:', { communityId, fid, dk });
+      
+      // 获取该设施的所有预约（避免复合索引问题）
       const snap = await db.collection("communities").doc(communityId).collection("reservations")
         .where("facilityId", "==", fid)
-        .where("dateKey", "==", dk)
         .get();
-      const list = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
-      list.sort((a, b) => String(a.startTime || "").localeCompare(String(b.startTime || "")) || String(a.unit || "").localeCompare(String(b.unit || "")));
+      
+      console.log('原始查询结果数量:', snap.size);
+      
+      let list = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
+      
+      console.log('解析后列表长度:', list.length);
+      console.log('预约数据示例:', list[0]);
+      
+      // 如果指定了日期，在本地过滤
+      if (dk) {
+        list = list.filter(r => String(r.dateKey || "").trim() === dk);
+        console.log('按日期过滤后长度:', list.length);
+      }
+      
+      // 按日期和时间从新到旧排序
+      list.sort((a, b) => {
+        const dateCompare = String(b.dateKey || "").localeCompare(String(a.dateKey || ""));
+        if (dateCompare !== 0) return dateCompare;
+        return String(b.startTime || "").localeCompare(String(a.startTime || ""));
+      });
+      
+      console.log('最终返回数量:', list.length);
       return list;
-    } catch {
+    } catch (e) {
+      console.error('loadReservationsByFacilityDate80 error:', e);
       return [];
     }
   }
@@ -4033,6 +4102,30 @@
           return;
         }
 
+        // 查找住戶數據
+        let residentData = {};
+        try {
+          const residentSnap = await db.collection("users")
+            .where("community", "==", String(communityId || "default"))
+            .where("houseNo", "==", unit)
+            .where("displayName", "==", name)
+            .limit(1)
+            .get();
+          
+          if (residentSnap.size > 0) {
+            const residentDoc = residentSnap.docs[0];
+            const resident = residentDoc.data() || {};
+            residentData = {
+              residentId: residentDoc.id,
+              avatarDataUrl: resident.avatarDataUrl || "",
+              displayName: resident.displayName || name,
+              email: resident.email || "",
+            };
+          }
+        } catch (err) {
+          console.log("查找住戶失敗，將不保存住戶詳細信息", err);
+        }
+
         const u = auth && auth.currentUser ? auth.currentUser : null;
         const createdBy = u ? String(u.uid || "") : "";
         const createdByName = getAdminDisplayName80();
@@ -4053,6 +4146,7 @@
           createdByName,
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
+          ...residentData,
         };
         if (status === "approved") {
           payload.approvedAt = FieldValue.serverTimestamp();
@@ -4170,25 +4264,11 @@
               <label for="facilitySearch80">搜尋</label>
               <input id="facilitySearch80" type="text" autocomplete="off" placeholder="戶號/姓名" />
             </div>
-            <button class="btn btn-primary btn-sm" type="button" id="btnFacilityNew80">新增預約</button>
+            <button class="btn btn-sm danger" type="button" id="btnFacilityNew80">新增預約</button>
           </div>
           <div class="status" id="facilityStatus80" hidden></div>
-          <div class="table-wrap">
-            <table class="units-table" id="facilityReservationTable80">
-              <thead>
-                <tr>
-                  <th style="width: 140px;">時段</th>
-                  <th style="width: 160px;">戶號</th>
-                  <th>姓名</th>
-                  <th style="width: 120px;">狀態</th>
-                  <th style="width: 160px;">建立</th>
-                  <th style="width: 220px;">操作</th>
-                </tr>
-              </thead>
-              <tbody id="facilityReservationTbody80">
-                <tr><td colspan="6"><div class="status">讀取中...</div></td></tr>
-              </tbody>
-            </table>
+          <div id="facilityReservationContainer80" style="display:flex; flex-direction:column; gap:12px; width:100%; overflow-x:hidden;">
+            <div class="status">讀取中...</div>
           </div>
         </div>
       </section>
@@ -4201,7 +4281,7 @@
     const btnNew = document.getElementById("btnFacilityNew80");
     const subnavButtonsWrap = document.getElementById("facilitySubnavButtons80");
     const statusEl = document.getElementById("facilityStatus80");
-    const tbody = document.getElementById("facilityReservationTbody80");
+    const reservationContainer = document.getElementById("facilityReservationContainer80");
 
     const setStatus = (msg, isError) => {
       if (!statusEl) return;
@@ -4216,25 +4296,25 @@
     let pendingReservationsByFacility = {}; // 按设施统计待审核预约
     let totalPendingReservations = 0; // 总待审核数
     let unsubscribePendingListener = null; // 实时监听器取消函数
+    let residentsMap = {}; // 住戶數據映射表
+    let unsubscribeResidentsListener = null; // 住戶監聽器取消函數
 
     // 更新底部导航栏的总数字泡泡
     const updateBottomNavBadge = () => {
-      const bottomNav = document.querySelector('.frame-ft nav');
-      if (!bottomNav) return;
+      const badge = document.getElementById('badgeNavFacility');
+      if (!badge) return;
       
-      const facilityLink = bottomNav.querySelector('a[href="#community/facility"]');
-      if (!facilityLink) return;
+      // 先检查当前是否在 facility 页面
+      const raw = String(location.hash || "").replace(/^#/, "").trim();
+      const parts = raw.split("/");
+      const isFacilityPage = parts[0] === "community" && parts[1] === "facility";
       
-      // 移除旧的badge
-      const oldBadge = facilityLink.querySelector('.nav-badge');
-      if (oldBadge) oldBadge.remove();
-      
-      // 添加新的badge（如果有数据）
-      if (totalPendingReservations > 0) {
-        const badge = document.createElement('span');
-        badge.className = 'nav-badge';
+      // 只有在 facility 页面并且有数据时才显示
+      if (isFacilityPage && totalPendingReservations > 0) {
         badge.textContent = String(totalPendingReservations);
-        facilityLink.appendChild(badge);
+        badge.hidden = false;
+      } else {
+        badge.hidden = true;
       }
     };
 
@@ -4280,7 +4360,7 @@
     };
 
     const renderReservations = () => {
-      if (!tbody) return;
+      if (!reservationContainer) return;
       const q = String(inputSearch ? inputSearch.value : "").trim();
       const list = q
         ? currentReservations.filter((r) => {
@@ -4302,15 +4382,15 @@
       });
 
       if (!facilities.length) {
-        tbody.innerHTML = `<tr><td colspan="6"><div class="status">尚未建立設施，請先到「設施設定」新增。</div></td></tr>`;
+        reservationContainer.innerHTML = `<div class="status">尚未建立設施，請先到「設施設定」新增。</div>`;
         return;
       }
       if (!list.length) {
-        tbody.innerHTML = `<tr><td colspan="6"><div class="status">目前沒有預約資料。</div></td></tr>`;
+        reservationContainer.innerHTML = `<div class="status">目前沒有預約資料。</div>`;
         return;
       }
 
-      tbody.innerHTML = list.map((r) => {
+      reservationContainer.innerHTML = list.map((r) => {
         const id = String(r.id || "");
         const st = String(r.status || "pending");
         const stText = st === "approved" ? "已核准" : (st === "rejected" ? "已拒絕" : (st === "canceled" ? "已取消" : "待審核"));
@@ -4321,26 +4401,145 @@
         const capText = cfg ? `${slotUsed}/${cap}` : "";
         const capHint = cfg && slotUsed >= cap && ["pending", "approved"].includes(st) ? `<span class="tag red" style="margin-left:8px;">已滿</span>` : "";
 
-        const actions = st === "pending"
-          ? `
-              <button class="btn btn-sm btn-primary" type="button" data-action="approve" data-id="${escapeHtml(id)}">核准</button>
-              <button class="btn btn-sm danger" type="button" data-action="reject" data-id="${escapeHtml(id)}">拒絕</button>
-              <button class="btn btn-sm" type="button" data-action="delete" data-id="${escapeHtml(id)}">刪除</button>
-            `
-          : `
-              ${st === "approved" ? `<button class="btn btn-sm" type="button" data-action="cancel" data-id="${escapeHtml(id)}">取消</button>` : ``}
-              <button class="btn btn-sm" type="button" data-action="delete" data-id="${escapeHtml(id)}">刪除</button>
-            `;
+        const dateText = r.dateKey ? String(r.dateKey) : "—";
+        
+        // 用户头像 - 先從預約數據中查找，沒有則從住戶數據中查找
+        const name = String(r.name || r.displayName || r.email || "U").trim();
+        const unit = String(r.unit || "").trim();
+        
+        console.log("預約模組：處理預約項", { name, unit, 預約有大頭照: !!r.avatarDataUrl });
+        
+        // 先嚐試從預約數據中獲取大頭照
+        let residentData = {
+          displayName: name,
+          avatarDataUrl: String(r.avatarDataUrl || "").trim()
+        };
+        
+        // 如果預約數據中沒有大頭照，從住戶數據中查找
+        if (!residentData.avatarDataUrl && unit && name) {
+          console.log("預約模組：預約中沒有大頭照，嘗試從住戶映射中查找");
+          
+          let foundMatch = false;
+          
+          // 先嘗試精確匹配
+          const key = `${unit}_${name}`;
+          console.log("預約模組：嘗試精確匹配鍵", key);
+          if (residentsMap[key]) {
+            residentData = residentsMap[key];
+            console.log("預約模組：精確匹配成功，大頭照存在：", !!residentData.avatarDataUrl);
+            foundMatch = true;
+          }
+          
+          // 如果精確匹配失敗，嘗試其他匹配方式
+          if (!foundMatch) {
+            console.log("預約模組：精確匹配失敗，可用的鍵：", Object.keys(residentsMap));
+            
+            // 遍歷所有住戶，嘗試各種匹配方式
+            for (const [mapKey, resident] of Object.entries(residentsMap)) {
+              const mapParts = mapKey.split('_');
+              if (mapParts.length === 2) {
+                const mapUnit = mapParts[0].trim();
+                const mapName = mapParts[1].trim();
+                
+                // 方式1：完全匹配（忽略大小寫）
+                if (mapUnit.toLowerCase() === unit.toLowerCase() && 
+                    mapName.toLowerCase() === name.toLowerCase()) {
+                  residentData = resident;
+                  console.log("預約模組：忽略大小寫匹配成功，大頭照存在：", !!residentData.avatarDataUrl);
+                  foundMatch = true;
+                  break;
+                }
+                
+                // 方式2：預約的戶號是住戶戶號的前綴（例如預約是"A1"，住戶是"A1-1"）
+                if (mapUnit.toLowerCase().startsWith(unit.toLowerCase() + '-') && 
+                    mapName.toLowerCase() === name.toLowerCase()) {
+                  residentData = resident;
+                  console.log("預約模組：前綴匹配成功，大頭照存在：", !!residentData.avatarDataUrl);
+                  foundMatch = true;
+                  break;
+                }
+                
+                // 方式3：只匹配姓名
+                if (mapName.toLowerCase() === name.toLowerCase()) {
+                  residentData = resident;
+                  console.log("預約模組：只匹配姓名成功，大頭照存在：", !!residentData.avatarDataUrl);
+                  foundMatch = true;
+                  break;
+                }
+              }
+            }
+          }
+        } else if (residentData.avatarDataUrl) {
+          console.log("預約模組：使用預約數據中的大頭照");
+        }
+        
+        // 使用 avatarHtml 函數渲染大頭照
+        const avatarHtmlContent = avatarHtml(residentData);
+
+        // 操作按钮 - 图标方式
+        let actionsHtml = "";
+        if (st === "pending") {
+          actionsHtml = `
+            <button class="icon-btn" type="button" data-action="approve" data-id="${escapeHtml(id)}" aria-label="核准" title="核准">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="icon-btn danger" type="button" data-action="reject" data-id="${escapeHtml(id)}" aria-label="拒絕" title="拒絕">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <button class="icon-btn" type="button" data-action="delete" data-id="${escapeHtml(id)}" aria-label="刪除" title="刪除">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M9 4h6l1 2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                <path d="M6 6h12l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+            </button>
+          `;
+        } else {
+          actionsHtml = `
+            ${st === "approved" ? `
+              <button class="icon-btn" type="button" data-action="cancel" data-id="${escapeHtml(id)}" aria-label="取消" title="取消">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                </svg>
+              </button>
+            ` : ""}
+            <button class="icon-btn" type="button" data-action="delete" data-id="${escapeHtml(id)}" aria-label="刪除" title="刪除">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M9 4h6l1 2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                <path d="M6 6h12l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+            </button>
+          `;
+        }
 
         return `
-          <tr>
-            <td style="padding: 10px 12px;">${escapeHtml(`${String(r.startTime || "—")} - ${String(r.endTime || "—")}`)} ${capHint}</td>
-            <td style="padding: 10px 12px;">${escapeHtml(String(r.unit || "—"))}</td>
-            <td style="padding: 10px 12px;">${escapeHtml(String(r.name || "—"))}</td>
-            <td style="padding: 10px 12px;"><span class="tag ${tagClass}">${escapeHtml(stText)}</span>${cfg ? `<span class="muted" style="margin-left:8px;">${escapeHtml(capText)}</span>` : ""}</td>
-            <td style="padding: 10px 12px;">${escapeHtml(createdText)}</td>
-            <td style="padding: 10px 12px;"><div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">${actions}</div></td>
-          </tr>
+          <div class="resident-item" data-id="${escapeHtml(id)}" style="width:100%; min-width:0;">
+            <div class="resident-left">
+              <div class="avatar-sm">
+                ${avatarHtmlContent}
+              </div>
+              <div class="resident-text">
+                <div class="resident-name">
+                  ${escapeHtml(String(r.name || "—"))}
+                  <span class="tag ${tagClass}" style="margin-left:8px;">${escapeHtml(stText)}</span>
+                  ${capHint}
+                </div>
+                <div class="resident-sub">
+                  ${escapeHtml(dateText)}｜${escapeHtml(`${String(r.startTime || "—")} - ${String(r.endTime || "—")}`)}｜${escapeHtml(String(r.unit || "—"))}
+                  ${cfg ? `<span class="muted" style="margin-left:8px;">${escapeHtml(capText)}</span>` : ""}
+                  <span class="muted" style="margin-left:8px;">建立：${escapeHtml(createdText)}</span>
+                </div>
+              </div>
+            </div>
+            <div class="resident-actions" style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; flex:0 0 auto;">
+              ${actionsHtml}
+            </div>
+          </div>
         `.trim();
       }).join("");
     };
@@ -4389,13 +4588,16 @@
     const refreshReservations = async () => {
       const dateKey = inputDate ? String(inputDate.value || "").trim() : "";
       const fid = selFacility ? String(selFacility.value || "").trim() : "";
-      if (!dateKey || !fid) {
+      console.log('refreshReservations - 开始:', { dateKey, fid, cid });
+      
+      if (!fid) {
         currentReservations = [];
         renderReservations();
         return;
       }
       setStatus("讀取中...", false);
       currentReservations = await loadReservationsByFacilityDate80({ cid, facilityId: fid, dateKey });
+      console.log('refreshReservations - 加载完成:', currentReservations.length);
       setStatus("", false);
       // 重新渲染表格（数字泡泡由实时监听器处理）
       renderReservations();
@@ -4407,11 +4609,71 @@
       renderFacilityButtons();
     };
 
+    // 設置住戶數據監聽器
+    const setupResidentsListener = () => {
+      try {
+        unsubscribeResidentsListener = db.collection("users")
+          .where("community", "==", String(cid || "default"))
+          .onSnapshot((snap) => {
+            residentsMap = {};
+            console.log("預約模組：載入住戶數據，數量：", snap.size);
+            
+            // 先處理所有住戶數據
+            const list = snap.docs
+              .map((d) => {
+                const v = d.data() || {};
+                return {
+                  id: d.id,
+                  role: String(v.role || ""),
+                  houseNo: String(v.houseNo || v.unit || ""),
+                  subUnit: String(v.subUnit || ""),
+                  displayName: String(v.displayName || v.name || ""),
+                  email: String(v.email || v.username || ""),
+                  phone: String(v.phone || ""),
+                  enabled: v.enabled !== false,
+                  address: String(v.address || ""),
+                  avatarDataUrl: String(v.avatarDataUrl || ""),
+                  phoneNormalized: String(v.phoneNormalized || ""),
+                  status: String(v.status || ""),
+                  qrToken: String(v.qrToken || ""),
+                };
+              })
+              .filter((x) => isResidentRole(x.role) && x.status !== "pending");
+            
+            console.log("預約模組：篩選後的住戶數量：", list.length);
+            
+            // 建立映射
+            list.forEach(resident => {
+              const unit = resident.houseNo;
+              const name = resident.displayName;
+              if (unit && name) {
+                const key = `${unit}_${name}`;
+                residentsMap[key] = resident;
+                console.log("預約模組：加入住戶映射", key, "大頭照存在：", !!resident.avatarDataUrl);
+              }
+            });
+            
+            console.log("預約模組：住戶映射完成，鍵數量：", Object.keys(residentsMap).length);
+            // 住戶數據更新後重新渲染預約列表
+            renderReservations();
+          }, (err) => {
+            console.error("預約模組：載入住戶數據失敗", err);
+            residentsMap = {};
+          });
+      } catch (err) {
+        console.error("預約模組：設置住戶監聽器失敗", err);
+        residentsMap = {};
+      }
+    };
+
     const init = async () => {
       await refreshFacilities();
       // 设置实时监听器
       setupPendingListener();
-      if (inputDate) inputDate.value = ymd80(new Date());
+      // 設置住戶數據監聽器
+      setupResidentsListener();
+      // 不预设日期，显示所有预约
+      if (inputDate) inputDate.value = "";
       await refreshReservations();
     };
 
@@ -4493,7 +4755,7 @@
     if (inputSearch) inputSearch.addEventListener("input", onFilter);
     if (inputDate) inputDate.addEventListener("change", onDateOrFacility);
     if (selFacility) selFacility.addEventListener("change", onDateOrFacility);
-    if (tbody) tbody.addEventListener("click", onActionClick);
+    if (reservationContainer) reservationContainer.addEventListener("click", onActionClick);
     if (subnavButtonsWrap) {
       let draggingId = "";
       let draggingMoved = false;
@@ -4598,6 +4860,487 @@
 
     if (communityName) {}
     init();
+    updateFooterActiveNav();
+  }
+
+  function renderBulletinModule() {
+    const cid = resolveActiveCommunityId();
+    const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
+    let currentPage = "community"; // "community", "finance", "meeting", "repair"
+    let unsubscribeBulletins = null;
+    let bulletinData = [];
+
+    // 渲染 subnav 按钮的函数
+    const renderSubnav = () => {
+      if (!subnavEl) return;
+      
+      subnavEl.innerHTML = `
+        <button class="btn btn-sm ${currentPage === "community" ? "btn-primary" : ""}" type="button" data-bulletin-page="community">社區園地</button>
+        <button class="btn btn-sm ${currentPage === "finance" ? "btn-primary" : ""}" type="button" data-bulletin-page="finance">財務報表</button>
+        <button class="btn btn-sm ${currentPage === "meeting" ? "btn-primary" : ""}" type="button" data-bulletin-page="meeting">會議紀錄</button>
+        <button class="btn btn-sm ${currentPage === "repair" ? "btn-primary" : ""}" type="button" data-bulletin-page="repair">修繕報告</button>
+      `.trim();
+      
+      // 绑定按钮点击事件
+      subnavEl.querySelectorAll("[data-bulletin-page]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          currentPage = btn.getAttribute("data-bulletin-page");
+          renderPage();
+        });
+      });
+    };
+
+    // 渲染页面内容
+    const renderPage = () => {
+      renderSubnav();
+      
+      if (currentPage === "community") {
+        renderCommunityGarden();
+      } else if (currentPage === "finance") {
+        renderFinanceReport();
+      } else if (currentPage === "meeting") {
+        renderMeetingMinutes();
+      } else if (currentPage === "repair") {
+        renderRepairReport();
+      }
+    };
+
+    // 格式化日期
+    const formatDate = (date) => {
+      if (!date) return "";
+      const d = date instanceof Date ? date : date.toDate ? date.toDate() : new Date(date);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const da = String(d.getDate()).padStart(2, "0");
+      const h = String(d.getHours()).padStart(2, "0");
+      const mi = String(d.getMinutes()).padStart(2, "0");
+      return `${y}-${m}-${da} ${h}:${mi}`;
+    };
+
+    // 渲染公告列表
+    const renderBulletinList = (listEl) => {
+      if (!listEl) return;
+      
+      if (!bulletinData.length) {
+        listEl.innerHTML = `<div class="status">目前沒有公告</div>`;
+        return;
+      }
+      
+      listEl.innerHTML = bulletinData.map((item) => {
+        const tagColor = item.isPinned ? "red" : (item.isImportant ? "yellow" : "green");
+        const tagText = item.isPinned ? "置頂" : (item.isImportant ? "重要" : "最新");
+        
+        const imagesHtml = item.images && item.images.length 
+          ? `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+              ${item.images.map(img => `<img src="${escapeHtml(img)}" style="max-width:200px; max-height:150px; border-radius:8px;" />`).join("")}
+            </div>`
+          : "";
+        
+        return `
+          <div class="card" style="margin:0;" data-bulletin-id="${escapeHtml(item.id)}">
+            <div class="card-hd">
+              <div class="left">
+                <h3 style="font-size:16px;">${escapeHtml(item.title || "")}</h3>
+                <p style="margin:0; font-size:14px;">${escapeHtml(item.subtitle || "")}</p>
+              </div>
+              <span class="tag ${tagColor}">${tagText}</span>
+            </div>
+            <div class="card-bd">
+              <p>${escapeHtml(item.content || "")}</p>
+              ${imagesHtml}
+              <div class="muted" style="margin-top:8px;">建立時間：${formatDate(item.createdAt)}</div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    };
+
+    // 渲染社區園地
+    const renderCommunityGarden = () => {
+      contentEl.innerHTML = `
+        <section class="card">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("bulletin")}</div>
+              <div style="min-width:0;">
+                <h2>公告系統${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <p>分類公告、置頂、閱讀回覆</p>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" type="button" id="btnNewCommunityPost">新增公告</button>
+          </div>
+          <div class="card-bd">
+            <div class="status" id="communityStatus" hidden></div>
+            <div id="communityList" style="display:flex; flex-direction:column; gap:12px; width:100%;">
+              <div class="status">讀取中...</div>
+            </div>
+          </div>
+        </section>
+      `.trim();
+      
+      const listEl = document.getElementById("communityList");
+      const btnNew = document.getElementById("btnNewCommunityPost");
+      
+      if (btnNew) {
+        btnNew.addEventListener("click", () => {
+          openNewBulletinModal("community");
+        });
+      }
+      
+      setupBulletinsListener("community", listEl);
+    };
+
+    // 渲染財務報表
+    const renderFinanceReport = () => {
+      contentEl.innerHTML = `
+        <section class="card">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("bulletin")}</div>
+              <div style="min-width:0;">
+                <h2>公告系統${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <p>分類公告、置頂、閱讀回覆</p>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" type="button" id="btnNewFinanceReport">上傳報表</button>
+          </div>
+          <div class="card-bd">
+            <div class="status" id="financeStatus" hidden></div>
+            <div id="financeList" style="display:flex; flex-direction:column; gap:12px; width:100%;">
+              <div class="status">讀取中...</div>
+            </div>
+          </div>
+        </section>
+      `.trim();
+      
+      const listEl = document.getElementById("financeList");
+      const btnNew = document.getElementById("btnNewFinanceReport");
+      
+      if (btnNew) {
+        btnNew.addEventListener("click", () => {
+          openNewBulletinModal("finance");
+        });
+      }
+      
+      setupBulletinsListener("finance", listEl);
+    };
+
+    // 渲染會議紀錄
+    const renderMeetingMinutes = () => {
+      contentEl.innerHTML = `
+        <section class="card">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("bulletin")}</div>
+              <div style="min-width:0;">
+                <h2>公告系統${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <p>分類公告、置頂、閱讀回覆</p>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" type="button" id="btnNewMeetingMinutes">新增紀錄</button>
+          </div>
+          <div class="card-bd">
+            <div class="status" id="meetingStatus" hidden></div>
+            <div id="meetingList" style="display:flex; flex-direction:column; gap:12px; width:100%;">
+              <div class="status">讀取中...</div>
+            </div>
+          </div>
+        </section>
+      `.trim();
+      
+      const listEl = document.getElementById("meetingList");
+      const btnNew = document.getElementById("btnNewMeetingMinutes");
+      
+      if (btnNew) {
+        btnNew.addEventListener("click", () => {
+          openNewBulletinModal("meeting");
+        });
+      }
+      
+      setupBulletinsListener("meeting", listEl);
+    };
+
+    // 渲染修繕報告
+    const renderRepairReport = () => {
+      contentEl.innerHTML = `
+        <section class="card">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("bulletin")}</div>
+              <div style="min-width:0;">
+                <h2>公告系統${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <p>分類公告、置頂、閱讀回覆</p>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" type="button" id="btnNewRepairReport">新增報告</button>
+          </div>
+          <div class="card-bd">
+            <div class="status" id="repairStatus" hidden></div>
+            <div id="repairList" style="display:flex; flex-direction:column; gap:12px; width:100%;">
+              <div class="status">讀取中...</div>
+            </div>
+          </div>
+        </section>
+      `.trim();
+      
+      const listEl = document.getElementById("repairList");
+      const btnNew = document.getElementById("btnNewRepairReport");
+      
+      if (btnNew) {
+        btnNew.addEventListener("click", () => {
+          openNewBulletinModal("repair");
+        });
+      }
+      
+      setupBulletinsListener("repair", listEl);
+    };
+
+    // 設置公告監聽器
+    const setupBulletinsListener = (type, listEl) => {
+      console.log("[公告模組] 設置監聽器，type:", type, "cid:", cid);
+      if (unsubscribeBulletins) {
+        try { unsubscribeBulletins(); } catch {}
+      }
+      
+      unsubscribeBulletins = db
+        .collection("communities")
+        .doc(cid)
+        .collection("bulletins")
+        .where("type", "==", type)
+        .onSnapshot(
+          (snap) => {
+            console.log("[公告模組] 收到數據，文檔數量:", snap.size);
+            bulletinData = [];
+            snap.forEach((doc) => {
+              bulletinData.push({ id: doc.id, ...doc.data() });
+            });
+            
+            // 在前端進行排序
+            bulletinData.sort((a, b) => {
+              const tA = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : a.createdAt) : 0;
+              const tB = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : b.createdAt) : 0;
+              return tB - tA; // 降冪排序 (由新到舊)
+            });
+            
+            renderBulletinList(listEl);
+          },
+          (err) => {
+            console.error("[公告模組] 監聽器錯誤:", err);
+            if (listEl) listEl.innerHTML = `<div class="status">讀取失敗：${err.message}</div>`;
+          }
+        );
+    };
+
+    // 打開新增公告彈窗
+    const openNewBulletinModal = (type) => {
+      const modal = ensureModal("newBulletinModal", "modal-new-bulletin", "80%");
+      let selectedImages = [];
+      
+      const detach = bindModalClose(modal, () => {
+        cleanup();
+        detach();
+      });
+      
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-modal-close="1"></div>
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="newBulletinModalTitle">
+          <div class="modal-hd">
+            <h3 class="modal-title" id="newBulletinModalTitle">新增公告</h3>
+            <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          </div>
+          <form id="newBulletinForm">
+            <div class="modal-body">
+              <div class="status" id="newBulletinStatus" hidden></div>
+              <div class="field">
+                <label for="bulletinTitle">標題</label>
+                <input id="bulletinTitle" type="text" placeholder="請輸入公告標題" required />
+              </div>
+              <div class="field">
+                <label for="bulletinSubtitle">副標題</label>
+                <input id="bulletinSubtitle" type="text" placeholder="請輸入公告副標題" />
+              </div>
+              <div class="field">
+                <label for="bulletinContent">內容</label>
+                <textarea id="bulletinContent" placeholder="請輸入公告內容" required></textarea>
+              </div>
+              <div class="field">
+                <label>圖片（可多張）</label>
+                <div id="imageUploadArea" style="border:2px dashed #ccc; border-radius:8px; padding:16px; text-align:center; cursor:pointer; min-height:80px; display:flex; align-items:center; justify-content:center;">
+                  <div id="imagePlaceholder">點擊選擇圖片或拖曳圖片到此處</div>
+                  <div id="imagePreviewContainer" style="display:flex; gap:8px; flex-wrap:wrap; display:none;"></div>
+                </div>
+                <input id="imageInput" type="file" accept="image/*" multiple hidden />
+              </div>
+              <div class="field">
+                <label>
+                  <input type="checkbox" id="bulletinImportant" />
+                  標記為重要
+                </label>
+              </div>
+              <div class="field">
+                <label>
+                  <input type="checkbox" id="bulletinPinned" />
+                  置頂公告
+                </label>
+              </div>
+            </div>
+            <div class="modal-ft">
+              <button class="btn" type="button" data-modal-close="1">取消</button>
+              <button class="btn btn-primary" type="submit" id="btnSaveBulletin">儲存</button>
+            </div>
+          </form>
+        </div>
+      `.trim();
+      
+      const form = document.getElementById("newBulletinForm");
+      const titleInput = document.getElementById("bulletinTitle");
+      const subtitleInput = document.getElementById("bulletinSubtitle");
+      const contentInput = document.getElementById("bulletinContent");
+      const importantCheck = document.getElementById("bulletinImportant");
+      const pinnedCheck = document.getElementById("bulletinPinned");
+      const btnSave = document.getElementById("btnSaveBulletin");
+      const statusEl = document.getElementById("newBulletinStatus");
+      const imageInput = document.getElementById("imageInput");
+      const imageUploadArea = document.getElementById("imageUploadArea");
+      const imagePlaceholder = document.getElementById("imagePlaceholder");
+      const imagePreviewContainer = document.getElementById("imagePreviewContainer");
+      
+      const setStatus = (msg, isError) => {
+        if (!statusEl) return;
+        statusEl.textContent = String(msg || "").trim();
+        statusEl.hidden = !msg;
+        statusEl.style.color = isError ? "var(--color-danger)" : "var(--color-success)";
+      };
+      
+      const updateImagePreview = () => {
+        if (selectedImages.length === 0) {
+          imagePlaceholder.style.display = "block";
+          imagePreviewContainer.style.display = "none";
+        } else {
+          imagePlaceholder.style.display = "none";
+          imagePreviewContainer.style.display = "flex";
+          imagePreviewContainer.innerHTML = selectedImages.map((img, idx) => `
+            <div style="position:relative;">
+              <img src="${escapeHtml(img)}" style="width:100px; height:100px; object-fit:cover; border-radius:8px;" />
+              <button type="button" style="position:absolute; top:4px; right:4px; width:24px; height:24px; border-radius:50%; background:red; color:white; border:none; cursor:pointer; font-size:14px;" data-remove-image="${idx}">×</button>
+            </div>
+          `).join("");
+          
+          imagePreviewContainer.querySelectorAll("[data-remove-image]").forEach(btn => {
+            btn.addEventListener("click", () => {
+              const idx = parseInt(btn.getAttribute("data-remove-image"), 10);
+              selectedImages.splice(idx, 1);
+              updateImagePreview();
+            });
+          });
+        }
+      };
+      
+      if (imageUploadArea) {
+        imageUploadArea.addEventListener("click", () => imageInput.click());
+        
+        imageUploadArea.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          imageUploadArea.style.borderColor = "var(--color-primary)";
+        });
+        
+        imageUploadArea.addEventListener("dragleave", () => {
+          imageUploadArea.style.borderColor = "#ccc";
+        });
+        
+        imageUploadArea.addEventListener("drop", (e) => {
+          e.preventDefault();
+          imageUploadArea.style.borderColor = "#ccc";
+          const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+          handleImageFiles(files);
+        });
+      }
+      
+      if (imageInput) {
+        imageInput.addEventListener("change", () => {
+          handleImageFiles(Array.from(imageInput.files || []));
+        });
+      }
+      
+      const handleImageFiles = async (files) => {
+        for (const file of files) {
+          const dataUrl = await fileToImageDataUrl80(file);
+          if (dataUrl) {
+            selectedImages.push(dataUrl);
+          }
+        }
+        updateImagePreview();
+      };
+      
+      const onSubmit = async (e) => {
+        e.preventDefault();
+        if (!titleInput || !contentInput) return;
+        
+        const title = String(titleInput.value || "").trim();
+        const content = String(contentInput.value || "").trim();
+        
+        if (!title) {
+          setStatus("請輸入標題。", true);
+          return;
+        }
+        if (!content) {
+          setStatus("請輸入內容。", true);
+          return;
+        }
+        
+        if (btnSave) btnSave.disabled = true;
+        setStatus("儲存中...", false);
+        console.log("[公告模組] 開始儲存公告，type:", type, "cid:", cid);
+        
+        try {
+          await db.collection("communities").doc(cid).collection("bulletins").add({
+            type: type,
+            title: title,
+            subtitle: String(subtitleInput?.value || "").trim(),
+            content: content,
+            images: selectedImages,
+            isImportant: !!importantCheck?.checked,
+            isPinned: !!pinnedCheck?.checked,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+          
+          console.log("[公告模組] 公告儲存成功");
+          setStatus("已儲存。", false);
+          toast("已儲存");
+          modal.hidden = true;
+          cleanup();
+          detach();
+        } catch (err) {
+          console.error("[公告模組] 儲存失敗:", err);
+          const code = String(err && err.code ? err.code : "");
+          const msg = code.includes("permission-denied") ? "沒有權限儲存。" : `儲存失敗：${err.message}`;
+          setStatus(msg, true);
+        } finally {
+          if (btnSave) btnSave.disabled = false;
+        }
+      };
+      
+      const cleanup = () => {
+        try {
+          if (form) form.removeEventListener("submit", onSubmit);
+        } catch {}
+        if (unsubscribeBulletins && currentPage !== type) {
+          try { unsubscribeBulletins(); } catch {}
+        }
+      };
+      
+      if (form) form.addEventListener("submit", onSubmit);
+      updateImagePreview();
+      modal.hidden = false;
+      requestAnimationFrame(() => {
+        if (titleInput && titleInput.focus) titleInput.focus();
+      });
+    };
+
+    // 初始渲染
+    renderSubnav();
+    renderPage();
     updateFooterActiveNav();
   }
 
@@ -5829,55 +6572,99 @@
     const accounts = loadAccounts();
     const c = (accounts.communities || []).find((x) => x && String(x.id || "") === String(cid || "")) || null;
     const cname = c ? String(c.name || "").trim() : "";
+    let currentPage = "list"; // "list"、"points" 或 "pending"
 
-    if (subnavEl) {
+    // 渲染 subnav 按钮的函数
+    const renderSubnav = () => {
+      if (!subnavEl) return;
+      
       subnavEl.innerHTML = `
-        <button class="btn btn-sm" type="button" id="btnPendingResidents">
+        <button class="btn btn-sm ${currentPage === "pending" ? "btn-primary" : ""}" type="button" id="btnPendingResidents">
           <span class="badge-inline" id="pendingBadge" hidden>0</span>
           待審帳號
         </button>
+        <button class="btn btn-sm ${currentPage === "list" ? "btn-primary" : ""}" type="button" id="btnResidentsList">住戶造冊</button>
+        <button class="btn btn-sm ${currentPage === "points" ? "btn-primary" : ""}" type="button" id="btnResidentsPoints">住戶點數</button>
       `.trim();
       
-      // 獲取按鈕引用 (因為剛剛 innerHTML 重置了)
+      // 获取按钮引用
       const pendingBtn = document.getElementById("btnPendingResidents");
+      const listBtn = document.getElementById("btnResidentsList");
+      const pointsBtn = document.getElementById("btnResidentsPoints");
+      
       if (pendingBtn) {
-        pendingBtn.onclick = () => openPendingResidentsModal80({ communityId: cid });
+        pendingBtn.onclick = () => {
+          currentPage = "pending";
+          renderPage();
+        };
       }
-    }
+      if (listBtn) {
+        listBtn.onclick = () => {
+          currentPage = "list";
+          renderPage();
+        };
+      }
+      if (pointsBtn) {
+        pointsBtn.onclick = () => {
+          currentPage = "points";
+          renderPage();
+        };
+      }
+      
+      // 确保 pending badge 被正确更新
+      ensureResidentsPendingCountSubscription(cid);
+    };
 
-    contentEl.innerHTML = `
-      <section class="card residents-page">
-        <div class="card-hd">
-          <div class="left">
-            <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
-            <div style="min-width:0;">
-              <h2>住戶造冊</h2>
-              <p>${cname || "—"}</p>
+    // 初始渲染 subnav
+    renderSubnav();
+
+    const renderPage = () => {
+      // 重新渲染 subnav 以更新 active 状态
+      renderSubnav();
+      
+      if (currentPage === "list") {
+        renderResidentsList();
+      } else if (currentPage === "points") {
+        renderResidentsPoints();
+      } else if (currentPage === "pending") {
+        renderPendingResidents();
+      }
+    };
+
+    const renderResidentsList = () => {
+      contentEl.innerHTML = `
+        <section class="card residents-page">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
+              <div style="min-width:0;">
+                <h2>住戶造冊${cname ? `｜${escapeHtml(cname)}` : ""}</h2>
+                <p>住戶/承租/車位/聯絡方式彙整</p>
+              </div>
             </div>
+            <button class="icon-btn sm" type="button" id="btnUnits" aria-label="戶號列表" title="戶號列表">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M8 7h12M8 12h12M8 17h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                <path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+              </svg>
+            </button>
           </div>
-          <button class="icon-btn sm" type="button" id="btnUnits" aria-label="戶號列表" title="戶號列表">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M8 7h12M8 12h12M8 17h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-              <path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
-            </svg>
-          </button>
-        </div>
-        <div class="card-bd">
-          <div class="resident-toolbar">
-            <div class="resident-total" id="residentTotal">
-              <div class="unit-total" id="unitTotal">總戶數：—</div>
-              <div class="people-total" id="peopleTotal">總人數：—</div>
+          <div class="card-bd">
+            <div class="resident-toolbar">
+              <div class="resident-total" id="residentTotal">
+                <div class="unit-total" id="unitTotal">總戶數：—</div>
+                <div class="people-total" id="peopleTotal">總人數：—</div>
+              </div>
+              <div class="search resident-search">
+                <input id="residentSearch" type="text" placeholder="搜尋 戶號 / 姓名 / 手機 / Email" autocomplete="off" />
+              </div>
+              <button class="btn btn-primary btn-sm" type="button" id="btnAddResident">新增帳號</button>
             </div>
-            <div class="search resident-search">
-              <input id="residentSearch" type="text" placeholder="搜尋 戶號 / 姓名 / 手機 / Email" autocomplete="off" />
-            </div>
-            <button class="btn btn-primary btn-sm" type="button" id="btnAddResident">新增帳號</button>
+            <div class="status" id="residentStatus" hidden></div>
+            <div class="resident-list" id="residentList"></div>
           </div>
-          <div class="status" id="residentStatus" hidden></div>
-          <div class="resident-list" id="residentList"></div>
-        </div>
-      </section>
-    `.trim();
+        </section>
+      `.trim();
 
     const listEl = document.getElementById("residentList");
     const statusEl = document.getElementById("residentStatus");
@@ -5886,8 +6673,6 @@
     const unitsBtn = document.getElementById("btnUnits");
     const unitTotalEl = document.getElementById("unitTotal");
     const peopleTotalEl = document.getElementById("peopleTotal");
-
-    ensureResidentsPendingCountSubscription(cid);
 
     const setStatus = (msg, isError) => {
       if (!statusEl) return;
@@ -6063,6 +6848,801 @@
       } catch (err) {
         setStatus("系統錯誤，請重整頁面。", true);
       }
+    };
+
+    if (searchEl) searchEl.addEventListener("input", renderList);
+    if (addBtn) addBtn.addEventListener("click", () => openResidentEditor("create"));
+    if (unitsBtn) unitsBtn.addEventListener("click", openUnitsEditor);
+
+    if (listEl) {
+      listEl.addEventListener("click", async (e) => {
+        const row = e.target && e.target.closest ? e.target.closest(".resident-item") : null;
+        if (!row) return;
+        const id = row.getAttribute("data-id");
+        const r = residents.find((x) => String(x.id || "") === String(id || "")) || null;
+        if (!id || !r) return;
+
+        const parkingBtn = e.target.closest("[data-parking]");
+        if (parkingBtn) {
+          openResidentParkingModal80({
+            cid,
+            uid: id,
+            unit: String(r.houseNo || r.unit || "").trim(),
+            displayName: String(r.displayName || r.email || id),
+          });
+          return;
+        }
+
+        const controlBtn = e.target.closest("[data-control]");
+        if (controlBtn) {
+          openResidentControlModal80({
+            cid,
+            uid: id,
+            unit: String(r.houseNo || r.unit || "").trim(),
+            displayName: String(r.displayName || r.email || id),
+          });
+          return;
+        }
+
+        const qrBtn = e.target.closest("[data-qr]");
+        if (qrBtn) {
+          openResidentTokenModal80({
+            communityId: cid,
+            uid: id,
+            displayName: String(r.displayName || r.email || id),
+            qrToken: String(r.qrToken || "").trim(),
+            onSaved: (token) => {
+              r.qrToken = token;
+              renderList();
+            },
+          });
+          return;
+        }
+
+        const editBtn = e.target.closest("[data-edit]");
+        if (editBtn) {
+          openResidentEditor("edit", r);
+          return;
+        }
+        const delBtn = e.target.closest("[data-delete]");
+        if (delBtn) {
+          const ok = await (window.nwConfirm ? window.nwConfirm({
+            title: "確認刪除",
+            message: `確定要刪除住戶「${String(r.displayName || r.email || id)}」？`,
+            okText: "刪除",
+            cancelText: "取消",
+            danger: true,
+          }) : Promise.resolve(window.confirm("確定要刪除？")));
+          if (!ok) return;
+          delBtn.disabled = true;
+          try {
+            await db.collection("users").doc(String(id)).delete();
+            residents = residents.filter((x) => String(x.id || "") !== String(id || ""));
+            renderList();
+          } catch {
+            toast("刪除失敗");
+          } finally {
+            delBtn.disabled = false;
+          }
+        }
+      });
+
+      listEl.addEventListener("change", async (e) => {
+        const toggle = e.target && e.target.matches ? (e.target.matches("input[data-toggle]") ? e.target : null) : null;
+        if (!toggle) return;
+        const row = toggle.closest(".resident-item");
+        if (!row) return;
+        const id = row.getAttribute("data-id");
+        const r = residents.find((x) => String(x.id || "") === String(id || "")) || null;
+        if (!id || !r) return;
+        const prev = Boolean(r.enabled !== false);
+        const next = Boolean(toggle.checked);
+        toggle.disabled = true;
+        try {
+          await db.collection("users").doc(String(id)).set(
+            { enabled: next, updatedAt: FieldValue.serverTimestamp() },
+            { merge: true }
+          );
+          r.enabled = next;
+        } catch {
+          toggle.checked = prev;
+          toast("更新失敗");
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    loadResidents();
+  };
+
+    const renderResidentsPoints = () => {
+      contentEl.innerHTML = `
+        <section class="card residents-page">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
+              <div style="min-width:0;">
+                <h2>住戶點數${cname ? `｜${escapeHtml(cname)}` : ""}</h2>
+                <p>住戶/承租/車位/聯絡方式彙整</p>
+              </div>
+            </div>
+          </div>
+          <div class="card-bd">
+            <div class="resident-toolbar">
+              <div class="resident-total" id="pointsTotal">
+                <div class="people-total">總住戶：—</div>
+              </div>
+              <div class="search resident-search">
+                <input id="pointsSearch" type="text" placeholder="搜尋 戶號 / 姓名 / 手機 / Email" autocomplete="off" />
+              </div>
+            </div>
+            <div class="status" id="pointsStatus" hidden></div>
+            <div class="resident-list" id="pointsList"></div>
+          </div>
+        </section>
+      `.trim();
+
+      const pointsListEl = document.getElementById("pointsList");
+      const pointsStatusEl = document.getElementById("pointsStatus");
+      const pointsSearchEl = document.getElementById("pointsSearch");
+      const pointsTotalEl = document.getElementById("pointsTotal");
+
+      const setPointsStatus = (msg, isError) => {
+        if (!pointsStatusEl) return;
+        const t = String(msg || "").trim();
+        pointsStatusEl.textContent = t;
+        pointsStatusEl.hidden = !t;
+        pointsStatusEl.classList.toggle("error", Boolean(isError));
+      };
+
+      let pointsResidents = [];
+
+      const renderPointsList = () => {
+        const q = String(pointsSearchEl ? pointsSearchEl.value : "").trim().toLowerCase();
+        const filtered = q
+          ? pointsResidents.filter((r) => {
+              const h = String(r.houseNo || "").toLowerCase();
+              const n = String(r.displayName || "").toLowerCase();
+              const p = String(r.phone || "").toLowerCase();
+              const e = String(r.email || "").toLowerCase();
+              return h.includes(q) || n.includes(q) || p.includes(q) || e.includes(q);
+            })
+          : pointsResidents;
+
+        if (!pointsListEl) return;
+        if (pointsTotalEl) pointsTotalEl.textContent = `總住戶：${pointsResidents.length}`;
+        if (!filtered.length) {
+          pointsListEl.innerHTML = `<div class="status">尚無住戶資料。</div>`;
+          return;
+        }
+
+        pointsListEl.innerHTML = filtered
+          .map((r) => {
+            const houseNo = String(r.houseNo || "").trim();
+            const subUnit = String(r.subUnit || "").trim();
+            const fullUnit = subUnit ? `${houseNo}-${subUnit}` : houseNo;
+            const points = r.points || 0;
+            return `
+              <div class="resident-item" data-id="${String(r.id || "")}">
+                <div class="resident-left">
+                  <div class="avatar-sm">${avatarHtml(r)}</div>
+                  <div class="resident-text">
+                    <div class="resident-name">${String(r.displayName || "—")}</div>
+                    <div class="resident-sub">${fullUnit}${r.phone ? " | " + r.phone : ""}</div>
+                  </div>
+                </div>
+                <div class="resident-actions" style="gap: 8px; align-items: center;">
+                  <div style="font-weight: bold; font-size: 16px; color: var(--primary); min-width: 80px; text-align: right;">${points} 點</div>
+
+                  <button class="icon-btn" type="button" data-action="history" data-id="${String(r.id || "")}" aria-label="紀錄" title="紀錄">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z" stroke="currentColor" stroke-width="1.7"/>
+                      <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                  <button class="icon-btn" type="button" data-action="edit" data-id="${String(r.id || "")}" aria-label="設定" title="設定">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-2.8l-.2-.2a2 2 0 0 0-2.8 0L5 17v3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                      <path d="M13.5 6.5 17.5 10.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            `.trim();
+          })
+          .join("");
+
+        // 绑定按钮事件
+        pointsListEl.querySelectorAll("[data-action]").forEach(btn => {
+          btn.onclick = async (e) => {
+            const action = btn.getAttribute("data-action");
+            const id = btn.getAttribute("data-id");
+            const resident = pointsResidents.find(r => r.id === id);
+            if (!resident) return;
+
+            if (action === "edit") {
+              openPointsEditor(resident);
+            } else if (action === "history") {
+              openPointsHistory(resident);
+            }
+          };
+        });
+      };
+
+      const updatePoints = async (id, newPoints, reason) => {
+        try {
+          // 获取当前用户信息
+          const currentUser = auth.currentUser;
+          const operatorName = currentUser ? (currentUser.displayName || currentUser.email || "管理員") : "管理員";
+          const operatorUid = currentUser ? currentUser.uid : "";
+
+          // 先获取旧点數
+          const doc = await db.collection("users").doc(String(id)).get();
+          const oldData = doc.exists ? doc.data() : {};
+          const oldPoints = oldData.points || 0;
+
+          // 计算点數变化
+          const pointsChange = newPoints - oldPoints;
+
+          // 更新用户点數
+          await db.collection("users").doc(String(id)).set({
+            points: newPoints,
+            updatedAt: FieldValue.serverTimestamp()
+          }, { merge: true });
+
+          // 保存点數变更历史纪录
+          const historyRecord = {
+            userId: String(id),
+            communityId: String(cid || "default"),
+            oldPoints: oldPoints,
+            newPoints: newPoints,
+            pointsChange: pointsChange,
+            reason: reason || "點數變更",
+            operatorName: operatorName,
+            operatorUid: operatorUid,
+            createdAt: FieldValue.serverTimestamp()
+          };
+
+          await db.collection("pointsHistory").add(historyRecord);
+
+          toast(reason + " 成功");
+        } catch (err) {
+          toast("操作失敗：" + err.message);
+        }
+      };
+
+      const openPointsEditor = (resident) => {
+        const modal = ensureModal("pointsEditorModal", "", "80%");
+        let detach = () => {};
+        detach = bindModalClose(modal, () => detach());
+        let unsubscribe = () => {};
+        let currentPoints = resident.points || 0;
+
+        const render = () => {
+          modal.innerHTML = `
+            <div class="modal-backdrop" data-modal-close="1"></div>
+            <div class="modal-dialog" role="dialog" aria-modal="true">
+              <div class="modal-hd" style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 class="modal-title">設定點數 - ${String(resident.displayName || resident.email || "住戶")}</h3>
+                <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+              </div>
+              <div class="modal-body" style="display: flex; flex-direction: column; gap: 20px;">
+                <div style="background: var(--bg-soft); padding: 20px; border-radius: 12px; text-align: center;">
+                  <div style="color: var(--muted); font-size: 14px; margin-bottom: 8px;">目前點數</div>
+                  <div style="font-size: 48px; font-weight: 900; color: var(--primary); line-height: 1;" id="currentPointsDisplay">${currentPoints}</div>
+                </div>
+                <div>
+                  <button class="btn btn-primary" type="button" id="addPointsBtn">新增點數</button>
+                </div>
+                <div>
+                  <h4 style="margin-bottom: 12px; font-weight: bold;">歷史紀錄</h4>
+                  <div id="historyList" style="display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto;">
+                    <div class="status">載入中...</div>
+                  </div>
+                </div>
+              </div>
+              <div class="modal-ft">
+                <button class="btn" type="button" data-modal-close="1">關閉</button>
+              </div>
+            </div>
+          `.trim();
+
+          const addBtn = modal.querySelector("#addPointsBtn");
+          const historyListEl = modal.querySelector("#historyList");
+
+          // 新增點數按钮
+          addBtn.onclick = () => openAddPointsModal();
+
+          // 加载歷史紀錄
+          loadHistory(historyListEl);
+        };
+
+        const openAddPointsModal = () => {
+          const subModal = ensureModal("addPointsSubModal", "", "60%");
+          let subDetach = () => {};
+          subDetach = bindModalClose(subModal, () => subDetach());
+
+          subModal.innerHTML = `
+            <div class="modal-backdrop" data-modal-close="1"></div>
+            <div class="modal-dialog" role="dialog" aria-modal="true">
+              <div class="modal-hd">
+                <h3 class="modal-title">新增點數</h3>
+                <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+              </div>
+              <form id="addPointsForm">
+                <div class="modal-body">
+                  <div class="field">
+                    <label for="addPointsAmount">增減點數（正數增加，負數扣除）</label>
+                    <input id="addPointsAmount" type="number" placeholder="例如：5 或 -3" />
+                  </div>
+                  <div class="field">
+                    <label for="addPointsReason">事由</label>
+                    <input id="addPointsReason" type="text" placeholder="請輸入事由" />
+                  </div>
+                </div>
+                <div class="modal-ft">
+                  <button class="btn" type="button" data-modal-close="1">取消</button>
+                  <button class="btn btn-primary" type="submit">確認</button>
+                </div>
+              </form>
+            </div>
+          `.trim();
+
+          const form = subModal.querySelector("#addPointsForm");
+          const amountInput = subModal.querySelector("#addPointsAmount");
+          const reasonInput = subModal.querySelector("#addPointsReason");
+
+          form.onsubmit = async (e) => {
+            e.preventDefault();
+            const change = parseInt(amountInput.value, 10) || 0;
+            const reason = reasonInput.value || "";
+            
+            if (!reason) {
+              toast("請輸入事由");
+              return;
+            }
+            
+            const newPoints = Math.max(0, currentPoints + change);
+            await updatePoints(resident.id, newPoints, reason);
+            
+            // 更新本地顯示
+            currentPoints = newPoints;
+            const display = modal.querySelector("#currentPointsDisplay");
+            if (display) display.textContent = currentPoints;
+            
+            subModal.hidden = true;
+          };
+
+          subModal.hidden = false;
+        };
+
+        const loadHistory = (containerEl) => {
+          const formatDate = (date) => {
+            if (!date) return "—";
+            const d = date.toDate ? date.toDate() : new Date(date);
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            const hour = String(d.getHours()).padStart(2, "0");
+            const minute = String(d.getMinutes()).padStart(2, "0");
+            return `${year}-${month}-${day} ${hour}:${minute}`;
+          };
+
+          unsubscribe = db.collection("pointsHistory")
+            .where("userId", "==", String(resident.id))
+            .limit(50)
+            .onSnapshot(
+              (snap) => {
+                let records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                
+                // 客户端排序
+                records.sort((a, b) => {
+                  const aTime = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
+                  const bTime = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
+                  return bTime - aTime;
+                });
+
+                if (!records.length) {
+                  containerEl.innerHTML = `<div class="status" style="text-align: center; padding: 32px 0;">目前沒有歷史紀錄</div>`;
+                  return;
+                }
+
+                containerEl.innerHTML = records.map(record => {
+                  const changeClass = record.pointsChange > 0 ? "color: #10b981;" : "color: #ef4444;";
+                  const changeText = record.pointsChange > 0 ? `+${record.pointsChange}` : `${record.pointsChange}`;
+                  return `
+                    <div style="border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: #fff;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px;">
+                        <div style="font-weight: bold; font-size: 14px;">
+                          <span style="${changeClass} font-size: 18px; font-weight: 900;">${changeText} 點</span>
+                          <span style="color: var(--muted); font-size: 12px; margin-left: 8px;">(${record.oldPoints} → ${record.newPoints})</span>
+                        </div>
+                        <div style="color: var(--muted); font-size: 12px;">${formatDate(record.createdAt)}</div>
+                      </div>
+                      <div style="color: var(--muted); font-size: 13px; margin-bottom: 4px;">${record.reason}</div>
+                      <div style="color: var(--muted); font-size: 12px;">操作人員：${record.operatorName || "—"}</div>
+                    </div>
+                  `;
+                }).join("");
+              },
+              (err) => {
+                console.error("Failed to load points history:", err);
+                containerEl.innerHTML = `<div class="status error">載入失敗：${err.message}</div>`;
+              }
+            );
+        };
+
+        const originalDetach = detach;
+        detach = () => {
+          unsubscribe();
+          originalDetach();
+        };
+
+        render();
+        modal.hidden = false;
+      };
+
+      const openPointsHistory = (resident) => {
+        const modal = ensureModal("pointsHistoryModal", "", "90%");
+        let unsubscribe = () => {};
+        const detach = bindModalClose(modal, () => {
+          unsubscribe();
+          detach();
+        });
+
+        modal.innerHTML = `
+          <div class="modal-backdrop" data-modal-close="1"></div>
+          <div class="modal-dialog" role="dialog" aria-modal="true">
+            <div class="modal-hd">
+              <h3 class="modal-title">點數紀錄 - ${String(resident.displayName || resident.email || "住戶")}</h3>
+              <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+              <div id="historyStatus" class="status" style="margin-bottom: 16px;">讀取中...</div>
+              <div id="historyList"></div>
+            </div>
+          </div>
+        `.trim();
+
+        const statusEl = modal.querySelector("#historyStatus");
+        const listEl = modal.querySelector("#historyList");
+
+        const formatDate = (date) => {
+          if (!date) return "—";
+          const d = date.toDate ? date.toDate() : new Date(date);
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          const hour = String(d.getHours()).padStart(2, "0");
+          const minute = String(d.getMinutes()).padStart(2, "0");
+          return `${year}-${month}-${day} ${hour}:${minute}`;
+        };
+
+        // 监听历史纪录变化
+        unsubscribe = db.collection("pointsHistory")
+          .where("userId", "==", String(resident.id))
+          .limit(50)
+          .onSnapshot(
+            (snap) => {
+              let records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+              
+              // 在客户端排序
+              records.sort((a, b) => {
+                const aTime = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
+                const bTime = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
+                return bTime - aTime; // 降序
+              });
+
+              if (statusEl) {
+                statusEl.hidden = true;
+              }
+
+              if (!records.length) {
+                if (listEl) {
+                  listEl.innerHTML = `<div class="status" style="text-align: center; padding: 32px 0;">目前沒有點數變更紀錄</div>`;
+                }
+                return;
+              }
+
+              if (listEl) {
+                listEl.innerHTML = `
+                  <div style="display: grid; gap: 12px;">
+                    ${records.map(record => {
+                      const changeClass = record.pointsChange > 0 ? "success" : "danger";
+                      const changeText = record.pointsChange > 0 ? `+${record.pointsChange}` : `${record.pointsChange}`;
+                      return `
+                        <div style="border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: #fff;">
+                          <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 8px;">
+                            <div style="font-weight: bold; font-size: 14px;">
+                              <span style="color: ${record.pointsChange > 0 ? '#10b981' : '#ef4444'}; font-size: 18px; font-weight: 900;">${changeText} 點</span>
+                              <span style="color: var(--muted); font-size: 12px; margin-left: 8px;">(${record.oldPoints} → ${record.newPoints})</span>
+                            </div>
+                            <div style="color: var(--muted); font-size: 12px;">${formatDate(record.createdAt)}</div>
+                          </div>
+                          <div style="color: var(--muted); font-size: 13px; margin-bottom: 4px;">${record.reason}</div>
+                          <div style="color: var(--muted); font-size: 12px;">操作人員：${record.operatorName || "—"}</div>
+                        </div>
+                      `;
+                    }).join("")}
+                  </div>
+                `;
+              }
+            },
+            (err) => {
+              console.error("Failed to load points history:", err);
+              if (statusEl) {
+                statusEl.textContent = "載入失敗：" + err.message;
+                statusEl.classList.add("error");
+                statusEl.hidden = false;
+              }
+            }
+          );
+
+        modal.hidden = false;
+      };
+
+      // 加载住户数据（包含点数字段）
+      const loadPointsResidents = async () => {
+        setPointsStatus("讀取中...", false);
+        try {
+          state.unsubResidents = db.collection("users")
+            .where("community", "==", String(cid || "default"))
+            .onSnapshot((snap) => {
+              const list = snap.docs
+                .map((d) => {
+                  const v = d.data() || {};
+                  return {
+                    id: d.id,
+                    role: String(v.role || ""),
+                    houseNo: String(v.houseNo || v.unit || ""),
+                    subUnit: String(v.subUnit || ""),
+                    displayName: String(v.displayName || v.name || ""),
+                    email: String(v.email || v.username || ""),
+                    phone: String(v.phone || ""),
+                    enabled: v.enabled !== false,
+                    avatarDataUrl: String(v.avatarDataUrl || ""),
+                    status: String(v.status || ""),
+                    points: v.points || 0
+                  };
+                })
+                .filter((x) => isResidentRole(x.role) && x.status !== "pending");
+
+              list.sort((a, b) => {
+                const ah = String(a.houseNo || "");
+                const bh = String(b.houseNo || "");
+                if (ah !== bh) return ah.localeCompare(bh, "zh-Hant");
+                const as = String(a.subUnit || "");
+                const bs = String(b.subUnit || "");
+                if (as !== bs) return as.localeCompare(bs, "zh-Hant");
+                return String(a.displayName || "").localeCompare(String(b.displayName || ""), "zh-Hant");
+              });
+
+              pointsResidents = list;
+              setPointsStatus("", false);
+              renderPointsList();
+            }, (err) => {
+              const code = String(err && err.code ? err.code : "");
+              setPointsStatus(code.includes("permission-denied") ? "沒有權限讀取住戶資料。" : "讀取失敗，請稍後再試。", true);
+              pointsResidents = [];
+              renderPointsList();
+            });
+        } catch (err) {
+          setPointsStatus("系統錯誤，請重整頁面。", true);
+        }
+      };
+
+      if (pointsSearchEl) {
+        pointsSearchEl.addEventListener("input", renderPointsList);
+      }
+
+      loadPointsResidents();
+    };
+
+    const renderPendingResidents = () => {
+      contentEl.innerHTML = `
+        <section class="card residents-page">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
+              <div style="min-width:0;">
+                <h2>待審帳號${cname ? `｜${escapeHtml(cname)}` : ""}</h2>
+                <p>住戶/承租/車位/聯絡方式彙整</p>
+              </div>
+            </div>
+          </div>
+          <div class="card-bd">
+            <div class="status" id="pendingResidentsStatus" hidden></div>
+            <div class="resident-list" id="pendingResidentsList"></div>
+          </div>
+        </section>
+      `.trim();
+
+      const listEl = document.getElementById("pendingResidentsList");
+      const statusEl = document.getElementById("pendingResidentsStatus");
+
+      const setStatus = (msg, isError) => {
+        if (!statusEl) return;
+        const t = String(msg || "").trim();
+        statusEl.textContent = t;
+        statusEl.hidden = !t;
+        statusEl.classList.toggle("error", Boolean(isError));
+      };
+
+      const renderList = (list) => {
+        if (!listEl) return;
+        if (!list.length) {
+          listEl.innerHTML = `<div class="status">目前沒有帳號申請紀錄。</div>`;
+          return;
+        }
+
+        listEl.innerHTML = list.map((r) => {
+          const houseNo = String(r.houseNo || "").trim();
+          const phone = String(r.phone || "").trim();
+          const email = String(r.email || "").trim();
+          const subParts = [houseNo, phone, email].filter(Boolean);
+          const isPending = r.status === "pending";
+          const statusLabel = isPending ? "待審核" : (r.status === "approved" ? "已核准" : r.status);
+          const statusClass = isPending ? "warning" : "success";
+
+          return `
+            <div class="resident-item" data-id="${String(r.id || "")}">
+              <div class="resident-left">
+                <div class="avatar-sm">${avatarHtml(r)}</div>
+                <div class="resident-text">
+                  <div class="resident-name">
+                    ${String(r.displayName || "—")}
+                    <span class="status-chip ${statusClass}">${statusLabel}</span>
+                  </div>
+                  <div class="resident-sub">${subParts.join("｜")}</div>
+                </div>
+              </div>
+              <div class="resident-actions">
+                ${isPending ? `
+                  <button class="btn btn-primary btn-sm" type="button" data-approve title="核准">核准</button>
+                  <button class="btn btn-sm danger" type="button" data-reject title="刪除">刪除</button>
+                ` : `
+                  <button class="btn btn-sm" type="button" disabled>已處理</button>
+                `}
+              </div>
+            </div>
+          `.trim();
+        }).join("");
+
+        // 綁定核准/拒絕事件
+        listEl.querySelectorAll(".resident-item").forEach(item => {
+          const id = item.getAttribute("data-id");
+          const r = list.find(x => x.id === id);
+          if (!r || r.status !== "pending") return;
+          
+          item.querySelector("[data-approve]").onclick = async () => {
+            const ok = await (window.nwConfirm ? window.nwConfirm({
+              title: "核准帳號",
+              message: `是否核准「${r.displayName}」的住戶帳號申請並建立正式登入帳號？`,
+              okText: "核准並建立",
+              cancelText: "取消"
+            }) : Promise.resolve(confirm("是否核准？")));
+            
+            if (ok) {
+              let createdAuth = null;
+              try {
+                toast("正在建立帳號...");
+                const email = String(r.email || "").trim().toLowerCase();
+                const phone = normalizePhoneDigits(r.phone);
+                // 密碼優先使用申請時填寫的，若無則用手機號碼
+                const password = String(r.password || phone).trim();
+                
+                if (!email || !password) throw new Error("缺少必要的 Email 或密碼資訊");
+
+                // 1. 在 Firebase Auth 建立帳號
+                createdAuth = await createAuthUser(email, password);
+                const newUid = createdAuth.uid;
+
+                // 2. 將資料轉移至以 UID 為鍵的文件，並更新狀態
+                const payload = {
+                  ...r,
+                  id: newUid,
+                  uid: newUid,
+                  username: email,
+                  status: "approved",
+                  enabled: true,
+                  updatedAt: FieldValue.serverTimestamp()
+                };
+                delete payload.password; // 不在 Firestore 儲存明文密碼
+
+                // 密碼 Hash 處理
+                if (typeof sha256Hex === "function") {
+                  payload.passwordHash = await sha256Hex(password);
+                  payload.passwordHashAlg = "SHA-256";
+                  payload.passwordUpdatedAt = FieldValue.serverTimestamp();
+                }
+
+                await db.collection("users").doc(newUid).set(payload, { merge: true });
+
+                // 3. 更新搜尋索引
+                if (typeof upsertUserLookup === "function") {
+                  const accounts = loadAccounts();
+                  const c = (accounts.communities || []).find((x) => x && String(x.id || "") === String(cid || "")) || null;
+                  const communityCode = c ? String(c.username || "") : "";
+                  await upsertUserLookup({ 
+                    phoneNormalized: phone, 
+                    email, 
+                    phone, 
+                    uid: newUid, 
+                    community: cid, 
+                    communityCode, 
+                    role: "住戶" 
+                  });
+                }
+
+                // 4. 刪除原本的申請紀錄
+                if (id !== newUid) {
+                  await db.collection("users").doc(id).delete();
+                }
+
+                toast("帳號核准成功並已建立");
+              } catch (err) {
+                console.error("Approval error:", err);
+                const code = String(err && err.code ? err.code : "");
+                const msg =
+                  code.includes("auth/email-already-in-use") ? "此電子郵件已被使用。" :
+                  code.includes("auth/weak-password") ? "密碼強度不足。" :
+                  "核准失敗：" + err.message;
+                toast(msg);
+              } finally {
+                if (createdAuth && createdAuth.auth) {
+                  try {
+                    await createdAuth.auth.signOut();
+                  } catch {}
+                }
+              }
+            }
+          };
+
+          item.querySelector("[data-reject]").onclick = async () => {
+            const ok = await (window.nwConfirm ? window.nwConfirm({
+              title: "刪除申請",
+              message: `是否刪除「${r.displayName}」的住戶帳號申請紀錄？`,
+              okText: "確認刪除",
+              cancelText: "取消",
+              danger: true
+            }) : Promise.resolve(confirm("是否刪除？")));
+            
+            if (ok) {
+              try {
+                await db.collection("users").doc(id).delete();
+                toast("已刪除申請紀錄");
+              } catch (err) {
+                toast("操作失敗：" + err.message);
+              }
+            }
+          };
+        });
+      };
+
+      setStatus("讀取中...", false);
+      state.unsubResidents = db.collection("users")
+        .where("community", "==", cid)
+        .where("role", "==", "resident")
+        .where("status", "==", "pending")
+        .onSnapshot((snap) => {
+          let list = snap.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          
+          // 在前端進行排序
+          list.sort((a, b) => {
+            const tA = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : a.createdAt) : 0;
+            const tB = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : b.createdAt) : 0;
+            return tB - tA; // 降冪排序
+          });
+
+          setStatus("", false);
+          renderList(list);
+        }, (err) => {
+          setStatus("讀取失敗：" + err.message, true);
+        });
     };
 
     const openResidentEditor = (mode, resident) => {
@@ -6691,116 +8271,15 @@
       };
     };
 
-    if (searchEl) searchEl.addEventListener("input", renderList);
-    if (addBtn) addBtn.addEventListener("click", () => openResidentEditor("create"));
-    if (unitsBtn) unitsBtn.addEventListener("click", openUnitsEditor);
-
-    if (listEl) {
-      listEl.addEventListener("click", async (e) => {
-        const row = e.target && e.target.closest ? e.target.closest(".resident-item") : null;
-        if (!row) return;
-        const id = row.getAttribute("data-id");
-        const r = residents.find((x) => String(x.id || "") === String(id || "")) || null;
-        if (!id || !r) return;
-
-        const parkingBtn = e.target.closest("[data-parking]");
-        if (parkingBtn) {
-          openResidentParkingModal80({
-            cid,
-            uid: id,
-            unit: String(r.houseNo || r.unit || "").trim(),
-            displayName: String(r.displayName || r.email || id),
-          });
-          return;
-        }
-
-        const controlBtn = e.target.closest("[data-control]");
-        if (controlBtn) {
-          openResidentControlModal80({
-            cid,
-            uid: id,
-            unit: String(r.houseNo || r.unit || "").trim(),
-            displayName: String(r.displayName || r.email || id),
-          });
-          return;
-        }
-
-        const qrBtn = e.target.closest("[data-qr]");
-        if (qrBtn) {
-          openResidentTokenModal80({
-            communityId: cid,
-            uid: id,
-            displayName: String(r.displayName || r.email || id),
-            qrToken: String(r.qrToken || "").trim(),
-            onSaved: (token) => {
-              r.qrToken = token;
-              renderList();
-            },
-          });
-          return;
-        }
-
-        const editBtn = e.target.closest("[data-edit]");
-        if (editBtn) {
-          openResidentEditor("edit", r);
-          return;
-        }
-        const delBtn = e.target.closest("[data-delete]");
-        if (delBtn) {
-          const ok = await (window.nwConfirm ? window.nwConfirm({
-            title: "確認刪除",
-            message: `確定要刪除住戶「${String(r.displayName || r.email || id)}」？`,
-            okText: "刪除",
-            cancelText: "取消",
-            danger: true,
-          }) : Promise.resolve(window.confirm("確定要刪除？")));
-          if (!ok) return;
-          delBtn.disabled = true;
-          try {
-            await db.collection("users").doc(String(id)).delete();
-            residents = residents.filter((x) => String(x.id || "") !== String(id));
-            renderList();
-          } catch {
-            toast("刪除失敗");
-          } finally {
-            delBtn.disabled = false;
-          }
-        }
-      });
-
-      listEl.addEventListener("change", async (e) => {
-        const toggle = e.target && e.target.matches ? (e.target.matches("input[data-toggle]") ? e.target : null) : null;
-        if (!toggle) return;
-        const row = toggle.closest(".resident-item");
-        if (!row) return;
-        const id = row.getAttribute("data-id");
-        const r = residents.find((x) => String(x.id || "") === String(id || "")) || null;
-        if (!id || !r) return;
-        const prev = Boolean(r.enabled !== false);
-        const next = Boolean(toggle.checked);
-        toggle.disabled = true;
-        try {
-          await db.collection("users").doc(String(id)).set(
-            { enabled: next, updatedAt: FieldValue.serverTimestamp() },
-            { merge: true }
-          );
-          r.enabled = next;
-        } catch {
-          toggle.checked = prev;
-          toast("更新失敗");
-        } finally {
-          toggle.disabled = false;
-        }
-      });
-    }
-
-    loadResidents();
+    renderPage();
     (async () => {
       try {
         const doc = await db.collection("communities").doc(String(cid || "default")).get();
         const v = doc && doc.exists ? (doc.data() || {}) : {};
         communityUnits = normalizeUnitList(v.units);
-        refreshUnitTotals();
+        if (currentPage === "list") {
+          refreshUnitTotals();
+        }
       } catch {}
     })();
     updateFooterActiveNav();
@@ -7006,7 +8485,7 @@
           <div class="left">
             <div class="chip" aria-hidden="true">${iconSvg("visitor")}</div>
             <div style="min-width:0;">
-              <h2>訪客登記</h2>
+              <h2>訪客登記${cname ? `｜${escapeHtml(cname)}` : ""}</h2>
               <p>${visitorDesc}</p>
             </div>
           </div>
@@ -8046,6 +9525,10 @@
       renderFacilityModule();
       return;
     }
+    if (moduleId === "bulletin") {
+      renderBulletinModule();
+      return;
+    }
     if (subnavEl) subnavEl.innerHTML = "";
     const m = moduleCatalog.find((x) => x && x.id === moduleId) || null;
     if (!m) {
@@ -8053,13 +9536,15 @@
       renderDashboard();
       return;
     }
+    const cid = resolveActiveCommunityId();
+    const cname = (state.communities.find((c) => c.id === cid) || {}).name || "";
     contentEl.innerHTML = `
       <section class="card">
         <div class="card-hd">
           <div class="left">
             <div class="chip" aria-hidden="true">${iconSvg(m.id)}</div>
             <div style="min-width:0;">
-              <h2>${m.name}</h2>
+              <h2>${m.name}${cname ? `｜${escapeHtml(cname)}` : ""}</h2>
               <p>${m.desc}</p>
             </div>
           </div>

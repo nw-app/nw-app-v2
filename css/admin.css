@@ -13,6 +13,8 @@
 * { box-sizing: border-box; }
 html, body { 
   height: 100%; 
+  width: 100%;
+  overflow-x: visible;
   /* 隐藏垂直滚动条但保留滚动功能 */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
@@ -50,10 +52,12 @@ a { color: inherit; text-decoration: none; }
 .layout {
   height: 100dvh;
   height: 100svh;
+  width: 100%;
   display: grid;
   grid-template-columns: 1fr;
   grid-template-rows: minmax(56px, 8vh) minmax(56px, 8vh) minmax(56px, 8vh) minmax(0, 68vh) minmax(56px, 8vh);
   padding-bottom: 0;
+  overflow-x: visible;
 }
 
 .frame-hd {
@@ -357,7 +361,7 @@ a { color: inherit; text-decoration: none; }
 #facilitySubnavButtons80 > button:hover { transform: none; box-shadow: none; background: rgba(17, 24, 39, 0.03); }
 #facilitySubnavButtons80 > button.btn-primary { background: var(--brand); color: #fff; border-color: rgba(0, 0, 0, 0); }
 
-.frame-bd { overflow: auto; padding: 12px 16px 14px; min-height: 0; }
+.frame-bd { overflow: auto; overflow-x: visible; padding: 12px 16px 14px; min-height: 0; }
 .layout.visitor-main-lock .frame-bd { overflow: hidden; }
 .layout.visitor-main-lock #content {
   height: 100%;
@@ -380,7 +384,6 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid var(--border);
   border-radius: 18px;
   box-shadow: 0 10px 26px rgba(17, 24, 39, 0.07);
-  overflow: hidden;
   display: grid;
   grid-template-rows: auto 1fr;
 }
@@ -880,10 +883,11 @@ a { color: inherit; text-decoration: none; }
 }
 .parcel-info {
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 .parcel-recipient {
   font-size: 14px;
@@ -935,6 +939,180 @@ a { color: inherit; text-decoration: none; }
   gap: 8px;
   justify-content: flex-end;
   flex: 0 0 auto;
+}
+
+/* 包裹卡片响应式优化 */
+@media (max-width: 480px) {
+  .parcel-card {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .parcel-card-bd {
+    gap: 8px;
+  }
+  .parcel-info {
+    gap: 3px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .parcel-company {
+    font-size: 13px;
+  }
+  .parcel-recipient {
+    font-size: 13px;
+  }
+  .parcel-track,
+  .parcel-type,
+  .parcel-time,
+  .parcel-received,
+  .parcel-handler {
+    font-size: 11px;
+  }
+  .parcel-actions {
+    flex: 0 0 auto;
+    gap: 6px;
+  }
+  .icon-btn.sm {
+    width: 36px;
+    height: 36px;
+  }
+  .tag {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+}
+
+/* 訪客卡片响应式优化 */
+@media (max-width: 480px) {
+  .visitor-item {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .visitor-left {
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .visitor-text {
+    min-width: 0;
+  }
+  .visitor-top-row {
+    gap: 6px;
+  }
+  .visitor-name {
+    font-size: 13px;
+  }
+  .visitor-sub,
+  .visitor-sub2,
+  .visitor-keep,
+  .visitor-created {
+    font-size: 11px;
+  }
+  .visitor-sub-row {
+    gap: 6px;
+  }
+  .visitor-actions {
+    gap: 6px;
+    flex: 0 0 auto;
+  }
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* 訪客工具栏响应式优化 */
+@media (max-width: 768px) {
+  .visitor-toolbar {
+    gap: 8px;
+  }
+  .visitor-toolbar input[type="text"],
+  .visitor-toolbar input {
+    min-width: 120px;
+  }
+  .visitor-search {
+    min-width: 180px;
+  }
+}
+
+@media (max-width: 480px) {
+  .visitor-toolbar {
+    gap: 6px;
+  }
+  .visitor-toolbar .field {
+    width: 100%;
+  }
+  .visitor-toolbar input[type="text"],
+  .visitor-toolbar input {
+    min-width: 100%;
+    width: 100%;
+  }
+  .visitor-search {
+    width: 100%;
+    min-width: 100%;
+  }
+  .visitor-toolbar .btn {
+    flex: 1;
+  }
+}
+
+/* 住戶卡片响应式优化 */
+@media (max-width: 768px) {
+  .resident-item {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .resident-item {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .resident-left {
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .resident-text {
+    min-width: 0;
+  }
+  .resident-name {
+    font-size: 13px;
+  }
+  .resident-sub {
+    font-size: 11px;
+  }
+  .resident-actions {
+    gap: 6px;
+    flex: 0 0 auto;
+  }
+  .resident-search {
+    min-width: 180px;
+  }
+}
+
+/* 住戶工具栏响应式优化 */
+@media (max-width: 768px) {
+  .resident-toolbar {
+    gap: 8px;
+  }
+  .resident-search {
+    min-width: 180px;
+  }
+}
+
+@media (max-width: 480px) {
+  .resident-toolbar {
+    gap: 6px;
+  }
+  .resident-search {
+    width: 100%;
+    min-width: 100%;
+  }
+  .resident-total {
+    width: 100%;
+  }
 }
 
 /* Scan Modal Enhancements */
@@ -1762,5 +1940,551 @@ a { color: inherit; text-decoration: none; }
   #residentTokenModal .modal-dialog {
     width: calc(100vw - 12px) !important;
     max-width: calc(100vw - 12px) !important;
+  }
+}
+
+/* ====================================================
+ * 全面响应式布局优化
+ * ==================================================== */
+
+/* 通用卡片响应式优化
+ */
+@media (max-width: 1200px) {
+  .card {
+    width: 100%;
+    max-width: 100%;
+  }
+  .card-hd {
+    padding: 12px;
+  }
+  .card-bd {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 992px) {
+  .card {
+    border-radius: 16px;
+  }
+  .card-hd {
+    padding: 10px;
+  }
+  .card-bd {
+    padding: 10px;
+  }
+  .chip {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+  }
+  .card-hd h2 {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 768px) {
+  .frame-bd {
+    padding: 10px;
+  }
+  .card {
+    border-radius: 14px;
+  }
+  .card-hd {
+    padding: 10px;
+  }
+  .card-hd .left {
+    gap: 8px;
+  }
+  .chip {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+  }
+  .card-hd h2 {
+    font-size: 14px;
+  }
+  .card-hd p {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .frame-bd {
+    padding: 8px;
+  }
+  .card {
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(17, 24, 39, 0.05);
+  }
+  .card-hd {
+    padding: 8px 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .card-hd .left {
+    width: 100%;
+    gap: 10px;
+  }
+  .chip {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+  .card-hd h2 {
+    font-size: 14px;
+  }
+  .card-hd p {
+    font-size: 11px;
+  }
+}
+
+/* ====================================================
+ * 访客页面响应式优化
+ * ==================================================== */
+
+/* 访客工具栏响应式 */
+@media (max-width: 992px) {
+  .visitor-toolbar {
+    gap: 8px;
+  }
+  .visitor-toolbar input[type="text"] {
+    min-width: 140px;
+  }
+  .visitor-search {
+    min-width: 200px;
+  }
+}
+
+@media (max-width: 768px) {
+  .visitor-toolbar {
+    gap: 8px;
+  }
+  .visitor-toolbar .field {
+    width: 100%;
+  }
+  .visitor-toolbar input[type="text"],
+  .visitor-toolbar input {
+    min-width: 100%;
+    width: 100%;
+  }
+  .visitor-search {
+    width: 100%;
+    min-width: 100%;
+  }
+  .visitor-toolbar .btn {
+    flex: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .visitor-toolbar {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .visitor-toolbar input[type="text"],
+  .visitor-toolbar input {
+    height: 34px;
+    font-size: 13px;
+  }
+  .visitor-toolbar label {
+    font-size: 11px;
+  }
+}
+
+/* 访客列表响应式 */
+@media (max-width: 992px) {
+  .visitor-grid {
+    gap: 8px;
+  }
+  .visitor-item {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  .visitor-name {
+    font-size: 13px;
+  }
+  .visitor-sub,
+  .visitor-sub2,
+  .visitor-keep,
+  .visitor-created {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 768px) {
+  .visitor-grid {
+    gap: 8px;
+  }
+  .visitor-item {
+    padding: 10px 12px;
+    gap: 10px;
+    border-radius: 12px;
+  }
+  .visitor-left {
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .visitor-text {
+    min-width: 0;
+  }
+  .visitor-top-row {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .visitor-top-row .visitor-created {
+    width: 100%;
+    text-align: left;
+  }
+  .visitor-sub-row {
+    gap: 8px;
+  }
+  .visitor-actions {
+    gap: 6px;
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .visitor-grid {
+    gap: 6px;
+  }
+  .visitor-item {
+    padding: 8px 10px;
+    gap: 10px;
+    border-radius: 10px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .visitor-left {
+    width: 100%;
+    gap: 6px;
+  }
+  .visitor-top-row {
+    gap: 6px;
+  }
+  .visitor-sub-row {
+    gap: 6px;
+    flex-direction: column;
+  }
+  .visitor-sub,
+  .visitor-sub2,
+  .visitor-keep {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .visitor-actions {
+    width: 100%;
+    gap: 6px;
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* ====================================================
+ * 包裹页面响应式优化
+ * ==================================================== */
+
+@media (max-width: 992px) {
+  .parcel-filter-bar {
+    gap: 8px;
+  }
+  .parcel-filter-bar input,
+  .parcel-filter-bar select {
+    min-width: 140px;
+  }
+}
+
+@media (max-width: 768px) {
+  .parcel-filter-bar {
+    gap: 8px;
+  }
+  .parcel-filter-bar .field {
+    width: 100%;
+  }
+  .parcel-filter-bar input,
+  .parcel-filter-bar select {
+    width: 100%;
+    min-width: 100%;
+  }
+  .parcel-filter-bar .btn {
+    flex: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .parcel-filter-bar {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .parcel-filter-bar input,
+  .parcel-filter-bar select {
+    height: 34px;
+    font-size: 13px;
+  }
+  .parcel-filter-bar label {
+    font-size: 11px;
+  }
+  .parcel-card {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .parcel-card-bd {
+    flex-direction: column;
+    width: 100%;
+  }
+  .parcel-info {
+    width: 100%;
+  }
+  .parcel-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* ====================================================
+ * 住户页面响应式优化
+ * ==================================================== */
+
+@media (max-width: 992px) {
+  .resident-toolbar {
+    gap: 8px;
+  }
+  .resident-search {
+    min-width: 200px;
+  }
+}
+
+@media (max-width: 768px) {
+  .resident-toolbar {
+    gap: 8px;
+  }
+  .resident-toolbar .field {
+    width: 100%;
+  }
+  .resident-search {
+    width: 100%;
+    min-width: 100%;
+  }
+  .resident-total {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .resident-toolbar {
+    gap: 6px;
+  }
+  .resident-search {
+    height: 34px;
+    font-size: 13px;
+  }
+  .resident-toolbar label {
+    font-size: 11px;
+  }
+  .resident-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .resident-left {
+    width: 100%;
+  }
+  .resident-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* ====================================================
+ * 框架整体响应式优化
+ * ==================================================== */
+
+@media (max-width: 768px) {
+  .frame-hd {
+    padding: 0 12px;
+  }
+  .frame-hd .logo {
+    gap: 8px;
+  }
+  .frame-hd .logo .logo-icon {
+    width: 32px;
+    height: 32px;
+  }
+  .frame-hd .logo .logo-title {
+    font-size: 14px;
+  }
+  .frame-hd .logo .logo-sub {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .frame-hd {
+    padding: 0 10px;
+    height: 56px;
+  }
+  .frame-hd .logo {
+    gap: 6px;
+  }
+  .frame-hd .logo .logo-icon {
+    width: 30px;
+    height: 30px;
+  }
+  .frame-hd .logo .logo-title {
+    font-size: 13px;
+  }
+  .frame-hd .logo .logo-sub {
+    font-size: 10px;
+  }
+  .user-info {
+    gap: 6px;
+  }
+  .user-info .avatar-sm {
+    width: 36px;
+    height: 36px;
+  }
+  .user-info .name {
+    font-size: 13px;
+  }
+}
+
+/* ====================================================
+ * 底部导航响应式优化
+ * ==================================================== */
+
+@media (max-width: 768px) {
+  .frame-ft .nav {
+    padding: 0 8px;
+  }
+  .frame-ft .nav a {
+    padding: 0 4px;
+  }
+  .frame-ft .nav .label {
+    font-size: 10px;
+  }
+  .frame-ft .nav svg {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .frame-ft .nav {
+    padding: 0 6px;
+  }
+  .frame-ft .nav a {
+    padding: 0 2px;
+  }
+  .frame-ft .nav .label {
+    font-size: 9px;
+  }
+  .frame-ft .nav svg {
+    width: 22px;
+    height: 22px;
+  }
+  .frame-ft .nav .nav-badge {
+    right: 16px;
+    top: 4px;
+    font-size: 10px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+  }
+}
+
+/* ====================================================
+ * 平板和桌面端优化
+ * ==================================================== */
+
+@media (min-width: 768px) {
+  .card {
+    max-width: 100%;
+  }
+}
+
+@media (min-width: 992px) {
+  .card {
+    max-width: 100%;
+  }
+}
+
+@media (min-width: 1200px) {
+  .card {
+    max-width: 100%;
+  }
+}
+
+/* 设施预约响应式优化 */
+@media (max-width: 768px) {
+  #facilityReservationContainer80 {
+    width: 100%;
+  }
+  
+  .card-bd {
+    padding: 12px;
+    width: 100%;
+  }
+  
+  .parcel-filter-bar {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  
+  .resident-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    width: 100%;
+  }
+  
+  .resident-item .resident-left {
+    width: 100%;
+  }
+  
+  .resident-item .resident-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .card {
+    width: 100%;
+    overflow-x: hidden;
+  }
+  
+  .card-bd {
+    padding: 10px;
+    width: 100%;
+    overflow-x: hidden;
+  }
+  
+  .parcel-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  
+  .resident-item {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    padding: 12px;
+  }
+  
+  .resident-left {
+    width: 100%;
+  }
+  
+  .resident-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }

@@ -548,9 +548,9 @@ html.force-portrait-rotate .pwa-install {
 .modal-dialog {
   position: relative;
   z-index: 1;
-  width: 90vw;
-  height: 90vh;
-  max-width: 90vw;
+  width: 90%;
+  height: 90%;
+  max-width: 1200px;
   max-height: 90vh;
   background: rgba(255, 255, 255, 0.98);
   border: 1px solid rgba(17, 24, 39, 0.14);
@@ -568,8 +568,10 @@ html.force-portrait-rotate .pwa-install {
   box-sizing: border-box;
 }
 .modal-dialog.large {
-  width: min(1100px, 95vw);
-  height: 85vh;
+  width: 90%;
+  height: 90%;
+  max-width: 1200px;
+  max-height: 90vh;
 }
 .modal-dialog.full {
   width: 100vw;
@@ -1223,16 +1225,17 @@ html.force-portrait-rotate .pwa-install {
 /* 手机竖屏模态框响应式样式 */
 @media (max-width: 768px) {
   .modal-dialog {
-    width: calc(100vw - 16px);
-    max-width: calc(100vw - 16px);
-    height: 85vh;
+    width: 90%;
+    height: 90%;
+    max-width: 100%;
+    max-height: 90vh;
     border-radius: 12px;
-    margin: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
+    margin: 0;
   }
   
   .modal-dialog.large {
-    width: calc(100vw - 16px);
-    max-width: calc(100vw - 16px);
+    width: 90%;
+    max-width: 100%;
   }
   
   .modal-hd {
@@ -1254,16 +1257,17 @@ html.force-portrait-rotate .pwa-install {
 
 @media (max-width: 480px) {
   .modal-dialog {
-    width: calc(100vw - 12px);
-    max-width: calc(100vw - 12px);
-    height: 90vh;
+    width: 90%;
+    height: 90%;
+    max-width: 100%;
+    max-height: 90vh;
     border-radius: 10px;
-    margin: max(6px, env(safe-area-inset-top)) 6px max(6px, env(safe-area-inset-bottom));
+    margin: 0;
   }
   
   .modal-dialog.large {
-    width: calc(100vw - 12px);
-    max-width: calc(100vw - 12px);
+    width: 90%;
+    max-width: 100%;
   }
   
   .modal-hd {
