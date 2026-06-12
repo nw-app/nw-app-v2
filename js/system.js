@@ -25,15 +25,15 @@
   const PAGES = ["accounts", "community", "links"];
 
   const state = {
-    communities: [],
-    configByCommunityId: new Map(),
-    unsubCommunities: null,
-    unsubConfig: null,
-    unsubResidents: null,
-    currentPage: "accounts",
-    communityAreaFilter: "全部",
-    accountsRoleView: "resident",
-  };
+      communities: [],
+      configByCommunityId: new Map(),
+      unsubCommunities: null,
+      unsubConfig: null,
+      unsubResidents: null,
+      currentPage: "accounts",
+      communityAreaFilter: "住戶",
+      accountsRoleView: "resident",
+    };
 
   try {
     const raw = String(location.hash || "").replace(/^#/, "");
@@ -48,8 +48,15 @@
   } catch {}
   try {
     const savedArea = String(localStorage.getItem(STORAGE_AREA_FILTER) || "");
-    if (["全部", "台北", "新北", "桃園"].includes(savedArea)) state.communityAreaFilter = savedArea;
-  } catch {}
+    if (["住戶"].includes(savedArea)) {
+      state.communityAreaFilter = savedArea;
+    } else {
+      // 如果没有保存过，默认使用住戶
+      state.communityAreaFilter = "住戶";
+    }
+  } catch {
+    state.communityAreaFilter = "住戶";
+  }
 
   const catalogCommunityButtons = [
     { id: "parcel", name: "包裹郵件", defaultUrl: "#community/parcel" },
@@ -287,9 +294,8 @@
     let forceCreateUser = false;
 
     const getCommunityOptions = () => {
-      const area = String(state.communityAreaFilter || "全部");
       const list = state.communities || [];
-      return list.filter((c) => area === "全部" ? true : String(c?.area || "") === area);
+      return list;
     };
 
     const resolveUnits = () => {
@@ -441,22 +447,25 @@
 
     const setOptions = () => {
       const list = getCommunityOptions();
-      const html = list.map((c) => `<option value="${c.id}">${c.name || c.id}</option>`).join("");
+      
+      // For main community select (always show "全部" as default)
+      const html = 
+        `<option value="" selected>全部</option>` + 
+        list.map((c) => `<option value="${c.id}">${c.name || c.id}</option>`).join("");
       communitySelect.innerHTML = html;
+      
+      // For modal community select (without default option)
       if (inputCommunity) {
-        inputCommunity.innerHTML = html;
+        const modalHtml = list.map((c) => `<option value="${c.id}">${c.name || c.id}</option>`).join("");
+        inputCommunity.innerHTML = modalHtml;
       }
+      
       return list;
     };
 
     const optionList = setOptions();
-    const pickedCommunityId = loadActiveCommunityId({ communities: optionList }) || "";
-    if (pickedCommunityId && optionList.some((c) => String(c?.id || "") === String(pickedCommunityId))) {
-      communitySelect.value = pickedCommunityId;
-    } else if (optionList[0]) {
-      communitySelect.value = String(optionList[0].id || "");
-    }
-    if (communitySelect.value) setActiveCommunityId(communitySelect.value);
+    // Always default to "全部" (empty string)
+    communitySelect.value = "";
 
     let currentUsers = [];
 
@@ -536,17 +545,40 @@
       const view = String(state.accountsRoleView || "resident");
       const activeId = communitySelect.value || "";
       const rList = document.getElementById("residentList");
-      const list = view === "admin" ? (currentUsers || []) : (currentUsers || []).filter((r) => String(r.communityId || "") === String(activeId || ""));
+
+      let list = [];
+      if (view === "admin") {
+        list = currentUsers || [];
+      } else if (activeId !== "") {
+        // 如果選了特定社區，只顯示該社區
+        list = (currentUsers || []).filter((r) => String(r.communityId || "") === String(activeId));
+      } else {
+        // 沒選特定社區，顯示所有帳號
+        list = currentUsers || [];
+      }
+
       const title = view === "admin" ? "系統管理員" : view === "community" ? "社區" : "住戶";
+      
+      // 建立社区ID到名称的映射
+      const communityMap = new Map();
+      (state.communities || []).forEach(c => {
+        communityMap.set(String(c.id), String(c.name || c.id));
+      });
+      
       rList.innerHTML = list.map((r) => {
         const unitText = String(r.unit || "").trim();
         const sub = view === "resident" && unitText ? `<div class="account-sub">${unitText}</div>` : "";
+        const communityName = communityMap.get(String(r.communityId || "")) || "";
+        const communityDisplay = communityName ? `<span class="tag" style="margin-left:8px;">${communityName}</span>` : "";
         return `
             <div class="item account-item">
               <div class="account-left">
                 <div class="avatar-sm">${avatarHtml(r)}</div>
                 <div class="account-text">
-                  <div class="account-name">${String(r.name || "—")}</div>
+                  <div style="display:flex;align-items:center;">
+                    <div class="account-name">${String(r.name || "—")}</div>
+                    ${communityDisplay}
+                  </div>
                   ${sub}
                   <div class="account-meta">
                     <div class="switch-label">${r.enabled ? "啟用" : "停用"}</div>
@@ -607,25 +639,23 @@
       });
     };
 
-    const subscribeUsers = (communityId) => {
+    const subscribeUsers = async (communityId) => {
       if (state.unsubResidents) state.unsubResidents();
       currentUsers = [];
       const rList = document.getElementById("residentList");
       if (rList) rList.innerHTML = `<div class="status">讀取中...</div>`;
-      const cid = String(communityId || "default");
+      const cid = String(communityId || "");
       const view = String(state.accountsRoleView || "resident");
       const base = db.collection("users");
-      const q =
-        view === "admin"
-          ? base.where("role", "in", ["系統管理員", "系統管理者", "系統", "admin"])
-          : base.where("community", "==", cid);
-
+      
+      console.log("subscribeUsers called with:", { communityId, cid, view });
+      
       let didLoad = false;
       const renderError = (msg) => {
         if (!rList) return;
         rList.innerHTML = `<div class="status error">${String(msg || "讀取失敗。")}</div>`;
       };
-
+      
       const applySnap = (snap) => {
         didLoad = true;
         currentUsers = snap.docs.map((d) => {
@@ -649,6 +679,7 @@
             category: String(v.category || v.residentCategory || ""),
           };
         }).filter(Boolean);
+        
         if (view === "admin") {
           const me = auth && auth.currentUser ? auth.currentUser : null;
           const email = me && me.email ? String(me.email || "").trim() : "";
@@ -677,7 +708,7 @@
         }
         renderUserList();
       };
-
+      
       const onError = (err) => {
         const code = String(err && err.code ? err.code : "");
         const msg =
@@ -690,26 +721,41 @@
           statusEl.classList.add("error");
         }
       };
-
+      
       const t = window.setTimeout(() => {
         if (didLoad) return;
         renderError("讀取逾時，請確認網路或重新登入後再試。");
       }, 8000);
-
-      q.get().then((snap) => {
-        if (didLoad) return;
-        window.clearTimeout(t);
-        applySnap(snap);
-      }).catch((err) => {
+      
+      try {
+        if (view === "admin") {
+          const q = base.where("role", "in", ["系統管理員", "系統管理者", "系統", "admin"]);
+          const snap = await q.get();
+          window.clearTimeout(t);
+          applySnap(snap);
+        } else if (cid === "") {
+          // 没选特定社区，获取所有用户
+          const snap = await base.get();
+          window.clearTimeout(t);
+          applySnap(snap);
+        } else {
+          const q = base.where("community", "==", cid);
+          const snap = await q.get();
+          window.clearTimeout(t);
+          applySnap(snap);
+        }
+      } catch (err) {
         window.clearTimeout(t);
         onError(err);
-      });
-
+      }
+      
       state.unsubResidents = null;
     };
 
     communitySelect.addEventListener("change", () => {
-      setActiveCommunityId(communitySelect.value);
+      if (communitySelect.value) {
+        setActiveCommunityId(communitySelect.value);
+      }
       subscribeUsers(communitySelect.value);
     });
 
@@ -1038,7 +1084,9 @@
     }
     communitySelect.disabled = Boolean(isAdminView);
     if (inputCommunity) inputCommunity.disabled = Boolean(isAdminView);
-    subscribeUsers(communitySelect.value || "default");
+    
+    // Initial data load for accounts
+    subscribeUsers(communitySelect.value || "");
 
     const rList = document.getElementById("residentList");
     if (rList) {
@@ -1324,8 +1372,7 @@
     const renderCommunityList = () => {
       const d = loadAccounts();
       const cList = document.getElementById("communityList");
-      const area = String(state.communityAreaFilter || "全部");
-      const list = (d.communities || []).filter((c) => area === "全部" ? true : String(c?.area || "") === area);
+      const list = d.communities || []; // 显示所有社区，不再按区域筛选
       cList.innerHTML = list.map((c) => `
             <div class="item community-item">
               <div class="community-row1">
@@ -1729,7 +1776,11 @@
       // 內部連結選項
       const internalLinks = [
         { value: "parcel.html", label: "包裹郵件" },
-        { value: "facility.html", label: "設施預約" }
+        { value: "facility.html", label: "設施預約" },
+        { value: "bulletin-community.html", label: "社區園地" },
+        { value: "bulletin-finance.html", label: "財務報表" },
+        { value: "bulletin-meeting.html", label: "會議紀錄" },
+        { value: "bulletin-repair.html", label: "修繕報告" }
       ];
 
       let html = "";
@@ -2315,60 +2366,42 @@
     bar.hidden = !shouldShow;
     if (!shouldShow) return;
 
-    const options = ["全部", "台北", "新北", "桃園"];
-    const current = String(state.communityAreaFilter || "全部");
     const titleArea = document.getElementById("communityAreaName");
     if (titleArea) {
       const rv = String(state.accountsRoleView || "resident");
       if (state.currentPage === "accounts" && rv === "community") titleArea.textContent = "社區";
       else if (state.currentPage === "accounts" && rv === "admin") titleArea.textContent = "系統管理員";
-      else titleArea.textContent = current;
+      else if (state.currentPage === "accounts") titleArea.textContent = "住戶";
+      else if (state.currentPage === "community") titleArea.textContent = "社區後台";
     }
 
     if (state.currentPage === "accounts") {
       const rv = String(state.accountsRoleView || "resident");
       bar.innerHTML = `
         <div class="filter-left">
-          ${options.map((x) => `
-              <button type="button" class="filter-btn ${rv === "resident" && x === current ? "active" : ""}" data-area="${x}" aria-pressed="${rv === "resident" && x === current ? "true" : "false"}">${x}</button>
-            `).join("")}
+          <button type="button" class="filter-btn ${rv === "resident" ? "active" : ""}" data-accounts-role="resident" aria-pressed="${rv === "resident" ? "true" : "false"}">住戶</button>
         </div>
         <div class="filter-right">
           <button type="button" class="filter-btn ${rv === "community" ? "active" : ""}" data-accounts-role="community" aria-pressed="${rv === "community" ? "true" : "false"}">社區</button>
           <button type="button" class="filter-btn ${rv === "admin" ? "active" : ""}" data-accounts-role="admin" aria-pressed="${rv === "admin" ? "true" : "false"}">系統</button>
         </div>
       `.trim();
-    } else {
-      bar.innerHTML = options.map((x) => `
-          <button type="button" class="filter-btn ${x === current ? "active" : ""}" data-area="${x}" aria-pressed="${x === current ? "true" : "false"}">${x}</button>
-        `).join("");
+    } else if (state.currentPage === "community") {
+      bar.innerHTML = `<button type="button" class="filter-btn active" data-area="社區後台" aria-pressed="true">社區後台</button>`;
     }
 
-    if (bar._boundAreaFilter) return;
-    bar._boundAreaFilter = true;
-    bar.addEventListener("click", (e) => {
+    // 移除旧的事件绑定，重新绑定
+    const oldBar = bar.cloneNode(true);
+    bar.parentNode.replaceChild(oldBar, bar);
+    
+    oldBar.addEventListener("click", (e) => {
       const roleBtn = e.target && e.target.closest ? e.target.closest("[data-accounts-role]") : null;
       if (roleBtn && state.currentPage === "accounts") {
         const v = String(roleBtn.getAttribute("data-accounts-role") || "resident");
         if (v === state.accountsRoleView) return;
         state.accountsRoleView = v;
         openPage("accounts");
-        return;
       }
-
-      const t = e.target && e.target.closest ? e.target.closest("[data-area]") : null;
-      if (!t) return;
-      const v = String(t.getAttribute("data-area") || "全部");
-      const cur = String(state.communityAreaFilter || "全部");
-      const roleView = String(state.accountsRoleView || "resident");
-      const shouldForceToResident = state.currentPage === "accounts" && roleView !== "resident";
-      if (v === cur && !shouldForceToResident) return;
-      state.communityAreaFilter = v;
-      if (state.currentPage === "accounts") state.accountsRoleView = "resident";
-      try {
-        localStorage.setItem(STORAGE_AREA_FILTER, v);
-      } catch {}
-      openPage(state.currentPage);
     });
   }
 
@@ -2398,6 +2431,8 @@
         const cB = String(b.username || "");
         return cA.localeCompare(cB, "zh-TW", { numeric: true });
       });
+      console.log("[Debug] state.communities loaded:", state.communities.length);
+      state.communities.forEach(c => console.log(`[Debug] Community: ${c.name}, Area: ${c.area}, ID: ${c.id}`));
       openPage(state.currentPage);
     }).catch(() => {
       state.communities = [];

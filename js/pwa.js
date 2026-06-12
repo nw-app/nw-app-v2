@@ -183,12 +183,20 @@
       wrap.id = "profileHouseNoQrWrap";
       wrap.className = "profile-qr-wrap";
       wrap.hidden = true;
-      wrap.innerHTML = `<img id="profileHouseNoQrImg" alt="QR Code" />`;
+      wrap.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center;">
+          <img id="profileHouseNoQrImg" alt="QR Code" />
+          <div id="profilePointsWrap" class="profile-points-wrap" style="margin-top: 12px; text-align: center;">
+            <div class="profile-points-label" style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">目前點數</div>
+            <div id="profilePointsValue" class="profile-points-value" style="font-size: 36px; font-weight: 900; color: #1f2937;">—</div>
+          </div>
+        </div>
+      `;
       houseNoText.insertAdjacentElement("afterend", wrap);
       return wrap;
     };
 
-    const renderProfileHouseNoQr = (token) => {
+    const renderProfileHouseNoQr = (token, userData) => {
       const wrap = ensureProfileHouseNoQr();
       if (!wrap) return;
       const img = wrap.querySelector("#profileHouseNoQrImg");
@@ -212,6 +220,15 @@
         img.addEventListener("error", () => {
           try { wrap.innerHTML = `<div class="status error">QR code 產生失敗</div>`; } catch {}
         });
+      }
+      // 顯示點數
+      const pointsEl = wrap.querySelector("#profilePointsValue");
+      if (pointsEl && userData) {
+        // 嘗試從多個可能的字段獲取點數
+        const points = userData.points || userData.point || userData.credit || userData.score || userData.balance || 0;
+        pointsEl.textContent = String(points);
+      } else if (pointsEl) {
+        pointsEl.textContent = "—";
       }
     };
 
@@ -678,7 +695,7 @@
             const sub = String(data.subHouseNo || data.subUnit || data.sub || "").trim();
             const full = base ? (sub ? `${base}-${sub}` : base) : "—";
             if (houseNoText) houseNoText.textContent = full;
-            renderProfileHouseNoQr(String(data.qrToken || "").trim());
+            renderProfileHouseNoQr(String(data.qrToken || "").trim(), data);
           }
           if (roleEl) {
             roleEl.style.display = "";

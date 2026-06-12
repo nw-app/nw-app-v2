@@ -118,17 +118,17 @@
       <div class="grid grid-1">
         <section class="card">
           <div class="card-hd">
-            <div>
-              <h2><span class="community-area-label" id="communityAreaName">全部</span><span>帳號列表</span></h2>
+            <div class="card-hd-left">
+              <h2><span class="community-area-label" id="communityAreaName">住戶</span><span>帳號列表</span></h2>
+              <div class="field" id="field_accounts_community">
+                <label for="r_community">所屬社區</label>
+                <select id="r_community"></select>
+              </div>
             </div>
             <button class="btn btn-primary" type="button" id="btnAddResident">新增帳號</button>
           </div>
           <div class="card-bd">
-            <div class="field" id="field_accounts_community">
-              <label for="r_community">所屬社區</label>
-              <select id="r_community"></select>
-            </div>
-            <div class="list" id="residentList" style="margin-top:12px;"></div>
+            <div class="list" id="residentList"></div>
 
             <div class="modal" id="residentModal" hidden>
               <div class="modal-backdrop" data-modal-close="1"></div>
@@ -223,7 +223,7 @@
         <section class="card">
           <div class="card-hd">
             <div>
-              <h2><span class="community-area-label" id="communityAreaName">全部</span><span>社區列表</span></h2>
+              <h2><span class="community-area-label" id="communityAreaName">社區後台</span><span>社區列表</span></h2>
             </div>
             <button class="btn btn-primary" type="button" id="btnAddCommunity">新增社區</button>
           </div>

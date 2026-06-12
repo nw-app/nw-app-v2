@@ -27,25 +27,33 @@ html, body {
   -ms-overflow-style: none; /* IE and Edge */
 }
 
-/* 隐藏Chrome, Safari和Opera的滚动条 */
+/* 顯示捲動條以符合系統原生捲動方式 */
 ::-webkit-scrollbar {
-  display: none;
+  display: block;
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-/* 确保所有可滚动元素也隐藏滚动条 */
+/* 確保所有可捲動元素顯示捲動條 */
 .scrollable,
 .scroll-container,
 .overflow-y-auto,
 .overflow-x-auto {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: thin;
+  -ms-overflow-style: auto;
 }
 
 .scrollable::-webkit-scrollbar,
 .scroll-container::-webkit-scrollbar,
 .overflow-y-auto::-webkit-scrollbar,
 .overflow-x-auto::-webkit-scrollbar {
-  display: none; /* Chrome, Safari and Opera */
+  display: block;
 }
 body {
   margin: 0;
@@ -127,10 +135,12 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid rgba(255, 255, 255, 0.18);
 }
 .main {
+  height: 100dvh;
   padding: 18px 18px 28px;
   display: grid;
   grid-template-rows: auto 1fr;
   gap: 14px;
+  overflow: hidden;
 }
 .topbar {
   display: flex;
@@ -170,7 +180,12 @@ a { color: inherit; text-decoration: none; }
   color: #fff;
 }
 .btn-primary:hover { box-shadow: 0 16px 34px rgba(211, 47, 47, 0.35); }
-.content { display: grid; gap: 14px; }
+.content { 
+  display: grid; 
+  gap: 14px; 
+  min-height: 0;
+  height: 100%;
+}
 .grid {
   display: grid;
   grid-template-columns: 1.2fr 0.8fr;
@@ -182,6 +197,10 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: 0 10px 26px rgba(17, 24, 39, 0.07);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
 }
 .card-hd {
   padding: 14px 14px 10px;
@@ -191,6 +210,16 @@ a { color: inherit; text-decoration: none; }
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 10;
+}
+.card-bd { 
+  padding: 14px; 
+  overflow-y: auto;
+  flex: 1 1 auto;
 }
 .card-hd h2 { margin: 0; font-size: 16px; font-weight: 900; }
 .card-hd p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
@@ -347,7 +376,12 @@ a { color: inherit; text-decoration: none; }
 }
 .frame-title h1 { margin: 0; font-size: 18px; font-weight: 900; letter-spacing: 0.2px; }
 .frame-title p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.frame-bd { overflow: auto; padding: 0; min-height: 0; }
+.frame-bd { overflow: hidden; padding: 0; min-height: 0; }
+.content { 
+  overflow: auto; 
+  height: 100%; 
+  min-height: 0;
+}
 .home-grid {
   display: flex;
   flex-direction: column;

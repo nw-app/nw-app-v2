@@ -561,12 +561,15 @@ async function loadFacilities(userData) {
       // 获取当前时间
       const now = new Date();
       
-      // 统计每个设施的预约数量（包括待审核和免审核，但只统计未过期的预约
+      // 统计每个设施的当前用户预约数量（只统计当前用户、未过期的预约
       const stats = {};
       let total = 0;
       list.forEach(r => {
         const fid = String(r.facilityId || "").trim();
-        if (fid) {
+        const reservationUserId = String(r.createdBy || "").trim();
+        
+        // 只统计当前用户的预约
+        if (fid && reservationUserId === currentUserId) {
           // 检查预约时间是否已过
           let isExpired = false;
           
@@ -680,44 +683,101 @@ async function loadFacilities(userData) {
         ${slots.map(slot => {
           let status = 'available';
           let reservationData = null;
-          const slotDateTime = makeDateTime80(dateKey, slot.start);
+          const slotStartDateTime = makeDateTime80(dateKey, slot.start);
+          const slotEndDateTime = makeDateTime80(dateKey, slot.end);
           
           // 检查时间是否已过
           const isPast = selectedDateStr < todayStr || 
-            (selectedDateStr === todayStr && slotDateTime < now);
+            (selectedDateStr === todayStr && slotEndDateTime < now);
+          
+          // 检查是否在预约时间内
+          const isInProgress = selectedDateStr === todayStr && 
+            slotStartDateTime <= now && now <= slotEndDateTime;
+          
+          // 查找该时段的预约（无论时间是否已过）
+          const reservation = existingReservations.find(r => 
+            String(r.startTime) === slot.start && 
+            ['pending', 'approved'].includes(String(r.status))
+          );
+          
+          if (reservation) {
+            reservationData = reservation;
+            if (String(reservation.createdBy) === String(currentUserId)) {
+              // 自己的预约
+              status = 'self-booked';
+            } else {
+              // 他人预约
+              status = 'other-booked';
+            }
+          }
           
           if (isPast) {
-            status = 'past';
-          } else {
-            // 查找该时段的预约
-            const reservation = existingReservations.find(r => 
-              String(r.startTime) === slot.start && 
-              ['pending', 'approved'].includes(String(r.status))
-            );
-            
-            if (reservation) {
-              reservationData = reservation;
-              if (String(reservation.createdBy) === String(currentUserId)) {
-                // 自己的预约
-                // 这里简化处理，实际可以添加已使用/未使用的逻辑
-                status = 'self-booked';
-              } else {
-                // 他人预约
-                status = 'other-booked';
-              }
-            }
+            // 时间已过，添加 past 类（灰色背景）
+            // 但保留原来的预约状态，这样还能显示预约信息
           }
 
           let className = 'booking-time-btn';
-          if (status === 'past') className += ' past';
-          else if (status === 'other-booked') className += ' other-booked';
-          else if (status === 'self-booked') className += ' self-booked';
-          else if (status === 'self-used') className += ' self-used';
-          else if (status === 'self-unused') className += ' self-unused';
+          if (isPast) {
+            className += ' past';
+          } else if (isInProgress) {
+            className += ' in-progress';
+          } else if (status === 'other-booked') {
+            className += ' other-booked';
+          } else if (status === 'self-booked') {
+            className += ' self-booked';
+          } else if (status === 'self-used') {
+            className += ' self-used';
+          } else if (status === 'self-unused') {
+            className += ' self-unused';
+          }
+
+          let statusText = '';
+          let approvalText = '';
+          let checkinText = '';
+          if (status === 'self-booked') {
+            if (isPast) {
+              statusText = '<span class="booking-status-text">已預約</span>';
+            } else {
+              statusText = '<span class="booking-status-text">已預約</span>';
+            }
+            if (reservationData && String(reservationData.status) === 'approved') {
+              approvalText = '<span class="booking-approval-text">(已核准)</span>';
+            } else if (reservationData && String(reservationData.status) === 'pending') {
+              approvalText = '<span class="booking-approval-text">(審查中)</span>';
+            }
+            // 显示报到状态
+            if (reservationData && Boolean(reservationData.checkedIn)) {
+              checkinText = '<span class="booking-checkin-text checked-in">已報到</span>';
+            } else if (reservationData && String(reservationData.status) === 'approved') {
+              checkinText = '<span class="booking-checkin-text not-checked-in">未報到</span>';
+            }
+          } else if (status === 'other-booked') {
+            if (isPast) {
+              statusText = '<span class="booking-status-text">已預約</span>';
+            } else {
+              statusText = '<span class="booking-status-text">目前已有預約</span>';
+            }
+            if (reservationData && String(reservationData.status) === 'approved') {
+              approvalText = '<span class="booking-approval-text">(已核准)</span>';
+            } else if (reservationData && String(reservationData.status) === 'pending') {
+              approvalText = '<span class="booking-approval-text">(審查中)</span>';
+            }
+            // 显示报到状态
+            if (reservationData && Boolean(reservationData.checkedIn)) {
+              checkinText = '<span class="booking-checkin-text checked-in">已報到</span>';
+            } else if (reservationData && String(reservationData.status) === 'approved') {
+              checkinText = '<span class="booking-checkin-text not-checked-in">未報到</span>';
+            }
+          }
 
           return `
             <button class="${className}" data-start="${slot.start}" data-end="${slot.end}" data-status="${status}" data-reservation-id="${reservationData ? reservationData.id : ''}">
-              ${slot.start} - ${slot.end}
+              <span class="booking-time-text">${slot.start} - ${slot.end}</span>
+              <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap; justify-content:flex-end;">
+                ${statusText}
+                ${approvalText}
+                ${checkinText}
+              </div>
             </button>
           `;
         }).join('')}

@@ -835,7 +835,36 @@
         .collection("reservations")
         .where("status", "==", "pending")
         .onSnapshot((snap) => {
-          updateFacilityPendingBadges(snap && typeof snap.size === "number" ? snap.size : 0);
+          if (!snap || !snap.docs || !Array.isArray(snap.docs)) {
+            updateFacilityPendingBadges(0);
+            return;
+          }
+          
+          const now = new Date();
+          let validCount = 0;
+          
+          snap.docs.forEach(doc => {
+            const r = doc.data();
+            let isExpired = false;
+            
+            if (r.endAt) {
+              const endDate = r.endAt.toDate ? r.endAt.toDate() : new Date(r.endAt);
+              if (endDate < now) {
+                isExpired = true;
+              }
+            } else if (r.dateKey && r.endTime) {
+              const endDateTime = makeDateTime80(r.dateKey, r.endTime);
+              if (endDateTime && endDateTime < now) {
+                isExpired = true;
+              }
+            }
+            
+            if (!isExpired) {
+              validCount++;
+            }
+          });
+          
+          updateFacilityPendingBadges(validCount);
         }, () => {});
     } catch {
       stopFacilityPendingCountSubscription();
@@ -3974,25 +4003,29 @@
               <label for="r_facility">設施</label>
               <select id="r_facility" required></select>
             </div>
-            <div style="display:flex; gap:10px;">
-              <div class="field" style="flex:1;">
-                <label for="r_date">日期</label>
-                <input id="r_date" type="date" required />
-              </div>
-              <div class="field" style="flex:1;">
-                <label for="r_slot">時段</label>
-                <select id="r_slot" required></select>
-              </div>
+            <div class="field">
+              <label for="r_date">日期</label>
+              <input id="r_date" type="date" required />
             </div>
-            <div style="display:flex; gap:10px;">
-              <div class="field" style="flex:1;">
-                <label for="r_unit">戶號</label>
-                <input id="r_unit" type="text" autocomplete="off" placeholder="例如 A1-1" required />
-              </div>
-              <div class="field" style="flex:1;">
-                <label for="r_name">姓名</label>
-                <input id="r_name" type="text" autocomplete="off" placeholder="例如 王小明" required />
-              </div>
+            <div class="field">
+              <label for="r_slot">時段</label>
+              <select id="r_slot" required></select>
+            </div>
+            <div class="field">
+              <label for="r_unit">戶號</label>
+              <input id="r_unit" type="text" autocomplete="off" placeholder="例如 A1-1" required />
+            </div>
+            <div class="field">
+              <label for="r_name">姓名</label>
+              <input id="r_name" type="text" autocomplete="off" placeholder="例如 王小明" required />
+            </div>
+            <div style="display:flex; justify-content:flex-start; margin-top:8px;">
+              <button class="btn btn-sm" type="button" id="btnScanQr" style="display:flex; align-items:center; gap:6px; padding:10px 20px;">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:22px; height:22px; flex-shrink:0;">
+                  <path d="M4 4h7v7H4V4zm2 2v3h3V6H6zm11-2h5v5h-5V4zm2 2h1v1h-1V6zm-6 2h2v2h-2V8zm-2 4h2v2h-2v-2zm6 0h2v2h-2v-2zm2 2h2v2h-2v-2zm-6 0h2v2h-2v-2zm-4 0h2v2h-2v-2zm-2 2h2v2H8v-2zM4 13h7v7H4v-7zm2 2v3h3v-3H6zm11 2h5v5h-5v-5zm2 2h1v1h-1v-1z" fill="currentColor"/>
+                </svg>
+                <span>掃描住戶QR Code</span>
+              </button>
             </div>
             <div class="field">
               <label for="r_note">備註</label>
@@ -4008,6 +4041,557 @@
       </div>
     `.trim();
     return modal;
+  }
+
+  function ensureResidentQrScanModal80() {
+    let modal = document.getElementById("residentQrScanModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "residentQrScanModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="residentQrScanModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="residentQrScanModalTitle">掃描住戶QR Code</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label for="residentQrTokenInput">或手動輸入住戶QR序號</label>
+            <input id="residentQrTokenInput" type="text" autocomplete="off" placeholder="輸入QR序號後按Enter" />
+          </div>
+          <div style="margin-top:12px;">
+            <div id="residentQrScanReader" style="width:100%; max-width:400px; margin:0 auto; border-radius:12px; overflow:hidden; aspect-ratio:1/1;"></div>
+          </div>
+          <div class="status" id="residentQrScanStatus" hidden></div>
+          <div style="margin-top:12px; text-align:center;">
+            <button class="btn btn-sm" type="button" id="btnRescanQr">重新掃描</button>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+        </div>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  async function openResidentQrScanModal80({ communityId, onScanned }) {
+    const modal = ensureResidentQrScanModal80();
+    let scanner = null;
+    let busy = false;
+
+    const inputEl = modal.querySelector("#residentQrTokenInput");
+    const statusEl = modal.querySelector("#residentQrScanStatus");
+    const btnRescan = modal.querySelector("#btnRescanQr");
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    const stopScanner = async () => {
+      if (!scanner) return;
+      try {
+        await scanner.stop();
+      } catch {}
+      scanner = null;
+    };
+
+    const processToken = async (rawToken) => {
+      if (busy) return;
+      const token = String(rawToken || "").trim();
+      if (!token) return;
+      busy = true;
+      setStatus("查詢住戶中...", false);
+
+      const cid = String(communityId || "").trim() || "default";
+      let userDoc = null;
+      try {
+        const snap = await db.collection("users").where("qrToken", "==", token).limit(1).get();
+        userDoc = snap && snap.docs && snap.docs[0] ? snap.docs[0] : null;
+      } catch (e) {
+        setStatus("查詢失敗，請稍後再試。", true);
+        busy = false;
+        return;
+      }
+
+      if (!userDoc || !userDoc.exists) {
+        setStatus("找不到此住戶，請確認QR序號。", true);
+        busy = false;
+        return;
+      }
+
+      const udata = userDoc.data() || {};
+      const uCommunity = String(udata.community || "").trim();
+      if (!uCommunity || uCommunity !== cid) {
+        setStatus("非本社區住戶。", true);
+        busy = false;
+        return;
+      }
+
+      const uUnit = String(udata.houseNo || udata.unit || "").trim();
+      const uName = String(udata.displayName || udata.name || "").trim() || inferUserName({ email: udata.email });
+
+      setStatus("", false);
+      await stopScanner();
+      modal.hidden = true;
+      if (typeof onScanned === "function") onScanned({ unit: uUnit, name: uName });
+      busy = false;
+    };
+
+    const startScanner = async () => {
+      await stopScanner();
+      setStatus("啟動相機中...", false);
+      try {
+        scanner = new Html5Qrcode("residentQrScanReader");
+      } catch {
+        scanner = null;
+      }
+      if (!scanner) {
+        setStatus("無法啟動相機，請改用手動輸入。", true);
+        return;
+      }
+      try {
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 30,
+            qrbox: (w, h) => {
+              const size = Math.min(w, h) * 0.9;
+              return { width: size, height: size };
+            },
+            aspectRatio: 1.0,
+            disableFlip: false,
+            experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+          },
+          (decodedText) => {
+            const t = String(decodedText || "").trim();
+            if (!t) return;
+            stopScanner().finally(() => processToken(t));
+          },
+          (errorMessage) => {
+            // 忽略解码错误不显示，但不影响
+          }
+        );
+        setStatus("", false);
+      } catch (e) {
+        try {
+          // 如果环境摄像头失败，尝试使用任意可用的摄像头
+          await scanner.start(
+            { facingMode: "user" },
+            {
+              fps: 30,
+              qrbox: (w, h) => {
+                const size = Math.min(w, h) * 0.9;
+                return { width: size, height: size };
+              },
+              aspectRatio: 1.0,
+              disableFlip: false,
+              experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+            },
+            (decodedText) => {
+              const t = String(decodedText || "").trim();
+              if (!t) return;
+              stopScanner().finally(() => processToken(t));
+            },
+            () => {}
+          );
+          setStatus("", false);
+        } catch (e2) {
+          setStatus("相機啟動失敗，請確認已允許相機權限。", true);
+        }
+      }
+    };
+
+    let detach = bindModalClose(modal, async () => {
+      await stopScanner();
+    });
+
+    if (inputEl) {
+      inputEl.value = "";
+      inputEl._rh = (e) => {
+        if (!e || e.key !== "Enter") return;
+        try { e.preventDefault(); } catch {}
+        const v = String(inputEl.value || "").trim();
+        inputEl.value = "";
+        processToken(v);
+      };
+      inputEl.addEventListener("keydown", inputEl._rh);
+    }
+
+    if (btnRescan) {
+      btnRescan._rh = () => startScanner();
+      btnRescan.addEventListener("click", btnRescan._rh);
+    }
+
+    modal.hidden = false;
+    requestAnimationFrame(() => {
+      startScanner();
+    });
+  }
+
+  function ensureResidentCheckInModal80() {
+    let modal = document.getElementById("residentCheckInModal80");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "residentCheckInModal80";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="residentCheckInModalTitle80" style="width:80vw; max-width:1000px;">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="residentCheckInModalTitle80">住戶預約報到</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label for="residentQrTokenInput80">或手動輸入住戶QR序號</label>
+            <input id="residentQrTokenInput80" type="text" autocomplete="off" placeholder="輸入QR序號後按Enter" />
+          </div>
+          <div style="margin-top:12px;">
+            <div id="residentCheckInQrReader80" style="width:100%; max-width:400px; margin:0 auto; border-radius:12px; overflow:hidden; aspect-ratio:1/1;"></div>
+          </div>
+          <div class="status" id="residentCheckInScanStatus80" hidden></div>
+          <div style="margin-top:12px; text-align:center;">
+            <button class="btn btn-sm" type="button" id="btnRescanCheckInQr80">重新掃描</button>
+          </div>
+          <hr style="margin:20px 0; border:none; border-top:1px solid var(--color-border);" />
+          <div id="residentCheckInInfo80" hidden>
+            <div class="resident-name" style="font-size:18px; font-weight:600; margin-bottom:8px;"></div>
+            <div class="resident-sub" style="color:var(--color-text-muted); margin-bottom:16px;"></div>
+          </div>
+          <div id="residentReservationsList80"></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  async function openResidentCheckInModal80({ communityId }) {
+    const modal = ensureResidentCheckInModal80();
+    let scanner = null;
+    let busy = false;
+    let currentResident = null;
+    let currentReservations = [];
+    const cid = String(communityId || "").trim() || "default";
+
+    const inputEl = modal.querySelector("#residentQrTokenInput80");
+    const statusEl = modal.querySelector("#residentCheckInScanStatus80");
+    const btnRescan = modal.querySelector("#btnRescanCheckInQr80");
+    const infoEl = modal.querySelector("#residentCheckInInfo80");
+    const listEl = modal.querySelector("#residentReservationsList80");
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    const stopScanner = async () => {
+      if (!scanner) return;
+      try {
+        await scanner.stop();
+      } catch {}
+      scanner = null;
+    };
+
+    const getFacilityName = (fid) => {
+      const facility = facilities.find(f => String(f.id || "") === String(fid || ""));
+      return facility ? String(facility.name || fid) : fid;
+    };
+
+    const renderReservations = () => {
+      if (!listEl) return;
+      if (!currentReservations || !currentReservations.length) {
+        listEl.innerHTML = `<div class="status">今日無預約項目</div>`;
+        return;
+      }
+
+      const now = new Date();
+      listEl.innerHTML = currentReservations.map((r) => {
+        const id = String(r.id || "");
+        const st = String(r.status || "pending");
+        const stText = st === "approved" ? "已核准" : (st === "rejected" ? "已拒絕" : (st === "canceled" ? "已取消" : "待審核"));
+        const tagClass = st === "approved" ? "green" : (st === "rejected" ? "red" : (st === "canceled" ? "gray" : "yellow"));
+        const isCheckedIn = Boolean(r.checkedIn);
+        const facilityName = getFacilityName(r.facilityId);
+
+        let itemStyle = "";
+        if (isCheckedIn) {
+          itemStyle = "background-color: #d4edda;";
+        }
+
+        return `
+          <div class="resident-item" data-id="${escapeHtml(id)}" style="${itemStyle}">
+            <div class="resident-left">
+              <div class="resident-text">
+                <div class="resident-name">
+                  ${escapeHtml(facilityName)}
+                  <span class="tag ${tagClass}" style="margin-left:8px;">${escapeHtml(stText)}</span>
+                  ${isCheckedIn ? `<span class="tag green" style="margin-left:8px;">已報到</span>` : ""}
+                </div>
+                <div class="resident-sub">
+                  ${escapeHtml(`${String(r.startTime || "—")} - ${String(r.endTime || "—")}`)}
+                </div>
+              </div>
+            </div>
+            <div class="resident-actions" style="display:flex; gap:8px; justify-content:flex-end;">
+              ${st === "approved" && !isCheckedIn ? `
+                <button class="btn btn-sm btn-primary" type="button" data-action="checkin" data-id="${escapeHtml(id)}">報到</button>
+              ` : ""}
+            </div>
+          </div>
+        `.trim();
+      }).join("");
+    };
+
+    const loadReservations = async (unit, name) => {
+      const now = new Date();
+      const today = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+
+      try {
+        const snap = await db.collection("communities").doc(cid).collection("reservations")
+          .where("dateKey", "==", today)
+          .get();
+        
+        const allReservations = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
+        
+        currentReservations = allReservations.filter((r) => {
+          const rUnit = String(r.unit || "").trim().toLowerCase();
+          const rName = String(r.name || "").trim().toLowerCase();
+          const targetUnit = String(unit || "").trim().toLowerCase();
+          const targetName = String(name || "").trim().toLowerCase();
+          
+          return rUnit === targetUnit && rName === targetName;
+        });
+
+        currentReservations.sort((a, b) => {
+          return String(a.startTime || "").localeCompare(String(b.startTime || ""));
+        });
+
+        if (infoEl) {
+          infoEl.hidden = false;
+          const nameEl = infoEl.querySelector(".resident-name");
+          const subEl = infoEl.querySelector(".resident-sub");
+          if (nameEl) nameEl.textContent = `${name || ""} - ${unit || ""}`;
+          if (subEl) subEl.textContent = `今日預約：${currentReservations.length} 筆`;
+        }
+
+        renderReservations();
+      } catch (e) {
+        console.error("載入預約失敗", e);
+        setStatus("載入預約失敗，請稍後再試。", true);
+      }
+    };
+
+    const processToken = async (rawToken) => {
+      if (busy) return;
+      const token = String(rawToken || "").trim();
+      if (!token) return;
+      busy = true;
+      setStatus("查詢住戶中...", false);
+
+      let userDoc = null;
+      try {
+        const snap = await db.collection("users").where("qrToken", "==", token).limit(1).get();
+        userDoc = snap && snap.docs && snap.docs[0] ? snap.docs[0] : null;
+      } catch (e) {
+        setStatus("查詢失敗，請稍後再試。", true);
+        busy = false;
+        return;
+      }
+
+      if (!userDoc || !userDoc.exists) {
+        setStatus("找不到此住戶，請確認QR序號。", true);
+        busy = false;
+        return;
+      }
+
+      const udata = userDoc.data() || {};
+      const uCommunity = String(udata.community || "").trim();
+      if (!uCommunity || uCommunity !== cid) {
+        setStatus("非本社區住戶。", true);
+        busy = false;
+        return;
+      }
+
+      const uUnit = String(udata.houseNo || udata.unit || "").trim();
+      const uName = String(udata.displayName || udata.name || "").trim() || inferUserName({ email: udata.email });
+
+      currentResident = { unit: uUnit, name: uName };
+      setStatus("", false);
+      await stopScanner();
+      await loadReservations(uUnit, uName);
+      busy = false;
+    };
+
+    const startScanner = async () => {
+      await stopScanner();
+      setStatus("啟動相機中...", false);
+      try {
+        scanner = new Html5Qrcode("residentCheckInQrReader80");
+      } catch {
+        scanner = null;
+      }
+      if (!scanner) {
+        setStatus("無法啟動相機，請改用手動輸入。", true);
+        return;
+      }
+      try {
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 30,
+            qrbox: (w, h) => {
+              const size = Math.min(w, h) * 0.9;
+              return { width: size, height: size };
+            },
+            aspectRatio: 1.0,
+            disableFlip: false,
+            experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+          },
+          (decodedText) => {
+            const t = String(decodedText || "").trim();
+            if (!t) return;
+            stopScanner().finally(() => processToken(t));
+          },
+          () => {}
+        );
+        setStatus("", false);
+      } catch (e) {
+        try {
+          await scanner.start(
+            { facingMode: "user" },
+            {
+              fps: 30,
+              qrbox: (w, h) => {
+                const size = Math.min(w, h) * 0.9;
+                return { width: size, height: size };
+              },
+              aspectRatio: 1.0,
+              disableFlip: false,
+              experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+            },
+            (decodedText) => {
+              const t = String(decodedText || "").trim();
+              if (!t) return;
+              stopScanner().finally(() => processToken(t));
+            },
+            () => {}
+          );
+          setStatus("", false);
+        } catch (e2) {
+          setStatus("相機啟動失敗，請確認已允許相機權限。", true);
+        }
+      }
+    };
+
+    const handleCheckIn = async (id) => {
+      const ok = await (window.nwConfirm ? window.nwConfirm({
+        title: "報到",
+        message: "確認住戶是否報到？",
+        okText: "確認報到",
+        cancelText: "取消",
+      }) : Promise.resolve(confirm("確認住戶是否報到？")));
+      if (!ok) return;
+
+      try {
+        const u = auth && auth.currentUser ? auth.currentUser : null;
+        const by = u ? String(u.uid || "") : "";
+        const byName = getAdminDisplayName80();
+        const patch = {
+          checkedIn: true,
+          checkedInAt: FieldValue.serverTimestamp(),
+          checkedInBy: by,
+          checkedInByName: byName,
+          updatedAt: FieldValue.serverTimestamp()
+        };
+        await db.collection("communities").doc(cid).collection("reservations").doc(id).set(patch, { merge: true });
+        
+        if (currentReservations) {
+          const r = currentReservations.find(x => String(x.id || "") === String(id || ""));
+          if (r) {
+            r.checkedIn = true;
+          }
+        }
+        renderReservations();
+        await refreshReservations();
+      } catch (e) {
+        console.error("報到失敗", e);
+        setStatus("報到失敗，請稍後再試。", true);
+      }
+    };
+
+    const handleListClick = (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest("button[data-action][data-id]") : null;
+      if (!btn) return;
+      const id = String(btn.getAttribute("data-id") || "").trim();
+      const action = String(btn.getAttribute("data-action") || "").trim();
+      if (!id || !action) return;
+
+      if (action === "checkin") {
+        handleCheckIn(id);
+      }
+    };
+
+    let detach = bindModalClose(modal, async () => {
+      await stopScanner();
+      if (inputEl && inputEl._rh) {
+        inputEl.removeEventListener("keydown", inputEl._rh);
+      }
+      if (btnRescan && btnRescan._rh) {
+        btnRescan.removeEventListener("click", btnRescan._rh);
+      }
+      if (listEl && listEl._rh) {
+        listEl.removeEventListener("click", listEl._rh);
+      }
+    });
+
+    if (inputEl) {
+      inputEl.value = "";
+      inputEl._rh = (e) => {
+        if (!e || e.key !== "Enter") return;
+        try { e.preventDefault(); } catch {}
+        const v = String(inputEl.value || "").trim();
+        inputEl.value = "";
+        processToken(v);
+      };
+      inputEl.addEventListener("keydown", inputEl._rh);
+    }
+
+    if (btnRescan) {
+      btnRescan._rh = () => startScanner();
+      btnRescan.addEventListener("click", btnRescan._rh);
+    }
+
+    if (listEl) {
+      listEl._rh = handleListClick;
+      listEl.addEventListener("click", listEl._rh);
+    }
+
+    if (infoEl) infoEl.hidden = true;
+    if (listEl) listEl.innerHTML = "";
+    currentReservations = [];
+    currentResident = null;
+
+    modal.hidden = false;
+    requestAnimationFrame(() => {
+      startScanner();
+    });
   }
 
   async function openReservationModal80({ cid, facilities, presetFacilityId, presetDateKey, onSaved }) {
@@ -4049,7 +4633,21 @@
       const fid = String(selFacility.value || "").trim();
       const dateKey = String(inputDate.value || "").trim();
       const cfg = list.find((x) => String(x.id || "") === fid) || null;
-      const slots = cfg ? facilitySlotList80(dateKey, cfg) : [];
+      let slots = cfg ? facilitySlotList80(dateKey, cfg) : [];
+      
+      // 过滤逾期的时段
+      const now = new Date();
+      const today = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+      
+      if (dateKey === today) {
+        // 如果选择的是今天，过滤已经过期的时段
+        const currentTime = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+        slots = slots.filter((s) => {
+          // 只保留结束时间大于当前时间的时段
+          return s.endTime > currentTime;
+        });
+      }
+      
       selSlot.innerHTML = slots.map((s) => `<option value="${escapeHtml(String(s.startTime || ""))}">${escapeHtml(`${s.startTime} - ${s.endTime}`)}</option>`).join("");
     };
 
@@ -4061,6 +4659,19 @@
     const onChange = () => fillSlots();
     if (selFacility) selFacility.addEventListener("change", onChange);
     if (inputDate) inputDate.addEventListener("change", onChange);
+
+    const btnScanQr = modal.querySelector("#btnScanQr");
+    if (btnScanQr) {
+      btnScanQr.addEventListener("click", () => {
+        openResidentQrScanModal80({
+          communityId: communityId,
+          onScanned: (data) => {
+            if (inputUnit) inputUnit.value = String(data.unit || "");
+            if (inputName) inputName.value = String(data.name || "");
+          }
+        });
+      });
+    }
 
     const onSubmit = async (e) => {
       e.preventDefault();
@@ -4224,6 +4835,28 @@
     }
   }
 
+  async function checkInReservation80({ cid, id }) {
+    const communityId = String(cid || "").trim() || "default";
+    const rid = String(id || "").trim();
+    if (!rid) return false;
+    const u = auth && auth.currentUser ? auth.currentUser : null;
+    const by = u ? String(u.uid || "") : "";
+    const byName = getAdminDisplayName80();
+    const patch = {
+      checkedIn: true,
+      checkedInAt: FieldValue.serverTimestamp(),
+      checkedInBy: by,
+      checkedInByName: byName,
+      updatedAt: FieldValue.serverTimestamp()
+    };
+    try {
+      await db.collection("communities").doc(communityId).collection("reservations").doc(rid).set(patch, { merge: true });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function renderFacilityModule() {
     const cid = resolveActiveCommunityId();
     const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
@@ -4265,6 +4898,17 @@
               <input id="facilitySearch80" type="text" autocomplete="off" placeholder="戶號/姓名" />
             </div>
             <button class="btn btn-sm danger" type="button" id="btnFacilityNew80">新增預約</button>
+            <button class="icon-btn" type="button" id="btnFacilityScanQr80" aria-label="掃描QR Code報到" title="掃描QR Code報到" style="margin-left:8px;">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px; height:20px;">
+                <path d="M4 4h7v7H4V4zm2 2v3h3V6H6zm11-2h5v5h-5V4zm2 2h1v1h-1V6zm-6 2h2v2h-2V8zm-2 4h2v2h-2v-2zm6 0h2v2h-2v-2zm2 2h2v2h-2v-2zm-6 0h2v2h-2v-2zm-4 0h2v2h-2v-2zm-2 2h2v2H8v-2zM4 13h7v7H4v-7zm2 2v3h3v-3H6zm11 2h5v5h-5v-5zm2 2h1v1h-1v-1z" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
+          <div id="facilityFilterButtons80" style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+            <button class="btn btn-sm btn-primary" type="button" data-filter="all">全部</button>
+            <button class="btn btn-sm" type="button" data-filter="recent">近期</button>
+            <button class="btn btn-sm" type="button" data-filter="checkedIn">已報到</button>
+            <button class="btn btn-sm" type="button" data-filter="expired">已逾期</button>
           </div>
           <div class="status" id="facilityStatus80" hidden></div>
           <div id="facilityReservationContainer80" style="display:flex; flex-direction:column; gap:12px; width:100%; overflow-x:hidden;">
@@ -4279,9 +4923,13 @@
     const inputSearch = document.getElementById("facilitySearch80");
     const btnManage = document.getElementById("btnFacilityManage80");
     const btnNew = document.getElementById("btnFacilityNew80");
+    const btnScanQr = document.getElementById("btnFacilityScanQr80");
     const subnavButtonsWrap = document.getElementById("facilitySubnavButtons80");
     const statusEl = document.getElementById("facilityStatus80");
     const reservationContainer = document.getElementById("facilityReservationContainer80");
+    const filterButtonsContainer = document.getElementById("facilityFilterButtons80");
+
+    let currentFilter = "all"; // 筛选状态: "all" | "recent" | "checkedIn" | "expired";
 
     const setStatus = (msg, isError) => {
       if (!statusEl) return;
@@ -4344,17 +4992,38 @@
     };
 
     const countPendingReservations = () => {
+      const now = new Date();
       const stats = {};
       let total = 0;
+      
       currentReservations.forEach(r => {
         if (String(r.status || "pending") === "pending") {
-          const fid = String(r.facilityId || "").trim();
-          if (fid) {
-            stats[fid] = (stats[fid] || 0) + 1;
-            total++;
+          let isExpired = false;
+          
+          // 判斷預約是否過期
+          if (r.endAt) {
+            const endDate = r.endAt.toDate ? r.endAt.toDate() : new Date(r.endAt);
+            if (endDate < now) {
+              isExpired = true;
+            }
+          } else if (r.dateKey && r.endTime) {
+            const endDateTime = makeDateTime80(r.dateKey, r.endTime);
+            if (endDateTime && endDateTime < now) {
+              isExpired = true;
+            }
+          }
+          
+          // 只統計未過期的預約
+          if (!isExpired) {
+            const fid = String(r.facilityId || "").trim();
+            if (fid) {
+              stats[fid] = (stats[fid] || 0) + 1;
+              total++;
+            }
           }
         }
       });
+      
       pendingReservationsByFacility = stats;
       totalPendingReservations = total;
     };
@@ -4362,13 +5031,78 @@
     const renderReservations = () => {
       if (!reservationContainer) return;
       const q = String(inputSearch ? inputSearch.value : "").trim();
-      const list = q
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      // 先进行基本搜索过滤
+      let filteredList = q
         ? currentReservations.filter((r) => {
           const unit = String(r.unit || "");
           const name = String(r.name || "");
           return unit.includes(q) || name.includes(q);
         })
         : currentReservations.slice();
+      
+      // 根据筛选条件进一步过滤
+      filteredList = filteredList.filter((r) => {
+        // 判断预约状态
+        let isExpired = false;
+        let isInProgress = false;
+        let isCheckedIn = false;
+        let isToday = false;
+        
+        // 判断是否已报到
+        if (r.checkedIn) {
+          isCheckedIn = true;
+        }
+        
+        // 判断预约期间、是否过期和是否是今天
+        if (r.startAt && r.endAt) {
+          const startDate = r.startAt.toDate ? r.startAt.toDate() : new Date(r.startAt);
+          const endDate = r.endAt.toDate ? r.endAt.toDate() : new Date(r.endAt);
+          if (endDate < now) {
+            isExpired = true;
+          } else if (startDate <= now && now <= endDate) {
+            isInProgress = true;
+          }
+          const reservationDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+          if (reservationDate.getTime() === today.getTime()) {
+            isToday = true;
+          }
+        } else if (r.dateKey && r.startTime && r.endTime) {
+          const startDateTime = makeDateTime80(r.dateKey, r.startTime);
+          const endDateTime = makeDateTime80(r.dateKey, r.endTime);
+          if (startDateTime && endDateTime) {
+            if (endDateTime < now) {
+              isExpired = true;
+            } else if (startDateTime <= now && now <= endDateTime) {
+              isInProgress = true;
+            }
+          } else if (endDateTime && endDateTime < now) {
+            isExpired = true;
+          }
+          if (r.dateKey === `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`) {
+            isToday = true;
+          }
+        }
+        
+        // 根据当前筛选条件返回
+        switch (currentFilter) {
+          case "recent":
+            // 近期: 今日未报到且未逾期
+            return isToday && !isCheckedIn && !isExpired;
+          case "checkedIn":
+            // 已报到
+            return isCheckedIn;
+          case "expired":
+            // 已逾期
+            return isExpired;
+          case "all":
+          default:
+            // 全部
+            return true;
+        }
+      });
 
       const fid = selFacility ? String(selFacility.value || "").trim() : "";
       const cfg = facilities.find((f) => String(f.id || "") === fid) || null;
@@ -4385,12 +5119,12 @@
         reservationContainer.innerHTML = `<div class="status">尚未建立設施，請先到「設施設定」新增。</div>`;
         return;
       }
-      if (!list.length) {
+      if (!filteredList.length) {
         reservationContainer.innerHTML = `<div class="status">目前沒有預約資料。</div>`;
         return;
       }
 
-      reservationContainer.innerHTML = list.map((r) => {
+      reservationContainer.innerHTML = filteredList.map((r) => {
         const id = String(r.id || "");
         const st = String(r.status || "pending");
         const stText = st === "approved" ? "已核准" : (st === "rejected" ? "已拒絕" : (st === "canceled" ? "已取消" : "待審核"));
@@ -4402,6 +5136,40 @@
         const capHint = cfg && slotUsed >= cap && ["pending", "approved"].includes(st) ? `<span class="tag red" style="margin-left:8px;">已滿</span>` : "";
 
         const dateText = r.dateKey ? String(r.dateKey) : "—";
+        
+        // 判斷預約狀態
+        const now = new Date();
+        let isExpired = false;
+        let isInProgress = false;
+        let isCheckedIn = false;
+        
+        // 判斷是否已報到
+        if (r.checkedIn) {
+          isCheckedIn = true;
+        }
+        
+        // 判斷預約期間和是否過期
+        if (r.startAt && r.endAt) {
+          const startDate = r.startAt.toDate ? r.startAt.toDate() : new Date(r.startAt);
+          const endDate = r.endAt.toDate ? r.endAt.toDate() : new Date(r.endAt);
+          if (endDate < now) {
+            isExpired = true;
+          } else if (startDate <= now && now <= endDate) {
+            isInProgress = true;
+          }
+        } else if (r.dateKey && r.startTime && r.endTime) {
+          const startDateTime = makeDateTime80(r.dateKey, r.startTime);
+          const endDateTime = makeDateTime80(r.dateKey, r.endTime);
+          if (startDateTime && endDateTime) {
+            if (endDateTime < now) {
+              isExpired = true;
+            } else if (startDateTime <= now && now <= endDateTime) {
+              isInProgress = true;
+            }
+          } else if (endDateTime && endDateTime < now) {
+            isExpired = true;
+          }
+        }
         
         // 用户头像 - 先從預約數據中查找，沒有則從住戶數據中查找
         const name = String(r.name || r.displayName || r.email || "U").trim();
@@ -4500,10 +5268,11 @@
           `;
         } else {
           actionsHtml = `
-            ${st === "approved" ? `
-              <button class="icon-btn" type="button" data-action="cancel" data-id="${escapeHtml(id)}" aria-label="取消" title="取消">
+            ${st === "approved" && !isCheckedIn ? `
+              <button class="icon-btn" type="button" data-action="checkin" data-id="${escapeHtml(id)}" aria-label="報到" title="報到">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" stroke="currentColor" stroke-width="1.7"/>
                 </svg>
               </button>
             ` : ""}
@@ -4517,8 +5286,34 @@
           `;
         }
 
+        // 根據預約狀態設置樣式和按鈕
+        let itemStyle = "width:100%; min-width:0;";
+        
+        if (isCheckedIn) {
+          // 已報到顯示淺綠色
+          itemStyle = "background-color: #d4edda; width:100%; min-width:0;";
+        } else if (isExpired) {
+          // 超過預約時間未報到顯示淺紅色
+          itemStyle = "background-color: #ffecec; width:100%; min-width:0;";
+          // 超過時間的待審核預約只顯示刪除按鈕
+          if (st === "pending") {
+            actionsHtml = `
+              <button class="icon-btn" type="button" data-action="delete" data-id="${escapeHtml(id)}" aria-label="刪除" title="刪除">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M9 4h6l1 2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  <path d="M6 6h12l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 6Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                </svg>
+              </button>
+            `;
+          }
+        } else if (isInProgress) {
+          // 預約期間內未報到顯示黃色
+          itemStyle = "background-color: #fff3cd; width:100%; min-width:0;";
+        }
+
         return `
-          <div class="resident-item" data-id="${escapeHtml(id)}" style="width:100%; min-width:0;">
+          <div class="resident-item" data-id="${escapeHtml(id)}" style="${itemStyle}">
             <div class="resident-left">
               <div class="avatar-sm">
                 ${avatarHtmlContent}
@@ -4557,14 +5352,34 @@
           .onSnapshot((snap) => {
             const list = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
             
-            // 统计每个设施的待审核数量和总数
+            const now = new Date();
+            // 统计每个设施的待审核数量和总数（只统计时间未到的预约）
             const stats = {};
             let total = 0;
+            
             list.forEach(r => {
-              const fid = String(r.facilityId || "").trim();
-              if (fid) {
-                stats[fid] = (stats[fid] || 0) + 1;
-                total++;
+              let isStarted = false;
+              
+              // 判斷預約是否已開始（只統計時間未到的預約）
+              if (r.startAt) {
+                const startDate = r.startAt.toDate ? r.startAt.toDate() : new Date(r.startAt);
+                if (startDate <= now) {
+                  isStarted = true;
+                }
+              } else if (r.dateKey && r.startTime) {
+                const startDateTime = makeDateTime80(r.dateKey, r.startTime);
+                if (startDateTime && startDateTime <= now) {
+                  isStarted = true;
+                }
+              }
+              
+              // 只統計時間未到的預約
+              if (!isStarted) {
+                const fid = String(r.facilityId || "").trim();
+                if (fid) {
+                  stats[fid] = (stats[fid] || 0) + 1;
+                  total++;
+                }
               }
             });
             
@@ -4737,6 +5552,20 @@
         return;
       }
 
+      if (action === "checkin") {
+        const ok = await (window.nwConfirm ? window.nwConfirm({
+          title: "報到",
+          message: "確認住戶是否報到？",
+          okText: "確認報到",
+          cancelText: "取消",
+        }) : Promise.resolve(confirm("確認住戶是否報到？")));
+        if (!ok) return;
+        const done = await checkInReservation80({ cid, id });
+        if (!done) toast("操作失敗");
+        await refreshReservations();
+        return;
+      }
+
       if (action === "delete") {
         const ok = await (window.nwConfirm ? window.nwConfirm({
           title: "刪除預約",
@@ -4756,6 +5585,36 @@
     if (inputDate) inputDate.addEventListener("change", onDateOrFacility);
     if (selFacility) selFacility.addEventListener("change", onDateOrFacility);
     if (reservationContainer) reservationContainer.addEventListener("click", onActionClick);
+    
+    if (btnScanQr) btnScanQr.addEventListener("click", () => {
+      openResidentCheckInModal80({ communityId: cid });
+    });
+    
+    // 筛选按钮点击事件
+    if (filterButtonsContainer) {
+      filterButtonsContainer.addEventListener("click", (e) => {
+        const btn = e.target && e.target.closest ? e.target.closest("button[data-filter]") : null;
+        if (!btn) return;
+        const filter = String(btn.getAttribute("data-filter") || "").trim();
+        if (!filter) return;
+        
+        currentFilter = filter;
+        
+        // 更新按钮样式
+        const buttons = filterButtonsContainer.querySelectorAll("button[data-filter]");
+        buttons.forEach(b => {
+          const btnFilter = String(b.getAttribute("data-filter") || "").trim();
+          if (btnFilter === currentFilter) {
+            b.classList.add("btn-primary");
+          } else {
+            b.classList.remove("btn-primary");
+          }
+        });
+        
+        // 重新渲染
+        renderReservations();
+      });
+    }
     if (subnavButtonsWrap) {
       let draggingId = "";
       let draggingMoved = false;
@@ -4863,10 +5722,67 @@
     updateFooterActiveNav();
   }
 
+  // 高度壓縮圖片用於公告，避免超過Firebase 1MB限制
+  const fileToImageDataUrlForBulletin = (file) => new Promise((resolve, reject) => {
+    if (!file) {
+      resolve("");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("read-failed"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("image-decode-failed"));
+      img.onload = () => {
+        const maxWidth = 800; // 最大寬度
+        const maxHeight = 600; // 最大高度
+        let srcW = img.naturalWidth || 0;
+        let srcH = img.naturalHeight || 0;
+        if (!srcW || !srcH) {
+          reject(new Error("bad-image"));
+          return;
+        }
+        
+        // 計算縮放比例，保持長寬比
+        let targetW = srcW;
+        let targetH = srcH;
+        if (srcW > maxWidth || srcH > maxHeight) {
+          const ratio = Math.min(maxWidth / srcW, maxHeight / srcH);
+          targetW = Math.round(srcW * ratio);
+          targetH = Math.round(srcH * ratio);
+        }
+        
+        const canvas = document.createElement("canvas");
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("no-canvas"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, targetW, targetH);
+        resolve(canvas.toDataURL("image/jpeg", 0.5)); // 質量設為 0.5，更緊湊
+      };
+      img.src = String(reader.result || "");
+    };
+    reader.readAsDataURL(file);
+  });
+
   function renderBulletinModule() {
     const cid = resolveActiveCommunityId();
     const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
+    
+    // 从哈希路由中获取当前页面
+    const raw = String(location.hash || "").replace(/^#/, "").trim();
+    const parts = raw.split("/");
     let currentPage = "community"; // "community", "finance", "meeting", "repair"
+    if (parts.length >= 3 && parts[0] === "community" && parts[1] === "bulletin") {
+      const pageParam = parts[2];
+      if (["community", "finance", "meeting", "repair"].includes(pageParam)) {
+        currentPage = pageParam;
+      }
+    }
+    
     let unsubscribeBulletins = null;
     let bulletinData = [];
 
@@ -4885,6 +5801,8 @@
       subnavEl.querySelectorAll("[data-bulletin-page]").forEach(btn => {
         btn.addEventListener("click", () => {
           currentPage = btn.getAttribute("data-bulletin-page");
+          // 更新哈希路由
+          location.hash = `#community/bulletin/${currentPage}`;
           renderPage();
         });
       });
@@ -5164,9 +6082,9 @@
                 <textarea id="bulletinContent" placeholder="請輸入公告內容" required></textarea>
               </div>
               <div class="field">
-                <label>圖片（可多張）</label>
+                <label>圖片（最多5張）</label>
                 <div id="imageUploadArea" style="border:2px dashed #ccc; border-radius:8px; padding:16px; text-align:center; cursor:pointer; min-height:80px; display:flex; align-items:center; justify-content:center;">
-                  <div id="imagePlaceholder">點擊選擇圖片或拖曳圖片到此處</div>
+                  <div id="imagePlaceholder">點擊選擇圖片或拖曳圖片到此處（最多5張）</div>
                   <div id="imagePreviewContainer" style="display:flex; gap:8px; flex-wrap:wrap; display:none;"></div>
                 </div>
                 <input id="imageInput" type="file" accept="image/*" multiple hidden />
@@ -5263,12 +6181,30 @@
       }
       
       const handleImageFiles = async (files) => {
-        for (const file of files) {
-          const dataUrl = await fileToImageDataUrl80(file);
+        // 檢查是否已達到圖片數量上限
+        const remainingSlots = 5 - selectedImages.length;
+        if (remainingSlots <= 0) {
+          setStatus("最多只能上傳5張圖片。", true);
+          return;
+        }
+        
+        // 只處理剩下的額度
+        const filesToProcess = files.slice(0, remainingSlots);
+        
+        for (const file of filesToProcess) {
+          const dataUrl = await fileToImageDataUrlForBulletin(file);
           if (dataUrl) {
             selectedImages.push(dataUrl);
           }
         }
+        
+        // 如果有超出的檔案，顯示提示
+        if (files.length > remainingSlots) {
+          setStatus(`已上傳${selectedImages.length}張圖片，達到上限。`, true);
+        } else {
+          setStatus("", false);
+        }
+        
         updateImagePreview();
       };
       
@@ -7695,11 +8631,13 @@
       
       if (inputCommunity) {
         const currentCid = isEdit ? String(data.community || cid || "default") : String(cid || "default");
-        const options = (state.communities || []).map(c => 
-          `<option value="${c.id}">${escapeHtml(c.name)}</option>`
-        ).join("");
+        const options = 
+          `<option value="" selected>全部</option>` + 
+          (state.communities || []).map(c => 
+            `<option value="${c.id}">${escapeHtml(c.name)}</option>`
+          ).join("");
         inputCommunity.innerHTML = options;
-        inputCommunity.value = currentCid;
+        inputCommunity.value = isEdit ? currentCid : "";
         inputCommunity.disabled = true;
         
         if (btnUnlockCommunity) {
@@ -9573,6 +10511,19 @@
     if (parts[0] !== "community") return false;
     const moduleId = parts[1] || "community-dashboard";
     if (moduleId === "community-dashboard") return false;
+    
+    // 如果是 bulletin 并且有子页面参数，且当前已经在 bulletin 页面，则不重新渲染整个模块
+    // 这样 renderBulletinModule 会根据新的哈希路由来显示正确的子页面
+    if (moduleId === "bulletin") {
+      const contentEl = document.getElementById("content");
+      const isAlreadyInBulletin = contentEl && contentEl.querySelector("[data-bulletin-page]");
+      if (isAlreadyInBulletin) {
+        // 重新渲染公告模块以应用新的子页面参数
+        renderBulletinModule();
+        return true;
+      }
+    }
+    
     renderModule(moduleId);
     return true;
   }

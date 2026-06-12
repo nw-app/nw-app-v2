@@ -320,26 +320,33 @@
     contentEl.innerHTML = homeView();
     if (moduleId === "home") {
       renderRowACarousel();
-      
-      // 綁定九宮格按鈕點擊事件
-      contentEl.querySelectorAll(".grid-btn").forEach(btn => {
-        btn.addEventListener("click", (e) => {
-          const url = btn.getAttribute("data-url");
-          const name = btn.getAttribute("data-name");
-          const isExternal = btn.getAttribute("data-external") === "1";
-          
-          if (url && url !== "#" && !url.startsWith("#")) {
-            e.preventDefault();
-            if (isExternal) {
-              window.open(url, "_blank");
-            } else {
-              openPageModal(url, name);
-            }
-          }
-        });
-      });
     }
   }
+
+  // 使用事件委托处理按钮点击
+  // 在 document 级别监听，确保所有按钮都能被处理
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("a.grid-btn");
+    if (!btn) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const url = btn.getAttribute("data-url") || btn.getAttribute("href");
+    const name = btn.getAttribute("data-name");
+    const isExternal = btn.getAttribute("data-external") === "1";
+    
+    if (!url || url === "#") return;
+    
+    // 处理外部链接
+    if (isExternal) {
+      window.open(url, "_blank");
+    } 
+    // 处理本地 html 文件
+    else if (url && url !== "#" && !url.startsWith("#")) {
+      openPageModal(url, name);
+    }
+  });
 
   function openPageModal(url, name) {
     const modal = document.getElementById("externalPageModal");
