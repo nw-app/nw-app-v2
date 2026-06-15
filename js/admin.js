@@ -9443,6 +9443,9 @@
       const st = modal.querySelector("#unitsStatus");
       const countEl = modal.querySelector("#unitsModalCount");
       const btnAddRow = modal.querySelector("#btnAddUnitRow");
+      
+      // 在函數內部獲取有效的 cid
+      const currentCid = resolveActiveCommunityId();
 
       const setModalStatus = (msg, isError) => {
         if (!st) return;
@@ -9481,11 +9484,38 @@
       setModalStatus("讀取中...", false);
       modal.hidden = false;
       try {
-        const doc = await db.collection("communities").doc(String(cid || "default")).get();
+        console.log("openUnitsEditor: 開始讀取戶號資料, currentCid:", currentCid);
+        const doc = await db.collection("communities").doc(String(currentCid)).get();
+        console.log("openUnitsEditor: 讀取結果 doc.exists:", doc.exists);
         const v = doc && doc.exists ? (doc.data() || {}) : {};
+        console.log("openUnitsEditor: 讀取結果 v:", v);
         const units = Array.isArray(v.units) ? v.units : [];
-        communityUnits = units;
-        refreshUnitTotals();
+        console.log("openUnitsEditor: 讀取結果 units:", units);
+        
+        // 更新頁面上的總戶數顯示
+        const unitTotalEl = document.getElementById("unitTotal");
+        if (unitTotalEl) {
+          const normalizeUnitList = (list) => {
+            const raw = Array.isArray(list) ? list : [];
+            const uniq = [];
+            const seen = new Set();
+            for (const x of raw) {
+              let val = "";
+              if (typeof x === "object" && x !== null) {
+                val = String(x.id || "").trim();
+              } else {
+                val = String(x || "").trim();
+              }
+              if (!val) continue;
+              if (seen.has(val)) continue;
+              seen.add(val);
+              uniq.push(val);
+            }
+            return uniq;
+          };
+          unitTotalEl.textContent = `總戶數：${normalizeUnitList(units).length}`;
+        }
+        
         if (tbody) {
           tbody.innerHTML = "";
           units.forEach(u => {
@@ -9498,9 +9528,11 @@
         setModalStatus("", false);
       } catch (err) {
         console.error("Load units failed:", err);
+        console.error("Load units failed 詳細:", JSON.stringify(err, null, 2));
         if (tbody) tbody.innerHTML = "";
         if (countEl) countEl.textContent = "總戶數：—";
-        setModalStatus("讀取失敗，請稍後再試。", true);
+        const errorMsg = "讀取失敗：" + (err.message || "請稍後再試。") + " (cid: " + String(currentCid) + ")";
+        setModalStatus(errorMsg, true);
       }
 
       const onAddRow = () => {
@@ -9542,12 +9574,35 @@
 
         setModalStatus("儲存中...", false);
         try {
-          await db.collection("communities").doc(String(cid || "default")).set(
+          await db.collection("communities").doc(String(currentCid)).set(
             { units: uniq, updatedAt: FieldValue.serverTimestamp() },
             { merge: true }
           );
-          communityUnits = uniq;
-          refreshUnitTotals();
+          
+          // 更新頁面上的總戶數顯示
+          const unitTotalEl = document.getElementById("unitTotal");
+          if (unitTotalEl) {
+            const normalizeUnitList = (list) => {
+              const raw = Array.isArray(list) ? list : [];
+              const uniq = [];
+              const seen = new Set();
+              for (const x of raw) {
+                let val = "";
+                if (typeof x === "object" && x !== null) {
+                  val = String(x.id || "").trim();
+                } else {
+                  val = String(x || "").trim();
+                }
+                if (!val) continue;
+                if (seen.has(val)) continue;
+                seen.add(val);
+                uniq.push(val);
+              }
+              return uniq;
+            };
+            unitTotalEl.textContent = `總戶數：${normalizeUnitList(uniq).length}`;
+          }
+          
           modal.hidden = true;
           detach();
         } catch (err) {
@@ -9579,7 +9634,7 @@
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "戶號列表");
-        XLSX.writeFile(wb, `戶號列表_${cname || "社區"}.xlsx`);
+        XLSX.writeFile(wb, `戶號列表_${currentCid || "社區"}.xlsx`);
       };
 
       const onImportClick = () => inputImport.click();
