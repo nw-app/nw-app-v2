@@ -8250,7 +8250,10 @@
       // 加載點數設定
       const loadPointsSettings = async () => {
         try {
-          const doc = await db.collection("communities").doc(cid).get();
+          const currentCid = resolveActiveCommunityId();
+          if (!currentCid) return;
+          
+          const doc = await db.collection("communities").doc(currentCid).get();
           const data = doc.exists ? (doc.data() || {}) : {};
           if (data.pointsSettings && typeof data.pointsSettings === "object") {
             pointsSettings = { ...pointsSettings, ...data.pointsSettings };
@@ -8321,6 +8324,7 @@
           modal.querySelectorAll('input[name="pointsMode"]').forEach(radio => {
             radio.onchange = (e) => {
               pointsSettings.sharePoints = e.target.value === "share";
+              console.log("選擇的模式：", pointsSettings.sharePoints ? "共用點數" : "分開計算");
             };
           });
 
@@ -8329,19 +8333,34 @@
           if (saveBtn) {
             saveBtn.onclick = async () => {
               try {
-                await db.collection("communities").doc(cid).set({
+                console.log("=== 開始儲存點數設定 ===");
+                console.log("當前 pointsSettings.sharePoints =", pointsSettings.sharePoints);
+                
+                // 獲取當前社區 ID
+                const currentCid = resolveActiveCommunityId();
+                console.log("儲存點數設定，cid:", currentCid);
+                if (!currentCid) {
+                  toast("無法取得社區資訊，請重新整理頁面");
+                  return;
+                }
+                
+                console.log("準備寫入數據庫...");
+                await db.collection("communities").doc(currentCid).set({
                   pointsSettings: {
                     sharePoints: pointsSettings.sharePoints
                   },
                   updatedAt: FieldValue.serverTimestamp()
                 }, { merge: true });
+                console.log("寫入成功！");
+                
                 toast("設定已儲存");
                 renderPointsList();
                 modal.hidden = true;
                 detach();
               } catch (err) {
-                console.error("儲存失敗:", err);
-                toast("儲存失敗：" + err.message);
+                console.error("=== 儲存失敗 ===");
+                console.error("錯誤詳情:", err);
+                toast("儲存失敗：" + (err.message || "未知錯誤"));
               }
             };
           }
@@ -8358,7 +8377,7 @@
 
       const renderPointsList = () => {
         const q = String(pointsSearchEl ? pointsSearchEl.value : "").trim().toLowerCase();
-        const filtered = q
+        let filtered = q
           ? pointsResidents.filter((r) => {
               const h = String(r.houseNo || "").toLowerCase();
               const n = String(r.displayName || "").toLowerCase();
@@ -8373,6 +8392,21 @@
         if (!filtered.length) {
           pointsListEl.innerHTML = `<div class="status">尚無住戶資料。</div>`;
           return;
+        }
+
+        // 如果是共用模式，只顯示主帳號
+        if (pointsSettings.sharePoints) {
+          const processedHouseNos = new Set();
+          filtered = filtered.filter((r) => {
+            const houseNo = String(r.houseNo || "").trim();
+            if (!houseNo) return true;
+            if (processedHouseNos.has(houseNo)) return false;
+            if (isMainAccount(r)) {
+              processedHouseNos.add(houseNo);
+              return true;
+            }
+            return false;
+          });
         }
 
         pointsListEl.innerHTML = filtered
@@ -8469,6 +8503,11 @@
           };
 
           await db.collection("pointsHistory").add(historyRecord);
+
+          // 如果是共用點數模式，需要更新戶號的總點數
+          if (pointsResidents && pointsResidents.length > 0) {
+            await saveHousePointsTotals(pointsResidents);
+          }
 
           toast(reason + " 成功");
         } catch (err) {
@@ -8746,6 +8785,38 @@
         modal.hidden = false;
       };
 
+      // 計算並保存每個戶號的總點數
+      const saveHousePointsTotals = async (list) => {
+        try {
+          console.log("saveHousePointsTotals - 開始處理，cid:", cid, "list長度:", list.length);
+          
+          const housePoints = {};
+          list.forEach((r) => {
+            const houseNo = String(r.houseNo || "").trim();
+            const points = Number(r.points || 0);
+            console.log("saveHousePointsTotals - 住戶:", r.displayName, "houseNo:", houseNo, "points:", points);
+            
+            if (houseNo) {
+              if (!housePoints[houseNo]) {
+                housePoints[houseNo] = 0;
+              }
+              housePoints[houseNo] += points;
+            }
+          });
+          
+          console.log("saveHousePointsTotals - 計算完成，housePoints:", housePoints);
+          
+          await db.collection("communities").doc(cid).set({
+            housePoints: housePoints,
+            updatedAt: FieldValue.serverTimestamp()
+          }, { merge: true });
+          
+          console.log("saveHousePointsTotals - 已保存戶號點數總計:", housePoints);
+        } catch (e) {
+          console.error("saveHousePointsTotals - 保存失敗:", e);
+        }
+      };
+
       // 加载住户数据（包含点数字段）
       const loadPointsResidents = async () => {
         setPointsStatus("讀取中...", false);
@@ -8785,6 +8856,9 @@
               pointsResidents = list;
               setPointsStatus("", false);
               renderPointsList();
+              
+              // 保存每個戶號的總點數
+              saveHousePointsTotals(list);
             }, (err) => {
               const code = String(err && err.code ? err.code : "");
               setPointsStatus(code.includes("permission-denied") ? "沒有權限讀取住戶資料。" : "讀取失敗，請稍後再試。", true);
