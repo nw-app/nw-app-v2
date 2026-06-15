@@ -8358,7 +8358,7 @@
 
       const renderPointsList = () => {
         const q = String(pointsSearchEl ? pointsSearchEl.value : "").trim().toLowerCase();
-        let filtered = q
+        const filtered = q
           ? pointsResidents.filter((r) => {
               const h = String(r.houseNo || "").toLowerCase();
               const n = String(r.displayName || "").toLowerCase();
@@ -8367,21 +8367,6 @@
               return h.includes(q) || n.includes(q) || p.includes(q) || e.includes(q);
             })
           : pointsResidents;
-
-        // 如果是共用模式，只顯示主帳號
-        if (pointsSettings.sharePoints) {
-          const processedHouseNos = new Set();
-          filtered = filtered.filter((r) => {
-            const houseNo = String(r.houseNo || "").trim();
-            if (!houseNo) return true;
-            if (processedHouseNos.has(houseNo)) return false;
-            if (isMainAccount(r)) {
-              processedHouseNos.add(houseNo);
-              return true;
-            }
-            return false;
-          });
-        }
 
         if (!pointsListEl) return;
         if (pointsTotalEl) pointsTotalEl.textContent = `總住戶：${pointsResidents.length}`;
