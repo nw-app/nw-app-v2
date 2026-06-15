@@ -3340,6 +3340,7 @@
     const imageDataUrl = String(data.imageDataUrl || data.image || data.imageUrl || "").trim();
     const usageTime = String(data.usageTime || data.usage || "").trim();
     const chargeMethod = String(data.chargeMethod || data.charge || data.pricing || "").trim();
+    const chargeAmount = Number(data.chargeAmount || 0) || 0;
     const orderRaw = Number(data.order);
     const order = Number.isFinite(orderRaw) ? orderRaw : null;
     const slotMinutes = Math.max(15, Math.min(240, Number(data.slotMinutes || data.slot || 60) || 60));
@@ -3349,7 +3350,7 @@
     const requireApproval = Boolean(data.requireApproval !== false);
     const enabled = Boolean(data.enabled !== false);
     const advanceBookingDays = Math.max(1, Math.min(365, Number(data.advanceBookingDays || 30) || 30));
-    return { id: String(id || "").trim(), name, imageDataUrl, usageTime, chargeMethod, order, slotMinutes, openTime, closeTime, capacity, requireApproval, enabled, advanceBookingDays };
+    return { id: String(id || "").trim(), name, imageDataUrl, usageTime, chargeMethod, chargeAmount, order, slotMinutes, openTime, closeTime, capacity, requireApproval, enabled, advanceBookingDays };
   }
 
   async function loadFacilityConfigs80(cid) {
@@ -3500,6 +3501,7 @@
                     <th style="width: 110px;">時段(分)</th>
                     <th style="width: 110px;">名額</th>
                     <th style="width: 200px;">消費方式</th>
+                    <th style="width: 150px;">金額</th>
                     <th style="width: 110px;">提前預約(天)</th>
                     <th style="width: 110px;">需審核</th>
                     <th style="width: 110px;">啟用</th>
@@ -3563,7 +3565,11 @@
         <td><input type="time" class="f-close" value="${escapeHtml(String(c.closeTime || "21:00"))}" step="300" /></td>
         <td><input type="number" class="f-slot" value="${escapeHtml(String(c.slotMinutes || 60))}" min="15" step="5" /></td>
         <td><input type="number" class="f-cap" value="${escapeHtml(String(c.capacity || 1))}" min="1" step="1" /></td>
-        <td><input type="text" class="f-charge" value="${escapeHtml(chargeMethod)}" placeholder="例如 每小時100元/次" /></td>
+        <td><select class="f-charge">
+            <option value="點數" ${chargeMethod === '點數' || !chargeMethod ? 'selected' : ''}>點數</option>
+            <option value="現金" ${chargeMethod === '現金' ? 'selected' : ''}>現金</option>
+          </select></td>
+        <td><input type="number" class="f-amount" value="${escapeHtml(String(c.chargeAmount || ''))}" min="0" step="1" placeholder="金額" /></td>
         <td><input type="number" class="f-advance" value="${escapeHtml(String(c.advanceBookingDays || 30))}" min="1" max="365" step="1" /></td>
         <td style="padding: 0 12px;"><input type="checkbox" class="f-approve" ${c.requireApproval !== false ? "checked" : ""} /></td>
         <td style="padding: 0 12px;"><input type="checkbox" class="f-enabled" ${c.enabled !== false ? "checked" : ""} /></td>
@@ -3644,6 +3650,7 @@
           const slotMinutes = Math.max(15, Math.min(240, Number(tr.querySelector(".f-slot")?.value || 60) || 60));
           const capacity = Math.max(1, Math.min(500, Number(tr.querySelector(".f-cap")?.value || 1) || 1));
           const chargeMethod = String(tr.querySelector(".f-charge")?.value || "").trim();
+          const chargeAmount = Number(tr.querySelector(".f-amount")?.value || 0) || 0;
           const advanceBookingDays = Math.max(1, Math.min(365, Number(tr.querySelector(".f-advance")?.value || 30) || 30));
           const requireApproval = Boolean(tr.querySelector(".f-approve")?.checked);
           const enabled = Boolean(tr.querySelector(".f-enabled")?.checked);
@@ -3660,6 +3667,7 @@
             slotMinutes,
             capacity,
             chargeMethod,
+            chargeAmount,
             advanceBookingDays,
             requireApproval,
             enabled,
@@ -3702,6 +3710,223 @@
       reader.onerror = () => resolve("");
       reader.readAsDataURL(file);
     });
+  }
+
+  function ensureFacilityExpenseModal80() {
+    const modal = ensureModal("facilityExpenseModal80", "modal-facility-expense", "90%");
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="facilityExpenseModalTitle80">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="facilityExpenseModalTitle80">消費明細</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body" style="padding: 0;">
+          <div class="parcel-filter-bar" style="padding:16px; border-bottom:1px solid var(--border);">
+            <div class="field">
+              <label for="expenseFacilitySelect80">設施</label>
+              <select id="expenseFacilitySelect80"></select>
+            </div>
+            <div class="field">
+              <label for="expenseDateFrom80">開始日期</label>
+              <input id="expenseDateFrom80" type="date" />
+            </div>
+            <div class="field">
+              <label for="expenseDateTo80">結束日期</label>
+              <input id="expenseDateTo80" type="date" />
+            </div>
+            <button class="btn btn-primary" type="button" id="btnExpenseSearch80">查詢</button>
+          </div>
+          <div class="status" id="expenseStatus80" hidden style="margin:16px;"></div>
+          <div id="expenseSummary80" style="padding:16px; border-bottom:1px solid var(--border); display:flex; gap:24px; flex-wrap:wrap;">
+            <div class="field">
+              <label>總點數</label>
+              <div class="value" id="totalPoints80">0</div>
+            </div>
+            <div class="field">
+              <label>總現金</label>
+              <div class="value" id="totalCash80">0</div>
+            </div>
+          </div>
+          <div class="units-table-container" style="max-height: 400px; overflow-y: auto;">
+            <table class="units-table">
+              <thead>
+                <tr>
+                  <th style="width: 150px;">日期</th>
+                  <th style="width: 150px;">時間</th>
+                  <th style="width: 200px;">設施</th>
+                  <th style="width: 150px;">戶號</th>
+                  <th style="width: 150px;">姓名</th>
+                  <th style="width: 120px;">消費方式</th>
+                  <th style="width: 120px;">金額</th>
+                  <th style="width: 150px;">建立時間</th>
+                </tr>
+              </thead>
+              <tbody id="expenseTbody80"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn btn-primary" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    return modal;
+  }
+
+  async function openFacilityExpenseModal80({ cid }) {
+    const communityId = String(cid || "").trim() || "default";
+    const modal = ensureFacilityExpenseModal80();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const selFacility = modal.querySelector("#expenseFacilitySelect80");
+    const inputDateFrom = modal.querySelector("#expenseDateFrom80");
+    const inputDateTo = modal.querySelector("#expenseDateTo80");
+    const btnSearch = modal.querySelector("#btnExpenseSearch80");
+    const tbody = modal.querySelector("#expenseTbody80");
+    const st = modal.querySelector("#expenseStatus80");
+    const totalPointsEl = modal.querySelector("#totalPoints80");
+    const totalCashEl = modal.querySelector("#totalCash80");
+
+    // 设置默认日期为今天
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    if (inputDateFrom) inputDateFrom.value = todayStr;
+    if (inputDateTo) inputDateTo.value = todayStr;
+
+    const setStatus = (msg, isError) => {
+      if (!st) return;
+      const t = String(msg || "").trim();
+      st.textContent = t;
+      st.hidden = !t;
+      st.classList.toggle("error", Boolean(isError));
+    };
+
+    // 加载设施列表
+    const loadFacilities = async () => {
+      if (!selFacility) return;
+      try {
+        const snap = await db.collection("communities").doc(communityId).collection("facility_configs").get();
+        selFacility.innerHTML = '<option value="">全部設施</option>';
+        snap.docs.forEach(doc => {
+          const data = doc.data() || {};
+          selFacility.innerHTML += `<option value="${doc.id}">${escapeHtml(String(data.name || doc.id))}</option>`;
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    // 加载和显示消费明细
+    const loadExpenses = async () => {
+      if (!tbody) return;
+      try {
+        setStatus("讀取中...", false);
+        tbody.innerHTML = '<tr><td colspan="8" class="status">讀取中...</td></tr>';
+
+        // 先加载所有设施配置
+        const facilitySnap = await db.collection("communities").doc(communityId).collection("facility_configs").get();
+        const facilityMap = new Map();
+        facilitySnap.docs.forEach(doc => {
+          const facilityData = doc.data() || {};
+          facilityMap.set(doc.id, {
+            chargeMethod: String(facilityData.chargeMethod || ""),
+            chargeAmount: Number(facilityData.chargeAmount || 0)
+          });
+        });
+
+        // 简化查询，避免需要复合索引
+        // 先获取所有记录，然后在客户端过滤和排序
+        let query = db.collection("communities").doc(communityId).collection("reservations");
+        
+        // 只按创建时间排序，不按日期过滤来避免复合索引
+        query = query.orderBy("createdAt", "desc").limit(100);
+
+        const snap = await query.get();
+        const selectedFacilityId = selFacility?.value || "";
+        const dateFrom = inputDateFrom?.value;
+        const dateTo = inputDateTo?.value;
+        
+        let totalPoints = 0;
+        let totalCash = 0;
+        const rows = [];
+
+        for (const doc of snap.docs) {
+          const data = doc.data() || {};
+          const facilityId = String(data.facilityId || "");
+          const dateKey = String(data.dateKey || "");
+          
+          // 在客户端按设施过滤
+          if (selectedFacilityId && facilityId !== selectedFacilityId) continue;
+          
+          // 在客户端按日期过滤
+          if (dateFrom && dateKey < dateFrom) continue;
+          if (dateTo && dateKey > dateTo) continue;
+          
+          // 从预先加载的设施配置中获取收费信息
+          let chargeMethod = "";
+          let chargeAmount = 0;
+          const facilityInfo = facilityMap.get(facilityId);
+          if (facilityInfo) {
+            chargeMethod = facilityInfo.chargeMethod;
+            chargeAmount = facilityInfo.chargeAmount;
+          }
+
+          // 计算总计（只对当前筛选条件下的记录加总）
+          if (chargeMethod === "點數") {
+            totalPoints += chargeAmount;
+          } else if (chargeMethod === "現金") {
+            totalCash += chargeAmount;
+          }
+
+          const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : null);
+          const createdAtStr = createdAt ? createdAt.toLocaleString() : "";
+
+          rows.push(`
+            <tr>
+              <td>${escapeHtml(dateKey)}</td>
+              <td>${escapeHtml(String(data.startTime || ""))} - ${escapeHtml(String(data.endTime || ""))}</td>
+              <td>${escapeHtml(String(data.facilityName || ""))}</td>
+              <td>${escapeHtml(String(data.unit || ""))}</td>
+              <td>${escapeHtml(String(data.name || ""))}</td>
+              <td>${escapeHtml(chargeMethod)}</td>
+              <td>${chargeAmount > 0 ? chargeAmount : "-"}</td>
+              <td>${escapeHtml(createdAtStr)}</td>
+            </tr>
+          `);
+        }
+
+        // 更新总计（显示当前筛选条件下的加总）
+        if (totalPointsEl) totalPointsEl.textContent = totalPoints;
+        if (totalCashEl) totalCashEl.textContent = totalCash;
+
+        // 更新表格
+        if (rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" class="status">沒有資料</td></tr>';
+        } else {
+          tbody.innerHTML = rows.join("");
+        }
+
+        setStatus("", false);
+      } catch (err) {
+        console.error(err);
+        setStatus("讀取失敗，請稍後再試。", true);
+      }
+    };
+
+    if (btnSearch) btnSearch.addEventListener("click", loadExpenses);
+
+    await loadFacilities();
+    await loadExpenses();
+
+    modal.hidden = false;
+
+    const oldDetach = detach;
+    detach = () => {
+      try { if (btnSearch) btnSearch.removeEventListener("click", loadExpenses); } catch {}
+      oldDetach();
+    };
   }
 
   function ensureFacilityManageModal80() {
@@ -4876,6 +5101,12 @@
               <p>時段控管、名額與審核流程</p>
             </div>
           </div>
+          <button class="icon-btn sm" type="button" id="btnFacilityExpense80" aria-label="消費明細" title="消費明細">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px; height:20px;">
+              <path d="M10 4h4a2 2 0 0 1 2 2v1H6V6a2 2 0 0 1 2-2h2Zm-5 4h14v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              <path d="M8 12h8M8 16h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+          </button>
           <button class="icon-btn sm" type="button" id="btnFacilityManage80" aria-label="設施設定" title="設施設定">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.7"/>
@@ -4922,6 +5153,7 @@
     const inputDate = document.getElementById("facilityDate80");
     const inputSearch = document.getElementById("facilitySearch80");
     const btnManage = document.getElementById("btnFacilityManage80");
+    const btnExpense = document.getElementById("btnFacilityExpense80");
     const btnNew = document.getElementById("btnFacilityNew80");
     const btnScanQr = document.getElementById("btnFacilityScanQr80");
     const subnavButtonsWrap = document.getElementById("facilitySubnavButtons80");
@@ -5698,6 +5930,19 @@
             await refreshReservations();
           }
         });
+      });
+    }
+
+    if (btnExpense) {
+      console.log('綁定消費明細按鈕事件');
+      btnExpense.addEventListener("click", () => {
+        console.log('消費明細按鈕被點擊');
+        try {
+          console.log('調用 openFacilityExpenseModal80, cid:', cid);
+          openFacilityExpenseModal80({ cid });
+        } catch (err) {
+          console.error('打開消費明細彈窗失敗:', err);
+        }
       });
     }
 

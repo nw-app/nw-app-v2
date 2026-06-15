@@ -162,6 +162,7 @@
     const name = String(data.name || id || "").trim() || "設施";
     const imageDataUrl = String(data.imageDataUrl || data.image || data.imageUrl || "").trim();
     const chargeMethod = String(data.chargeMethod || data.charge || data.pricing || "").trim();
+    const chargeAmount = Number(data.chargeAmount || 0) || 0;
     const orderRaw = Number(data.order);
     const order = Number.isFinite(orderRaw) ? orderRaw : null;
     const slotMinutes = Math.max(15, Math.min(240, Number(data.slotMinutes || data.slot || 60) || 60));
@@ -171,7 +172,7 @@
     const requireApproval = Boolean(data.requireApproval !== false);
     const enabled = Boolean(data.enabled !== false);
     const advanceBookingDays = Math.max(1, Math.min(365, Number(data.advanceBookingDays || 30) || 30));
-    return { id: String(id || "").trim(), name, imageDataUrl, chargeMethod, order, slotMinutes, openTime, closeTime, capacity, requireApproval, enabled, advanceBookingDays };
+    return { id: String(id || "").trim(), name, imageDataUrl, chargeMethod, chargeAmount, order, slotMinutes, openTime, closeTime, capacity, requireApproval, enabled, advanceBookingDays };
   }
 
   async function loadFacilityConfigs(cid, filterEnabled = true) {
@@ -223,7 +224,7 @@
           <div class="parcel-desc">開放時間：${facility.openTime} - ${facility.closeTime}</div>
           <div class="parcel-type">時段長度：${facility.slotMinutes} 分鐘</div>
           <div class="parcel-type">預約名額：${facility.capacity} 人</div>
-          ${facility.chargeMethod ? `<div class="parcel-type">費用說明：${facility.chargeMethod}</div>` : ''}
+          ${facility.chargeMethod ? `<div class="parcel-type">費用說明：${facility.chargeMethod}${facility.chargeAmount > 0 ? ` ${facility.chargeAmount}` : ''}</div>` : ''}
           ${facility.requireApproval ? `<div class="parcel-date" style="color: #d32f2f;">需要審核</div>` : '<div class="parcel-date" style="color: #10b981;">免審核</div>'}
         </div>
         <button class="btn btn-primary facility-book-btn" onclick="window.bookFacility && window.bookFacility('${facility.id}', '${facility.name}')">
