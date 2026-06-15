@@ -4477,23 +4477,31 @@
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <div class="modal-body">
-          <div class="field">
-            <label for="residentQrTokenInput80">或手動輸入住戶QR序號</label>
-            <input id="residentQrTokenInput80" type="text" autocomplete="off" placeholder="輸入QR序號後按Enter" />
+          <!-- 掃描模式 -->
+          <div id="scanMode80">
+            <div class="field">
+              <label for="residentQrTokenInput80">或手動輸入住戶QR序號</label>
+              <input id="residentQrTokenInput80" type="text" autocomplete="off" placeholder="輸入QR序號後按Enter" />
+            </div>
+            <div style="margin-top:12px;">
+              <div id="residentCheckInQrReader80" style="width:100%; max-width:400px; margin:0 auto; border-radius:12px; overflow:hidden; aspect-ratio:1/1;"></div>
+            </div>
+            <div class="status" id="residentCheckInScanStatus80" hidden></div>
+            <div style="margin-top:12px; text-align:center;">
+              <button class="btn btn-sm" type="button" id="btnRescanCheckInQr80">重新掃描</button>
+            </div>
           </div>
-          <div style="margin-top:12px;">
-            <div id="residentCheckInQrReader80" style="width:100%; max-width:400px; margin:0 auto; border-radius:12px; overflow:hidden; aspect-ratio:1/1;"></div>
+          <!-- 預約列表模式 -->
+          <div id="listMode80" hidden>
+            <div id="residentCheckInInfo80">
+              <div class="resident-name" style="font-size:18px; font-weight:600; margin-bottom:8px;"></div>
+              <div class="resident-sub" style="color:var(--color-text-muted); margin-bottom:16px;"></div>
+            </div>
+            <div id="residentReservationsList80"></div>
+            <div style="margin-top:20px; text-align:center;">
+              <button class="btn btn-sm" type="button" id="btnBackToScan80">返回掃描</button>
+            </div>
           </div>
-          <div class="status" id="residentCheckInScanStatus80" hidden></div>
-          <div style="margin-top:12px; text-align:center;">
-            <button class="btn btn-sm" type="button" id="btnRescanCheckInQr80">重新掃描</button>
-          </div>
-          <hr style="margin:20px 0; border:none; border-top:1px solid var(--color-border);" />
-          <div id="residentCheckInInfo80" hidden>
-            <div class="resident-name" style="font-size:18px; font-weight:600; margin-bottom:8px;"></div>
-            <div class="resident-sub" style="color:var(--color-text-muted); margin-bottom:16px;"></div>
-          </div>
-          <div id="residentReservationsList80"></div>
         </div>
         <div class="modal-ft">
           <button class="btn" type="button" data-modal-close="1">關閉</button>
@@ -4512,9 +4520,12 @@
     let currentReservations = [];
     const cid = String(communityId || "").trim() || "default";
 
+    const scanModeEl = modal.querySelector("#scanMode80");
+    const listModeEl = modal.querySelector("#listMode80");
     const inputEl = modal.querySelector("#residentQrTokenInput80");
     const statusEl = modal.querySelector("#residentCheckInScanStatus80");
     const btnRescan = modal.querySelector("#btnRescanCheckInQr80");
+    const btnBackToScan = modal.querySelector("#btnBackToScan80");
     const infoEl = modal.querySelector("#residentCheckInInfo80");
     const listEl = modal.querySelector("#residentReservationsList80");
 
@@ -4524,6 +4535,21 @@
       statusEl.textContent = t;
       statusEl.hidden = !t;
       statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    const switchToScanMode = async () => {
+      scanModeEl.hidden = false;
+      listModeEl.hidden = true;
+      currentResident = null;
+      currentReservations = [];
+      if (inputEl) inputEl.value = "";
+      setStatus("", false);
+      await startScanner();
+    };
+
+    const switchToListMode = () => {
+      scanModeEl.hidden = true;
+      listModeEl.hidden = false;
     };
 
     const stopScanner = async () => {
@@ -4542,7 +4568,7 @@
     const renderReservations = () => {
       if (!listEl) return;
       if (!currentReservations || !currentReservations.length) {
-        listEl.innerHTML = `<div class="status">今日無預約項目</div>`;
+        listEl.innerHTML = `<div class="status">無預約項目</div>`;
         return;
       }
 
@@ -4570,7 +4596,7 @@
                   ${isCheckedIn ? `<span class="tag green" style="margin-left:8px;">已報到</span>` : ""}
                 </div>
                 <div class="resident-sub">
-                  ${escapeHtml(`${String(r.startTime || "—")} - ${String(r.endTime || "—")}`)}
+                  ${escapeHtml(String(r.dateKey || "—"))} · ${escapeHtml(`${String(r.startTime || "—")} - ${String(r.endTime || "—")}`)}
                 </div>
               </div>
             </div>
@@ -4586,25 +4612,48 @@
 
     const loadReservations = async (unit, name) => {
       const now = new Date();
-      const today = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+      const todayStr = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
 
       try {
+        // 載入所有預約，然後在客戶端篩選（避免複合索引問題）
         const snap = await db.collection("communities").doc(cid).collection("reservations")
-          .where("dateKey", "==", today)
+          .orderBy("createdAt", "desc")
+          .limit(200)
           .get();
         
         const allReservations = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
         
+        // 篩選該住戶的預約，並排除已取消和已拒絕的
         currentReservations = allReservations.filter((r) => {
           const rUnit = String(r.unit || "").trim().toLowerCase();
           const rName = String(r.name || "").trim().toLowerCase();
           const targetUnit = String(unit || "").trim().toLowerCase();
           const targetName = String(name || "").trim().toLowerCase();
+          const status = String(r.status || "pending");
           
-          return rUnit === targetUnit && rName === targetName;
+          // 檢查預約是否已過期
+          let isExpired = false;
+          if (r.endAt) {
+            const endDate = r.endAt.toDate ? r.endAt.toDate() : new Date(r.endAt);
+            if (endDate < now) {
+              isExpired = true;
+            }
+          } else if (r.dateKey && r.endTime) {
+            const endDateTime = makeDateTime80(r.dateKey, r.endTime);
+            if (endDateTime && endDateTime < now) {
+              isExpired = true;
+            }
+          }
+          
+          // 只保留該住戶、未取消、未拒絕、未過期的預約
+          return rUnit === targetUnit && rName === targetName && 
+                 status !== "canceled" && status !== "rejected" && !isExpired;
         });
 
+        // 按日期和時間排序
         currentReservations.sort((a, b) => {
+          const dateCompare = String(a.dateKey || "").localeCompare(String(b.dateKey || ""));
+          if (dateCompare !== 0) return dateCompare;
           return String(a.startTime || "").localeCompare(String(b.startTime || ""));
         });
 
@@ -4613,7 +4662,7 @@
           const nameEl = infoEl.querySelector(".resident-name");
           const subEl = infoEl.querySelector(".resident-sub");
           if (nameEl) nameEl.textContent = `${name || ""} - ${unit || ""}`;
-          if (subEl) subEl.textContent = `今日預約：${currentReservations.length} 筆`;
+          if (subEl) subEl.textContent = `預約項目：${currentReservations.length} 筆`;
         }
 
         renderReservations();
@@ -4661,6 +4710,7 @@
       setStatus("", false);
       await stopScanner();
       await loadReservations(uUnit, uName);
+      switchToListMode();
       busy = false;
     };
 
@@ -4781,6 +4831,9 @@
       if (btnRescan && btnRescan._rh) {
         btnRescan.removeEventListener("click", btnRescan._rh);
       }
+      if (btnBackToScan && btnBackToScan._rh) {
+        btnBackToScan.removeEventListener("click", btnBackToScan._rh);
+      }
       if (listEl && listEl._rh) {
         listEl.removeEventListener("click", listEl._rh);
       }
@@ -4803,12 +4856,19 @@
       btnRescan.addEventListener("click", btnRescan._rh);
     }
 
+    if (btnBackToScan) {
+      btnBackToScan._rh = () => switchToScanMode();
+      btnBackToScan.addEventListener("click", btnBackToScan._rh);
+    }
+
     if (listEl) {
       listEl._rh = handleListClick;
       listEl.addEventListener("click", listEl._rh);
     }
 
-    if (infoEl) infoEl.hidden = true;
+    // 初始化：顯示掃描模式
+    if (scanModeEl) scanModeEl.hidden = false;
+    if (listModeEl) listModeEl.hidden = true;
     if (listEl) listEl.innerHTML = "";
     currentReservations = [];
     currentResident = null;
@@ -8148,6 +8208,12 @@
                 <p>住戶/承租/車位/聯絡方式彙整</p>
               </div>
             </div>
+            <button class="icon-btn sm" type="button" id="btnPointsSettings" aria-label="點數設定" title="點數設定">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+            </button>
           </div>
           <div class="card-bd">
             <div class="resident-toolbar">
@@ -8168,6 +8234,7 @@
       const pointsStatusEl = document.getElementById("pointsStatus");
       const pointsSearchEl = document.getElementById("pointsSearch");
       const pointsTotalEl = document.getElementById("pointsTotal");
+      const btnPointsSettings = document.getElementById("btnPointsSettings");
 
       const setPointsStatus = (msg, isError) => {
         if (!pointsStatusEl) return;
@@ -8178,10 +8245,120 @@
       };
 
       let pointsResidents = [];
+      let pointsSettings = { sharePoints: true }; // 預設共用
+
+      // 加載點數設定
+      const loadPointsSettings = async () => {
+        try {
+          const doc = await db.collection("communities").doc(cid).get();
+          const data = doc.exists ? (doc.data() || {}) : {};
+          if (data.pointsSettings && typeof data.pointsSettings === "object") {
+            pointsSettings = { ...pointsSettings, ...data.pointsSettings };
+          }
+        } catch (err) {
+          console.error("Load points settings error:", err);
+        }
+      };
+
+      const getHouseGroupPoints = (houseNo) => {
+        if (!pointsSettings.sharePoints) return 0;
+        return pointsResidents
+          .filter(r => String(r.houseNo || "").trim() === String(houseNo || "").trim())
+          .reduce((sum, r) => sum + (Number(r.points) || 0), 0);
+      };
+
+      const isMainAccount = (resident) => {
+        const subUnit = String(resident.subUnit || "").trim();
+        return !subUnit || subUnit === "1";
+      };
+
+      const openPointsSettingsModal = () => {
+        const modal = ensureModal("pointsSettingsModal", "", "500px");
+        let detach = () => {};
+        detach = bindModalClose(modal, () => detach());
+
+        const render = () => {
+          modal.innerHTML = `
+            <div class="modal-backdrop" data-modal-close="1"></div>
+            <div class="modal-dialog" role="dialog" aria-modal="true">
+              <div class="modal-hd">
+                <h3 class="modal-title">點數設定</h3>
+                <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+              </div>
+              <div class="modal-body">
+                <div class="field">
+                  <label>點數計算方式</label>
+                  <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                      <input type="radio" name="pointsMode" value="share" ${pointsSettings.sharePoints ? "checked" : ""} />
+                      <span>
+                        <strong>共用點數</strong>
+                        <div style="font-size: 12px; color: var(--muted); margin-top: 4px;">
+                          同戶號（例如 A1）的住戶共用點數，以 &lt;戶號&gt;-1 為主帳號顯示，子帳號點數合併計算
+                        </div>
+                      </span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                      <input type="radio" name="pointsMode" value="separate" ${!pointsSettings.sharePoints ? "checked" : ""} />
+                      <span>
+                        <strong>分開計算</strong>
+                        <div style="font-size: 12px; color: var(--muted); margin-top: 4px;">
+                          每個住戶獨立計算點數
+                        </div>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="modal-ft">
+                <button class="btn" type="button" data-modal-close="1">取消</button>
+                <button class="btn btn-primary" type="button" id="btnSavePointsSettings">儲存</button>
+              </div>
+            </div>
+          `.trim();
+
+          // 綁定單選框事件
+          modal.querySelectorAll('input[name="pointsMode"]').forEach(radio => {
+            radio.onchange = (e) => {
+              pointsSettings.sharePoints = e.target.value === "share";
+            };
+          });
+
+          // 綁定儲存按鈕
+          const saveBtn = modal.querySelector("#btnSavePointsSettings");
+          if (saveBtn) {
+            saveBtn.onclick = async () => {
+              try {
+                await db.collection("communities").doc(cid).set({
+                  pointsSettings: {
+                    sharePoints: pointsSettings.sharePoints
+                  },
+                  updatedAt: FieldValue.serverTimestamp()
+                }, { merge: true });
+                toast("設定已儲存");
+                renderPointsList();
+                modal.hidden = true;
+                detach();
+              } catch (err) {
+                console.error("儲存失敗:", err);
+                toast("儲存失敗：" + err.message);
+              }
+            };
+          }
+        };
+
+        render();
+        modal.hidden = false;
+      };
+
+      // 綁定設定按鈕事件
+      if (btnPointsSettings) {
+        btnPointsSettings.onclick = openPointsSettingsModal;
+      }
 
       const renderPointsList = () => {
         const q = String(pointsSearchEl ? pointsSearchEl.value : "").trim().toLowerCase();
-        const filtered = q
+        let filtered = q
           ? pointsResidents.filter((r) => {
               const h = String(r.houseNo || "").toLowerCase();
               const n = String(r.displayName || "").toLowerCase();
@@ -8190,6 +8367,21 @@
               return h.includes(q) || n.includes(q) || p.includes(q) || e.includes(q);
             })
           : pointsResidents;
+
+        // 如果是共用模式，只顯示主帳號
+        if (pointsSettings.sharePoints) {
+          const processedHouseNos = new Set();
+          filtered = filtered.filter((r) => {
+            const houseNo = String(r.houseNo || "").trim();
+            if (!houseNo) return true;
+            if (processedHouseNos.has(houseNo)) return false;
+            if (isMainAccount(r)) {
+              processedHouseNos.add(houseNo);
+              return true;
+            }
+            return false;
+          });
+        }
 
         if (!pointsListEl) return;
         if (pointsTotalEl) pointsTotalEl.textContent = `總住戶：${pointsResidents.length}`;
@@ -8203,7 +8395,13 @@
             const houseNo = String(r.houseNo || "").trim();
             const subUnit = String(r.subUnit || "").trim();
             const fullUnit = subUnit ? `${houseNo}-${subUnit}` : houseNo;
-            const points = r.points || 0;
+            let points = Number(r.points) || 0;
+            
+            // 如果是共用模式，顯示同戶號總和
+            if (pointsSettings.sharePoints && houseNo) {
+              points = getHouseGroupPoints(houseNo);
+            }
+            
             return `
               <div class="resident-item" data-id="${String(r.id || "")}">
                 <div class="resident-left">
@@ -8617,7 +8815,9 @@
         pointsSearchEl.addEventListener("input", renderPointsList);
       }
 
-      loadPointsResidents();
+      loadPointsSettings().then(() => {
+        loadPointsResidents();
+      });
     };
 
     const renderPendingResidents = () => {
