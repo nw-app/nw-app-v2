@@ -1,0 +1,38 @@
+.parcel-ft.has-ads {
+  padding: 0;
+  justify-content: stretch;
+  align-items: stretch;
+}
+
+.ads-footer {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  position: relative;
+}
+
+.ads-footer-track {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.ads-footer-track img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 1;
+  transition: opacity 220ms ease;
+}
+
+.ads-footer-track img.is-fading {
+  opacity: 0;
+}
+
+.ads-footer.is-clickable {
+  cursor: pointer;
+}

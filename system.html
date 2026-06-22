@@ -290,6 +290,7 @@
                     <button class="unit-tab-btn" type="button" data-unit-tab="row-d" role="tab" aria-selected="false">社紐</button>
                     <button class="unit-tab-btn" type="button" data-unit-tab="row-f" role="tab" aria-selected="false">生紐</button>
                     <button class="unit-tab-btn" type="button" data-unit-tab="service" role="tab" aria-selected="false">客服</button>
+                    <button class="unit-tab-btn" type="button" data-unit-tab="ads" role="tab" aria-selected="false">廣告</button>
                   </div>
                   <button class="modal-close" type="button" id="btnCloseUnitModal" aria-label="關閉">×</button>
                 </div>
@@ -384,6 +385,30 @@
                           <label for="modal_service_url">客服中心網址</label>
                           <input id="modal_service_url" type="text" placeholder="https://..." />
                           <p class="muted">設定點擊頁尾「客服」按鈕時開啟的網頁連結</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="unit-tab-panel" data-unit-panel="ads" role="tabpanel" hidden>
+                      <div class="field">
+                        <label>頁尾廣告輪播設定</label>
+                        <div class="carousel-settings">
+                          <div class="field">
+                            <label for="modal_ads_page">頁面</label>
+                            <select id="modal_ads_page">
+                              <option value="facility.html">facility.html</option>
+                              <option value="bulletin-community.html">bulletin-community.html</option>
+                              <option value="bulletin-finance.html">bulletin-finance.html</option>
+                              <option value="bulletin-meeting.html">bulletin-meeting.html</option>
+                              <option value="bulletin-repair.html">bulletin-repair.html</option>
+                              <option value="parcel.html">parcel.html</option>
+                            </select>
+                            <p class="muted">設定指定頁面的 footer 廣告圖片（最多 8 張）。</p>
+                          </div>
+                          <div class="field">
+                            <label for="modal_ads_interval">輪播時間 (秒)</label>
+                            <input id="modal_ads_interval" type="number" min="1" max="60" placeholder="預設 3" />
+                          </div>
+                          <div id="adsImageList" class="image-settings-list"></div>
                         </div>
                       </div>
                     </div>

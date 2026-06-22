@@ -2823,6 +2823,10 @@
               <label for="modal_r_address">地址</label>
               <input id="modal_r_address" type="text" placeholder="例：台北市..." autocomplete="street-address" />
             </div>
+            <div class="field" id="field_r_building">
+              <label for="modal_r_building">棟別</label>
+              <input id="modal_r_building" type="text" placeholder="例：A棟" autocomplete="off" />
+            </div>
             <div class="field" id="field_r_roles">
               <label>住戶角色</label>
               <div class="check-grid" id="modal_r_roles">
@@ -6748,13 +6752,15 @@
       renderParcelList(filter, readParcelFilters());
     };
 
-    const renderParcelLine = (p, id) => {
+    const renderParcelLine = (p, id, index = 0) => {
       const company = escapeHtml(p.company || "其他物流");
       const trackNo = escapeHtml(p.trackNo || "—");
       const time = p.createdAt ? (p.createdAt.toDate ? p.createdAt.toDate() : new Date(p.createdAt)) : null;
       const timeText = time ? `${pad2(time.getMonth()+1)}/${pad2(time.getDate())} ${pad2(time.getHours())}:${pad2(time.getMinutes())}` : "—";
+      const serial = normalizeParcelSerial(p.internalSerial) || "配號中";
       return `
         <div class="parcel-card" data-id="${String(id || "")}">
+          <div class="parcel-seq">${serial}</div>
           <div class="parcel-card-hd">
             <div class="parcel-company">${company}</div>
           </div>
@@ -6910,6 +6916,96 @@
     startScanner();
   }
 
+  function normalizeParcelSerial(value) {
+    const raw = String(value == null ? "" : value).trim();
+    if (!raw) return "";
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 1 || n > 9999) return "";
+    return String(n).padStart(4, "0");
+  }
+
+  function findNextAvailableParcelSerial(usedSet, startFrom = 1) {
+    const used = usedSet instanceof Set ? usedSet : new Set();
+    const start = Math.min(9999, Math.max(1, parseInt(startFrom, 10) || 1));
+    for (let i = 0; i < 9999; i += 1) {
+      const value = ((start - 1 + i) % 9999) + 1;
+      const serial = String(value).padStart(4, "0");
+      if (!used.has(serial)) return serial;
+    }
+    return "";
+  }
+
+  async function allocateParcelInternalSerial(cid) {
+    const communityId = String(cid || "").trim();
+    if (!communityId) throw new Error("社區編號不存在，無法分配內部編號。");
+    const communityRef = db.collection("communities").doc(communityId);
+    const configRef = db.collection("communities").doc(communityId).collection("settings").doc("parcel_config");
+    const parcelSnap = await communityRef.collection("parcels").limit(10000).get();
+    let maxUsed = 0;
+    parcelSnap.forEach((doc) => {
+      const serial = normalizeParcelSerial((doc.data() || {}).internalSerial);
+      if (serial) maxUsed = Math.max(maxUsed, parseInt(serial, 10) || 0);
+    });
+    return db.runTransaction(async (tx) => {
+      const configSnap = await tx.get(configRef);
+      const lastSerial = normalizeParcelSerial((configSnap.exists ? (configSnap.data() || {}) : {}).lastInternalSerial);
+      const lastUsed = lastSerial ? (parseInt(lastSerial, 10) || 0) : 0;
+      const nextValue = Math.max(lastUsed, maxUsed) + 1;
+      if (nextValue > 9999) throw new Error("內部編號已滿，無法再分配。");
+      const next = String(nextValue).padStart(4, "0");
+      tx.set(configRef, {
+        lastInternalSerial: next,
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      return next;
+    });
+  }
+
+  let _parcelSerialBackfillCid = "";
+  let _parcelSerialBackfillPromise = null;
+  function ensureParcelInternalSerials(cid, docs) {
+    const communityId = String(cid || "").trim();
+    const rows = (Array.isArray(docs) ? docs : []).filter((doc) => !normalizeParcelSerial(((doc && doc.data && doc.data()) || {}).internalSerial));
+    if (!communityId || !rows.length) return Promise.resolve();
+    if (_parcelSerialBackfillPromise && _parcelSerialBackfillCid === communityId) return _parcelSerialBackfillPromise;
+    _parcelSerialBackfillCid = communityId;
+    _parcelSerialBackfillPromise = (async () => {
+      const snap = await db.collection("communities").doc(communityId).collection("parcels").limit(10000).get();
+      const configRef = db.collection("communities").doc(communityId).collection("settings").doc("parcel_config");
+      const used = new Set();
+      snap.forEach((doc) => {
+        const serial = normalizeParcelSerial((doc.data() || {}).internalSerial);
+        if (serial) used.add(serial);
+      });
+      for (const doc of rows) {
+        if (!doc || !doc.ref) continue;
+        const currentSerial = normalizeParcelSerial(((doc.data && doc.data()) || {}).internalSerial);
+        if (currentSerial) {
+          used.add(currentSerial);
+          continue;
+        }
+        const next = findNextAvailableParcelSerial(used);
+        if (!next) break;
+        used.add(next);
+        await doc.ref.set({ internalSerial: next }, { merge: true });
+      }
+      let maxSerial = 0;
+      used.forEach((serial) => {
+        maxSerial = Math.max(maxSerial, parseInt(serial, 10) || 0);
+      });
+      if (maxSerial > 0) {
+        await configRef.set({
+          lastInternalSerial: String(maxSerial).padStart(4, "0"),
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
+    })().finally(() => {
+      _parcelSerialBackfillCid = "";
+      _parcelSerialBackfillPromise = null;
+    });
+    return _parcelSerialBackfillPromise;
+  }
+
   let _unsubParcels = null;
   function renderParcelList(filter = "all", filters = {}) {
     const cid = resolveActiveCommunityId();
@@ -6929,6 +7025,8 @@
         listEl.innerHTML = `<div class="status">目前沒有包裹紀錄。</div>`;
         return;
       }
+
+      ensureParcelInternalSerials(cid, snap.docs).catch(() => {});
 
       let docs = snap.docs;
       if (filter !== "all") {
@@ -6960,7 +7058,7 @@
 
       listEl.innerHTML = `
         <div class="parcel-grid">
-          ${docs.map(doc => {
+          ${docs.map((doc, index) => {
             const p = doc.data();
             const id = doc.id;
             const statusLabel = p.status === "received" ? "已領取" : "待領取";
@@ -6978,9 +7076,11 @@
               handlerAccount && handlerName && handlerAccount !== handlerName ? `${handlerAccount}<${handlerName}>` :
               handlerName || handlerAccount;
             const handlerLine = (p.status === "received" && handlerText) ? `<div class="parcel-handler">處理：${escapeHtml(handlerText)}</div>` : "";
+            const serial = normalizeParcelSerial(p.internalSerial) || "配號中";
             
             return `
               <div class="parcel-card" data-id="${id}">
+                <div class="parcel-seq">${serial}</div>
                 <div class="parcel-card-hd">
                   <div class="parcel-company">${escapeHtml(p.company || "其他物流")}</div>
                   <div class="${statusClass}">${statusLabel}</div>
@@ -7362,24 +7462,25 @@
     form.onsubmit = async (e) => {
       e.preventDefault();
       if (readOnly) return;
-      const payload = {
-        company: inputCompany.value.trim(),
-        trackNo: inputTrackNo.value.trim(),
-        unit: inputUnit.value.trim(),
-        recipient: inputRecipient.value.trim(),
-        address: inputAddress.value.trim(),
-        note: inputNote.value.trim(),
-        type: inputType ? String(inputType.value || "一般包裹").trim() : "一般包裹",
-        updatedAt: FieldValue.serverTimestamp()
-      };
-
-      if (!isEdit) {
-        payload.status = "pending";
-        payload.createdAt = FieldValue.serverTimestamp();
-      }
-
       if (btnSubmit) btnSubmit.disabled = true;
       try {
+        const payload = {
+          company: inputCompany.value.trim(),
+          trackNo: inputTrackNo.value.trim(),
+          unit: inputUnit.value.trim(),
+          recipient: inputRecipient.value.trim(),
+          address: inputAddress.value.trim(),
+          note: inputNote.value.trim(),
+          type: inputType ? String(inputType.value || "一般包裹").trim() : "一般包裹",
+          updatedAt: FieldValue.serverTimestamp()
+        };
+
+        if (!isEdit) {
+          payload.status = "pending";
+          payload.createdAt = FieldValue.serverTimestamp();
+          payload.internalSerial = await allocateParcelInternalSerial(cid);
+        }
+
         const ref = isEdit 
           ? db.collection("communities").doc(cid).collection("parcels").doc(parcelId)
           : db.collection("communities").doc(cid).collection("parcels").doc();
@@ -7897,7 +7998,7 @@
                 <div class="people-total" id="peopleTotal">總人數：—</div>
               </div>
               <div class="search resident-search">
-                <input id="residentSearch" type="text" placeholder="搜尋 戶號 / 姓名 / 手機 / Email" autocomplete="off" />
+                <input id="residentSearch" type="text" placeholder="搜尋 戶號 / 姓名 / 手機 / Email / 棟別" autocomplete="off" />
               </div>
               <button class="btn btn-primary btn-sm" type="button" id="btnAddResident">新增帳號</button>
             </div>
@@ -7958,7 +8059,8 @@
             const n = String(r.displayName || "").toLowerCase();
             const p = String(r.phone || "").toLowerCase();
             const e = String(r.email || "").toLowerCase();
-            return h.includes(q) || n.includes(q) || p.includes(q) || e.includes(q);
+            const b = String(r.building || r.block || "").toLowerCase();
+            return h.includes(q) || n.includes(q) || p.includes(q) || e.includes(q) || b.includes(q);
           })
         : residents;
 
@@ -8059,6 +8161,7 @@
                   phone: String(v.phone || ""),
                   enabled: v.enabled !== false,
                   address: String(v.address || ""),
+                  building: String(v.building || v.block || ""),
                   avatarDataUrl: String(v.avatarDataUrl || ""),
                   phoneNormalized: String(v.phoneNormalized || ""),
                   status: String(v.status || ""),
@@ -9102,6 +9205,7 @@
       const inputPhone = modal.querySelector("#modal_r_phone");
       const inputPassword = modal.querySelector("#modal_r_password");
       const inputAddr = modal.querySelector("#modal_r_address");
+      const inputBuilding = modal.querySelector("#modal_r_building");
       const inputEnabled = modal.querySelector("#modal_r_enabled");
       const unitMatchBadge = modal.querySelector("#unitMatchBadge");
       const avatarUploader = modal.querySelector("#residentAvatarUploader");
@@ -9168,6 +9272,7 @@
       if (inputEmail) inputEmail.value = isEdit ? String(data.email || "") : "";
       if (inputPhone) inputPhone.value = isEdit ? String(data.phone || "") : "";
       if (inputAddr) inputAddr.value = isEdit ? String(data.address || "") : "";
+      if (inputBuilding) inputBuilding.value = isEdit ? String(data.building || data.block || "") : "";
       if (inputEnabled) inputEnabled.value = String((isEdit ? data.enabled !== false : true) ? "true" : "false");
       if (inputPassword) inputPassword.value = "";
       if (inputEmail) inputEmail.disabled = Boolean(isEdit);
@@ -9314,13 +9419,13 @@
         
         // 自動填寫地址
         const unitVal = normalizeText(inputUnit.value);
-        if (unitVal && inputAddress && !inputAddress.value.trim()) {
+        if (unitVal && inputAddr && !inputAddr.value.trim()) {
           const found = (Array.isArray(communityUnits) ? communityUnits : []).find(u => {
             const uid = (typeof u === "object" && u !== null) ? String(u.id || "") : String(u || "");
             return uid.trim().toLowerCase() === unitVal.toLowerCase();
           });
           if (found && typeof found === "object" && found.address) {
-            inputAddress.value = found.address;
+            inputAddr.value = found.address;
           }
         }
       };
@@ -9352,6 +9457,7 @@
         const phone = normalizeText(inputPhone ? inputPhone.value : "");
         const passwordRaw = normalizeText(inputPassword ? inputPassword.value : "");
         const address = normalizeText(inputAddr ? inputAddr.value : "");
+        const building = normalizeText(inputBuilding ? inputBuilding.value : "");
         const enabled = String(inputEnabled ? inputEnabled.value : "true") === "true";
 
         if (!name) {
@@ -9431,6 +9537,7 @@
             phone: phoneNormalized,
             phoneNormalized,
             address,
+            building,
             enabled: Boolean(enabled),
             category,
             residentRoles: roles,
@@ -10994,6 +11101,109 @@
     setupDashboardReorder(grid);
   }
 
+  function renderCareModule() {
+    const cid = resolveActiveCommunityId();
+    const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
+    const raw = String(location.hash || "").replace(/^#/, "").trim();
+    const parts = raw.split("/");
+    let currentPage = "sos";
+    if (parts.length >= 3 && parts[0] === "community" && parts[1] === "care") {
+      const pageParam = parts[2];
+      if (["sos", "72h", "reminder"].includes(pageParam)) currentPage = pageParam;
+    }
+
+    const pageMap = {
+      sos: {
+        label: "住戶SOS",
+        title: "住戶SOS",
+        desc: "緊急求助、即時通報與聯絡資訊整合。",
+        tag: "緊急",
+        body: `
+          <div class="row"><div class="muted">可放入住戶求助紀錄、求助類型、通報時間與處理狀態。</div></div>
+          <div class="grid cols-3" style="margin-top:12px;">
+            <div class="kpi"><div class="kpi-label">今日求助</div><div class="kpi-value">--</div></div>
+            <div class="kpi"><div class="kpi-label">處理中</div><div class="kpi-value">--</div></div>
+            <div class="kpi"><div class="kpi-label">已完成</div><div class="kpi-value">--</div></div>
+          </div>
+        `
+      },
+      "72h": {
+        label: "72小時",
+        title: "72小時",
+        desc: "災防物資、緊急清單與應變資訊彙整。",
+        tag: "防災",
+        body: `
+          <div class="row"><div class="muted">可放入防災物資清單、避難資訊、備援設備與聯繫窗口。</div></div>
+          <div class="list" style="margin-top:12px;">
+            <div class="list-item"><strong>物資清單</strong><div class="muted">飲水、照明、急救包、通訊設備</div></div>
+            <div class="list-item"><strong>避難資訊</strong><div class="muted">集合點、樓層疏散路線、聯絡方式</div></div>
+            <div class="list-item"><strong>應變任務</strong><div class="muted">巡查、廣播、支援、回報</div></div>
+          </div>
+        `
+      },
+      reminder: {
+        label: "提醒",
+        title: "提醒",
+        desc: "關懷通知、用藥提醒與定期追蹤紀錄。",
+        tag: "關懷",
+        body: `
+          <div class="row"><div class="muted">可放入住戶追蹤提醒、關懷排程、通知發送與回覆紀錄。</div></div>
+          <div class="grid cols-2" style="margin-top:12px;">
+            <div class="card" style="margin:0;"><div class="card-bd"><strong>今日提醒</strong><div class="muted">-- 筆待發送</div></div></div>
+            <div class="card" style="margin:0;"><div class="card-bd"><strong>本週追蹤</strong><div class="muted">-- 位待聯繫</div></div></div>
+          </div>
+        `
+      }
+    };
+
+    const renderSubnav = () => {
+      if (!subnavEl) return;
+      subnavEl.innerHTML = `
+        <button class="btn btn-sm ${currentPage === "sos" ? "btn-primary" : ""}" type="button" data-care-page="sos">住戶SOS</button>
+        <button class="btn btn-sm ${currentPage === "72h" ? "btn-primary" : ""}" type="button" data-care-page="72h">72小時</button>
+        <button class="btn btn-sm ${currentPage === "reminder" ? "btn-primary" : ""}" type="button" data-care-page="reminder">提醒</button>
+      `.trim();
+      subnavEl.querySelectorAll("[data-care-page]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const nextPage = String(btn.getAttribute("data-care-page") || "sos");
+          if (nextPage === currentPage) return;
+          location.hash = `#community/care/${nextPage}`;
+        });
+      });
+    };
+
+    const renderPage = () => {
+      renderSubnav();
+      const page = pageMap[currentPage] || pageMap.sos;
+      contentEl.innerHTML = `
+        <section class="card">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("care")}</div>
+              <div style="min-width:0;">
+                <h2>關懷救護${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <p>${page.desc}</p>
+              </div>
+            </div>
+            <span class="tag red">${page.tag}</span>
+          </div>
+          <div class="card-bd">
+            <div class="row">
+              <div>
+                <div style="font-size:18px; font-weight:800; color:#111827;">${page.title}</div>
+                <div class="muted" style="margin-top:4px;">此子分頁目前為示意版，可再接實際資料與功能。</div>
+              </div>
+            </div>
+            ${page.body}
+          </div>
+        </section>
+      `.trim();
+      updateFooterActiveNav();
+    };
+
+    renderPage();
+  }
+
   function renderModule(moduleId) {
     const layoutEl = document.querySelector(".layout");
     if (layoutEl) layoutEl.classList.toggle("visitor-main-lock", moduleId === "visitor");
@@ -11024,6 +11234,10 @@
     }
     if (moduleId === "bulletin") {
       renderBulletinModule();
+      return;
+    }
+    if (moduleId === "care") {
+      renderCareModule();
       return;
     }
     if (subnavEl) subnavEl.innerHTML = "";

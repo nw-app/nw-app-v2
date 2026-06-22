@@ -1553,7 +1553,7 @@
     };
 
     const setActiveUnitTab = (tabId) => {
-      const validTabs = ["units", "features", "row-a", "row-b", "row-d", "row-f", "service"];
+      const validTabs = ["units", "features", "row-a", "row-b", "row-d", "row-f", "service", "ads"];
       const next = validTabs.includes(tabId) ? tabId : "units";
       unitActiveTab = next;
       if (!unitModal) return;
@@ -1579,6 +1579,8 @@
         if (unitTitleTextEl) unitTitleTextEl.textContent = "生紐設定";
       } else if (next === "service") {
         if (unitTitleTextEl) unitTitleTextEl.textContent = "客服設定";
+      } else if (next === "ads") {
+        if (unitTitleTextEl) unitTitleTextEl.textContent = "廣告設定";
       } else {
         if (unitTitleTextEl) unitTitleTextEl.textContent = "戶號列表";
       }
@@ -1917,6 +1919,178 @@
       }
     };
 
+    const ADS_PAGES = [
+      "facility.html",
+      "bulletin-community.html",
+      "bulletin-finance.html",
+      "bulletin-meeting.html",
+      "bulletin-repair.html",
+      "parcel.html",
+    ];
+    let adsActivePage = ADS_PAGES[0];
+    let adsDraftPages = {};
+
+    const normalizeAdsPageKey = (v) => {
+      const s = String(v || "").trim();
+      return ADS_PAGES.includes(s) ? s : ADS_PAGES[0];
+    };
+
+    const clonePlain = (obj) => {
+      const o = obj && typeof obj === "object" ? obj : {};
+      try {
+        if (typeof structuredClone === "function") return structuredClone(o);
+      } catch {}
+      try {
+        return JSON.parse(JSON.stringify(o));
+      } catch {
+        return {};
+      }
+    };
+
+    const ensureAdsDraftLoaded = (cfg) => {
+      const fromCfg = cfg && cfg.adsFooter && typeof cfg.adsFooter === "object" ? cfg.adsFooter : {};
+      const pages = fromCfg && typeof fromCfg.pages === "object" && fromCfg.pages ? fromCfg.pages : {};
+      adsDraftPages = clonePlain(pages);
+    };
+
+    const readAdsImagesFromDom = () => {
+      const images = [];
+      for (let i = 0; i < 8; i += 1) {
+        const url = document.querySelector(`[data-ads-slot-url="${i}"]`)?.value || "";
+        const link = document.querySelector(`[data-ads-slot-link="${i}"]`)?.value || "";
+        const data = document.getElementById(`ads_slot_preview_${i}`)?.getAttribute("data-slot-data") || "";
+        images.push({ url: String(url || ""), link: String(link || ""), data: String(data || "") });
+      }
+      return images;
+    };
+
+    const persistAdsPageFromDom = () => {
+      const pageKey = normalizeAdsPageKey(document.getElementById("modal_ads_page")?.value || adsActivePage);
+      const interval = parseInt(document.getElementById("modal_ads_interval")?.value, 10);
+      const intervalSec = Number.isFinite(interval) && interval > 0 ? interval : 3;
+      adsDraftPages[pageKey] = {
+        intervalSec,
+        images: readAdsImagesFromDom()
+      };
+    };
+
+    const renderAdsFooterSettings = (cfg) => {
+      ensureAdsDraftLoaded(cfg);
+      const pageSel = document.getElementById("modal_ads_page");
+      const intervalInput = document.getElementById("modal_ads_interval");
+      const list = document.getElementById("adsImageList");
+      if (!pageSel || !intervalInput || !list) return;
+
+      const safePage = normalizeAdsPageKey(pageSel.value || adsActivePage);
+      adsActivePage = safePage;
+      pageSel.value = safePage;
+
+      const saved = adsDraftPages[safePage] && typeof adsDraftPages[safePage] === "object" ? adsDraftPages[safePage] : {};
+      const images = Array.isArray(saved.images) ? saved.images : [];
+      const intervalSec = parseInt(saved.intervalSec, 10);
+      intervalInput.value = (Number.isFinite(intervalSec) && intervalSec > 0 ? intervalSec : 3);
+
+      let html = "";
+      for (let i = 0; i < 8; i += 1) {
+        const v = images[i] || { url: "", link: "", data: "" };
+        html += `
+          <div class="image-slot" data-slot-index="${i}">
+            <div class="slot-preview" id="ads_slot_preview_${i}" ${v.data ? `data-slot-data="${v.data}"` : ""}>
+              ${v.data || v.url ? `<img src="${v.data || v.url}" />` : "<span>2:1</span>"}
+            </div>
+            <div class="slot-inputs">
+              <div class="slot-actions">
+                <input type="text" placeholder="輸入圖片網址" value="${v.url || ""}" data-ads-slot-url="${i}" />
+                <input type="text" placeholder="點擊連結（新視窗）" value="${v.link || ""}" data-ads-slot-link="${i}" />
+                <button class="btn btn-sm" type="button" data-ads-slot-upload="${i}">上傳</button>
+                <input type="file" accept="image/*" hidden data-ads-slot-file="${i}" />
+                <button class="btn btn-sm danger" type="button" data-ads-slot-clear="${i}">清除</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      list.innerHTML = html;
+
+      if (!pageSel._boundAdsChange) {
+        pageSel._boundAdsChange = true;
+        pageSel.addEventListener("change", () => {
+          persistAdsPageFromDom();
+          adsActivePage = normalizeAdsPageKey(pageSel.value);
+          renderAdsFooterSettings({ adsFooter: { pages: adsDraftPages } });
+        });
+      }
+
+      if (!intervalInput._boundAdsChange) {
+        intervalInput._boundAdsChange = true;
+        intervalInput.addEventListener("change", () => persistAdsPageFromDom());
+      }
+
+      list.querySelectorAll("[data-ads-slot-upload]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const idx = btn.getAttribute("data-ads-slot-upload");
+          list.querySelector(`[data-ads-slot-file="${idx}"]`)?.click();
+        });
+      });
+
+      list.querySelectorAll("[data-ads-slot-file]").forEach((input) => {
+        input.addEventListener("change", async () => {
+          const idx = input.getAttribute("data-ads-slot-file");
+          const file = input.files && input.files[0] ? input.files[0] : null;
+          if (!file) return;
+          try {
+            const dataUrl = await fileToCompressedDataUrl(file);
+            const preview = document.getElementById(`ads_slot_preview_${idx}`);
+            if (preview) {
+              preview.innerHTML = `<img src="${dataUrl}" />`;
+              preview.setAttribute("data-slot-data", dataUrl);
+            }
+            persistAdsPageFromDom();
+          } catch (err) {
+            console.error(err);
+          }
+        });
+      });
+
+      list.querySelectorAll("[data-ads-slot-clear]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const idx = btn.getAttribute("data-ads-slot-clear");
+          const preview = document.getElementById(`ads_slot_preview_${idx}`);
+          if (preview) {
+            preview.innerHTML = "<span>2:1</span>";
+            preview.removeAttribute("data-slot-data");
+          }
+          const urlInput = list.querySelector(`[data-ads-slot-url="${idx}"]`);
+          if (urlInput) urlInput.value = "";
+          const linkInput = list.querySelector(`[data-ads-slot-link="${idx}"]`);
+          if (linkInput) linkInput.value = "";
+          persistAdsPageFromDom();
+        });
+      });
+
+      list.querySelectorAll("[data-ads-slot-url]").forEach((input) => {
+        input.addEventListener("input", () => {
+          const idx = input.getAttribute("data-ads-slot-url");
+          const url = String(input.value || "").trim();
+          const preview = document.getElementById(`ads_slot_preview_${idx}`);
+          const slotData = preview ? preview.getAttribute("data-slot-data") : "";
+          if (!preview) return;
+          if (url) {
+            preview.innerHTML = `<img src="${url}" />`;
+          } else if (slotData) {
+            preview.innerHTML = `<img src="${slotData}" />`;
+          } else {
+            preview.innerHTML = "<span>2:1</span>";
+          }
+          persistAdsPageFromDom();
+        });
+      });
+
+      list.querySelectorAll("[data-ads-slot-link]").forEach((input) => {
+        input.addEventListener("input", () => persistAdsPageFromDom());
+      });
+    };
+
     const closeUnitModal = () => {
       if (!unitModal) return;
       unitModal.hidden = true;
@@ -1924,6 +2098,8 @@
       detachUnitKeydown = () => {};
       unitCommunityId = "";
       unitConfigCache = null;
+      adsActivePage = ADS_PAGES[0];
+      adsDraftPages = {};
       setActiveUnitTab("units");
       clearUnitStatus();
       if (unitCountEl) unitCountEl.textContent = "總戶數：—";
@@ -1956,6 +2132,7 @@
           renderRowButtonSettings("rowDButtonList", "rowDButtons", defaultRowDButtons);
           renderRowButtonSettings("rowFButtonList", "rowFButtons", defaultRowFButtons);
           renderServiceSettings(unitConfigCache);
+          renderAdsFooterSettings(unitConfigCache);
         }).catch(() => {
           unitConfigCache = {};
           renderUnitFeatureList(unitConfigCache);
@@ -1963,6 +2140,7 @@
           renderRowButtonSettings("rowDButtonList", "rowDButtons", defaultRowDButtons);
           renderRowButtonSettings("rowFButtonList", "rowFButtons", defaultRowFButtons);
           renderServiceSettings(unitConfigCache);
+          renderAdsFooterSettings(unitConfigCache);
         });
       }
       const onKeydown = (e) => {
@@ -2252,6 +2430,8 @@
           const rowDButtons = getButtonsFromDom("rowDButtonList", defaultRowDButtons) || (unitConfigCache.rowDButtons || defaultRowDButtons.map(b => ({ ...b })));
           const rowFButtons = getButtonsFromDom("rowFButtonList", defaultRowFButtons) || (unitConfigCache.rowFButtons || defaultRowFButtons.map(b => ({ ...b })));
           const serviceUrl = document.getElementById("modal_service_url")?.value || "";
+          persistAdsPageFromDom();
+          const adsFooter = { pages: adsDraftPages };
 
           await Promise.all([
             db.collection("communities").doc(id).set(
@@ -2267,6 +2447,7 @@
                 rowDButtons,
                 rowFButtons,
                 serviceUrl,
+                adsFooter,
                 updatedAt: FieldValue.serverTimestamp() 
               },
               { merge: true }

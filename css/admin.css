@@ -859,6 +859,20 @@ a { color: inherit; text-decoration: none; }
   gap: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
+.parcel-seq {
+  flex: 0 0 52px;
+  min-width: 52px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(17, 24, 39, 0.05);
+  color: #d32f2f;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
 .parcel-card-hd {
   display: flex;
   align-items: center;
@@ -946,6 +960,11 @@ a { color: inherit; text-decoration: none; }
   .parcel-card {
     padding: 10px 12px;
     gap: 8px;
+  }
+  .parcel-seq {
+    flex-basis: 46px;
+    min-width: 46px;
+    font-size: 12px;
   }
   .parcel-card-bd {
     gap: 8px;
