@@ -631,7 +631,7 @@
     
     // 获取用户信息
     const user = auth.currentUser;
-    const userEmail = user ? user.email : '未知';
+    const userEmail = user ? user.email : 'unknown@example.com';
     
     // 格式化日期时间
     const year = now.getFullYear();
@@ -654,12 +654,24 @@
       communityId: cid || 'unknown'
     };
     
-    // 保存到 localStorage 用于演示
+    // 保存到 localStorage
     let sosRecords = JSON.parse(localStorage.getItem('sos_records') || '[]');
-    sosRecords.unshift(sosRecord); // 最新的放前面
+    sosRecords.unshift(sosRecord);
     localStorage.setItem('sos_records', JSON.stringify(sosRecords));
     
-    // 设置一个标记，表示有新的 SOS
+    // 使用 BroadcastChannel 发送 SOS 信号给后台
+    try {
+      const channel = new BroadcastChannel('sos-channel');
+      channel.postMessage({
+        type: 'SOS_ALERT',
+        data: sosRecord
+      });
+      channel.close();
+    } catch (e) {
+      console.warn('BroadcastChannel not available, using localStorage backup');
+    }
+    
+    // 同时设置 localStorage 标记作为备用
     localStorage.setItem('sos_new', '1');
     localStorage.setItem('sos_new_time', Date.now().toString());
     

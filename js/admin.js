@@ -11105,6 +11105,7 @@
   let sosAlertAudio = null;
   let sosPollingInterval = null;
   let lastSosTime = 0;
+  let sosBroadcastChannel = null;
 
   // 创建警报音频
   function createSosAlertAudio() {
@@ -11141,12 +11142,20 @@
 
   // 显示 SOS 弹窗
   function showSosAlertModal(sosRecord) {
+    console.log('显示 SOS 弹窗:', sosRecord);
     const modal = document.getElementById('sosAlertModal');
-    if (!modal) return;
+    if (!modal) {
+      console.error('找不到 SOS 弹窗元素');
+      return;
+    }
     
-    document.getElementById('sosAlertDatetime').textContent = sosRecord.datetime;
-    document.getElementById('sosAlertHouseNo').textContent = sosRecord.houseNo;
-    document.getElementById('sosAlertName').textContent = sosRecord.name;
+    const datetimeEl = document.getElementById('sosAlertDatetime');
+    const houseNoEl = document.getElementById('sosAlertHouseNo');
+    const nameEl = document.getElementById('sosAlertName');
+    
+    if (datetimeEl) datetimeEl.textContent = sosRecord.datetime;
+    if (houseNoEl) houseNoEl.textContent = sosRecord.houseNo;
+    if (nameEl) nameEl.textContent = sosRecord.name;
     
     modal.hidden = false;
     
@@ -11171,6 +11180,7 @@
       const records = localStorage.getItem('sos_records');
       return records ? JSON.parse(records) : [];
     } catch (e) {
+      console.error('获取 SOS 记录失败:', e);
       return [];
     }
   }
@@ -11192,7 +11202,7 @@
     }
   }
 
-  // 监听新 SOS
+  // 监听新 SOS（备用方案）
   function checkForNewSos() {
     try {
       const hasNew = localStorage.getItem('sos_new');
@@ -11219,6 +11229,29 @@
     }
     lastSosTime = Date.now();
     sosPollingInterval = setInterval(checkForNewSos, 1000);
+  }
+
+  // 初始化 SOS 广播频道
+  function initSosBroadcastChannel() {
+    try {
+      // 关闭旧频道
+      if (sosBroadcastChannel) {
+        sosBroadcastChannel.close();
+      }
+      
+      sosBroadcastChannel = new BroadcastChannel('sos-channel');
+      
+      sosBroadcastChannel.onmessage = (event) => {
+        console.log('收到 SOS 消息:', event.data);
+        if (event.data && event.data.type === 'SOS_ALERT') {
+          showSosAlertModal(event.data.data);
+        }
+      };
+      
+      console.log('SOS 广播频道已初始化');
+    } catch (e) {
+      console.warn('BroadcastChannel 不可用，使用轮询方式:', e);
+    }
   }
 
   // 渲染 SOS 记录表格
@@ -11773,7 +11806,12 @@
       closeBtn.addEventListener('click', closeSosAlertModal);
     }
     
-    // 启动全局 SOS 轮询，无论在哪个页面都能收到警报
+    // 初始化广播频道（优先）
+    initSosBroadcastChannel();
+    
+    // 同时启动轮询作为备用
     startSosPolling();
+    
+    console.log('SOS 功能已初始化');
   });
 })();
