@@ -535,6 +535,25 @@
     e.stopPropagation();
     sendSOS();
   });
+  
+  // 调试按钮绑定
+  const initDebug = () => {
+    const debugBtn = document.getElementById('btnDebugSOS');
+    if (debugBtn) {
+      debugBtn.addEventListener('click', () => {
+        console.log('Debug: 测试 SOS 发送');
+        sendSOS();
+      });
+      console.log('Debug 按钮已绑定');
+    }
+  };
+  
+  // 初始化
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDebug);
+  } else {
+    initDebug();
+  }
 
   function openPageModal(url, name) {
     const modal = document.getElementById("externalPageModal");
@@ -674,6 +693,15 @@
     sosRecords.unshift(sosRecord);
     localStorage.setItem('sos_records', JSON.stringify(sosRecords));
     
+    // 关键！先清除再设置，确保 storage 事件能触发
+    localStorage.removeItem('sos_new');
+    // 稍微等待一下再设置
+    setTimeout(() => {
+      localStorage.setItem('sos_new', '1');
+      localStorage.setItem('sos_new_time', Date.now().toString());
+      console.log('localStorage sos_new 标记已设置');
+    }, 50);
+    
     // 方式1: 使用 BroadcastChannel 发送 SOS 信号
     try {
       const channel = new BroadcastChannel('sos-channel');
@@ -687,12 +715,7 @@
       console.warn('BroadcastChannel 发送失败:', e);
     }
     
-    // 方式2: 使用 localStorage 标记 + 轮询（备用）
-    localStorage.setItem('sos_new', '1');
-    localStorage.setItem('sos_new_time', Date.now().toString());
-    console.log('localStorage 标记已设置');
-    
-    // 方式3: 使用 window.postMessage 尝试向其他标签发送
+    // 方式2: 使用 window.postMessage 尝试向其他标签发送
     try {
       window.postMessage({
         type: 'SOS_ALERT',

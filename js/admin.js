@@ -11233,8 +11233,27 @@
 
   // 初始化 SOS 广播频道
   function initSosBroadcastChannel() {
+    console.log('初始化 SOS 监听系统...');
+    
+    // 方式1: 监听 localStorage 的 storage 事件（最可靠）
+    window.addEventListener('storage', (event) => {
+      console.log('Storage 事件触发:', event.key, event.newValue);
+      
+      if (event.key === 'sos_new' && event.newValue === '1') {
+        console.log('检测到新 SOS 信号！');
+        // 获取最新的 SOS 记录
+        const records = getSosRecords();
+        if (records.length > 0) {
+          showSosAlertModal(records[0]);
+          // 清除标记，避免重复触发
+          localStorage.removeItem('sos_new');
+        }
+      }
+    });
+    console.log('Storage 事件监听器已设置');
+    
+    // 方式2: BroadcastChannel（备用）
     try {
-      // 关闭旧频道
       if (sosBroadcastChannel) {
         sosBroadcastChannel.close();
       }
@@ -11250,10 +11269,10 @@
       
       console.log('SOS 广播频道已初始化');
     } catch (e) {
-      console.warn('BroadcastChannel 不可用，使用轮询方式:', e);
+      console.warn('BroadcastChannel 不可用', e);
     }
     
-    // 同时监听 window.postMessage 作为额外方式
+    // 方式3: 监听 window.postMessage（额外备用）
     window.addEventListener('message', (event) => {
       console.log('收到 postMessage:', event.data);
       if (event.data && event.data.type === 'SOS_ALERT') {
