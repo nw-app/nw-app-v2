@@ -184,6 +184,7 @@
   } catch {}
   const auth = firebase.auth();
   const db = firebase.firestore();
+  const FieldValue = firebase.firestore.FieldValue;
   try {
     db.settings({
       experimentalAutoDetectLongPolling: true,
@@ -530,30 +531,10 @@
     const sosBtn = e.target.closest(".btn-sos");
     if (!sosBtn) return;
     
-    console.log('SOS 按钮被点击');
     e.preventDefault();
     e.stopPropagation();
     sendSOS();
   });
-  
-  // 调试按钮绑定
-  const initDebug = () => {
-    const debugBtn = document.getElementById('btnDebugSOS');
-    if (debugBtn) {
-      debugBtn.addEventListener('click', () => {
-        console.log('Debug: 测试 SOS 发送');
-        sendSOS();
-      });
-      console.log('Debug 按钮已绑定');
-    }
-  };
-  
-  // 初始化
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initDebug);
-  } else {
-    initDebug();
-  }
 
   function openPageModal(url, name) {
     const modal = document.getElementById("externalPageModal");
@@ -652,81 +633,54 @@
     modal.hidden = false;
   }
 
-  // SOS 发送功能
-  function sendSOS() {
-    console.log('=== SOS 按钮被触发 ===');
-    
-    const now = new Date();
-    const accounts = loadAccounts();
-    const cid = resolveActiveCommunityId();
-    const c = accounts.communities.find((x) => x && x.id === cid) || null;
-    
-    // 获取用户信息
+  async function sendSOS() {
     const user = auth.currentUser;
-    const userEmail = user ? user.email : 'unknown@example.com';
-    
-    // 格式化日期时间
+    if (!user) {
+      alert("請先登入再送出 SOS");
+      return;
+    }
+
+    const now = new Date();
     const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    const datetime = `${year}年${month}月${day}日 ${hours}:${minutes}:${seconds}`;
-    
-    // 创建 SOS 记录
-    const sosRecord = {
-      id: 'sos_' + Date.now(),
-      datetime: datetime,
-      timestamp: Date.now(),
-      houseNo: c ? (c.username || '未知户号') : '未知户号',
-      name: userEmail.split('@')[0] || '住户',
-      status: '待处理',
-      notes: '',
-      communityId: cid || 'unknown'
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    const seconds = String(now.getSeconds()).padStart(2, "0");
+    const datetimeText = `${year}年${month}月${day}日 ${hours}:${minutes}:${seconds}`;
+    const createdAtMs = Date.now();
+
+    let udata = {};
+    try {
+      const udoc = await db.collection("users").doc(String(user.uid)).get();
+      udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
+    } catch {}
+
+    const community = String(udata.community || resolveActiveCommunityId() || "").trim() || "default";
+    const houseNo = String(udata.houseNo || udata.unit || "").trim() || "—";
+    const displayName = String(udata.displayName || udata.name || "").trim();
+    const fallbackName = String(user.email || "").split("@")[0] || "住戶";
+    const name = displayName || fallbackName;
+
+    const payload = {
+      community,
+      houseNo,
+      name,
+      status: "待處理",
+      record: "",
+      createdAt: FieldValue.serverTimestamp(),
+      createdAtMs,
+      createdBy: String(user.uid),
+      createdByEmail: String(user.email || ""),
+      datetimeText,
     };
-    
-    console.log('SOS 记录:', sosRecord);
-    
-    // 保存到 localStorage
-    let sosRecords = JSON.parse(localStorage.getItem('sos_records') || '[]');
-    sosRecords.unshift(sosRecord);
-    localStorage.setItem('sos_records', JSON.stringify(sosRecords));
-    
-    // 关键！先清除再设置，确保 storage 事件能触发
-    localStorage.removeItem('sos_new');
-    // 稍微等待一下再设置
-    setTimeout(() => {
-      localStorage.setItem('sos_new', '1');
-      localStorage.setItem('sos_new_time', Date.now().toString());
-      console.log('localStorage sos_new 标记已设置');
-    }, 50);
-    
-    // 方式1: 使用 BroadcastChannel 发送 SOS 信号
+
     try {
-      const channel = new BroadcastChannel('sos-channel');
-      channel.postMessage({
-        type: 'SOS_ALERT',
-        data: sosRecord
-      });
-      channel.close();
-      console.log('BroadcastChannel 消息已发送');
+      await db.collection("sos_alerts").add(payload);
+      alert("SOS 通報已送出");
     } catch (e) {
-      console.warn('BroadcastChannel 发送失败:', e);
+      alert("SOS 通報送出失敗，請稍後再試");
     }
-    
-    // 方式2: 使用 window.postMessage 尝试向其他标签发送
-    try {
-      window.postMessage({
-        type: 'SOS_ALERT',
-        data: sosRecord
-      }, '*');
-      console.log('postMessage 已发送');
-    } catch (e) {
-      console.warn('postMessage 发送失败:', e);
-    }
-    
-    alert('SOS 呼叫已发出！');
   }
   
   function homeView() {

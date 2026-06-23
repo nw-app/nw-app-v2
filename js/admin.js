@@ -231,12 +231,18 @@
       });
       refreshLoginInfo(user);
       ensureConfigSubscription();
+      try {
+        startSosAlertsListener(resolveActiveCommunityId());
+      } catch {}
       if (handleHashRoute()) return;
       renderDashboard();
     }).catch(() => {
       state.communities = [];
       refreshLoginInfo(user);
       ensureConfigSubscription();
+      try {
+        startSosAlertsListener(resolveActiveCommunityId());
+      } catch {}
       if (handleHashRoute()) return;
       renderDashboard();
     });
@@ -11101,184 +11107,116 @@
     setupDashboardReorder(grid);
   }
 
-  // SOS 功能全局变量
-  let sosAlertAudio = null;
-  let sosPollingInterval = null;
-  let lastSosTime = 0;
-  let sosBroadcastChannel = null;
+  let sosUnsub = null;
+  let sosRecords = [];
+  let sosLastNotifiedMs = 0;
+  let sosAudioCtx = null;
+  let sosOsc = null;
+  let sosGain = null;
+  let sosBeepTimer = null;
 
-  // 创建警报音频
-  function createSosAlertAudio() {
+  function startSosAlarm() {
+    if (sosBeepTimer) return;
     const AudioContext = window.AudioContext || window.webkitAudioContext;
-    const audioCtx = new AudioContext();
-    
-    return {
-      play: () => {
-        if (audioCtx.state === 'suspended') {
-          audioCtx.resume();
-        }
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        oscillator.frequency.value = 800;
-        oscillator.type = 'square';
-        gainNode.gain.value = 0.3;
-        oscillator.start();
-        let beepCount = 0;
-        const beepInterval = setInterval(() => {
-          beepCount++;
-          if (beepCount > 10) {
-            clearInterval(beepInterval);
-            oscillator.stop();
-            return;
-          }
-          gainNode.gain.value = beepCount % 2 === 1 ? 0.3 : 0;
-        }, 300);
-        return { oscillator, interval: beepInterval };
-      }
-    };
+    try {
+      if (!sosAudioCtx) sosAudioCtx = new AudioContext();
+      if (sosAudioCtx.state === "suspended") sosAudioCtx.resume();
+      sosOsc = sosAudioCtx.createOscillator();
+      sosGain = sosAudioCtx.createGain();
+      sosOsc.connect(sosGain);
+      sosGain.connect(sosAudioCtx.destination);
+      sosOsc.frequency.value = 880;
+      sosOsc.type = "square";
+      sosGain.gain.value = 0;
+      sosOsc.start();
+      let on = false;
+      sosBeepTimer = setInterval(() => {
+        on = !on;
+        if (sosGain) sosGain.gain.value = on ? 0.25 : 0;
+      }, 420);
+    } catch {}
   }
 
-  // 显示 SOS 弹窗
-  function showSosAlertModal(sosRecord) {
-    console.log('显示 SOS 弹窗:', sosRecord);
-    const modal = document.getElementById('sosAlertModal');
-    if (!modal) {
-      console.error('找不到 SOS 弹窗元素');
-      return;
+  function stopSosAlarm() {
+    if (sosBeepTimer) {
+      clearInterval(sosBeepTimer);
+      sosBeepTimer = null;
     }
-    
-    const datetimeEl = document.getElementById('sosAlertDatetime');
-    const houseNoEl = document.getElementById('sosAlertHouseNo');
-    const nameEl = document.getElementById('sosAlertName');
-    
-    if (datetimeEl) datetimeEl.textContent = sosRecord.datetime;
-    if (houseNoEl) houseNoEl.textContent = sosRecord.houseNo;
-    if (nameEl) nameEl.textContent = sosRecord.name;
-    
+    try {
+      if (sosGain) sosGain.gain.value = 0;
+    } catch {}
+    try {
+      if (sosOsc) sosOsc.stop();
+    } catch {}
+    sosOsc = null;
+    sosGain = null;
+  }
+
+  function showSosAlertModal(r) {
+    const modal = document.getElementById("sosAlertModal");
+    if (!modal) return;
+    const datetimeEl = document.getElementById("sosAlertDatetime");
+    const houseNoEl = document.getElementById("sosAlertHouseNo");
+    const nameEl = document.getElementById("sosAlertName");
+    const dt = String(r.datetimeText || "").trim() || (r.createdAtMs ? new Date(r.createdAtMs).toLocaleString("zh-TW") : "");
+    if (datetimeEl) datetimeEl.textContent = dt;
+    if (houseNoEl) houseNoEl.textContent = String(r.houseNo || "").trim();
+    if (nameEl) nameEl.textContent = String(r.name || "").trim();
     modal.hidden = false;
-    
-    // 播放警报
-    if (!sosAlertAudio) {
-      sosAlertAudio = createSosAlertAudio();
-    }
-    sosAlertAudio.play();
+    startSosAlarm();
   }
 
-  // 关闭 SOS 弹窗
   function closeSosAlertModal() {
-    const modal = document.getElementById('sosAlertModal');
-    if (modal) {
-      modal.hidden = true;
-    }
+    const modal = document.getElementById("sosAlertModal");
+    if (modal) modal.hidden = true;
+    stopSosAlarm();
   }
 
-  // 获取 SOS 记录
   function getSosRecords() {
+    return Array.isArray(sosRecords) ? sosRecords.slice() : [];
+  }
+
+  async function updateSosRecordStatus(recordId, newStatus) {
     try {
-      const records = localStorage.getItem('sos_records');
-      return records ? JSON.parse(records) : [];
-    } catch (e) {
-      console.error('获取 SOS 记录失败:', e);
-      return [];
+      await db.collection("sos_alerts").doc(String(recordId)).update({
+        status: String(newStatus || "").trim(),
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedAtMs: Date.now(),
+      });
+    } catch {
+      toast("更新失敗");
     }
   }
 
-  // 更新 SOS 记录状态
-  function updateSosRecordStatus(recordId, newStatus, notes = '') {
-    try {
-      let records = getSosRecords();
-      const recordIndex = records.findIndex(r => r.id === recordId);
-      if (recordIndex !== -1) {
-        records[recordIndex].status = newStatus;
-        if (notes) {
-          records[recordIndex].notes = notes;
-        }
-        localStorage.setItem('sos_records', JSON.stringify(records));
-      }
-    } catch (e) {
-      console.error('更新 SOS 记录失败:', e);
-    }
-  }
+  function startSosAlertsListener(communityId) {
+    const cid = String(communityId || "").trim();
+    if (!cid) return;
+    if (sosUnsub) sosUnsub();
+    sosLastNotifiedMs = Date.now();
+    sosUnsub = db
+      .collection("sos_alerts")
+      .orderBy("createdAtMs", "desc")
+      .limit(100)
+      .onSnapshot(
+        (snap) => {
+          const list = snap.docs
+            .map((d) => ({ id: d.id, ...(d.data() || {}) }))
+            .filter((x) => String(x.community || "").trim() === cid)
+            .sort((a, b) => (Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0)));
+          sosRecords = list;
 
-  // 监听新 SOS（备用方案）
-  function checkForNewSos() {
-    try {
-      const hasNew = localStorage.getItem('sos_new');
-      const newTime = parseInt(localStorage.getItem('sos_new_time') || '0');
-      
-      if (hasNew === '1' && newTime > lastSosTime) {
-        lastSosTime = newTime;
-        localStorage.removeItem('sos_new');
-        
-        const records = getSosRecords();
-        if (records.length > 0) {
-          showSosAlertModal(records[0]);
-        }
-      }
-    } catch (e) {
-      console.error('检查 SOS 失败:', e);
-    }
-  }
+          const latest = list[0] || null;
+          if (latest && Number(latest.createdAtMs || 0) > sosLastNotifiedMs && String(latest.status || "").trim() === "待處理") {
+            sosLastNotifiedMs = Number(latest.createdAtMs || 0);
+            showSosAlertModal(latest);
+          }
 
-  // 开始 SOS 轮询
-  function startSosPolling() {
-    if (sosPollingInterval) {
-      clearInterval(sosPollingInterval);
-    }
-    lastSosTime = Date.now();
-    sosPollingInterval = setInterval(checkForNewSos, 1000);
-  }
-
-  // 初始化 SOS 广播频道
-  function initSosBroadcastChannel() {
-    console.log('初始化 SOS 监听系统...');
-    
-    // 方式1: 监听 localStorage 的 storage 事件（最可靠）
-    window.addEventListener('storage', (event) => {
-      console.log('Storage 事件触发:', event.key, event.newValue);
-      
-      if (event.key === 'sos_new' && event.newValue === '1') {
-        console.log('检测到新 SOS 信号！');
-        // 获取最新的 SOS 记录
-        const records = getSosRecords();
-        if (records.length > 0) {
-          showSosAlertModal(records[0]);
-          // 清除标记，避免重复触发
-          localStorage.removeItem('sos_new');
-        }
-      }
-    });
-    console.log('Storage 事件监听器已设置');
-    
-    // 方式2: BroadcastChannel（备用）
-    try {
-      if (sosBroadcastChannel) {
-        sosBroadcastChannel.close();
-      }
-      
-      sosBroadcastChannel = new BroadcastChannel('sos-channel');
-      
-      sosBroadcastChannel.onmessage = (event) => {
-        console.log('收到 BroadcastChannel SOS 消息:', event.data);
-        if (event.data && event.data.type === 'SOS_ALERT') {
-          showSosAlertModal(event.data.data);
-        }
-      };
-      
-      console.log('SOS 广播频道已初始化');
-    } catch (e) {
-      console.warn('BroadcastChannel 不可用', e);
-    }
-    
-    // 方式3: 监听 window.postMessage（额外备用）
-    window.addEventListener('message', (event) => {
-      console.log('收到 postMessage:', event.data);
-      if (event.data && event.data.type === 'SOS_ALERT') {
-        showSosAlertModal(event.data.data);
-      }
-    });
+          if (String(location.hash || "").includes("#community/care")) {
+            renderCareModule();
+          }
+        },
+        () => {}
+      );
   }
 
   // 渲染 SOS 记录表格
@@ -11288,16 +11226,16 @@
     if (records.length === 0) {
       return `
         <div style="text-align: center; padding: 40px; color: #9ca3af;">
-          暂无 SOS 记录
+          暫無 SOS 紀錄
         </div>
       `;
     }
 
     const statusClass = (status) => {
       switch (status) {
-        case '待处理': return 'sos-status-pending';
-        case '处理中': return 'sos-status-processing';
-        case '已处理': return 'sos-status-resolved';
+        case '待處理': return 'sos-status-pending';
+        case '處理中': return 'sos-status-processing';
+        case '已完成': return 'sos-status-resolved';
         default: return '';
       }
     };
@@ -11317,19 +11255,19 @@
         <tbody>
           ${records.map(record => `
             <tr data-sos-id="${record.id}">
-              <td>${record.datetime}</td>
+              <td>${record.datetimeText || ''}</td>
               <td>${record.houseNo}</td>
               <td>${record.name}</td>
               <td><span class="${statusClass(record.status)}">${record.status}</span></td>
               <td>
-                ${record.status === '待处理' ? `
+                ${record.status === '待處理' ? `
                   <button class="sos-action-btn sos-action-btn-primary" data-action="process" data-id="${record.id}">開始處理</button>
                 ` : ''}
-                ${record.status === '处理中' ? `
+                ${record.status === '處理中' ? `
                   <button class="sos-action-btn sos-action-btn-success" data-action="resolve" data-id="${record.id}">完成處理</button>
                 ` : ''}
               </td>
-              <td>${record.notes || '-'}</td>
+              <td>${record.record || '-'}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -11442,11 +11380,9 @@
             const id = btn.getAttribute('data-id');
             
             if (action === 'process') {
-              updateSosRecordStatus(id, '处理中');
-              renderPage();
+              updateSosRecordStatus(id, '處理中');
             } else if (action === 'resolve') {
-              updateSosRecordStatus(id, '已处理');
-              renderPage();
+              updateSosRecordStatus(id, '已完成');
             }
           });
         });
@@ -11456,9 +11392,6 @@
     };
 
     renderPage();
-    
-    // 开始 SOS 轮询
-    startSosPolling();
   }
 
   function renderModule(moduleId) {
@@ -11825,47 +11758,8 @@
     updateFooterActiveNav();
   });
 
-  // SOS 功能初始化
-  const initSOS = () => {
-    console.log('开始初始化 SOS 功能...');
-    
-    // 绑定关闭按钮事件
-    const closeBtn = document.getElementById('sosAlertCloseBtn');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', closeSosAlertModal);
-      console.log('关闭按钮已绑定');
-    } else {
-      console.error('找不到关闭按钮');
-    }
-    
-    // 绑定测试按钮
-    const testBtn = document.getElementById('btnTestSOS');
-    if (testBtn) {
-      testBtn.addEventListener('click', () => {
-        console.log('测试按钮被点击');
-        const testRecord = {
-          datetime: new Date().toLocaleString('zh-TW'),
-          houseNo: 'A-123',
-          name: '测试用户'
-        };
-        showSosAlertModal(testRecord);
-      });
-      console.log('测试按钮已绑定');
-    }
-    
-    // 初始化广播频道（优先）
-    initSosBroadcastChannel();
-    
-    // 同时启动轮询作为备用
-    startSosPolling();
-    
-    console.log('SOS 功能初始化完成');
-  };
-
-  // 确保 DOM 完全加载后初始化
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initSOS);
-  } else {
-    initSOS();
-  }
+  document.addEventListener("DOMContentLoaded", () => {
+    const closeBtn = document.getElementById("sosAlertCloseBtn");
+    if (closeBtn) closeBtn.addEventListener("click", closeSosAlertModal);
+  });
 })();
