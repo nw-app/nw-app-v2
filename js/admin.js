@@ -11269,8 +11269,55 @@
     stopSosAlarm();
   }
 
+  function openSosDial(phoneNumber) {
+    const phone = String(phoneNumber || "").trim();
+    if (!phone) return false;
+    closeSosAlertModal();
+    try {
+      window.location.href = `tel:${phone}`;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function getSosRecords() {
     return Array.isArray(sosRecords) ? sosRecords.slice() : [];
+  }
+
+  async function enrichSosRecordsWithSubUnit(records) {
+    const list = Array.isArray(records) ? records.slice() : [];
+    const needsLookup = list.filter((record) => {
+      const current = String(record.subHouseNo || record.subUnit || "").trim();
+      const uid = String(record.createdBy || "").trim();
+      return !current && !!uid;
+    });
+    if (!needsLookup.length) return list;
+
+    const subUnitMap = {};
+    await Promise.all(needsLookup.map(async (record) => {
+      const uid = String(record.createdBy || "").trim();
+      if (!uid || Object.prototype.hasOwnProperty.call(subUnitMap, uid)) return;
+      try {
+        const snap = await db.collection("users").doc(uid).get();
+        const data = snap && snap.exists ? (snap.data() || {}) : {};
+        subUnitMap[uid] = String(data.subUnit || data.subHouseNo || "").trim();
+      } catch {
+        subUnitMap[uid] = "";
+      }
+    }));
+
+    return list.map((record) => {
+      const current = String(record.subHouseNo || record.subUnit || "").trim();
+      if (current) return record;
+      const uid = String(record.createdBy || "").trim();
+      const fallbackSubUnit = String(subUnitMap[uid] || "").trim();
+      return {
+        ...record,
+        subHouseNo: fallbackSubUnit,
+        subUnit: fallbackSubUnit,
+      };
+    });
   }
 
   async function updateSosRecordStatus(recordId, newStatus) {
@@ -11305,17 +11352,34 @@
       .orderBy("createdAtMs", "desc")
       .limit(100)
       .onSnapshot(
-        (snap) => {
-          const list = snap.docs
-            .map((d) => ({ id: d.id, ...(d.data() || {}) }))
+        async (snap) => {
+          let list = snap.docs
+            .map((d) => {
+              const data = d.data() || {};
+              return {
+                id: d.id,
+                ...data,
+                subHouseNo: String(data.subHouseNo || data.subUnit || "").trim(),
+              };
+            })
             .filter((x) => String(x.community || "").trim() === cid)
             .sort((a, b) => (Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0)));
+          list = await enrichSosRecordsWithSubUnit(list);
           sosRecords = list;
 
           const latest = list[0] || null;
           if (latest && Number(latest.createdAtMs || 0) > sosLastNotifiedMs && String(latest.status || "").trim() === "待處理") {
             sosLastNotifiedMs = Number(latest.createdAtMs || 0);
-            showSosAlertModal(latest);
+            const cfg = loadConfig(cid) || {};
+            const actionMode = String(latest.actionMode || cfg.sosActionMode || "backend").trim() || "backend";
+            const phoneNumber = String(latest.phoneNumber || cfg.sosPhoneNumber || "").trim();
+            if (actionMode === "phone" && phoneNumber) {
+              closeSosAlertModal();
+              openSosDial(phoneNumber);
+              toast(`SOS 來電撥號：${phoneNumber}`);
+            } else {
+              showSosAlertModal(latest);
+            }
           }
 
           if (String(location.hash || "").includes("#community/care")) {
@@ -11404,6 +11468,7 @@
             },
             { merge: true }
           );
+          if (nextMode === "phone") closeSosAlertModal();
           setStatus("已儲存", false);
           setTimeout(() => {
             modal.hidden = true;
@@ -11499,7 +11564,7 @@
             <tr data-sos-id="${record.id}">
               <td>${record.datetimeText || ''}</td>
               <td>${record.houseNo || '-'}</td>
-              <td>${record.subHouseNo || '-'}</td>
+              <td>${record.subHouseNo || record.subUnit || '-'}</td>
               <td>${record.name || '-'}</td>
               <td><span class="${statusClass(record.status)}">${record.status}</span></td>
               <td>

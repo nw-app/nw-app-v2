@@ -647,12 +647,8 @@
     const cfg = loadConfig();
     const sosActionMode = String(cfg.sosActionMode || "backend").trim();
     const sosPhoneNumber = String(cfg.sosPhoneNumber || "").trim();
-    if (sosActionMode === "phone") {
-      if (!sosPhoneNumber) {
-        alert("尚未設定撥打電話號碼");
-        return;
-      }
-      location.href = `tel:${sosPhoneNumber}`;
+    if (sosActionMode === "phone" && !sosPhoneNumber) {
+      alert("尚未設定撥打電話號碼");
       return;
     }
 
@@ -691,11 +687,13 @@
       createdBy: String(user.uid),
       createdByEmail: String(user.email || ""),
       datetimeText,
+      actionMode: sosActionMode,
+      phoneNumber: sosPhoneNumber,
     };
 
     try {
       await db.collection("sos_alerts").add(payload);
-      alert("SOS 通報已送出");
+      alert(sosActionMode === "phone" ? "SOS 已送出，後台將直接撥號" : "SOS 通報已送出");
     } catch (e) {
       alert("SOS 通報送出失敗，請稍後再試");
     }
