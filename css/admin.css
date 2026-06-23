@@ -1540,6 +1540,7 @@ a { color: inherit; text-decoration: none; }
   overflow: hidden;
   flex: 0 0 auto;
 }
+.residents-page .resident-item .avatar-sm { cursor: pointer; }
 .avatar-sm .avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .avatar-sm .avatar-fallback { font-size: 14px; font-weight: 900; color: rgba(31, 41, 55, 0.8); }
 .units-text {

@@ -234,6 +234,9 @@
       try {
         startSosAlertsListener(resolveActiveCommunityId());
       } catch {}
+      try {
+        startAdminIntercomIncomingListener(resolveActiveCommunityId());
+      } catch {}
       if (handleHashRoute()) return;
       renderDashboard();
     }).catch(() => {
@@ -242,6 +245,9 @@
       ensureConfigSubscription();
       try {
         startSosAlertsListener(resolveActiveCommunityId());
+      } catch {}
+      try {
+        startAdminIntercomIncomingListener(resolveActiveCommunityId());
       } catch {}
       if (handleHashRoute()) return;
       renderDashboard();
@@ -8308,6 +8314,16 @@
         const r = residents.find((x) => String(x.id || "") === String(id || "")) || null;
         if (!id || !r) return;
 
+        const avatarHit = e.target && e.target.closest ? e.target.closest(".avatar-sm") : null;
+        if (avatarHit) {
+          try {
+            await intercomStartOutgoingToResident({ communityId: cid, resident: r });
+          } catch {
+            toast("無法開啟通話(對講)");
+          }
+          return;
+        }
+
         const parkingBtn = e.target.closest("[data-parking]");
         if (parkingBtn) {
           openResidentParkingModal80({
@@ -9158,7 +9174,25 @@
         listEl.querySelectorAll(".resident-item").forEach(item => {
           const id = item.getAttribute("data-id");
           const r = list.find(x => x.id === id);
-          if (!r || r.status !== "pending") return;
+          if (!r) return;
+
+          const avatarEl = item.querySelector(".avatar-sm");
+          if (avatarEl) {
+            avatarEl.style.cursor = "pointer";
+            avatarEl.onclick = (ev) => {
+              if (ev) {
+                try { ev.preventDefault(); } catch {}
+                try { ev.stopPropagation(); } catch {}
+              }
+              if (String(r.status || "").trim() === "pending") {
+                toast("此帳號尚未核准，無法通話");
+                return;
+              }
+              intercomStartOutgoingToResident({ communityId: cid, resident: r }).catch(() => toast("無法開啟通話(對講)"));
+            };
+          }
+
+          if (r.status !== "pending") return;
           
           item.querySelector("[data-approve]").onclick = async () => {
             const ok = await (window.nwConfirm ? window.nwConfirm({
@@ -11269,16 +11303,551 @@
     stopSosAlarm();
   }
 
-  function openSosDial(phoneNumber) {
-    const phone = String(phoneNumber || "").trim();
-    if (!phone) return false;
-    closeSosAlertModal();
+  let intercomIncomingUnsub = null;
+  let intercomActive = null;
+  let intercomRingCtx = null;
+  let intercomRingOsc = null;
+  let intercomRingGain = null;
+  let intercomRingTimer = null;
+  let intercomLastIncomingMs = 0;
+  let intercomLastIncomingId = "";
+
+  function startIntercomRingtone() {
+    stopIntercomRingtone();
     try {
-      window.location.href = `tel:${phone}`;
-      return true;
-    } catch {
-      return false;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      intercomRingCtx = intercomRingCtx || new Ctx();
+      if (intercomRingCtx && intercomRingCtx.state === "suspended") {
+        intercomRingCtx.resume().catch(() => {});
+      }
+      intercomRingGain = intercomRingCtx.createGain();
+      intercomRingGain.gain.value = 0.0001;
+      intercomRingGain.connect(intercomRingCtx.destination);
+
+      intercomRingOsc = intercomRingCtx.createOscillator();
+      intercomRingOsc.type = "sine";
+      intercomRingOsc.frequency.value = 880;
+      intercomRingOsc.connect(intercomRingGain);
+      intercomRingOsc.start();
+
+      let phase = 0;
+      const tick = () => {
+        if (!intercomRingGain) return;
+        phase = (phase + 1) % 6;
+        const on = phase === 1 || phase === 2;
+        try {
+          intercomRingGain.gain.value = on ? 0.12 : 0.0001;
+        } catch {}
+      };
+      tick();
+      intercomRingTimer = window.setInterval(tick, 420);
+    } catch {}
+  }
+
+  function stopIntercomRingtone() {
+    if (intercomRingTimer) {
+      window.clearInterval(intercomRingTimer);
+      intercomRingTimer = null;
     }
+    try {
+      if (intercomRingGain) intercomRingGain.gain.value = 0;
+    } catch {}
+    try {
+      if (intercomRingOsc) intercomRingOsc.stop();
+    } catch {}
+    intercomRingOsc = null;
+    intercomRingGain = null;
+  }
+
+  function createIntercomPeerConnection() {
+    if (typeof RTCPeerConnection !== "function") {
+      throw new Error("RTCPeerConnection not available");
+    }
+    const cfg = {
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    };
+    return new RTCPeerConnection(cfg);
+  }
+
+  async function readUserProfileForCall(uid) {
+    const id = String(uid || "").trim();
+    if (!id) return {};
+    try {
+      const snap = await db.collection("users").doc(id).get();
+      const data = snap && snap.exists ? (snap.data() || {}) : {};
+      return {
+        uid: id,
+        name: String(data.displayName || data.name || data.email || "").trim(),
+        houseNo: String(data.houseNo || data.unit || "").trim(),
+        subUnit: String(data.subUnit || data.subHouseNo || "").trim(),
+        community: String(data.community || "").trim(),
+      };
+    } catch {
+      return { uid: id };
+    }
+  }
+
+  function setIntercomCallStatus(text, isError) {
+    const modal = document.getElementById("intercomCallModal80");
+    if (!modal) return;
+    const el = modal.querySelector("#intercomCallStatus");
+    if (!el) return;
+    const t = String(text || "").trim();
+    el.textContent = t;
+    el.hidden = !t;
+    el.classList.toggle("error", Boolean(isError));
+  }
+
+  function ensureIntercomIncomingModal() {
+    const modal = ensureModal("intercomIncomingModal", "modal-intercom-incoming", "min(460px, 92vw)");
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="intercomIncomingTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="intercomIncomingTitle">來電提示</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div style="font-weight:900; font-size:18px;" id="intercomIncomingName">—</div>
+          <div class="muted" style="margin-top:6px;" id="intercomIncomingSub">—</div>
+        </div>
+        <div class="modal-ft" style="display:flex; gap:10px; justify-content:flex-end;">
+          <button class="btn" type="button" id="btnIntercomReject">掛斷</button>
+          <button class="btn btn-primary" type="button" id="btnIntercomAccept">接通</button>
+        </div>
+      </div>
+    `.trim();
+    return modal;
+  }
+
+  function ensureIntercomCallModal() {
+    const modal = ensureModal("intercomCallModal80", "modal-intercom-call", "80%");
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="intercomCallTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="intercomCallTitle">通話（對講）</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:grid; gap:10px;">
+            <div style="font-weight:900; font-size:18px;" id="intercomPeerName">—</div>
+            <div class="muted" id="intercomPeerSub">—</div>
+            <div class="status" id="intercomCallStatus" hidden></div>
+            <audio id="intercomRemoteAudioAdmin" autoplay playsinline></audio>
+          </div>
+        </div>
+        <div class="modal-ft" style="display:flex; gap:10px; justify-content:flex-end;">
+          <button class="btn" type="button" id="btnIntercomMute">靜音</button>
+          <button class="btn danger" type="button" id="btnIntercomHangup">掛斷</button>
+        </div>
+      </div>
+    `.trim();
+    return modal;
+  }
+
+  async function cleanupIntercomActive({ updateStatus } = {}) {
+    const active = intercomActive;
+    intercomActive = null;
+    stopIntercomRingtone();
+    if (!active) return;
+    try {
+      if (updateStatus && active.callDocRef) {
+        await active.callDocRef.set(
+          {
+            status: String(updateStatus),
+            endedAtMs: Date.now(),
+            endedAt: FieldValue.serverTimestamp(),
+            endedByUid: String(auth.currentUser ? auth.currentUser.uid : ""),
+          },
+          { merge: true }
+        );
+      }
+    } catch {}
+    try { if (active.unsubDoc) active.unsubDoc(); } catch {}
+    try { if (active.unsubCandidates) active.unsubCandidates(); } catch {}
+    try { if (active.unsubCandidates2) active.unsubCandidates2(); } catch {}
+    try { if (active.detachModal) active.detachModal(); } catch {}
+    try {
+      if (active.pc) active.pc.close();
+    } catch {}
+    try {
+      if (active.localStream) active.localStream.getTracks().forEach((t) => t.stop());
+    } catch {}
+    try {
+      const audio = document.getElementById("intercomRemoteAudioAdmin");
+      if (audio) audio.srcObject = null;
+    } catch {}
+  }
+
+  async function intercomStartOutgoingToResident({ communityId, resident }) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const r = resident && typeof resident === "object" ? resident : {};
+    const toUid = String(r.id || r.uid || "").trim();
+    if (!toUid) {
+      toast("找不到住戶 UID");
+      return;
+    }
+    const user = auth.currentUser;
+    if (!user) return;
+
+    await cleanupIntercomActive();
+    const modal = ensureIntercomCallModal();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => {
+      detach();
+      cleanupIntercomActive({ updateStatus: "ended" });
+    });
+
+    const peerNameEl = modal.querySelector("#intercomPeerName");
+    const peerSubEl = modal.querySelector("#intercomPeerSub");
+    const muteBtn = modal.querySelector("#btnIntercomMute");
+    const hangupBtn = modal.querySelector("#btnIntercomHangup");
+
+    const toHouseNo = String(r.houseNo || r.unit || "").trim();
+    const toSubUnit = String(r.subUnit || r.subHouseNo || "").trim();
+    const toDisplayUnit = toSubUnit ? `${toHouseNo}-${toSubUnit}` : toHouseNo;
+    const toName = String(r.displayName || r.name || r.email || "").trim() || "住戶";
+
+    if (peerNameEl) peerNameEl.textContent = toName;
+    if (peerSubEl) peerSubEl.textContent = [toDisplayUnit].filter(Boolean).join("｜") || "—";
+    setIntercomCallStatus("正在呼叫…", false);
+    modal.hidden = false;
+
+    if (hangupBtn) {
+      hangupBtn.onclick = () => {
+        modal.hidden = true;
+        cleanupIntercomActive({ updateStatus: "ended" });
+      };
+    }
+
+    let callDocRef = null;
+    let pc = null;
+    const remoteStream = new MediaStream();
+    let localStream = null;
+    let muted = false;
+
+    try {
+      callDocRef = db.collection("calls").doc();
+      pc = createIntercomPeerConnection();
+    } catch {
+      setIntercomCallStatus("此裝置/瀏覽器不支援通話(對講)。", true);
+      return;
+    }
+
+    pc.ontrack = (ev) => {
+      const list = ev && ev.streams && ev.streams[0] ? ev.streams[0].getTracks() : [];
+      list.forEach((t) => remoteStream.addTrack(t));
+      const audio = document.getElementById("intercomRemoteAudioAdmin");
+      if (audio) {
+        audio.srcObject = remoteStream;
+        audio.play().catch(() => {});
+      }
+    };
+
+    const offerCandidatesRef = callDocRef.collection("offerCandidates");
+    pc.onicecandidate = (ev) => {
+      if (!ev || !ev.candidate) return;
+      const c = ev.candidate;
+      const json = typeof c.toJSON === "function" ? c.toJSON() : { candidate: c.candidate, sdpMid: c.sdpMid, sdpMLineIndex: c.sdpMLineIndex };
+      offerCandidatesRef.add({ ...json, createdAtMs: Date.now() }).catch(() => {});
+    };
+
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch {
+      setIntercomCallStatus("無法開啟麥克風，請確認瀏覽器權限。", true);
+      try { pc.close(); } catch {}
+      return;
+    }
+    localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+
+    const fromProfile = await readUserProfileForCall(user.uid);
+    const offer = await pc.createOffer({ offerToReceiveAudio: true });
+    await pc.setLocalDescription(offer);
+
+    await callDocRef.set(
+      {
+        community: cid,
+        fromUid: String(user.uid),
+        fromRole: "admin",
+        fromName: String(fromProfile.name || user.email || "後台").trim(),
+        fromHouseNo: String(fromProfile.houseNo || "").trim(),
+        toUid,
+        toRole: "resident",
+        toName,
+        toHouseNo,
+        toSubUnit,
+        status: "ringing",
+        createdAt: FieldValue.serverTimestamp(),
+        createdAtMs: Date.now(),
+        offer: { type: offer.type, sdp: offer.sdp },
+      },
+      { merge: true }
+    );
+
+    if (hangupBtn) {
+      hangupBtn.onclick = () => cleanupIntercomActive({ updateStatus: "ended" });
+    }
+    if (muteBtn) {
+      muteBtn.onclick = () => {
+        muted = !muted;
+        (localStream ? localStream.getAudioTracks() : []).forEach((t) => (t.enabled = !muted));
+        muteBtn.textContent = muted ? "取消靜音" : "靜音";
+      };
+    }
+
+    const unsubDoc = callDocRef.onSnapshot(async (snap) => {
+      const data = snap && snap.exists ? (snap.data() || {}) : null;
+      if (!data) return;
+      const st = String(data.status || "").trim();
+      if (st === "accepted") {
+        if (!pc.currentRemoteDescription && data.answer && data.answer.type && data.answer.sdp) {
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+          } catch {}
+        }
+        setIntercomCallStatus("已接通", false);
+        return;
+      }
+      if (st === "rejected" || st === "ended" || st === "busy" || st === "missed") {
+        setIntercomCallStatus(st === "rejected" ? "對方已掛斷" : (st === "busy" ? "對方忙線中" : "通話已結束"), false);
+        await cleanupIntercomActive();
+      }
+    });
+
+    const unsubAnswerCandidates = callDocRef.collection("answerCandidates").onSnapshot((snap) => {
+      (snap.docChanges ? snap.docChanges() : []).forEach((ch) => {
+        if (!ch || ch.type !== "added") return;
+        const v = ch.doc && ch.doc.data ? (ch.doc.data() || {}) : {};
+        if (!v || !v.candidate) return;
+        try { pc.addIceCandidate(new RTCIceCandidate(v)); } catch {}
+      });
+    });
+
+    intercomActive = {
+      callDocRef,
+      pc,
+      localStream,
+      remoteStream,
+      unsubDoc,
+      unsubCandidates: unsubAnswerCandidates,
+      detachModal: detach,
+    };
+  }
+
+  async function intercomAnswerIncomingCall(callDocRef, data) {
+    const user = auth.currentUser;
+    if (!user) return;
+    const d = data && typeof data === "object" ? data : {};
+    if (!d.offer || !d.offer.type || !d.offer.sdp) return;
+
+    await cleanupIntercomActive();
+    const modal = ensureIntercomCallModal();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => {
+      detach();
+      cleanupIntercomActive({ updateStatus: "ended" });
+    });
+
+    const peerNameEl = modal.querySelector("#intercomPeerName");
+    const peerSubEl = modal.querySelector("#intercomPeerSub");
+    const muteBtn = modal.querySelector("#btnIntercomMute");
+    const hangupBtn = modal.querySelector("#btnIntercomHangup");
+
+    const fromName = String(d.fromName || "住戶").trim() || "住戶";
+    const fromHouse = String(d.fromHouseNo || "").trim();
+    if (peerNameEl) peerNameEl.textContent = fromName;
+    if (peerSubEl) peerSubEl.textContent = fromHouse || "—";
+
+    setIntercomCallStatus("接通中…", false);
+    modal.hidden = false;
+
+    if (hangupBtn) {
+      hangupBtn.onclick = () => {
+        modal.hidden = true;
+        cleanupIntercomActive({ updateStatus: "ended" });
+      };
+    }
+
+    let pc = null;
+    try {
+      pc = createIntercomPeerConnection();
+    } catch {
+      setIntercomCallStatus("此裝置/瀏覽器不支援通話(對講)。", true);
+      return;
+    }
+    const remoteStream = new MediaStream();
+    let localStream = null;
+    let muted = false;
+
+    pc.ontrack = (ev) => {
+      const list = ev && ev.streams && ev.streams[0] ? ev.streams[0].getTracks() : [];
+      list.forEach((t) => remoteStream.addTrack(t));
+      const audio = document.getElementById("intercomRemoteAudioAdmin");
+      if (audio) {
+        audio.srcObject = remoteStream;
+        audio.play().catch(() => {});
+      }
+    };
+
+    const answerCandidatesRef = callDocRef.collection("answerCandidates");
+    pc.onicecandidate = (ev) => {
+      if (!ev || !ev.candidate) return;
+      const c = ev.candidate;
+      const json = typeof c.toJSON === "function" ? c.toJSON() : { candidate: c.candidate, sdpMid: c.sdpMid, sdpMLineIndex: c.sdpMLineIndex };
+      answerCandidatesRef.add({ ...json, createdAtMs: Date.now() }).catch(() => {});
+    };
+
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch {
+      setIntercomCallStatus("無法開啟麥克風，請確認瀏覽器權限。", true);
+      try { pc.close(); } catch {}
+      return;
+    }
+    localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(d.offer));
+    } catch {
+      setIntercomCallStatus("通話初始化失敗。", true);
+      try { pc.close(); } catch {}
+      return;
+    }
+
+    const fromProfile = await readUserProfileForCall(user.uid);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await callDocRef.set(
+      {
+        status: "accepted",
+        acceptedAtMs: Date.now(),
+        acceptedAt: FieldValue.serverTimestamp(),
+        acceptedByUid: String(user.uid),
+        acceptedByName: String(fromProfile.name || user.email || "後台").trim(),
+        answer: { type: answer.type, sdp: answer.sdp },
+      },
+      { merge: true }
+    );
+
+    if (hangupBtn) hangupBtn.onclick = () => cleanupIntercomActive({ updateStatus: "ended" });
+    if (muteBtn) {
+      muteBtn.onclick = () => {
+        muted = !muted;
+        (localStream ? localStream.getAudioTracks() : []).forEach((t) => (t.enabled = !muted));
+        muteBtn.textContent = muted ? "取消靜音" : "靜音";
+      };
+    }
+
+    const unsubOfferCandidates = callDocRef.collection("offerCandidates").onSnapshot((snap) => {
+      (snap.docChanges ? snap.docChanges() : []).forEach((ch) => {
+        if (!ch || ch.type !== "added") return;
+        const v = ch.doc && ch.doc.data ? (ch.doc.data() || {}) : {};
+        if (!v || !v.candidate) return;
+        try { pc.addIceCandidate(new RTCIceCandidate(v)); } catch {}
+      });
+    });
+
+    const unsubDoc = callDocRef.onSnapshot(async (snap) => {
+      const v = snap && snap.exists ? (snap.data() || {}) : null;
+      if (!v) return;
+      const st = String(v.status || "").trim();
+      if (st === "ended" || st === "rejected") {
+        setIntercomCallStatus("通話已結束", false);
+        await cleanupIntercomActive();
+      }
+    });
+
+    intercomActive = {
+      callDocRef,
+      pc,
+      localStream,
+      remoteStream,
+      unsubDoc,
+      unsubCandidates: unsubOfferCandidates,
+      detachModal: detach,
+    };
+
+    modal.hidden = false;
+  }
+
+  function startAdminIntercomIncomingListener(communityId) {
+    const cid = String(communityId || "").trim();
+    if (!cid) return;
+    if (intercomIncomingUnsub) {
+      try { intercomIncomingUnsub(); } catch {}
+      intercomIncomingUnsub = null;
+    }
+    intercomLastIncomingMs = Date.now();
+    intercomLastIncomingId = "";
+
+    intercomIncomingUnsub = db
+      .collection("calls")
+      .where("community", "==", cid)
+      .where("toRole", "==", "admin")
+      .where("status", "==", "ringing")
+      .limit(10)
+      .onSnapshot(async (snap) => {
+        const docs = snap && snap.docs ? snap.docs : [];
+        const list = docs
+          .map((d) => ({ id: d.id, ...(d.data() || {}) }))
+          .filter((x) => x && String(x.status || "") === "ringing")
+          .sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
+        const latest = list[0] || null;
+        if (!latest) return;
+        const createdAtMs = Number(latest.createdAtMs || 0);
+        const callId = String(latest.id || "").trim();
+        if (!callId) return;
+        if (callId === intercomLastIncomingId) return;
+        if (createdAtMs <= intercomLastIncomingMs) return;
+        intercomLastIncomingMs = createdAtMs;
+        intercomLastIncomingId = callId;
+
+        if (intercomActive) {
+          try {
+            await db.collection("calls").doc(callId).set({ status: "busy", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true });
+          } catch {}
+          return;
+        }
+
+        const prompt = ensureIntercomIncomingModal();
+        let detach = () => {};
+        detach = bindModalClose(prompt, () => {
+          detach();
+          stopIntercomRingtone();
+        });
+        const nameEl = prompt.querySelector("#intercomIncomingName");
+        const subEl = prompt.querySelector("#intercomIncomingSub");
+        const btnAccept = prompt.querySelector("#btnIntercomAccept");
+        const btnReject = prompt.querySelector("#btnIntercomReject");
+
+        const fromName = String(latest.fromName || "住戶").trim() || "住戶";
+        const fromHouse = String(latest.fromHouseNo || "").trim();
+        if (nameEl) nameEl.textContent = fromName;
+        if (subEl) subEl.textContent = fromHouse || "—";
+
+        const callDocRef = db.collection("calls").doc(callId);
+
+        if (btnReject) {
+          btnReject.onclick = async () => {
+            stopIntercomRingtone();
+            try { await callDocRef.set({ status: "rejected", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true }); } catch {}
+            prompt.hidden = true;
+          };
+        }
+        if (btnAccept) {
+          btnAccept.onclick = async () => {
+            stopIntercomRingtone();
+            prompt.hidden = true;
+            await intercomAnswerIncomingCall(callDocRef, latest);
+          };
+        }
+
+        startIntercomRingtone();
+        prompt.hidden = false;
+      });
   }
 
   function getSosRecords() {
@@ -11371,14 +11940,11 @@
           if (latest && Number(latest.createdAtMs || 0) > sosLastNotifiedMs && String(latest.status || "").trim() === "待處理") {
             sosLastNotifiedMs = Number(latest.createdAtMs || 0);
             const cfg = loadConfig(cid) || {};
-            const actionMode = String(latest.actionMode || cfg.sosActionMode || "backend").trim() || "backend";
-            const phoneNumber = String(latest.phoneNumber || cfg.sosPhoneNumber || "").trim();
-            if (actionMode === "phone" && phoneNumber) {
-              closeSosAlertModal();
-              openSosDial(phoneNumber);
-              toast(`SOS 來電撥號：${phoneNumber}`);
-            } else {
+            const actionMode = String(cfg.sosActionMode || "backend").trim() || "backend";
+            if (actionMode === "backend") {
               showSosAlertModal(latest);
+            } else {
+              closeSosAlertModal();
             }
           }
 
