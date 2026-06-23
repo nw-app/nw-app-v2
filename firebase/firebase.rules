@@ -438,6 +438,59 @@ service cloud.firestore {
       );
     }
 
+    function callExists(callId) {
+      return exists(/databases/$(database)/documents/calls/$(callId));
+    }
+
+    function callData(callId) {
+      return get(/databases/$(database)/documents/calls/$(callId)).data;
+    }
+
+    function isCallParticipantByDoc(doc) {
+      return request.auth != null && (
+        isAdmin() ||
+        (isCommunityStaff() && doc.community == getUserData().community) ||
+        doc.fromUid == request.auth.uid ||
+        doc.toUid == request.auth.uid
+      );
+    }
+
+    function isCallParticipant(callId) {
+      return callExists(callId) && isCallParticipantByDoc(callData(callId));
+    }
+
+    match /calls/{callId} {
+      allow create: if request.auth != null && (
+        (
+          request.resource.data.community == getUserData().community &&
+          request.resource.data.fromUid == request.auth.uid &&
+          request.resource.data.fromRole in ["resident", "admin"] &&
+          request.resource.data.status == "ringing"
+        )
+        ||
+        isAdmin()
+      );
+
+      allow read: if request.auth != null && isCallParticipantByDoc(resource.data);
+
+      allow update: if request.auth != null && isCallParticipantByDoc(resource.data);
+
+      allow delete: if request.auth != null && (
+        isAdmin() ||
+        (isCommunityStaff() && resource.data.community == getUserData().community)
+      );
+
+      match /offerCandidates/{candidateId} {
+        allow read, create: if request.auth != null && isCallParticipant(callId);
+        allow update, delete: if false;
+      }
+
+      match /answerCandidates/{candidateId} {
+        allow read, create: if request.auth != null && isCallParticipant(callId);
+        allow update, delete: if false;
+      }
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

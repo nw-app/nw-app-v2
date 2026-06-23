@@ -1386,7 +1386,12 @@
         startIntercomRingtone();
         prompt.hidden = false;
       }, () => {
-        try { alert("來電監聽失敗：可能沒有權限或網路異常"); } catch {}
+        try {
+          if (!window.__nw_intercom_incoming_error_shown) {
+            window.__nw_intercom_incoming_error_shown = true;
+            alert("來電功能尚未啟用（權限不足），請更新 Firestore 規則後再試");
+          }
+        } catch {}
       });
   }
 
