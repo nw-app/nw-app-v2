@@ -11567,25 +11567,32 @@
     const offer = await pc.createOffer({ offerToReceiveAudio: true });
     await pc.setLocalDescription(offer);
 
-    await callDocRef.set(
-      {
-        community: cid,
-        fromUid: String(user.uid),
-        fromRole: "admin",
-        fromName: String(fromProfile.name || user.email || "後台").trim(),
-        fromHouseNo: String(fromProfile.houseNo || "").trim(),
-        toUid,
-        toRole: "resident",
-        toName,
-        toHouseNo,
-        toSubUnit,
-        status: "ringing",
-        createdAt: FieldValue.serverTimestamp(),
-        createdAtMs: Date.now(),
-        offer: { type: offer.type, sdp: offer.sdp },
-      },
-      { merge: true }
-    );
+    try {
+      await callDocRef.set(
+        {
+          community: cid,
+          fromUid: String(user.uid),
+          fromRole: "admin",
+          fromName: String(fromProfile.name || user.email || "後台").trim(),
+          fromHouseNo: String(fromProfile.houseNo || "").trim(),
+          toUid,
+          toRole: "resident",
+          toName,
+          toHouseNo,
+          toSubUnit,
+          status: "ringing",
+          createdAt: FieldValue.serverTimestamp(),
+          createdAtMs: Date.now(),
+          offer: { type: offer.type, sdp: offer.sdp },
+        },
+        { merge: true }
+      );
+    } catch {
+      setIntercomCallStatus("呼叫失敗：可能沒有權限或網路異常。", true);
+      toast("呼叫失敗");
+      try { pc.close(); } catch {}
+      return;
+    }
 
     if (hangupBtn) {
       hangupBtn.onclick = () => cleanupIntercomActive({ updateStatus: "ended" });
@@ -11780,8 +11787,9 @@
       try { intercomIncomingUnsub(); } catch {}
       intercomIncomingUnsub = null;
     }
-    intercomLastIncomingMs = Date.now();
+    intercomLastIncomingMs = 0;
     intercomLastIncomingId = "";
+    const minMs = Date.now() - 5 * 60 * 1000;
 
     intercomIncomingUnsub = db
       .collection("calls")
@@ -11801,7 +11809,7 @@
         const callId = String(latest.id || "").trim();
         if (!callId) return;
         if (callId === intercomLastIncomingId) return;
-        if (createdAtMs <= intercomLastIncomingMs) return;
+        if (createdAtMs && createdAtMs < minMs) return;
         intercomLastIncomingMs = createdAtMs;
         intercomLastIncomingId = callId;
 
@@ -11847,6 +11855,8 @@
 
         startIntercomRingtone();
         prompt.hidden = false;
+      }, () => {
+        toast("來電監聽失敗");
       });
   }
 

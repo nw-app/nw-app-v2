@@ -1316,8 +1316,9 @@
       try { intercomIncomingUnsub(); } catch {}
       intercomIncomingUnsub = null;
     }
-    intercomLastIncomingMs = Date.now();
+    intercomLastIncomingMs = 0;
     intercomLastIncomingId = "";
+    const minMs = Date.now() - 5 * 60 * 1000;
 
     intercomIncomingUnsub = db
       .collection("calls")
@@ -1338,7 +1339,7 @@
         const callId = String(latest.id || "").trim();
         if (!callId) return;
         if (callId === intercomLastIncomingId) return;
-        if (createdAtMs <= intercomLastIncomingMs) return;
+        if (createdAtMs && createdAtMs < minMs) return;
         intercomLastIncomingMs = createdAtMs;
         intercomLastIncomingId = callId;
 
@@ -1384,6 +1385,8 @@
 
         startIntercomRingtone();
         prompt.hidden = false;
+      }, () => {
+        try { alert("來電監聽失敗：可能沒有權限或網路異常"); } catch {}
       });
   }
 
