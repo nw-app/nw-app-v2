@@ -44,8 +44,24 @@
 
       <div class="frame-midtop" aria-label="頁中上">
         <div class="frame-title">
-          <h1 id="pageTitle"></h1>
-          <p id="pageSubtitle"></p>
+          <div class="title-left">
+            <h1 id="pageTitle"></h1>
+            <p id="pageSubtitle"></p>
+          </div>
+          <div class="datetime-weather-inline">
+            <div class="weather-section" id="weatherSection">
+              <div class="weather-info">
+                <div class="temperature" id="temperature">--°C</div>
+                <div class="location" id="locationDisplay">定位中...</div>
+                <div class="weather-desc" id="weatherDesc">獲取天氣中...</div>
+              </div>
+              <div class="weather-icon" id="weatherIcon">🌤️</div>
+            </div>
+            <div class="datetime-section">
+              <div class="time-display" id="timeDisplay">--:--:--</div>
+              <div class="date-display" id="dateDisplay">----年--月--日 星期--</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -119,7 +135,7 @@
                 <span class="user-avatar-fallback" id="profileAvatarFallback" aria-hidden="true">U</span>
                 <button type="button" class="avatar-edit-btn" id="btnEditAvatar" aria-label="更換大頭照" title="更換大頭照">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M12 20h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M12 20h9" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
                     <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
                   </svg>
                 </button>
@@ -149,7 +165,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="js/firebase-config.js"></script>
-    <script src="js/member.js?v=18"></script>
+    <script src="js/member.js?v=19"></script>
     <script src="js/pwa.js?v=3"></script>
   </body>
 </html>

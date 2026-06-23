@@ -1,4 +1,181 @@
 (() => {
+  // 日期和時間更新功能
+  function updateDateTime() {
+    const now = new Date();
+    
+    // 更新時間
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const timeDisplay = document.getElementById('timeDisplay');
+    if (timeDisplay) {
+      timeDisplay.textContent = `${hours}:${minutes}:${seconds}`;
+    }
+    
+    // 更新日期
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+    const weekday = weekdays[now.getDay()];
+    const dateDisplay = document.getElementById('dateDisplay');
+    if (dateDisplay) {
+      dateDisplay.textContent = `${year}年${month}月${day}日 星期${weekday}`;
+    }
+  }
+  
+  // 天氣圖標映射
+  function getWeatherIcon(condition) {
+    const iconMap = {
+      '晴': '☀️',
+      '多雲': '⛅',
+      '陰': '☁️',
+      '雨': '🌧️',
+      '雷陣雨': '⛈️',
+      '雪': '❄️',
+      '霧': '🌫️'
+    };
+    for (let key in iconMap) {
+      if (condition && condition.includes(key)) {
+        return iconMap[key];
+      }
+    }
+    return '🌤️';
+  }
+  
+  // 獲取地理位置
+  function getLocation() {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          fetchWeather(lat, lon);
+          reverseGeocode(lat, lon);
+        },
+        (error) => {
+          console.log('定位失敗，使用預設位置');
+          // 使用台北作為預設位置
+          fetchWeather(25.0330, 121.5654);
+          const locationDisplay = document.getElementById('locationDisplay');
+          if (locationDisplay) {
+            locationDisplay.textContent = '台北市';
+          }
+        }
+      );
+    } else {
+      console.log('瀏覽器不支持地理定位');
+      fetchWeather(25.0330, 121.5654);
+      const locationDisplay = document.getElementById('locationDisplay');
+      if (locationDisplay) {
+        locationDisplay.textContent = '台北市';
+      }
+    }
+  }
+  
+  // 反向地理編碼（將座標轉換為地址）
+  async function reverseGeocode(lat, lon) {
+    try {
+      // 使用 OpenStreetMap 的 Nominatim API
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&accept-language=zh-TW`
+      );
+      const data = await response.json();
+      const locationDisplay = document.getElementById('locationDisplay');
+      if (locationDisplay && data.address) {
+        const city = data.address.city || data.address.town || data.address.county || '';
+        const district = data.address.district || '';
+        locationDisplay.textContent = city + (district ? ' ' + district : '');
+      }
+    } catch (error) {
+      console.log('反向地理編碼失敗');
+    }
+  }
+  
+  // 獲取天氣資訊（使用 Open-Meteo 免費天氣 API）
+  async function fetchWeather(lat, lon) {
+    try {
+      const response = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto&forecast_days=1`
+      );
+      const data = await response.json();
+      
+      if (data.current) {
+        const temperature = Math.round(data.current.temperature_2m);
+        const weatherCode = data.current.weather_code;
+        
+        // 天氣代碼解釋
+        const weatherDesc = interpretWeatherCode(weatherCode);
+        const weatherIcon = getWeatherIcon(weatherDesc);
+        
+        // 更新天氣顯示
+        const temperatureEl = document.getElementById('temperature');
+        const weatherIconEl = document.getElementById('weatherIcon');
+        const weatherDescEl = document.getElementById('weatherDesc');
+        
+        if (temperatureEl) {
+          temperatureEl.textContent = `${temperature}°C`;
+        }
+        if (weatherIconEl) {
+          weatherIconEl.textContent = weatherIcon;
+        }
+        if (weatherDescEl) {
+          weatherDescEl.textContent = weatherDesc;
+        }
+      }
+    } catch (error) {
+      console.log('獲取天氣失敗:', error);
+      const weatherDescEl = document.getElementById('weatherDesc');
+      if (weatherDescEl) {
+        weatherDescEl.textContent = '天氣資訊暫時無法取得';
+      }
+    }
+  }
+  
+  // 解釋天氣代碼（來自 Open-Meteo）
+  function interpretWeatherCode(code) {
+    const codeMap = {
+      0: '晴',
+      1: '晴時多雲',
+      2: '多雲',
+      3: '陰',
+      45: '霧',
+      48: '霧',
+      51: '小雨',
+      53: '雨',
+      55: '大雨',
+      56: '凍雨',
+      57: '凍雨',
+      61: '小雨',
+      63: '雨',
+      65: '大雨',
+      66: '凍雨',
+      67: '凍雨',
+      71: '小雪',
+      73: '雪',
+      75: '大雪',
+      77: '雪粒',
+      80: '陣雨',
+      81: '陣雨',
+      82: '暴雨',
+      85: '陣雪',
+      86: '陣雪',
+      95: '雷陣雨',
+      96: '雷陣雨伴冰雹',
+      99: '雷陣雨伴冰雹'
+    };
+    return codeMap[code] || '多雲';
+  }
+  
+  // 初始化日期時間和天氣
+  function initDateTimeWeather() {
+    updateDateTime();
+    setInterval(updateDateTime, 1000); // 每秒更新時間
+    getLocation();
+    // 每30分鐘更新一次天氣
+    setInterval(getLocation, 30 * 60 * 1000);
+  }
+
   const firebaseConfig = window.FIREBASE_CONFIG;
   if (!firebaseConfig) throw new Error("Missing FIREBASE_CONFIG");
 
@@ -445,6 +622,50 @@
     modal.hidden = false;
   }
 
+  // SOS 发送功能
+  function sendSOS() {
+    const now = new Date();
+    const accounts = loadAccounts();
+    const cid = resolveActiveCommunityId();
+    const c = accounts.communities.find((x) => x && x.id === cid) || null;
+    
+    // 获取用户信息
+    const user = auth.currentUser;
+    const userEmail = user ? user.email : '未知';
+    
+    // 格式化日期时间
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const datetime = `${year}年${month}月${day}日 ${hours}:${minutes}:${seconds}`;
+    
+    // 创建 SOS 记录
+    const sosRecord = {
+      id: 'sos_' + Date.now(),
+      datetime: datetime,
+      timestamp: Date.now(),
+      houseNo: c ? (c.username || '未知户号') : '未知户号',
+      name: userEmail.split('@')[0] || '住户',
+      status: '待处理',
+      notes: '',
+      communityId: cid || 'unknown'
+    };
+    
+    // 保存到 localStorage 用于演示
+    let sosRecords = JSON.parse(localStorage.getItem('sos_records') || '[]');
+    sosRecords.unshift(sosRecord); // 最新的放前面
+    localStorage.setItem('sos_records', JSON.stringify(sosRecords));
+    
+    // 设置一个标记，表示有新的 SOS
+    localStorage.setItem('sos_new', '1');
+    localStorage.setItem('sos_new_time', Date.now().toString());
+    
+    alert('SOS 呼叫已发出！');
+  }
+  
   function homeView() {
     const cfg = loadConfig();
     const renderButtonGrid = (buttons) => {
@@ -477,7 +698,7 @@
           </div>
         </section>
         <section class="row-b">
-          <button class="btn-sos" type="button" onclick="alert('SOS 呼叫已發出')">SOS</button>
+          <button class="btn-sos" type="button" onclick="window.sendSOS && window.sendSOS()">SOS</button>
         </section>
         <section class="row-c">社區服務</section>
         <section class="row-d">
@@ -648,6 +869,9 @@
   bindSignOut();
   document.addEventListener("DOMContentLoaded", bindSignOut);
 
+  // 頁面載入時初始化日期時間和天氣
+  document.addEventListener('DOMContentLoaded', initDateTimeWeather);
+  
   auth.onAuthStateChanged(async (user) => {
     const redirectToIndex = () => {
       if (window.__nw_redirecting) return;
@@ -696,4 +920,7 @@
   });
 
   window.addEventListener("hashchange", () => render());
+  
+  // 暴露 SOS 功能到全局
+  window.sendSOS = sendSOS;
 })();

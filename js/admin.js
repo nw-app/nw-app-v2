@@ -11101,6 +11101,182 @@
     setupDashboardReorder(grid);
   }
 
+  // SOS 功能全局变量
+  let sosAlertAudio = null;
+  let sosPollingInterval = null;
+  let lastSosTime = 0;
+
+  // 创建警报音频
+  function createSosAlertAudio() {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+    
+    return {
+      play: () => {
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.frequency.value = 800;
+        oscillator.type = 'square';
+        gainNode.gain.value = 0.3;
+        oscillator.start();
+        let beepCount = 0;
+        const beepInterval = setInterval(() => {
+          beepCount++;
+          if (beepCount > 10) {
+            clearInterval(beepInterval);
+            oscillator.stop();
+            return;
+          }
+          gainNode.gain.value = beepCount % 2 === 1 ? 0.3 : 0;
+        }, 300);
+        return { oscillator, interval: beepInterval };
+      }
+    };
+  }
+
+  // 显示 SOS 弹窗
+  function showSosAlertModal(sosRecord) {
+    const modal = document.getElementById('sosAlertModal');
+    if (!modal) return;
+    
+    document.getElementById('sosAlertDatetime').textContent = sosRecord.datetime;
+    document.getElementById('sosAlertHouseNo').textContent = sosRecord.houseNo;
+    document.getElementById('sosAlertName').textContent = sosRecord.name;
+    
+    modal.hidden = false;
+    
+    // 播放警报
+    if (!sosAlertAudio) {
+      sosAlertAudio = createSosAlertAudio();
+    }
+    sosAlertAudio.play();
+  }
+
+  // 关闭 SOS 弹窗
+  function closeSosAlertModal() {
+    const modal = document.getElementById('sosAlertModal');
+    if (modal) {
+      modal.hidden = true;
+    }
+  }
+
+  // 获取 SOS 记录
+  function getSosRecords() {
+    try {
+      const records = localStorage.getItem('sos_records');
+      return records ? JSON.parse(records) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // 更新 SOS 记录状态
+  function updateSosRecordStatus(recordId, newStatus, notes = '') {
+    try {
+      let records = getSosRecords();
+      const recordIndex = records.findIndex(r => r.id === recordId);
+      if (recordIndex !== -1) {
+        records[recordIndex].status = newStatus;
+        if (notes) {
+          records[recordIndex].notes = notes;
+        }
+        localStorage.setItem('sos_records', JSON.stringify(records));
+      }
+    } catch (e) {
+      console.error('更新 SOS 记录失败:', e);
+    }
+  }
+
+  // 监听新 SOS
+  function checkForNewSos() {
+    try {
+      const hasNew = localStorage.getItem('sos_new');
+      const newTime = parseInt(localStorage.getItem('sos_new_time') || '0');
+      
+      if (hasNew === '1' && newTime > lastSosTime) {
+        lastSosTime = newTime;
+        localStorage.removeItem('sos_new');
+        
+        const records = getSosRecords();
+        if (records.length > 0) {
+          showSosAlertModal(records[0]);
+        }
+      }
+    } catch (e) {
+      console.error('检查 SOS 失败:', e);
+    }
+  }
+
+  // 开始 SOS 轮询
+  function startSosPolling() {
+    if (sosPollingInterval) {
+      clearInterval(sosPollingInterval);
+    }
+    lastSosTime = Date.now();
+    sosPollingInterval = setInterval(checkForNewSos, 1000);
+  }
+
+  // 渲染 SOS 记录表格
+  function renderSosRecordsTable() {
+    const records = getSosRecords();
+    
+    if (records.length === 0) {
+      return `
+        <div style="text-align: center; padding: 40px; color: #9ca3af;">
+          暂无 SOS 记录
+        </div>
+      `;
+    }
+
+    const statusClass = (status) => {
+      switch (status) {
+        case '待处理': return 'sos-status-pending';
+        case '处理中': return 'sos-status-processing';
+        case '已处理': return 'sos-status-resolved';
+        default: return '';
+      }
+    };
+
+    return `
+      <table class="sos-records-table">
+        <thead>
+          <tr>
+            <th>日期時間</th>
+            <th>戶號</th>
+            <th>姓名</th>
+            <th>處理狀況</th>
+            <th>操作</th>
+            <th>紀錄</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${records.map(record => `
+            <tr data-sos-id="${record.id}">
+              <td>${record.datetime}</td>
+              <td>${record.houseNo}</td>
+              <td>${record.name}</td>
+              <td><span class="${statusClass(record.status)}">${record.status}</span></td>
+              <td>
+                ${record.status === '待处理' ? `
+                  <button class="sos-action-btn sos-action-btn-primary" data-action="process" data-id="${record.id}">開始處理</button>
+                ` : ''}
+                ${record.status === '处理中' ? `
+                  <button class="sos-action-btn sos-action-btn-success" data-action="resolve" data-id="${record.id}">完成處理</button>
+                ` : ''}
+              </td>
+              <td>${record.notes || '-'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
   function renderCareModule() {
     const cid = resolveActiveCommunityId();
     const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
@@ -11118,14 +11294,7 @@
         title: "住戶SOS",
         desc: "緊急求助、即時通報與聯絡資訊整合。",
         tag: "緊急",
-        body: `
-          <div class="row"><div class="muted">可放入住戶求助紀錄、求助類型、通報時間與處理狀態。</div></div>
-          <div class="grid cols-3" style="margin-top:12px;">
-            <div class="kpi"><div class="kpi-label">今日求助</div><div class="kpi-value">--</div></div>
-            <div class="kpi"><div class="kpi-label">處理中</div><div class="kpi-value">--</div></div>
-            <div class="kpi"><div class="kpi-label">已完成</div><div class="kpi-value">--</div></div>
-          </div>
-        `
+        body: ""
       },
       "72h": {
         label: "72小時",
@@ -11175,6 +11344,12 @@
     const renderPage = () => {
       renderSubnav();
       const page = pageMap[currentPage] || pageMap.sos;
+      
+      let bodyContent = page.body;
+      if (currentPage === "sos") {
+        bodyContent = renderSosRecordsTable();
+      }
+      
       contentEl.innerHTML = `
         <section class="card">
           <div class="card-hd">
@@ -11191,17 +11366,39 @@
             <div class="row">
               <div>
                 <div style="font-size:18px; font-weight:800; color:#111827;">${page.title}</div>
-                <div class="muted" style="margin-top:4px;">此子分頁目前為示意版，可再接實際資料與功能。</div>
+                ${currentPage !== "sos" ? `<div class="muted" style="margin-top:4px;">此子分頁目前為示意版，可再接實際資料與功能。</div>` : ''}
               </div>
             </div>
-            ${page.body}
+            ${bodyContent}
           </div>
         </section>
       `.trim();
+      
+      // 如果是 SOS 页面，添加表格按钮事件监听
+      if (currentPage === "sos") {
+        contentEl.querySelectorAll('[data-action]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const action = btn.getAttribute('data-action');
+            const id = btn.getAttribute('data-id');
+            
+            if (action === 'process') {
+              updateSosRecordStatus(id, '处理中');
+              renderPage();
+            } else if (action === 'resolve') {
+              updateSosRecordStatus(id, '已处理');
+              renderPage();
+            }
+          });
+        });
+      }
+      
       updateFooterActiveNav();
     };
 
     renderPage();
+    
+    // 开始 SOS 轮询
+    startSosPolling();
   }
 
   function renderModule(moduleId) {
@@ -11566,5 +11763,17 @@
   window.addEventListener("hashchange", () => {
     if (!handleHashRoute()) renderDashboard();
     updateFooterActiveNav();
+  });
+
+  // SOS 功能初始化
+  document.addEventListener('DOMContentLoaded', () => {
+    // 绑定关闭按钮事件
+    const closeBtn = document.getElementById('sosAlertCloseBtn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', closeSosAlertModal);
+    }
+    
+    // 启动全局 SOS 轮询，无论在哪个页面都能收到警报
+    startSosPolling();
   });
 })();

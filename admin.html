@@ -203,5 +203,28 @@
         </form>
       </div>
     </div>
+    
+    <!-- SOS 通知弹窗 -->
+    <div class="sos-alert-modal" id="sosAlertModal" hidden>
+      <div class="sos-alert-content">
+        <div class="sos-alert-icon">🚨</div>
+        <h2 class="sos-alert-title">SOS 通報</h2>
+        <div class="sos-alert-info">
+          <div class="sos-info-item">
+            <span class="sos-info-label">日期時間：</span>
+            <span class="sos-info-value" id="sosAlertDatetime"></span>
+          </div>
+          <div class="sos-info-item">
+            <span class="sos-info-label">戶號：</span>
+            <span class="sos-info-value" id="sosAlertHouseNo"></span>
+          </div>
+          <div class="sos-info-item">
+            <span class="sos-info-label">姓名：</span>
+            <span class="sos-info-value" id="sosAlertName"></span>
+          </div>
+        </div>
+        <button class="sos-alert-close-btn" type="button" id="sosAlertCloseBtn">關閉</button>
+      </div>
+    </div>
   </body>
 </html>
