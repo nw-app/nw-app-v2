@@ -465,6 +465,21 @@ a { color: inherit; text-decoration: none; }
 .tag.yellow { background: rgba(211, 47, 47, 0.10); border-color: rgba(211, 47, 47, 0.24); color: #9f1c1c; }
 .tag.green { background: rgba(46, 125, 50, 0.12); border-color: rgba(46, 125, 50, 0.24); color: #1b5e20; }
 .tag.red { background: rgba(211, 47, 47, 0.1); border-color: rgba(211, 47, 47, 0.24); color: #9f1c1c; }
+.bulletin-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.bulletin-head-actions .icon-btn.sm {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+}
+.bulletin-head-actions .icon-btn.sm svg {
+  width: 20px;
+  height: 20px;
+}
 .status-chip {
   display: inline-flex;
   align-items: center;
@@ -515,6 +530,34 @@ a { color: inherit; text-decoration: none; }
 .icon-btn svg { width: 18px; height: 18px; display: block; }
 .icon-btn.sm { width: 36px; height: 36px; border-radius: 12px; }
 .icon-btn.sm svg { width: 22px; height: 22px; }
+#btnNewCommunityPost,
+#btnCourierConfig,
+#btnVisitorQr,
+#btnUnits,
+#btnPointsSettings,
+#btnFacilityExpense80,
+#btnFacilityManage80,
+#btnNewFinanceReport,
+#btnNewMeetingMinutes,
+#btnNewRepairReport,
+#btnSosSettings {
+  width: 48px;
+  height: 48px;
+}
+#btnNewCommunityPost svg,
+#btnCourierConfig svg,
+#btnVisitorQr svg,
+#btnUnits svg,
+#btnPointsSettings svg,
+#btnFacilityExpense80 svg,
+#btnFacilityManage80 svg,
+#btnNewFinanceReport svg,
+#btnNewMeetingMinutes svg,
+#btnNewRepairReport svg,
+#btnSosSettings svg {
+  width: 24px;
+  height: 24px;
+}
 .icon-btn:hover { background: rgba(17, 24, 39, 0.04); }
 .icon-btn:active { transform: translateY(1px); }
 .btn.danger {
@@ -2534,6 +2577,42 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* SOS 记录表格样式 */
+.sos-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+.sos-filter-bar .btn {
+  width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  padding: 0 6px;
+  font-size: clamp(11px, 1.8vw, 13px);
+}
+
+.sos-filter-bar .badge-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.08);
+  color: #374151;
+  font-size: 11px;
+  font-weight: 800;
+  margin-right: 6px;
+}
+
+.sos-filter-bar .btn.btn-sm.btn-primary .badge-inline {
+  background: rgba(255, 255, 255, 0.95);
+  color: #9f1c1c;
+}
+
 .sos-records-table {
   width: 100%;
   border-collapse: collapse;

@@ -241,7 +241,9 @@
       rowAInterval: 5,
       rowDButtons: defaultRowDButtons.map(b => ({ ...b })),
       rowFButtons: defaultRowFButtons.map(b => ({ ...b })),
-      serviceUrl: ""
+      serviceUrl: "",
+      sosActionMode: "backend",
+      sosPhoneNumber: ""
     };
   }
 
@@ -364,7 +366,9 @@
         rowAInterval: parsed.rowAInterval || 5,
         rowDButtons: mergeButtons(parsed.rowDButtons, defaultRowDButtons),
         rowFButtons: mergeButtons(parsed.rowFButtons, defaultRowFButtons),
-        serviceUrl: parsed.serviceUrl || ""
+        serviceUrl: parsed.serviceUrl || "",
+        sosActionMode: String(parsed.sosActionMode || d.sosActionMode || "backend").trim() || "backend",
+        sosPhoneNumber: String(parsed.sosPhoneNumber || d.sosPhoneNumber || "").trim()
       };
     } catch {
       return defaultConfig();
@@ -640,6 +644,18 @@
       return;
     }
 
+    const cfg = loadConfig();
+    const sosActionMode = String(cfg.sosActionMode || "backend").trim();
+    const sosPhoneNumber = String(cfg.sosPhoneNumber || "").trim();
+    if (sosActionMode === "phone") {
+      if (!sosPhoneNumber) {
+        alert("尚未設定撥打電話號碼");
+        return;
+      }
+      location.href = `tel:${sosPhoneNumber}`;
+      return;
+    }
+
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -658,6 +674,7 @@
 
     const community = String(udata.community || resolveActiveCommunityId() || "").trim() || "default";
     const houseNo = String(udata.houseNo || udata.unit || "").trim() || "—";
+    const subHouseNo = String(udata.subHouseNo || udata.subUnit || "").trim();
     const displayName = String(udata.displayName || udata.name || "").trim();
     const fallbackName = String(user.email || "").split("@")[0] || "住戶";
     const name = displayName || fallbackName;
@@ -665,6 +682,7 @@
     const payload = {
       community,
       houseNo,
+      subHouseNo,
       name,
       status: "待處理",
       record: "",

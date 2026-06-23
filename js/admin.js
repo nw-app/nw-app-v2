@@ -6151,7 +6151,7 @@
     };
 
     // 渲染公告列表
-    const renderBulletinList = (listEl) => {
+    const renderBulletinList = (listEl, type) => {
       if (!listEl) return;
       
       if (!bulletinData.length) {
@@ -6176,7 +6176,23 @@
                 <h3 style="font-size:16px;">${escapeHtml(item.title || "")}</h3>
                 <p style="margin:0; font-size:14px;">${escapeHtml(item.subtitle || "")}</p>
               </div>
-              <span class="tag ${tagColor}">${tagText}</span>
+              <div class="bulletin-head-actions">
+                <span class="tag ${tagColor}">${tagText}</span>
+                <button class="icon-btn sm" type="button" data-bulletin-edit="${escapeHtml(item.id)}" aria-label="編輯" title="編輯">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-1.4L4 18.6V20Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+                    <path d="M13.5 6.5l4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+                  </svg>
+                </button>
+                <button class="icon-btn sm danger" type="button" data-bulletin-delete="${escapeHtml(item.id)}" aria-label="刪除" title="刪除">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M5 7h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+                    <path d="M9 7V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8V7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M7 7l.8 11.1A2 2 0 0 0 9.8 20h4.4a2 2 0 0 0 2-1.9L17 7" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+                    <path d="M10 11v5M14 11v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+                  </svg>
+                </button>
+              </div>
             </div>
             <div class="card-bd">
               <p>${escapeHtml(item.content || "")}</p>
@@ -6186,6 +6202,37 @@
           </div>
         `;
       }).join("");
+
+      listEl.querySelectorAll("[data-bulletin-edit]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = String(btn.getAttribute("data-bulletin-edit") || "").trim();
+          const item = bulletinData.find((entry) => String(entry.id || "") === id);
+          if (!item) return;
+          openNewBulletinModal(type || item.type || "community", item);
+        });
+      });
+
+      listEl.querySelectorAll("[data-bulletin-delete]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = String(btn.getAttribute("data-bulletin-delete") || "").trim();
+          const item = bulletinData.find((entry) => String(entry.id || "") === id);
+          if (!id || !item) return;
+          const ok = await (window.nwConfirm ? window.nwConfirm({
+            title: "刪除公告",
+            message: `是否刪除「${String(item.title || "").trim() || "此筆公告"}」？`,
+            okText: "確認刪除",
+            cancelText: "取消",
+            danger: true
+          }) : Promise.resolve(confirm("是否刪除此筆公告？")));
+          if (!ok) return;
+          try {
+            await db.collection("communities").doc(cid).collection("bulletins").doc(id).delete();
+            toast("已刪除");
+          } catch (err) {
+            toast(`刪除失敗：${err.message}`);
+          }
+        });
+      });
     };
 
     // 渲染社區園地
@@ -6200,7 +6247,12 @@
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
-            <button class="btn btn-primary btn-sm" type="button" id="btnNewCommunityPost">新增公告</button>
+            <button class="icon-btn sm" type="button" id="btnNewCommunityPost" aria-label="新增公告" title="新增公告">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 5v14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
+                <path d="M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
+              </svg>
+            </button>
           </div>
           <div class="card-bd">
             <div class="status" id="communityStatus" hidden></div>
@@ -6235,7 +6287,12 @@
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
-            <button class="btn btn-primary btn-sm" type="button" id="btnNewFinanceReport">上傳報表</button>
+            <button class="icon-btn sm" type="button" id="btnNewFinanceReport" aria-label="上傳報表" title="上傳報表">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 5v14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
+                <path d="M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
+              </svg>
+            </button>
           </div>
           <div class="card-bd">
             <div class="status" id="financeStatus" hidden></div>
@@ -6270,7 +6327,12 @@
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
-            <button class="btn btn-primary btn-sm" type="button" id="btnNewMeetingMinutes">新增紀錄</button>
+            <button class="icon-btn sm" type="button" id="btnNewMeetingMinutes" aria-label="新增紀錄" title="新增紀錄">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 5v14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
+                <path d="M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
+              </svg>
+            </button>
           </div>
           <div class="card-bd">
             <div class="status" id="meetingStatus" hidden></div>
@@ -6305,7 +6367,12 @@
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
-            <button class="btn btn-primary btn-sm" type="button" id="btnNewRepairReport">新增報告</button>
+            <button class="icon-btn sm" type="button" id="btnNewRepairReport" aria-label="新增報告" title="新增報告">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 5v14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
+                <path d="M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
+              </svg>
+            </button>
           </div>
           <div class="card-bd">
             <div class="status" id="repairStatus" hidden></div>
@@ -6355,7 +6422,7 @@
               return tB - tA; // 降冪排序 (由新到舊)
             });
             
-            renderBulletinList(listEl);
+            renderBulletinList(listEl, type);
           },
           (err) => {
             console.error("[公告模組] 監聽器錯誤:", err);
@@ -6365,9 +6432,23 @@
     };
 
     // 打開新增公告彈窗
-    const openNewBulletinModal = (type) => {
+    const openNewBulletinModal = (type, existingItem) => {
       const modal = ensureModal("newBulletinModal", "modal-new-bulletin", "80%");
-      let selectedImages = [];
+      const isEditMode = !!(existingItem && existingItem.id);
+      let selectedImages = Array.isArray(existingItem?.images) ? existingItem.images.slice(0, 5) : [];
+      const modalTitleMap = {
+        community: "新增社區園地",
+        finance: "新增財務報表",
+        meeting: "新增會議記錄",
+        repair: "新增修繕報告"
+      };
+      const editTitleMap = {
+        community: "編輯社區園地",
+        finance: "編輯財務報表",
+        meeting: "編輯會議記錄",
+        repair: "編輯修繕報告"
+      };
+      const modalTitle = isEditMode ? (editTitleMap[type] || "編輯公告") : (modalTitleMap[type] || "新增公告");
       
       const detach = bindModalClose(modal, () => {
         cleanup();
@@ -6378,7 +6459,7 @@
         <div class="modal-backdrop" data-modal-close="1"></div>
         <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="newBulletinModalTitle">
           <div class="modal-hd">
-            <h3 class="modal-title" id="newBulletinModalTitle">新增公告</h3>
+            <h3 class="modal-title" id="newBulletinModalTitle">${escapeHtml(modalTitle)}</h3>
             <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
           </div>
           <form id="newBulletinForm">
@@ -6437,6 +6518,13 @@
       const imageUploadArea = document.getElementById("imageUploadArea");
       const imagePlaceholder = document.getElementById("imagePlaceholder");
       const imagePreviewContainer = document.getElementById("imagePreviewContainer");
+
+      if (titleInput) titleInput.value = String(existingItem?.title || "").trim();
+      if (subtitleInput) subtitleInput.value = String(existingItem?.subtitle || "").trim();
+      if (contentInput) contentInput.value = String(existingItem?.content || "").trim();
+      if (importantCheck) importantCheck.checked = !!existingItem?.isImportant;
+      if (pinnedCheck) pinnedCheck.checked = !!existingItem?.isPinned;
+      if (btnSave) btnSave.textContent = isEditMode ? "更新" : "儲存";
       
       const setStatus = (msg, isError) => {
         if (!statusEl) return;
@@ -6540,11 +6628,11 @@
         }
         
         if (btnSave) btnSave.disabled = true;
-        setStatus("儲存中...", false);
-        console.log("[公告模組] 開始儲存公告，type:", type, "cid:", cid);
+        setStatus(isEditMode ? "更新中..." : "儲存中...", false);
+        console.log("[公告模組] 開始儲存公告，type:", type, "cid:", cid, "edit:", isEditMode);
         
         try {
-          await db.collection("communities").doc(cid).collection("bulletins").add({
+          const payload = {
             type: type,
             title: title,
             subtitle: String(subtitleInput?.value || "").trim(),
@@ -6552,13 +6640,21 @@
             images: selectedImages,
             isImportant: !!importantCheck?.checked,
             isPinned: !!pinnedCheck?.checked,
-            createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
-          });
+          };
+
+          if (isEditMode) {
+            await db.collection("communities").doc(cid).collection("bulletins").doc(existingItem.id).update(payload);
+          } else {
+            await db.collection("communities").doc(cid).collection("bulletins").add({
+              ...payload,
+              createdAt: FieldValue.serverTimestamp(),
+            });
+          }
           
           console.log("[公告模組] 公告儲存成功");
-          setStatus("已儲存。", false);
-          toast("已儲存");
+          setStatus(isEditMode ? "已更新。" : "已儲存。", false);
+          toast(isEditMode ? "已更新" : "已儲存");
           modal.hidden = true;
           cleanup();
           detach();
@@ -11114,6 +11210,7 @@
   let sosOsc = null;
   let sosGain = null;
   let sosBeepTimer = null;
+  let sosStatusFilter = "all";
 
   function startSosAlarm() {
     if (sosBeepTimer) return;
@@ -11178,13 +11275,23 @@
 
   async function updateSosRecordStatus(recordId, newStatus) {
     try {
+      const operatorName = inferUserName(auth.currentUser);
       await db.collection("sos_alerts").doc(String(recordId)).update({
         status: String(newStatus || "").trim(),
+        record: operatorName,
         updatedAt: FieldValue.serverTimestamp(),
         updatedAtMs: Date.now(),
       });
     } catch {
       toast("更新失敗");
+    }
+  }
+
+  async function deleteSosRecord(recordId) {
+    try {
+      await db.collection("sos_alerts").doc(String(recordId)).delete();
+    } catch {
+      toast("刪除失敗");
     }
   }
 
@@ -11219,14 +11326,148 @@
       );
   }
 
+  async function openSosSettingsModal({ communityId }) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const modal = ensureModal("sosSettingsModal", "modal-sos-settings", "80%");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+    const cfg = loadConfig(cid) || {};
+    const currentMode = String(cfg.sosActionMode || "backend").trim() || "backend";
+    const currentPhone = String(cfg.sosPhoneNumber || "").trim();
+
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="sosSettingsTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="sosSettingsTitle">SOS 設定</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="status" id="sosSettingsStatus" hidden></div>
+          <div style="display:grid; gap:16px;">
+            <div style="font-weight:800; color:#111827;">社區前台 SOS 按鈕行為</div>
+            <label style="display:flex; align-items:flex-start; gap:10px; padding:14px; border:1px solid rgba(17,24,39,.12); border-radius:14px; cursor:pointer;">
+              <input type="radio" name="sosActionMode" value="backend" ${currentMode === "backend" ? "checked" : ""} />
+              <span>
+                <strong>後台通報</strong>
+                <div class="muted" style="margin-top:4px;">沿用目前功能，送出 SOS 到後台並顯示小視窗警示。</div>
+              </span>
+            </label>
+            <label style="display:flex; align-items:flex-start; gap:10px; padding:14px; border:1px solid rgba(17,24,39,.12); border-radius:14px; cursor:pointer;">
+              <input type="radio" name="sosActionMode" value="phone" ${currentMode === "phone" ? "checked" : ""} />
+              <span>
+                <strong>撥打電話</strong>
+                <div class="muted" style="margin-top:4px;">住戶按下 SOS 後直接以瀏覽器/手機撥打指定電話號碼。</div>
+              </span>
+            </label>
+            <div>
+              <div style="font-weight:700; margin-bottom:8px;">撥話號碼</div>
+              <input type="text" id="sosPhoneNumberInput" value="${escapeHtml(currentPhone)}" placeholder="例如：0912345678 或 02-1234-5678" style="width:100%; height:44px; border-radius:12px; border:1px solid rgba(17,24,39,.14); padding:0 14px; background:#fff;" />
+              <div class="muted" style="margin-top:6px;">只有在选择「撥打電話」时会使用此号码。</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+          <button class="btn btn-primary" type="button" id="btnSaveSosSettings">儲存</button>
+        </div>
+      </div>
+    `.trim();
+
+    const statusEl = modal.querySelector("#sosSettingsStatus");
+    const inputEl = modal.querySelector("#sosPhoneNumberInput");
+    const saveBtn = modal.querySelector("#btnSaveSosSettings");
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const text = String(msg || "").trim();
+      statusEl.hidden = !text;
+      statusEl.textContent = text;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    if (saveBtn) {
+      saveBtn.addEventListener("click", async () => {
+        const checked = modal.querySelector('input[name="sosActionMode"]:checked');
+        const nextMode = checked ? String(checked.value || "backend").trim() : "backend";
+        const nextPhone = inputEl ? String(inputEl.value || "").trim() : "";
+        if (nextMode === "phone" && !nextPhone) {
+          setStatus("請先設定撥話號碼", true);
+          return;
+        }
+        setStatus("儲存中...", false);
+        try {
+          await configDocRef(cid).set(
+            {
+              sosActionMode: nextMode,
+              sosPhoneNumber: nextPhone,
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+          setStatus("已儲存", false);
+          setTimeout(() => {
+            modal.hidden = true;
+            detach();
+          }, 400);
+        } catch (e) {
+          setStatus("儲存失敗", true);
+        }
+      });
+    }
+
+    modal.hidden = false;
+  }
+
   // 渲染 SOS 记录表格
-  function renderSosRecordsTable() {
+  function renderSosFilterBar() {
     const records = getSosRecords();
+    const counts = {
+      all: records.length,
+      pending: records.filter((record) => String(record.status || "").trim() === "待處理").length,
+      processing: records.filter((record) => String(record.status || "").trim() === "處理中").length,
+      resolved: records.filter((record) => String(record.status || "").trim() === "已完成").length,
+    };
+    const filters = [
+      { key: "all", label: "全部", count: counts.all },
+      { key: "pending", label: "待處理", count: counts.pending },
+      { key: "processing", label: "處理中", count: counts.processing },
+      { key: "resolved", label: "已完成", count: counts.resolved },
+    ];
+    return `
+      <div class="sos-filter-bar">
+        ${filters.map((filter) => `
+          <button class="btn btn-sm ${sosStatusFilter === filter.key ? "btn-primary" : ""}" type="button" data-sos-filter="${filter.key}">
+            <span class="badge-inline">${filter.count}</span>
+            ${filter.label}
+          </button>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function renderSosRecordsTable(filterKey) {
+    const records = getSosRecords();
+    const activeFilter = String(filterKey || "all").trim() || "all";
+    const filteredRecords = records.filter((record) => {
+      const status = String(record.status || "").trim();
+      if (activeFilter === "pending") return status === "待處理";
+      if (activeFilter === "processing") return status === "處理中";
+      if (activeFilter === "resolved") return status === "已完成";
+      return true;
+    });
     
     if (records.length === 0) {
       return `
         <div style="text-align: center; padding: 40px; color: #9ca3af;">
           暫無 SOS 紀錄
+        </div>
+      `;
+    }
+
+    if (filteredRecords.length === 0) {
+      return `
+        <div style="text-align: center; padding: 24px 40px; color: #9ca3af;">
+          此篩選條件下暫無紀錄
         </div>
       `;
     }
@@ -11246,6 +11487,7 @@
           <tr>
             <th>日期時間</th>
             <th>戶號</th>
+            <th>子戶號</th>
             <th>姓名</th>
             <th>處理狀況</th>
             <th>操作</th>
@@ -11253,11 +11495,12 @@
           </tr>
         </thead>
         <tbody>
-          ${records.map(record => `
+          ${filteredRecords.map(record => `
             <tr data-sos-id="${record.id}">
               <td>${record.datetimeText || ''}</td>
-              <td>${record.houseNo}</td>
-              <td>${record.name}</td>
+              <td>${record.houseNo || '-'}</td>
+              <td>${record.subHouseNo || '-'}</td>
+              <td>${record.name || '-'}</td>
               <td><span class="${statusClass(record.status)}">${record.status}</span></td>
               <td>
                 ${record.status === '待處理' ? `
@@ -11265,6 +11508,9 @@
                 ` : ''}
                 ${record.status === '處理中' ? `
                   <button class="sos-action-btn sos-action-btn-success" data-action="resolve" data-id="${record.id}">完成處理</button>
+                ` : ''}
+                ${record.status === '已完成' ? `
+                  <button class="sos-action-btn" data-action="delete" data-id="${record.id}">刪除紀錄</button>
                 ` : ''}
               </td>
               <td>${record.record || '-'}</td>
@@ -11325,8 +11571,12 @@
 
     const renderSubnav = () => {
       if (!subnavEl) return;
+      const activeSosCount = getSosRecords().filter((record) => String(record.status || "").trim() !== "已完成").length;
       subnavEl.innerHTML = `
-        <button class="btn btn-sm ${currentPage === "sos" ? "btn-primary" : ""}" type="button" data-care-page="sos">住戶SOS</button>
+        <button class="btn btn-sm ${currentPage === "sos" ? "btn-primary" : ""}" type="button" data-care-page="sos">
+          <span class="badge-inline" ${activeSosCount === 0 ? "hidden" : ""}>${activeSosCount}</span>
+          住戶SOS
+        </button>
         <button class="btn btn-sm ${currentPage === "72h" ? "btn-primary" : ""}" type="button" data-care-page="72h">72小時</button>
         <button class="btn btn-sm ${currentPage === "reminder" ? "btn-primary" : ""}" type="button" data-care-page="reminder">提醒</button>
       `.trim();
@@ -11345,7 +11595,7 @@
       
       let bodyContent = page.body;
       if (currentPage === "sos") {
-        bodyContent = renderSosRecordsTable();
+        bodyContent = `${renderSosFilterBar()}${renderSosRecordsTable(sosStatusFilter)}`;
       }
       
       contentEl.innerHTML = `
@@ -11358,7 +11608,12 @@
                 <p>${page.desc}</p>
               </div>
             </div>
-            <span class="tag red">${page.tag}</span>
+            <button class="icon-btn sm" type="button" id="btnSosSettings" aria-label="SOS設定" title="SOS設定">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.7"></path>
+                <path d="M19.2 12a7.2 7.2 0 0 0-.12-1.3l2.05-1.6-2-3.46-2.47 1a7.3 7.3 0 0 0-2.25-1.3L13 2h-4l-.43 3.34a7.3 7.3 0 0 0-2.25 1.3l-2.47-1-2 3.46 2.05 1.6A7.2 7.2 0 0 0 4.8 12c0 .44.04.88.12 1.3l-2.05 1.6 2 3.46 2.47-1a7.3 7.3 0 0 0 2.25 1.3L9 22h4l.43-3.34a7.3 7.3 0 0 0 2.25-1.3l2.47 1 2-3.46-2.05-1.6c.08-.42.12-.86.12-1.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+              </svg>
+            </button>
           </div>
           <div class="card-bd">
             <div class="row">
@@ -11374,6 +11629,12 @@
       
       // 如果是 SOS 页面，添加表格按钮事件监听
       if (currentPage === "sos") {
+        contentEl.querySelectorAll("[data-sos-filter]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            sosStatusFilter = String(btn.getAttribute("data-sos-filter") || "all").trim() || "all";
+            renderPage();
+          });
+        });
         contentEl.querySelectorAll('[data-action]').forEach(btn => {
           btn.addEventListener('click', () => {
             const action = btn.getAttribute('data-action');
@@ -11383,8 +11644,17 @@
               updateSosRecordStatus(id, '處理中');
             } else if (action === 'resolve') {
               updateSosRecordStatus(id, '已完成');
+            } else if (action === 'delete') {
+              deleteSosRecord(id);
             }
           });
+        });
+      }
+
+      const btnSosSettings = document.getElementById("btnSosSettings");
+      if (btnSosSettings) {
+        btnSosSettings.addEventListener("click", () => {
+          openSosSettingsModal({ communityId: cid });
         });
       }
       
