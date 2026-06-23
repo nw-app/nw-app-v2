@@ -11242,7 +11242,7 @@
       sosBroadcastChannel = new BroadcastChannel('sos-channel');
       
       sosBroadcastChannel.onmessage = (event) => {
-        console.log('收到 SOS 消息:', event.data);
+        console.log('收到 BroadcastChannel SOS 消息:', event.data);
         if (event.data && event.data.type === 'SOS_ALERT') {
           showSosAlertModal(event.data.data);
         }
@@ -11252,6 +11252,14 @@
     } catch (e) {
       console.warn('BroadcastChannel 不可用，使用轮询方式:', e);
     }
+    
+    // 同时监听 window.postMessage 作为额外方式
+    window.addEventListener('message', (event) => {
+      console.log('收到 postMessage:', event.data);
+      if (event.data && event.data.type === 'SOS_ALERT') {
+        showSosAlertModal(event.data.data);
+      }
+    });
   }
 
   // 渲染 SOS 记录表格
@@ -11799,11 +11807,31 @@
   });
 
   // SOS 功能初始化
-  document.addEventListener('DOMContentLoaded', () => {
+  const initSOS = () => {
+    console.log('开始初始化 SOS 功能...');
+    
     // 绑定关闭按钮事件
     const closeBtn = document.getElementById('sosAlertCloseBtn');
     if (closeBtn) {
       closeBtn.addEventListener('click', closeSosAlertModal);
+      console.log('关闭按钮已绑定');
+    } else {
+      console.error('找不到关闭按钮');
+    }
+    
+    // 绑定测试按钮
+    const testBtn = document.getElementById('btnTestSOS');
+    if (testBtn) {
+      testBtn.addEventListener('click', () => {
+        console.log('测试按钮被点击');
+        const testRecord = {
+          datetime: new Date().toLocaleString('zh-TW'),
+          houseNo: 'A-123',
+          name: '测试用户'
+        };
+        showSosAlertModal(testRecord);
+      });
+      console.log('测试按钮已绑定');
     }
     
     // 初始化广播频道（优先）
@@ -11812,6 +11840,13 @@
     // 同时启动轮询作为备用
     startSosPolling();
     
-    console.log('SOS 功能已初始化');
-  });
+    console.log('SOS 功能初始化完成');
+  };
+
+  // 确保 DOM 完全加载后初始化
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initSOS);
+  } else {
+    initSOS();
+  }
 })();

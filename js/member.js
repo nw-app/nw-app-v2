@@ -525,6 +525,17 @@
     }
   });
 
+  // SOS 按钮事件委托
+  document.addEventListener("click", (e) => {
+    const sosBtn = e.target.closest(".btn-sos");
+    if (!sosBtn) return;
+    
+    console.log('SOS 按钮被点击');
+    e.preventDefault();
+    e.stopPropagation();
+    sendSOS();
+  });
+
   function openPageModal(url, name) {
     const modal = document.getElementById("externalPageModal");
     const iframe = document.getElementById("externalPageIframe");
@@ -624,6 +635,8 @@
 
   // SOS 发送功能
   function sendSOS() {
+    console.log('=== SOS 按钮被触发 ===');
+    
     const now = new Date();
     const accounts = loadAccounts();
     const cid = resolveActiveCommunityId();
@@ -654,12 +667,14 @@
       communityId: cid || 'unknown'
     };
     
+    console.log('SOS 记录:', sosRecord);
+    
     // 保存到 localStorage
     let sosRecords = JSON.parse(localStorage.getItem('sos_records') || '[]');
     sosRecords.unshift(sosRecord);
     localStorage.setItem('sos_records', JSON.stringify(sosRecords));
     
-    // 使用 BroadcastChannel 发送 SOS 信号给后台
+    // 方式1: 使用 BroadcastChannel 发送 SOS 信号
     try {
       const channel = new BroadcastChannel('sos-channel');
       channel.postMessage({
@@ -667,13 +682,26 @@
         data: sosRecord
       });
       channel.close();
+      console.log('BroadcastChannel 消息已发送');
     } catch (e) {
-      console.warn('BroadcastChannel not available, using localStorage backup');
+      console.warn('BroadcastChannel 发送失败:', e);
     }
     
-    // 同时设置 localStorage 标记作为备用
+    // 方式2: 使用 localStorage 标记 + 轮询（备用）
     localStorage.setItem('sos_new', '1');
     localStorage.setItem('sos_new_time', Date.now().toString());
+    console.log('localStorage 标记已设置');
+    
+    // 方式3: 使用 window.postMessage 尝试向其他标签发送
+    try {
+      window.postMessage({
+        type: 'SOS_ALERT',
+        data: sosRecord
+      }, '*');
+      console.log('postMessage 已发送');
+    } catch (e) {
+      console.warn('postMessage 发送失败:', e);
+    }
     
     alert('SOS 呼叫已发出！');
   }
@@ -710,7 +738,7 @@
           </div>
         </section>
         <section class="row-b">
-          <button class="btn-sos" type="button" onclick="window.sendSOS && window.sendSOS()">SOS</button>
+          <button class="btn-sos" type="button" id="btnSOS">SOS</button>
         </section>
         <section class="row-c">社區服務</section>
         <section class="row-d">
