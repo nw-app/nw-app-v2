@@ -10,6 +10,8 @@
   "theme_color": "#d32f2f",
   "prefer_related_applications": false,
   "orientation": "portrait-primary",
+  "gcm_sender_id": "103953800507",
+  "gcm_user_visible_only": true,
   "icons": [
     {
       "src": "./icon-192.png?v=2",

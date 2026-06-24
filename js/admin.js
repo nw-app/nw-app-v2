@@ -8,12 +8,140 @@
   const auth = firebase.auth();
   const db = firebase.firestore();
   const FieldValue = firebase.firestore.FieldValue;
+  const messaging = (() => {
+    try { return firebase.messaging ? firebase.messaging() : null; } catch { return null; }
+  })();
   try {
     db.settings({
       experimentalAutoDetectLongPolling: true,
       experimentalForceLongPolling: true,
       useFetchStreams: false,
       ignoreUndefinedProperties: true,
+    });
+  } catch {}
+
+  let __nwPushInitDone = false;
+  async function initIntercomPush(user) {
+    if (__nwPushInitDone) return;
+    __nwPushInitDone = true;
+    if (!user) return;
+    if (!messaging) return;
+    if (!("Notification" in window)) return;
+    if (!("serviceWorker" in navigator)) return;
+    const vapidKey = String(window.FIREBASE_VAPID_KEY || "").trim();
+    if (!vapidKey) return;
+    let perm = Notification.permission;
+    if (perm !== "granted") {
+      try { perm = await Notification.requestPermission(); } catch { perm = Notification.permission; }
+    }
+    if (perm !== "granted") return;
+    let reg = null;
+    try { reg = await navigator.serviceWorker.ready; } catch {}
+    if (!reg) return;
+    let token = "";
+    try { token = await messaging.getToken({ vapidKey, serviceWorkerRegistration: reg }); } catch { token = ""; }
+    if (token) {
+      try {
+        await db.collection("users").doc(String(user.uid)).set(
+          {
+            fcmTokens: FieldValue.arrayUnion(String(token)),
+            fcmUpdatedAtMs: Date.now(),
+          },
+          { merge: true }
+        );
+      } catch {}
+    }
+
+    try {
+      messaging.onMessage((payload) => {
+        const data = payload && payload.data ? payload.data : {};
+        const callId = String(data.callId || "").trim();
+        if (callId) handleIntercomPushCallId(callId).catch(() => {});
+      });
+    } catch {}
+  }
+
+  async function handleIntercomPushCallId(callId) {
+    const id = String(callId || "").trim();
+    if (!id) return;
+    if (!auth.currentUser) return;
+    if (intercomActive) return;
+    if (id === intercomIncomingPromptCallId) return;
+    let snap = null;
+    try { snap = await db.collection("calls").doc(id).get(); } catch { snap = null; }
+    if (!snap || !snap.exists) return;
+    const d = snap.data() || {};
+    if (String(d.status || "").trim() !== "ringing") return;
+    if (String(d.toRole || "").trim() !== "admin") return;
+    const cid = String(resolveActiveCommunityId() || "").trim();
+    if (cid && String(d.community || "").trim() && String(d.community || "").trim() !== cid) return;
+
+    const prompt = ensureIntercomIncomingModal();
+    prepareIntercomModal(prompt);
+    closeIntercomIncomingPrompt({ delayMs: 0 });
+    intercomIncomingPromptEl = prompt;
+    intercomIncomingPromptCallId = id;
+    const callDocRef = db.collection("calls").doc(id);
+    if (intercomIncomingPromptUnsubDoc) {
+      try { intercomIncomingPromptUnsubDoc(); } catch {}
+      intercomIncomingPromptUnsubDoc = null;
+    }
+    intercomIncomingPromptUnsubDoc = callDocRef.onSnapshot((docSnap) => {
+      const v = docSnap && docSnap.exists ? (docSnap.data() || {}) : null;
+      const st = String((v && v.status) || "").trim();
+      if (!v || (st && st !== "ringing")) closeIntercomIncomingPrompt({ delayMs: 0 });
+    }, () => {});
+
+    let detach = () => {};
+    detach = bindModalClose(prompt, () => {
+      detach();
+      callDocRef.set({ status: "missed", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
+      closeIntercomIncomingPrompt({ delayMs: 0 });
+    });
+
+    const btnAccept = prompt.querySelector("#btnIntercomAccept");
+    const btnReject = prompt.querySelector("#btnIntercomReject");
+    const fromName = String(d.fromName || "住戶").trim() || "住戶";
+    const fromHouse = String(d.fromHouseNo || "").trim();
+    setIntercomPeerVisual(prompt, {
+      avatarSelector: "#intercomIncomingInitial",
+      imageSelector: "#intercomIncomingAvatar",
+      nameSelector: "#intercomIncomingName",
+      subSelector: "#intercomIncomingSub",
+      name: fromName,
+      sub: fromHouse || "住戶來電",
+      avatarDataUrl: String(d.fromAvatarDataUrl || "").trim(),
+      fallbackInitial: fromName,
+    });
+
+    if (btnReject) {
+      btnReject.onclick = async () => {
+        try { await callDocRef.set({ status: "rejected", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true }); } catch {}
+        closeIntercomIncomingPrompt({ delayMs: 1000 });
+      };
+    }
+    if (btnAccept) {
+      btnAccept.onclick = async () => {
+        closeIntercomIncomingPrompt({ delayMs: 0 });
+        await intercomAnswerIncomingCall(callDocRef, { id, ...d });
+      };
+    }
+
+    startIntercomRingtone("incoming");
+    prepareIntercomModal(prompt);
+  }
+
+  try {
+    navigator.serviceWorker?.addEventListener?.("message", (ev) => {
+      const data = ev && ev.data ? ev.data : null;
+      if (!data) return;
+      if (data.type === "INTERCOM_OPEN" && data.url) {
+        const url = String(data.url || "").trim();
+        if (url && !String(location.href).includes(url)) location.href = url;
+      }
+      if (data.type === "INTERCOM_PUSH" && data.callId) {
+        handleIntercomPushCallId(String(data.callId)).catch(() => {});
+      }
     });
   } catch {}
 
@@ -12999,6 +13127,7 @@
     const fallback = document.getElementById("userAvatarFallback");
     if (fallback) fallback.textContent = String(user.email || "U").trim().slice(0, 1).toUpperCase() || "U";
     ensureCommunitiesSubscription(user);
+    initIntercomPush(user).catch(() => {});
     if (!handleHashRoute()) renderDashboard();
     updateFooterActiveNav();
   });
