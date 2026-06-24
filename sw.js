@@ -41,8 +41,8 @@ try {
       const community = String(data.community || "").trim();
       const toRole = String(data.toRole || "").trim();
       const url = String(data.url || "").trim() || "./";
-      const title = String(data.title || "來電").trim() || "來電";
-      const body = String(data.body || "").trim();
+      const title = String(data.title || "生活網｜來電").trim() || "生活網｜來電";
+      const body = String(data.body || "點此開啟生活網接聽/拒接").trim();
       const autoOpen = String(data.autoOpen || "").trim() === "1";
 
       const tag = callId ? `intercom_${callId}` : "intercom_call";
@@ -53,6 +53,10 @@ try {
         tag,
         renotify: true,
         requireInteraction: true,
+        actions: [
+          { action: "answer", title: "接通" },
+          { action: "reject", title: "拒接" },
+        ],
         vibrate: [120, 80, 120, 80, 220],
         data: {
           type: "intercom",
@@ -85,13 +89,22 @@ self.addEventListener("notificationclick", (event) => {
   try {
     const n = event.notification;
     const d = n && n.data ? n.data : {};
-    const url = String(d.url || "./").trim() || "./";
+    const baseUrl = String(d.url || "./").trim() || "./";
+    const callId = String(d.callId || "").trim();
+    const action = String(event.action || "").trim();
+    let url = baseUrl;
+    try {
+      const u = new URL(baseUrl, self.location.origin);
+      if (callId) u.searchParams.set("call", callId);
+      if (action === "reject") u.searchParams.set("action", "reject");
+      url = u.toString();
+    } catch {}
     event.notification.close();
     event.waitUntil(
       self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
         const same = list.find((c) => c && typeof c.url === "string" && c.url.includes(self.location.origin));
         if (same) {
-          try { same.postMessage({ type: "INTERCOM_OPEN", url, callId: String(d.callId || "") }); } catch {}
+          try { same.postMessage({ type: "INTERCOM_OPEN", url, callId }); } catch {}
           return same.focus();
         }
         return self.clients.openWindow(url);

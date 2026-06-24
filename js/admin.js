@@ -131,6 +131,47 @@
     prepareIntercomModal(prompt);
   }
 
+  async function handleIntercomDeepLinkFromUrl() {
+    if (!auth.currentUser) return;
+    let callId = "";
+    let action = "";
+    try {
+      const u = new URL(String(location.href));
+      callId = String(u.searchParams.get("call") || "").trim();
+      action = String(u.searchParams.get("action") || "").trim();
+    } catch {}
+    if (!callId) return;
+
+    if (action === "reject") {
+      try {
+        const ref = db.collection("calls").doc(callId);
+        const snap = await ref.get();
+        const d = snap && snap.exists ? (snap.data() || {}) : null;
+        const cid = String(resolveActiveCommunityId() || "").trim();
+        if (d && String(d.status || "").trim() === "ringing" && String(d.toRole || "").trim() === "admin") {
+          if (!cid || !String(d.community || "").trim() || String(d.community || "").trim() === cid) {
+            await ref.set({ status: "rejected", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true });
+          }
+        }
+      } catch {}
+      try {
+        const u2 = new URL(String(location.href));
+        u2.searchParams.delete("call");
+        u2.searchParams.delete("action");
+        history.replaceState(null, "", u2.toString());
+      } catch {}
+      return;
+    }
+
+    await handleIntercomPushCallId(callId);
+    try {
+      const u2 = new URL(String(location.href));
+      u2.searchParams.delete("call");
+      u2.searchParams.delete("action");
+      history.replaceState(null, "", u2.toString());
+    } catch {}
+  }
+
   try {
     navigator.serviceWorker?.addEventListener?.("message", (ev) => {
       const data = ev && ev.data ? ev.data : null;
@@ -11491,36 +11532,50 @@
       intercomRingGain = intercomRingCtx.createGain();
       intercomRingGain.gain.value = 0.0001;
       intercomRingGain.connect(intercomRingCtx.destination);
-
-      const osc1 = intercomRingCtx.createOscillator();
-      const osc2 = intercomRingCtx.createOscillator();
-      osc1.type = "triangle";
-      osc2.type = "sine";
-      osc1.frequency.value = 523.25;
-      osc2.frequency.value = 659.25;
-      osc1.connect(intercomRingGain);
-      osc2.connect(intercomRingGain);
-      osc1.start();
-      osc2.start();
-      intercomRingOsc = [osc1, osc2];
+      intercomRingOsc = [];
 
       const m = String(mode || "incoming").trim() || "incoming";
-      const pattern = m === "waiting" ? [1, 0, 0, 0] : [1, 1, 0, 0, 1, 1, 0, 0, 0, 0];
-      const intervalMs = m === "waiting" ? 480 : 340;
-      let phase = 0;
-      const tick = () => {
-        if (!intercomRingGain || !intercomRingCtx) return;
-        const on = Boolean(pattern[phase % pattern.length]);
-        phase += 1;
-        const target = on ? 0.06 : 0.0001;
-        try {
-          intercomRingGain.gain.setTargetAtTime(target, intercomRingCtx.currentTime, 0.03);
-        } catch {
-          try { intercomRingGain.gain.value = target; } catch {}
-        }
+      const incomingNotes = [523.25, 659.25, 783.99, 659.25];
+      const waitingNotes = [440.0, 554.37];
+      let i = 0;
+
+      const playNote = (freq, durationMs) => {
+        if (!intercomRingCtx || !intercomRingGain) return;
+        const ctx = intercomRingCtx;
+        const now = ctx.currentTime;
+        const dur = Math.max(0.08, Number(durationMs || 220) / 1000);
+
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(Number(freq || 440), now);
+
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.linearRampToValueAtTime(0.07, now + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+        osc.connect(g);
+        g.connect(intercomRingGain);
+        osc.start(now);
+        osc.stop(now + dur + 0.02);
+        intercomRingOsc.push(osc);
       };
+
+      const tick = () => {
+        if (!intercomRingCtx || !intercomRingGain) return;
+        const volume = m === "waiting" ? 0.035 : 0.055;
+        try { intercomRingGain.gain.setTargetAtTime(volume, intercomRingCtx.currentTime, 0.05); } catch {}
+        if (m === "waiting") {
+          playNote(waitingNotes[i % waitingNotes.length], 140);
+          i += 1;
+          return;
+        }
+        playNote(incomingNotes[i % incomingNotes.length], 220);
+        i += 1;
+      };
+
       tick();
-      intercomRingTimer = window.setInterval(tick, intervalMs);
+      intercomRingTimer = window.setInterval(tick, m === "waiting" ? 900 : 520);
     } catch {}
   }
 
@@ -13128,6 +13183,7 @@
     if (fallback) fallback.textContent = String(user.email || "U").trim().slice(0, 1).toUpperCase() || "U";
     ensureCommunitiesSubscription(user);
     initIntercomPush(user).catch(() => {});
+    handleIntercomDeepLinkFromUrl().catch(() => {});
     if (!handleHashRoute()) renderDashboard();
     updateFooterActiveNav();
   });

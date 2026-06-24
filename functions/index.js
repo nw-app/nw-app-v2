@@ -60,7 +60,7 @@ exports.onCallCreated = functions.firestore.document("calls/{callId}").onCreate(
 
   const fromName = toStr(call.fromName) || (toRole === "resident" ? "社區後台" : "住戶");
   const fromHouseNo = toStr(call.fromHouseNo);
-  const title = toRole === "resident" ? "社區後台來電" : "住戶來電";
+  const title = toRole === "resident" ? "生活網｜社區後台來電" : "生活網｜住戶來電";
   const body = toRole === "resident"
     ? (fromName || "社區後台")
     : ([fromName, fromHouseNo].filter(Boolean).join("｜") || "住戶來電");
