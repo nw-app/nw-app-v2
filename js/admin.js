@@ -11529,11 +11529,16 @@
     if (id === intercomLastIncomingNotifyId) return;
     intercomLastIncomingNotifyId = id;
     if (!("Notification" in window)) return;
-    if (Notification.permission !== "granted") return;
-    if (!("serviceWorker" in navigator)) return;
-    let reg = null;
-    try { reg = await navigator.serviceWorker.ready; } catch { reg = null; }
-    if (!reg || typeof reg.showNotification !== "function") return;
+    let perm = Notification.permission;
+    if (perm === "default" && !window.__nw_intercom_notify_asked) {
+      try {
+        window.__nw_intercom_notify_asked = true;
+        perm = await Notification.requestPermission();
+      } catch {
+        perm = Notification.permission;
+      }
+    }
+    if (perm !== "granted") return;
 
     const c = String(community || "").trim();
     const fn = String(fromName || "住戶").trim() || "住戶";
@@ -11547,20 +11552,33 @@
     const url = q.toString() ? `./admin.html?${q.toString()}#community/community-dashboard` : "./admin.html#community/community-dashboard";
     const tag = `intercom_${id}`;
     try {
-      await reg.showNotification(title, {
-        body,
-        icon: "./icon-192.png?v=2",
-        badge: "./icon-192.png?v=2",
-        tag,
-        renotify: true,
-        requireInteraction: true,
-        vibrate: [120, 80, 120, 80, 220],
-        actions: [
-          { action: "answer", title: "接通" },
-          { action: "reject", title: "拒接" },
-        ],
-        data: { type: "intercom", callId: id, community: c, toRole: "admin", url },
-      });
+      if ("serviceWorker" in navigator) {
+        let reg = null;
+        try { reg = await navigator.serviceWorker.getRegistration(); } catch { reg = null; }
+        try { if (!reg) reg = await navigator.serviceWorker.ready; } catch {}
+        if (!reg) {
+          try { await navigator.serviceWorker.register("./sw.js"); } catch {}
+          try { reg = await navigator.serviceWorker.ready; } catch {}
+        }
+        if (reg && typeof reg.showNotification === "function") {
+          await reg.showNotification(title, {
+            body,
+            icon: "./icon-192.png?v=2",
+            badge: "./icon-192.png?v=2",
+            tag,
+            renotify: true,
+            requireInteraction: true,
+            vibrate: [120, 80, 120, 80, 220],
+            actions: [
+              { action: "answer", title: "接通" },
+              { action: "reject", title: "拒接" },
+            ],
+            data: { type: "intercom", callId: id, community: c, toRole: "admin", url },
+          });
+          return;
+        }
+      }
+      try { new Notification(title, { body, tag, icon: "./icon-192.png?v=2" }); } catch {}
     } catch {}
   }
 
@@ -11604,7 +11622,7 @@
         osc.frequency.setValueAtTime(Number(freq || 440), now);
 
         g.gain.setValueAtTime(0.0001, now);
-        g.gain.linearRampToValueAtTime(0.9, now + 0.02);
+        g.gain.linearRampToValueAtTime(1.0, now + 0.02);
         g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
 
         osc.connect(g);
@@ -11616,7 +11634,7 @@
 
       const tick = () => {
         if (!intercomRingCtx || !intercomRingGain) return;
-        const volume = m === "waiting" ? 0.18 : 0.26;
+        const volume = m === "waiting" ? 0.36 : 0.52;
         try { intercomRingGain.gain.setTargetAtTime(volume, intercomRingCtx.currentTime, 0.05); } catch {}
         if (m === "waiting") {
           playNote(waitingNotes[i % waitingNotes.length], 140);

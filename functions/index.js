@@ -90,15 +90,6 @@ exports.onCallCreated = functions.firestore.document("calls/{callId}").onCreate(
       headers: {
         Urgency: "high",
       },
-      notification: {
-        title,
-        body,
-        icon: "/icon-192.png?v=2",
-        badge: "/icon-192.png?v=2",
-        tag: callId ? `intercom_${callId}` : "intercom_call",
-        renotify: true,
-        requireInteraction: true,
-      },
       fcmOptions: {
         link: url,
       },
