@@ -43,6 +43,9 @@
     admin: "system.html",
     community: "admin.html#community/community-dashboard",
     resident: "member.html",
+    board: "ead.html",
+    table: "tad.html",
+    shop: "shop.html",
   });
   const ADMIN_EMAILS = new Set(["nwapp.eason@gmail.com"]);
 
@@ -72,11 +75,15 @@
     const cleaned = raw ? raw.replace(/\/+$/, "") : "";
     const lower = cleaned.toLowerCase();
     const ensureHtmlForRoute = () => {
-      const m = cleaned.match(/^\/?(admin|community|system)(\.html)?(#.*)?$/i);
+      const m = cleaned.match(/^\/?(admin|community|system|member|resident|ead|tad|shop)(\.html)?(#.*)?$/i);
       if (!m) return "";
       const base = String(m[1] || "").toLowerCase();
       const hash = String(m[3] || "");
       if (base === "system") return `system.html${hash}`;
+      if (base === "ead") return `ead.html${hash}`;
+      if (base === "tad") return `tad.html${hash}`;
+      if (base === "shop") return `shop.html${hash}`;
+      if (base === "member" || base === "resident") return `member.html${hash}`;
       return `admin.html${hash || "#community/community-dashboard"}`;
     };
     const fixedRoute = ensureHtmlForRoute();
@@ -87,6 +94,9 @@
       lower === "system" || lower === "/system" || lower === "system.html" || lower === "/system.html" ? routes.admin :
       lower === "community" || lower === "/community" || lower === "admin" || lower === "/admin" ? routes.community :
       lower === "member" || lower === "/member" || lower === "resident" || lower === "/resident" ? routes.resident :
+      lower === "ead" || lower === "/ead" || lower === "ead.html" || lower === "/ead.html" || lower === "board" || lower === "/board" ? routes.board :
+      lower === "tad" || lower === "/tad" || lower === "tad.html" || lower === "/tad.html" || lower === "table" || lower === "/table" ? routes.table :
+      lower === "shop" || lower === "/shop" || lower === "shop.html" || lower === "/shop.html" ? routes.shop :
       fixedRoute ? fixedRoute :
       cleaned.startsWith("/") ? cleaned.slice(1) :
       cleaned;
@@ -532,10 +542,13 @@
 
   function normalizeRole(input) {
     const r = String(input || "").trim().toLowerCase();
-    if (r === "admin" || r === "community" || r === "resident") return r;
+    if (r === "admin" || r === "community" || r === "resident" || r === "board" || r === "table" || r === "shop") return r;
     if (r === "系統管理員" || r === "系統管理者" || r === "系統") return "admin";
     if (r === "社區") return "community";
     if (r === "住戶") return "resident";
+    if (r === "看板") return "board";
+    if (r === "桌板") return "table";
+    if (r === "商店") return "shop";
     return "";
   }
 
@@ -545,6 +558,9 @@
     if (ADMIN_EMAILS.has(e)) return "admin";
     if (e.includes("admin") || e.includes("system") || e.includes("sys")) return "admin";
     if (e.includes("community") || e.includes("comm")) return "community";
+    if (e.includes("board") || e.includes("screen") || e.includes("signage")) return "board";
+    if (e.includes("table") || e.includes("desk")) return "table";
+    if (e.includes("shop") || e.includes("store")) return "shop";
     if (e.includes("resident") || e.includes("member")) return "resident";
     return "resident";
   }
@@ -644,6 +660,9 @@
         cleanup();
         if (key === "admin") resolve({ role: "community", url: routes.community });
         else if (key === "member") resolve({ role: "resident", url: routes.resident });
+        else if (key === "board") resolve({ role: "board", url: routes.board });
+        else if (key === "table") resolve({ role: "table", url: routes.table });
+        else if (key === "shop") resolve({ role: "shop", url: routes.shop });
         else resolve({ role: "admin", url: routes.admin });
       };
 
@@ -724,26 +743,28 @@
 
   async function resolveCommunityAndUrl(user, role, defaultUrl) {
     if (!user || !db || role === "admin") return defaultUrl;
+    const buildCommunityRoleUrl = (cKey) => {
+      if (!cKey) return defaultUrl;
+      if (role === "community") return `admin.html?c=${cKey}#community/community-dashboard`;
+      if (role === "board") return `ead.html?c=${cKey}`;
+      if (role === "table") return `tad.html?c=${cKey}`;
+      if (role === "shop") return `shop.html?c=${cKey}`;
+      return `member.html?c=${cKey}`;
+    };
     try {
       const doc = await db.collection("users").doc(user.uid).get();
       if (doc && doc.exists) {
         const data = doc.data() || {};
         const cidRaw = String(data.community || "").trim();
         const cKey = await resolveCommunityKey(cidRaw);
-        if (cKey) {
-          if (role === "community") return `admin.html?c=${cKey}#community/community-dashboard`;
-          return `member.html?c=${cKey}`;
-        }
+        if (cKey) return buildCommunityRoleUrl(cKey);
       }
     } catch {}
     try {
       const snap = await db.collection("user_lookup").where("uid", "==", String(user.uid)).limit(1).get();
       const d = snap && snap.docs && snap.docs[0] ? snap.docs[0].data() || {} : {};
       const cKey = String(d.communityCode || "").trim() || String(d.community || "").trim();
-      if (cKey && cKey !== "default") {
-        if (role === "community") return `admin.html?c=${cKey}#community/community-dashboard`;
-        return `member.html?c=${cKey}`;
-      }
+      if (cKey && cKey !== "default") return buildCommunityRoleUrl(cKey);
     } catch {}
     return defaultUrl;
   }
@@ -794,6 +815,9 @@
           sessionStorage.setItem("csp_last_cid", cKey);
         } catch {}
         if (role === "community") url = `admin.html?c=${cKey}#community/community-dashboard`;
+        else if (role === "board") url = `ead.html?c=${cKey}`;
+        else if (role === "table") url = `tad.html?c=${cKey}`;
+        else if (role === "shop") url = `shop.html?c=${cKey}`;
         else if (role === "resident") url = `member.html?c=${cKey}`;
       } else {
         url = await resolveCommunityAndUrl(user, role, url);
@@ -841,6 +865,9 @@
         const lastCid = String(sessionStorage.getItem("csp_last_cid") || "").trim();
         if (lastCid && lastCid !== "default") {
           if (role === "community") url = `admin.html?c=${lastCid}#community/community-dashboard`;
+          else if (role === "board") url = `ead.html?c=${lastCid}`;
+          else if (role === "table") url = `tad.html?c=${lastCid}`;
+          else if (role === "shop") url = `shop.html?c=${lastCid}`;
           else if (role === "resident") url = `member.html?c=${lastCid}`;
         } else {
           url = await resolveCommunityAndUrl(user, role, url);

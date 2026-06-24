@@ -976,30 +976,69 @@
   function setIntercomCallStatus(text, isError) {
     const modal = document.getElementById("intercomCallModal90");
     if (!modal) return;
-    const el = modal.querySelector("#intercomCallStatus");
+    const el = modal.querySelector("#intercomCallState");
     if (!el) return;
     const t = String(text || "").trim();
     el.textContent = t;
-    el.hidden = !t;
     el.classList.toggle("error", Boolean(isError));
+  }
+
+  function formatIntercomTimer(ms) {
+    const sec = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+    const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+    const ss = String(sec % 60).padStart(2, "0");
+    return `${mm}:${ss}`;
+  }
+
+  function startIntercomTimer(startAtMs) {
+    if (!intercomActive) return;
+    const active = intercomActive;
+    active.startedAtMs = Number(startAtMs || Date.now());
+    if (active.timerId) {
+      window.clearInterval(active.timerId);
+      active.timerId = null;
+    }
+    const tick = () => {
+      const modal = document.getElementById("intercomCallModal90");
+      if (!modal || !active.startedAtMs) return;
+      const el = modal.querySelector("#intercomTimer");
+      if (!el) return;
+      el.textContent = formatIntercomTimer(Date.now() - active.startedAtMs);
+    };
+    tick();
+    active.timerId = window.setInterval(tick, 500);
   }
 
   function ensureIntercomIncomingModal() {
     const modal = ensureModal("intercomIncomingModalMember");
+    modal.classList.add("modal-intercom-incoming");
     modal.innerHTML = `
-      <div class="modal-backdrop" data-modal-close="1"></div>
-      <div class="modal-dialog modal-sm" role="dialog" aria-modal="true" aria-labelledby="intercomIncomingTitleMember">
+      <div class="modal-backdrop"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="intercomIncomingTitleMember">
         <div class="modal-hd">
           <h3 class="modal-title" id="intercomIncomingTitleMember">來電提示</h3>
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <div class="modal-body">
-          <div style="font-weight:900; font-size:18px;" id="intercomIncomingNameMember">—</div>
-          <div style="margin-top:6px; color: rgba(31,41,55,.7);" id="intercomIncomingSubMember">—</div>
+          <div class="intercom-card">
+            <div class="intercom-peer">
+              <div class="intercom-avatar" id="intercomIncomingInitialMember" aria-hidden="true">—</div>
+              <div class="intercom-peer-meta">
+                <div class="intercom-peer-name" id="intercomIncomingNameMember">—</div>
+                <div class="intercom-peer-sub" id="intercomIncomingSubMember">—</div>
+              </div>
+            </div>
+            <div class="intercom-meta">
+              <span class="intercom-chip">來電中</span>
+              <span class="intercom-timer" aria-hidden="true">—</span>
+            </div>
+          </div>
         </div>
-        <div class="modal-ft" style="display:flex; gap:10px; justify-content:flex-end;">
-          <button class="btn btn-danger" type="button" id="btnIntercomRejectMember">掛斷</button>
-          <button class="btn btn-primary" type="button" id="btnIntercomAcceptMember">接通</button>
+        <div class="modal-ft">
+          <div class="intercom-actions">
+            <button class="intercom-btn danger" type="button" id="btnIntercomRejectMember">掛斷</button>
+            <button class="intercom-btn primary" type="button" id="btnIntercomAcceptMember">接通</button>
+          </div>
         </div>
       </div>
     `.trim();
@@ -1008,25 +1047,38 @@
 
   function ensureIntercomCallModal() {
     const modal = ensureModal("intercomCallModal90");
+    modal.classList.add("modal-intercom-call");
+    modal.style.setProperty("--modal-width", "90%");
+    modal.style.setProperty("--modal-height", "90%");
     modal.innerHTML = `
-      <div class="modal-backdrop" data-modal-close="1"></div>
-      <div class="modal-dialog large" role="dialog" aria-modal="true" aria-labelledby="intercomCallTitleMember">
+      <div class="modal-backdrop"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="intercomCallTitleMember">
         <div class="modal-hd">
           <h3 class="modal-title" id="intercomCallTitleMember">通話（對講）</h3>
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <div class="modal-body">
-          <div style="display:grid; gap:10px;">
-            <div style="font-weight:900; font-size:18px;" id="intercomPeerName">社區後台</div>
-            <div style="color: rgba(31,41,55,.7);" id="intercomPeerSub">—</div>
-            <div class="status" id="intercomCallStatus" hidden></div>
+          <div class="intercom-card">
+            <div class="intercom-peer">
+              <div class="intercom-avatar" id="intercomPeerInitialMember" aria-hidden="true">社</div>
+              <div class="intercom-peer-meta">
+                <div class="intercom-peer-name" id="intercomPeerName">社區後台</div>
+                <div class="intercom-peer-sub" id="intercomPeerSub">—</div>
+              </div>
+            </div>
+            <div class="intercom-meta">
+              <span class="intercom-chip" id="intercomCallState">待命</span>
+              <span class="intercom-timer" id="intercomTimer">00:00</span>
+            </div>
             <audio id="intercomRemoteAudioMember" autoplay playsinline></audio>
           </div>
         </div>
-        <div class="modal-ft" style="display:flex; gap:10px; justify-content:flex-end;">
-          <button class="btn" type="button" id="btnIntercomMute">靜音</button>
-          <button class="btn btn-danger" type="button" id="btnIntercomHangup">掛斷</button>
-          <button class="btn btn-primary" type="button" id="btnIntercomCallAdmin">呼叫後台</button>
+        <div class="modal-ft">
+          <div class="intercom-actions triple">
+            <button class="intercom-btn ghost" type="button" id="btnIntercomMute">靜音</button>
+            <button class="intercom-btn danger" type="button" id="btnIntercomHangup">掛斷</button>
+            <button class="intercom-btn primary" type="button" id="btnIntercomCallAdmin">呼叫後台</button>
+          </div>
         </div>
       </div>
     `.trim();
@@ -1038,6 +1090,9 @@
     intercomActive = null;
     stopIntercomRingtone();
     if (!active) return;
+    try {
+      if (active.timerId) window.clearInterval(active.timerId);
+    } catch {}
     try {
       if (updateStatus && active.callDocRef) {
         await active.callDocRef.set(
@@ -1081,6 +1136,8 @@
     const callBtn = modal.querySelector("#btnIntercomCallAdmin");
     if (callBtn) callBtn.disabled = true;
     setIntercomCallStatus("正在呼叫…", false);
+    const timerEl = modal.querySelector("#intercomTimer");
+    if (timerEl) timerEl.textContent = "00:00";
 
     const callDocRef = db.collection("calls").doc();
     const pc = createIntercomPeerConnection();
@@ -1154,6 +1211,7 @@
           try { await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); } catch {}
         }
         setIntercomCallStatus("已接通", false);
+        if (intercomActive && !intercomActive.timerId) startIntercomTimer(Date.now());
         return;
       }
       if (st === "rejected" || st === "ended" || st === "busy" || st === "missed") {
@@ -1196,17 +1254,22 @@
       cleanupIntercomActive({ updateStatus: "ended" });
     });
 
+    const initialEl = modal.querySelector("#intercomPeerInitialMember");
     const peerNameEl = modal.querySelector("#intercomPeerName");
     const peerSubEl = modal.querySelector("#intercomPeerSub");
     const muteBtn = modal.querySelector("#btnIntercomMute");
     const hangupBtn = modal.querySelector("#btnIntercomHangup");
     const callBtn = modal.querySelector("#btnIntercomCallAdmin");
     if (callBtn) callBtn.hidden = true;
+    const timerEl = modal.querySelector("#intercomTimer");
 
     const fromName = String(d.fromName || "社區後台").trim() || "社區後台";
     const fromSub = String(d.fromHouseNo || "").trim();
+    const initial = (fromName.slice(0, 1).toUpperCase() || "U").trim() || "U";
+    if (initialEl) initialEl.textContent = initial;
     if (peerNameEl) peerNameEl.textContent = fromName;
     if (peerSubEl) peerSubEl.textContent = fromSub || "—";
+    if (timerEl) timerEl.textContent = "00:00";
 
     setIntercomCallStatus("接通中…", false);
 
@@ -1253,10 +1316,11 @@
     const fromProfile = await readUserProfileForCall(user.uid);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
+    const startedAtMs = Date.now();
     await callDocRef.set(
       {
         status: "accepted",
-        acceptedAtMs: Date.now(),
+        acceptedAtMs: startedAtMs,
         acceptedAt: FieldValue.serverTimestamp(),
         acceptedByUid: String(user.uid),
         acceptedByName: String(fromProfile.name || user.email || "住戶").trim(),
@@ -1266,6 +1330,7 @@
       },
       { merge: true }
     );
+    setIntercomCallStatus("已接通", false);
 
     if (hangupBtn) hangupBtn.onclick = () => cleanupIntercomActive({ updateStatus: "ended" });
     if (muteBtn) {
@@ -1304,6 +1369,7 @@
       unsubCandidates: unsubOfferCandidates,
       detachModal: detach,
     };
+    startIntercomTimer(startedAtMs);
 
     modal.hidden = false;
   }
@@ -1351,11 +1417,16 @@
         }
 
         const prompt = ensureIntercomIncomingModal();
+        const callDocRef = db.collection("calls").doc(callId);
         let detach = () => {};
         detach = bindModalClose(prompt, () => {
           detach();
           stopIntercomRingtone();
+          callDocRef
+            .set({ status: "missed", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true })
+            .catch(() => {});
         });
+        const initialEl = prompt.querySelector("#intercomIncomingInitialMember");
         const nameEl = prompt.querySelector("#intercomIncomingNameMember");
         const subEl = prompt.querySelector("#intercomIncomingSubMember");
         const btnAccept = prompt.querySelector("#btnIntercomAcceptMember");
@@ -1363,10 +1434,10 @@
 
         const fromName = String(latest.fromName || "社區後台").trim() || "社區後台";
         const fromHouse = String(latest.fromHouseNo || "").trim();
+        const initial = (fromName.slice(0, 1).toUpperCase() || "U").trim() || "U";
+        if (initialEl) initialEl.textContent = initial;
         if (nameEl) nameEl.textContent = fromName;
         if (subEl) subEl.textContent = fromHouse || "—";
-
-        const callDocRef = db.collection("calls").doc(callId);
 
         if (btnReject) {
           btnReject.onclick = async () => {
@@ -1414,7 +1485,11 @@
       }
       if (hangupBtn) hangupBtn.onclick = () => cleanupIntercomActive({ updateStatus: "ended" });
       if (muteBtn) muteBtn.textContent = "靜音";
-      setIntercomCallStatus("", false);
+      const initialEl = modal.querySelector("#intercomPeerInitialMember");
+      if (initialEl) initialEl.textContent = "社";
+      const timerEl = modal.querySelector("#intercomTimer");
+      if (timerEl) timerEl.textContent = "00:00";
+      setIntercomCallStatus("待命", false);
       modal.hidden = false;
     });
   }

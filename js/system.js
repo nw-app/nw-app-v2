@@ -22,7 +22,57 @@
   const STORAGE_ACTIVE_COMMUNITY = "csp_active_community_v1";
   const STORAGE_LAST_PAGE = "csp_system_page_v1";
   const STORAGE_AREA_FILTER = "csp_community_area_filter_v1";
-  const PAGES = ["accounts", "community", "links"];
+  const PAGES = ["accounts", "community", "board", "table", "shop", "links"];
+  const ACCOUNT_ROLE_META = Object.freeze({
+    resident: { label: "住戶", roleValue: "住戶", sessionRole: "resident", page: "member.html" },
+    board: { label: "看板", roleValue: "看板", sessionRole: "board", page: "ead.html" },
+    table: { label: "桌板", roleValue: "桌板", sessionRole: "table", page: "tad.html" },
+    shop: { label: "商店", roleValue: "商店", sessionRole: "shop", page: "shop.html" },
+    community: { label: "社區", roleValue: "社區", sessionRole: "community", page: "admin.html" },
+    admin: { label: "系統管理員", roleValue: "系統管理員", sessionRole: "admin", page: "system.html" },
+  });
+  const ACCOUNT_ROLE_VIEWS = ["resident", "board", "table", "shop", "community", "admin"];
+  const COMMUNITY_LIKE_ROLE_VIEWS = new Set(["community", "board", "table", "shop"]);
+
+  function normalizeAccountRoleView(input) {
+    const raw = String(input || "").trim().toLowerCase();
+    if (ACCOUNT_ROLE_META[raw]) return raw;
+    if (raw === "系統管理員" || raw === "系統管理者" || raw === "系統") return "admin";
+    if (raw === "社區") return "community";
+    if (raw === "住戶") return "resident";
+    if (raw === "看板") return "board";
+    if (raw === "桌板") return "table";
+    if (raw === "商店") return "shop";
+    return "";
+  }
+
+  function getAccountRoleMeta(view) {
+    return ACCOUNT_ROLE_META[normalizeAccountRoleView(view) || "resident"] || ACCOUNT_ROLE_META.resident;
+  }
+
+  function getAccountRoleLabel(view) {
+    return getAccountRoleMeta(view).label;
+  }
+
+  function viewToStoredRoleValue(view) {
+    return getAccountRoleMeta(view).roleValue;
+  }
+
+  function storedRoleValueToView(role) {
+    return normalizeAccountRoleView(role) || "resident";
+  }
+
+  function buildRoleTargetUrl(view, communityKey) {
+    const v = normalizeAccountRoleView(view);
+    const key = String(communityKey || "").trim();
+    if (v === "admin") return "system.html";
+    const cPart = key && key !== "default" ? `?c=${encodeURIComponent(key)}` : "";
+    if (v === "community") return `admin.html${cPart}#community/community-dashboard`;
+    if (v === "board") return `ead.html${cPart}`;
+    if (v === "table") return `tad.html${cPart}`;
+    if (v === "shop") return `shop.html${cPart}`;
+    return `member.html${cPart}`;
+  }
 
   const state = {
       communities: [],
@@ -263,6 +313,7 @@
     const inputCategory = document.getElementById("modal_r_category");
     const fieldCategory = document.getElementById("field_r_category");
     const inputCommunity = document.getElementById("modal_r_community");
+    const communitiesWrap = document.getElementById("modal_r_communities");
     const inputUnit = document.getElementById("modal_r_unit");
     const inputName = document.getElementById("modal_r_name");
     const inputEmail = document.getElementById("modal_r_email");
@@ -296,6 +347,26 @@
     const getCommunityOptions = () => {
       const list = state.communities || [];
       return list;
+    };
+
+    const getSelectedCommunityIds = () => {
+      if (!communitiesWrap) return [];
+      const picked = [];
+      communitiesWrap.querySelectorAll("input[type=\"checkbox\"][data-community-id]").forEach((el) => {
+        if (!el.checked) return;
+        const id = String(el.getAttribute("data-community-id") || "").trim();
+        if (id) picked.push(id);
+      });
+      return picked;
+    };
+
+    const setSelectedCommunityIds = (ids) => {
+      const set = new Set((Array.isArray(ids) ? ids : []).map((x) => String(x || "").trim()).filter(Boolean));
+      if (!communitiesWrap) return;
+      communitiesWrap.querySelectorAll("input[type=\"checkbox\"][data-community-id]").forEach((el) => {
+        const id = String(el.getAttribute("data-community-id") || "").trim();
+        el.checked = set.has(id);
+      });
     };
 
     const resolveUnits = () => {
@@ -447,17 +518,33 @@
 
     const setOptions = () => {
       const list = getCommunityOptions();
+      const sorted = (list || []).slice().sort((a, b) => {
+        const ka = String(a.username || "").trim().toLowerCase();
+        const kb = String(b.username || "").trim().toLowerCase();
+        const byCode = ka.localeCompare(kb, "en", { numeric: true, sensitivity: "base" });
+        if (byCode !== 0) return byCode;
+        return String(a.name || "").localeCompare(String(b.name || ""), "zh-TW", { numeric: true, sensitivity: "base" });
+      });
       
       // For main community select (always show "全部" as default)
       const html = 
         `<option value="" selected>全部</option>` + 
-        list.map((c) => `<option value="${c.id}">${c.name || c.id}</option>`).join("");
+        sorted.map((c) => `<option value="${c.id}">${c.name || c.id}</option>`).join("");
       communitySelect.innerHTML = html;
       
       // For modal community select (without default option)
       if (inputCommunity) {
-        const modalHtml = list.map((c) => `<option value="${c.id}">${c.name || c.id}</option>`).join("");
+        const modalHtml = sorted.map((c) => `<option value="${c.id}">${c.name || c.id}</option>`).join("");
         inputCommunity.innerHTML = modalHtml;
+      }
+
+      if (communitiesWrap) {
+        communitiesWrap.innerHTML = sorted.map((c) => {
+          const name = String(c.name || c.id || "");
+          const code = String(c.username || "");
+          const label = code ? `${name}（${code}）` : name;
+          return `<label class="check"><input type="checkbox" data-community-id="${c.id}" />${label}</label>`;
+        }).join("");
       }
       
       return list;
@@ -470,44 +557,34 @@
     let currentUsers = [];
 
     const matchesRole = (docRole, view) => {
-      const r = String(docRole || "");
-      if (view === "admin") return r === "admin" || r === "系統管理員" || r === "系統";
-      if (view === "community") return r === "community" || r === "社區";
-      if (!r) return true;
-      return r === "resident" || r === "住戶";
-    };
-
-    const viewToRoleValue = (view) => {
-      if (view === "admin") return "系統管理員";
-      if (view === "community") return "社區";
-      return "住戶";
-    };
-
-    const roleValueToView = (role) => {
-      const r = String(role || "");
-      if (matchesRole(r, "admin")) return "admin";
-      if (matchesRole(r, "community")) return "community";
-      return "resident";
+      const currentView = normalizeAccountRoleView(view) || "resident";
+      const storedView = storedRoleValueToView(docRole);
+      if (!String(docRole || "").trim()) return currentView === "resident";
+      return storedView === currentView;
     };
 
     const applyModalMode = (view) => {
-      modalRoleView = viewToRoleValue(view) === "住戶" ? "resident" : view;
+      modalRoleView = normalizeAccountRoleView(view) || "resident";
       const isResident = modalRoleView === "resident";
-      const isCommunity = modalRoleView === "community";
       const isAdmin = modalRoleView === "admin";
+      const isCommunityLike = COMMUNITY_LIKE_ROLE_VIEWS.has(modalRoleView);
       const setFieldVisible = (el, visible) => {
         if (!el) return;
         el.hidden = !visible;
         el.style.display = visible ? "" : "none";
       };
       setFieldVisible(fieldCategory, !isAdmin);
-      setFieldVisible(fieldCommunity, isResident || isCommunity);
+      setFieldVisible(fieldCommunity, isResident || isCommunityLike);
       setFieldVisible(fieldUnit, isResident);
       setFieldVisible(fieldRoles, isResident);
       setFieldVisible(fieldAddress, isResident);
 
       if (inputCategory) inputCategory.required = !isAdmin;
-      if (inputCommunity) inputCommunity.required = Boolean(isResident || isCommunity);
+      if (inputCommunity) inputCommunity.required = Boolean(isResident);
+      if (inputCommunity) inputCommunity.hidden = !isResident;
+      if (inputCommunity) inputCommunity.style.display = isResident ? "" : "none";
+      if (communitiesWrap) communitiesWrap.hidden = !isCommunityLike;
+      if (communitiesWrap) communitiesWrap.style.display = isCommunityLike ? "" : "none";
       if (inputUnit) inputUnit.required = Boolean(isResident);
       if (unitMatchBadge) {
         unitMatchBadge.hidden = true;
@@ -515,11 +592,16 @@
         unitMatchBadge.style.display = "none";
       }
       if (inputCategory) {
-        if (isCommunity) {
+        if (modalRoleView === "community") {
           inputCategory.innerHTML = `
             <option value="管理員" selected>管理員</option>
             <option value="總幹事">總幹事</option>
             <option value="秘書">秘書</option>
+          `.trim();
+        } else if (isCommunityLike) {
+          inputCategory.innerHTML = `
+            <option value="管理員" selected>管理員</option>
+            <option value="操作員">操作員</option>
           `.trim();
         } else {
           inputCategory.innerHTML = `
@@ -529,8 +611,7 @@
         }
       }
       if (modalRoleNameEl) {
-        const label = modalRoleView === "admin" ? "系統管理員" : modalRoleView === "community" ? "社區" : "住戶";
-        modalRoleNameEl.textContent = label;
+        modalRoleNameEl.textContent = getAccountRoleLabel(modalRoleView);
       }
     };
 
@@ -542,7 +623,7 @@
     };
 
     const renderUserList = () => {
-      const view = String(state.accountsRoleView || "resident");
+      const view = normalizeAccountRoleView(state.accountsRoleView) || "resident";
       const activeId = communitySelect.value || "";
       const rList = document.getElementById("residentList");
 
@@ -551,13 +632,18 @@
         list = currentUsers || [];
       } else if (activeId !== "") {
         // 如果選了特定社區，只顯示該社區
-        list = (currentUsers || []).filter((r) => String(r.communityId || "") === String(activeId));
+        list = (currentUsers || []).filter((r) => {
+          const cid = String(r.communityId || "");
+          const cids = Array.isArray(r.communityIds) ? r.communityIds : [];
+          if (cid && cid === String(activeId)) return true;
+          return cids.some((x) => String(x || "") === String(activeId));
+        });
       } else {
         // 沒選特定社區，顯示所有帳號
         list = currentUsers || [];
       }
 
-      const title = view === "admin" ? "系統管理員" : view === "community" ? "社區" : "住戶";
+      const title = getAccountRoleLabel(view);
       
       // 建立社区ID到名称的映射
       const communityMap = new Map();
@@ -568,8 +654,11 @@
       rList.innerHTML = list.map((r) => {
         const unitText = String(r.unit || "").trim();
         const sub = view === "resident" && unitText ? `<div class="account-sub">${unitText}</div>` : "";
-        const communityName = communityMap.get(String(r.communityId || "")) || "";
-        const communityDisplay = communityName ? `<span class="tag" style="margin-left:8px;">${communityName}</span>` : "";
+        const cids = Array.isArray(r.communityIds) ? r.communityIds : [];
+        const firstId = String(r.communityId || (cids[0] || "")).trim();
+        const firstName = firstId ? (communityMap.get(firstId) || "") : "";
+        const extraCount = cids.length > 1 ? (cids.length - 1) : 0;
+        const communityDisplay = firstName ? `<span class="tag" style="margin-left:8px;">${firstName}${extraCount ? ` +${extraCount}` : ""}</span>` : "";
         return `
             <div class="item account-item">
               <div class="account-left">
@@ -645,7 +734,7 @@
       const rList = document.getElementById("residentList");
       if (rList) rList.innerHTML = `<div class="status">讀取中...</div>`;
       const cid = String(communityId || "");
-      const view = String(state.accountsRoleView || "resident");
+      const view = normalizeAccountRoleView(state.accountsRoleView) || "resident";
       const base = db.collection("users");
       
       console.log("subscribeUsers called with:", { communityId, cid, view });
@@ -662,9 +751,13 @@
           const v = d.data() || {};
           const role = String(v.role || "");
           if (!matchesRole(role, view)) return null;
+          const cidFromDoc = String(v.community || cid);
+          const cidsFromDoc = Array.isArray(v.communityIds) ? v.communityIds : [];
+          const communityIds = cidsFromDoc.map((x) => String(x || "").trim()).filter(Boolean);
           return {
             id: d.id,
-            communityId: String(v.community || cid),
+            communityId: cidFromDoc,
+            communityIds: communityIds.length ? communityIds : (cidFromDoc ? [cidFromDoc] : []),
             unit: String(v.houseNo || v.unit || ""),
             name: String(v.displayName || v.name || ""),
             username: String(v.username || v.email || v.phone || ""),
@@ -733,14 +826,8 @@
           const snap = await q.get();
           window.clearTimeout(t);
           applySnap(snap);
-        } else if (cid === "") {
-          // 没选特定社区，获取所有用户
-          const snap = await base.get();
-          window.clearTimeout(t);
-          applySnap(snap);
         } else {
-          const q = base.where("community", "==", cid);
-          const snap = await q.get();
+          const snap = await base.get();
           window.clearTimeout(t);
           applySnap(snap);
         }
@@ -788,11 +875,16 @@
       if (inputCommunity && cid) inputCommunity.value = cid;
       editUserId = "";
       forceCreateUser = false;
-      applyModalMode(String(state.accountsRoleView || "resident"));
+      applyModalMode(normalizeAccountRoleView(state.accountsRoleView) || "resident");
+      if (COMMUNITY_LIKE_ROLE_VIEWS.has(modalRoleView)) {
+        setSelectedCommunityIds(cid ? [cid] : []);
+      } else {
+        setSelectedCommunityIds([]);
+      }
       if (modalTitleEl) modalTitleEl.setAttribute("data-mode", "create");
       if (submitBtn) submitBtn.textContent = "建立";
       if (inputCategory) {
-        if (modalRoleView === "community") inputCategory.value = "管理員";
+        if (COMMUNITY_LIKE_ROLE_VIEWS.has(modalRoleView)) inputCategory.value = "管理員";
         else if (modalRoleView === "admin") inputCategory.value = "";
         else inputCategory.value = "住戶";
       }
@@ -832,7 +924,7 @@
       if (!modal || !user) return;
       forceCreateUser = Boolean(user.readOnly);
       editUserId = forceCreateUser ? "" : String(user.id || "");
-      const view = roleValueToView(user.role);
+      const view = storedRoleValueToView(user.role);
       applyModalMode(view);
       if (modalTitleEl) modalTitleEl.setAttribute("data-mode", "edit");
       if (submitBtn) submitBtn.textContent = "儲存";
@@ -840,6 +932,12 @@
 
       if (inputCategory) inputCategory.value = normalizeText(user.category || "住戶") || "住戶";
       if (inputCommunity && user.communityId) inputCommunity.value = String(user.communityId || "");
+      if (COMMUNITY_LIKE_ROLE_VIEWS.has(modalRoleView)) {
+        const ids = Array.isArray(user.communityIds) && user.communityIds.length ? user.communityIds : (user.communityId ? [user.communityId] : []);
+        setSelectedCommunityIds(ids);
+      } else {
+        setSelectedCommunityIds([]);
+      }
       if (inputUnit) inputUnit.value = normalizeText(user.unit || "");
       if (inputName) inputName.value = normalizeText(user.name || "");
       if (inputEmail) inputEmail.value = normalizeText(user.email || "");
@@ -927,14 +1025,16 @@
         const address = normalizeText(inputAddress ? inputAddress.value : "");
         const enabled = String(inputEnabled ? inputEnabled.value : "true") === "true";
         const isResident = modalRoleView === "resident";
-        const isCommunity = modalRoleView === "community";
-        const requiredCommunity = isResident || isCommunity;
+        const isCommunityLike = COMMUNITY_LIKE_ROLE_VIEWS.has(modalRoleView);
+        const requiredCommunity = isResident || isCommunityLike;
+        const selectedCommunityIds = isCommunityLike ? getSelectedCommunityIds() : (communityId ? [communityId] : []);
+        const primaryCommunityId = selectedCommunityIds.length ? String(selectedCommunityIds[0] || "").trim() : "";
         if (!name) {
           showModalError("請填寫姓名。");
           return;
         }
-        if (requiredCommunity && !communityId) {
-          showModalError("請選擇所屬社區。");
+        if (requiredCommunity && !primaryCommunityId) {
+          showModalError("請選擇服務社區。");
           return;
         }
         if (isResident && !unit) {
@@ -982,13 +1082,24 @@
             showModalError("建立失敗，請稍後再試。");
             return;
           }
-          const roleValue = viewToRoleValue(modalRoleView);
+          const roleValue = viewToStoredRoleValue(modalRoleView);
           const passwordHash = password ? await sha256Hex(password) : "";
           const avatarDataUrl = avatarFile ? await fileToAvatarDataUrl(avatarFile) : "";
+          const selectedCodes = selectedCommunityIds.map((id) => {
+            const c = (state.communities || []).find((x) => String(x && x.id ? x.id : "") === String(id || ""));
+            return c ? String(c.username || "") : "";
+          }).filter(Boolean);
+          const selectedNames = selectedCommunityIds.map((id) => {
+            const c = (state.communities || []).find((x) => String(x && x.id ? x.id : "") === String(id || ""));
+            return c ? String(c.name || "") : "";
+          }).filter(Boolean);
           const payload = {
             role: roleValue,
             category,
-            community: String((requiredCommunity ? communityId : "default") || "default"),
+            community: String((requiredCommunity ? primaryCommunityId : "default") || "default"),
+            communityIds: requiredCommunity ? selectedCommunityIds : [],
+            communityCodes: requiredCommunity ? selectedCodes : [],
+            communityNames: requiredCommunity ? selectedNames : [],
             houseNo: isResident ? unit : "",
             displayName: name,
             username: loginAccount,
@@ -1021,6 +1132,7 @@
           const nextItem = {
             id: String(id),
             communityId: String(payload.community || "default"),
+            communityIds: Array.isArray(payload.communityIds) ? payload.communityIds : [],
             unit: String(payload.houseNo || ""),
             name: String(payload.displayName || ""),
             username: String(payload.username || payload.email || payload.phone || ""),
@@ -1049,8 +1161,8 @@
           }
           renderUserList();
 
-          if (communitySelect.value !== String(communityId || "")) {
-            communitySelect.value = String(communityId || "");
+          if (communitySelect.value !== String(primaryCommunityId || "")) {
+            communitySelect.value = String(primaryCommunityId || "");
             setActiveCommunityId(communitySelect.value);
             subscribeUsers(communitySelect.value);
           }
@@ -1202,6 +1314,12 @@
     let unitActiveTab = "units";
     let unitConfigCache = null;
     let unitDrag = null;
+    const isCommunityManagePage = String(state.currentPage || "community") === "community";
+
+    if (addBtn) {
+      addBtn.hidden = !isCommunityManagePage;
+      addBtn.style.display = isCommunityManagePage ? "" : "none";
+    }
 
     const createUnitRow = (u = {}) => {
       const tr = document.createElement("tr");
@@ -1373,7 +1491,9 @@
       const d = loadAccounts();
       const cList = document.getElementById("communityList");
       const list = d.communities || []; // 显示所有社区，不再按区域筛选
-      cList.innerHTML = list.map((c) => `
+      cList.innerHTML = list.map((c) => {
+        if (!isCommunityManagePage) {
+          return `
             <div class="item community-item">
               <div class="community-row1">
                 <div class="community-row1-left">
@@ -1385,52 +1505,89 @@
                   <div class="community-name">${c.name}</div>
                 </div>
               </div>
-              <div class="community-row2">
-                <div class="community-meta meta">
-                  ${levelBadgeHtml(c.level)}
-                  <div class="switch-label">${c.enabled ? "啟用" : "停用"}</div>
-                  <label class="switch">
-                    <input type="checkbox" data-toggle-community="${c.id}" ${c.enabled ? "checked" : ""} />
-                    <span class="slider"></span>
-                  </label>
+            </div>
+          `.trim();
+        }
+
+        return `
+          <div class="item community-item">
+            <div class="community-row1">
+              <div class="community-row1-left">
+                <div class="community-thumb">
+                  ${c.imageDataUrl ? `<img src="${c.imageDataUrl}" alt="社區圖片">` : `<div class="fallback">2:1</div>`}
                 </div>
-                <div class="community-actions">
-                  <button class="icon-btn" type="button" data-go-admin="${c.id}" aria-label="前往社區後台" title="前往社區後台">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M4.5 10.3 12 5.7l7.5 4.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                      <path d="M6.2 10.3V19h11.6v-8.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                      <path d="M9 19v-5.3h6V19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </button>
-                  <button class="icon-btn" type="button" data-go-member="${c.id}" aria-label="前往住戶前台" title="前往住戶前台">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z" stroke="currentColor" stroke-width="1.7"/>
-                      <path d="M4 20a8 8 0 0 1 16 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                    </svg>
-                  </button>
-                  <button class="icon-btn" type="button" data-units-community="${c.id}" aria-label="設定" title="設定">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.7"/>
-                      <path d="M19.2 12a7.2 7.2 0 0 0-.1-1.1l2-1.6-1.8-3.1-2.5 1a7.2 7.2 0 0 0-1.9-1.1l-.4-2.7H9.5l-.4 2.7a7.2 7.2 0 0 0-1.9 1.1l-2.5-1-1.8 3.1 2 1.6A7.2 7.2 0 0 0 4.8 12c0 .4 0 .7.1 1.1l-2 1.6 1.8 3.1 2.5-1a7.2 7.2 0 0 0 1.9 1.1l.4 2.7h5l.4-2.7a7.2 7.2 0 0 0 1.9-1.1l2.5 1 1.8-3.1-2-1.6c.1-.4.1-.7.1-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" opacity="0.8"/>
-                    </svg>
-                  </button>
-                  <button class="icon-btn" type="button" data-edit-community="${c.id}" aria-label="編輯" title="編輯">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-2.8l-.2-.2a2 2 0 0 0-2.8 0L5 17v3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                      <path d="M13.5 6.5 17.5 10.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                    </svg>
-                  </button>
-                  <button class="icon-btn danger" type="button" data-delete-community="${c.id}" aria-label="刪除" title="刪除">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M9 4h6l1 2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                      <path d="M6 6h12l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                      <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                    </svg>
-                  </button>
-                </div>
+                <div class="community-area">${c.area || "台北"}</div>
+                <div class="community-code">${c.username}</div>
+                <div class="community-name">${c.name}</div>
               </div>
             </div>
-          `).join("") || `<div class="status">尚無社區資料。</div>`;
+            <div class="community-row2">
+              <div class="community-meta meta">
+                ${levelBadgeHtml(c.level)}
+                <div class="switch-label">${c.enabled ? "啟用" : "停用"}</div>
+                <label class="switch">
+                  <input type="checkbox" data-toggle-community="${c.id}" ${c.enabled ? "checked" : ""} />
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="community-actions">
+                <button class="icon-btn" type="button" data-go-admin="${c.id}" aria-label="前往社區後台" title="前往社區後台">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4.5 10.3 12 5.7l7.5 4.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M6.2 10.3V19h11.6v-8.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M9 19v-5.3h6V19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" type="button" data-go-member="${c.id}" aria-label="前往住戶前台" title="前往住戶前台">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z" stroke="currentColor" stroke-width="1.7"/>
+                    <path d="M4 20a8 8 0 0 1 16 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" type="button" data-go-board="${c.id}" aria-label="前往看板" title="前往看板">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="4" y="5" width="16" height="11" rx="2" stroke="currentColor" stroke-width="1.7"/>
+                    <path d="M9 19h6M12 16v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" type="button" data-go-table="${c.id}" aria-label="前往桌板" title="前往桌板">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="5" y="4.5" width="14" height="15" rx="2" stroke="currentColor" stroke-width="1.7"/>
+                    <path d="M9 9h6M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" type="button" data-go-shop="${c.id}" aria-label="前往商店" title="前往商店">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M5 9h14l-1 10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 9Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M9 9V7a3 3 0 0 1 6 0v2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" type="button" data-units-community="${c.id}" aria-label="設定" title="設定">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.7"/>
+                    <path d="M19.2 12a7.2 7.2 0 0 0-.1-1.1l2-1.6-1.8-3.1-2.5 1a7.2 7.2 0 0 0-1.9-1.1l-.4-2.7H9.5l-.4 2.7a7.2 7.2 0 0 0-1.9 1.1l-2.5-1-1.8 3.1 2 1.6A7.2 7.2 0 0 0 4.8 12c0 .4 0 .7.1 1.1l-2 1.6 1.8 3.1 2.5-1a7.2 7.2 0 0 0 1.9 1.1l.4 2.7h5l.4-2.7a7.2 7.2 0 0 0 1.9-1.1l2.5 1 1.8-3.1-2-1.6c.1-.4.1-.7.1-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" opacity="0.8"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" type="button" data-edit-community="${c.id}" aria-label="編輯" title="編輯">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-2.8l-.2-.2a2 2 0 0 0-2.8 0L5 17v3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M13.5 6.5 17.5 10.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn danger" type="button" data-delete-community="${c.id}" aria-label="刪除" title="刪除">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M9 4h6l1 2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M6 6h12l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        `.trim();
+      }).join("") || `<div class="status">尚無社區資料。</div>`;
+
+      if (!isCommunityManagePage) return;
 
       cList.querySelectorAll("[data-toggle-community]").forEach((input) => {
         input.addEventListener("change", async () => {
@@ -1469,33 +1626,27 @@
         });
       });
 
-      cList.querySelectorAll("[data-go-admin]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const id = btn.getAttribute("data-go-admin");
-          const c = (state.communities || []).find((x) => x && String(x.id || "") === String(id || ""));
-          if (!id || !c) return;
-          const key = String(c.username || c.id || "").trim();
-          if (!key) return;
-          try { sessionStorage.setItem("csp_last_cid", key); } catch {}
-          try { sessionStorage.setItem("csp_role", "community"); } catch {}
-          try { sessionStorage.setItem("csp_sysadmin", "1"); } catch {}
-          location.href = `admin.html?c=${encodeURIComponent(key)}#community/community-dashboard`;
+      const bindRoleEntryButton = (selector, attrName, view) => {
+        cList.querySelectorAll(selector).forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const id = btn.getAttribute(attrName);
+            const c = (state.communities || []).find((x) => x && String(x.id || "") === String(id || ""));
+            if (!id || !c) return;
+            const key = String(c.username || c.id || "").trim();
+            if (!key) return;
+            try { sessionStorage.setItem("csp_last_cid", key); } catch {}
+            try { sessionStorage.setItem("csp_role", getAccountRoleMeta(view).sessionRole); } catch {}
+            try { sessionStorage.setItem("csp_sysadmin", "1"); } catch {}
+            location.href = buildRoleTargetUrl(view, key);
+          });
         });
-      });
+      };
 
-      cList.querySelectorAll("[data-go-member]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const id = btn.getAttribute("data-go-member");
-          const c = (state.communities || []).find((x) => x && String(x.id || "") === String(id || ""));
-          if (!id || !c) return;
-          const key = String(c.username || c.id || "").trim();
-          if (!key) return;
-          try { sessionStorage.setItem("csp_last_cid", key); } catch {}
-          try { sessionStorage.setItem("csp_role", "resident"); } catch {}
-          try { sessionStorage.setItem("csp_sysadmin", "1"); } catch {}
-          location.href = `member.html?c=${encodeURIComponent(key)}`;
-        });
-      });
+      bindRoleEntryButton("[data-go-admin]", "data-go-admin", "community");
+      bindRoleEntryButton("[data-go-member]", "data-go-member", "resident");
+      bindRoleEntryButton("[data-go-board]", "data-go-board", "board");
+      bindRoleEntryButton("[data-go-table]", "data-go-table", "table");
+      bindRoleEntryButton("[data-go-shop]", "data-go-shop", "shop");
 
       cList.querySelectorAll("[data-delete-community]").forEach((btn) => {
         btn.addEventListener("click", async () => {
@@ -2543,32 +2694,42 @@
   function renderAreaFilterBar() {
     const bar = document.getElementById("areaFilter");
     if (!bar) return;
-    const shouldShow = state.currentPage === "community" || state.currentPage === "accounts";
+    const shouldShow = state.currentPage === "community" || state.currentPage === "board" || state.currentPage === "table" || state.currentPage === "shop" || state.currentPage === "accounts";
     bar.hidden = !shouldShow;
     if (!shouldShow) return;
 
     const titleArea = document.getElementById("communityAreaName");
     if (titleArea) {
-      const rv = String(state.accountsRoleView || "resident");
-      if (state.currentPage === "accounts" && rv === "community") titleArea.textContent = "社區";
-      else if (state.currentPage === "accounts" && rv === "admin") titleArea.textContent = "系統管理員";
-      else if (state.currentPage === "accounts") titleArea.textContent = "住戶";
+      const rv = normalizeAccountRoleView(state.accountsRoleView) || "resident";
+      if (state.currentPage === "accounts") titleArea.textContent = getAccountRoleLabel(rv);
       else if (state.currentPage === "community") titleArea.textContent = "社區後台";
+      else if (state.currentPage === "board") titleArea.textContent = "看板設定";
+      else if (state.currentPage === "table") titleArea.textContent = "桌板設定";
+      else if (state.currentPage === "shop") titleArea.textContent = "商店設定";
     }
 
     if (state.currentPage === "accounts") {
-      const rv = String(state.accountsRoleView || "resident");
+      const rv = normalizeAccountRoleView(state.accountsRoleView) || "resident";
       bar.innerHTML = `
         <div class="filter-left">
           <button type="button" class="filter-btn ${rv === "resident" ? "active" : ""}" data-accounts-role="resident" aria-pressed="${rv === "resident" ? "true" : "false"}">住戶</button>
         </div>
         <div class="filter-right">
+          <button type="button" class="filter-btn ${rv === "board" ? "active" : ""}" data-accounts-role="board" aria-pressed="${rv === "board" ? "true" : "false"}">看板</button>
+          <button type="button" class="filter-btn ${rv === "table" ? "active" : ""}" data-accounts-role="table" aria-pressed="${rv === "table" ? "true" : "false"}">桌板</button>
+          <button type="button" class="filter-btn ${rv === "shop" ? "active" : ""}" data-accounts-role="shop" aria-pressed="${rv === "shop" ? "true" : "false"}">商店</button>
           <button type="button" class="filter-btn ${rv === "community" ? "active" : ""}" data-accounts-role="community" aria-pressed="${rv === "community" ? "true" : "false"}">社區</button>
           <button type="button" class="filter-btn ${rv === "admin" ? "active" : ""}" data-accounts-role="admin" aria-pressed="${rv === "admin" ? "true" : "false"}">系統</button>
         </div>
       `.trim();
     } else if (state.currentPage === "community") {
       bar.innerHTML = `<button type="button" class="filter-btn active" data-area="社區後台" aria-pressed="true">社區後台</button>`;
+    } else if (state.currentPage === "board") {
+      bar.innerHTML = `<button type="button" class="filter-btn active" data-area="看板設定" aria-pressed="true">看板設定</button>`;
+    } else if (state.currentPage === "table") {
+      bar.innerHTML = `<button type="button" class="filter-btn active" data-area="桌板設定" aria-pressed="true">桌板設定</button>`;
+    } else if (state.currentPage === "shop") {
+      bar.innerHTML = `<button type="button" class="filter-btn active" data-area="商店設定" aria-pressed="true">商店設定</button>`;
     }
 
     // 移除旧的事件绑定，重新绑定
@@ -2660,7 +2821,7 @@
       subEl.style.display = "none";
     }
 
-    if (nextPage === "community") {
+    if (nextPage === "community" || nextPage === "board" || nextPage === "table" || nextPage === "shop") {
       titleEl.textContent = "社區列表";
       subEl.textContent = "";
       renderCommunity();

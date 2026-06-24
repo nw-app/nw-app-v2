@@ -11391,30 +11391,68 @@
   function setIntercomCallStatus(text, isError) {
     const modal = document.getElementById("intercomCallModal80");
     if (!modal) return;
-    const el = modal.querySelector("#intercomCallStatus");
+    const el = modal.querySelector("#intercomCallState");
     if (!el) return;
     const t = String(text || "").trim();
     el.textContent = t;
-    el.hidden = !t;
     el.classList.toggle("error", Boolean(isError));
+  }
+
+  function formatIntercomTimer(ms) {
+    const sec = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+    const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+    const ss = String(sec % 60).padStart(2, "0");
+    return `${mm}:${ss}`;
+  }
+
+  function startIntercomTimer(startAtMs) {
+    if (!intercomActive) return;
+    const active = intercomActive;
+    active.startedAtMs = Number(startAtMs || Date.now());
+    if (active.timerId) {
+      window.clearInterval(active.timerId);
+      active.timerId = null;
+    }
+    const tick = () => {
+      const modal = document.getElementById("intercomCallModal80");
+      if (!modal || !active.startedAtMs) return;
+      const el = modal.querySelector("#intercomTimer");
+      if (!el) return;
+      el.textContent = formatIntercomTimer(Date.now() - active.startedAtMs);
+    };
+    tick();
+    active.timerId = window.setInterval(tick, 500);
   }
 
   function ensureIntercomIncomingModal() {
     const modal = ensureModal("intercomIncomingModal", "modal-intercom-incoming", "min(460px, 92vw)");
     modal.innerHTML = `
-      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-backdrop"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="intercomIncomingTitle">
         <div class="modal-hd">
           <h3 class="modal-title" id="intercomIncomingTitle">來電提示</h3>
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <div class="modal-body">
-          <div style="font-weight:900; font-size:18px;" id="intercomIncomingName">—</div>
-          <div class="muted" style="margin-top:6px;" id="intercomIncomingSub">—</div>
+          <div class="intercom-card">
+            <div class="intercom-peer">
+              <div class="intercom-avatar" id="intercomIncomingInitial" aria-hidden="true">—</div>
+              <div class="intercom-peer-meta">
+                <div class="intercom-peer-name" id="intercomIncomingName">—</div>
+                <div class="intercom-peer-sub" id="intercomIncomingSub">—</div>
+              </div>
+            </div>
+            <div class="intercom-meta">
+              <span class="intercom-chip">來電中</span>
+              <span class="intercom-timer" aria-hidden="true">—</span>
+            </div>
+          </div>
         </div>
-        <div class="modal-ft" style="display:flex; gap:10px; justify-content:flex-end;">
-          <button class="btn" type="button" id="btnIntercomReject">掛斷</button>
-          <button class="btn btn-primary" type="button" id="btnIntercomAccept">接通</button>
+        <div class="modal-ft">
+          <div class="intercom-actions">
+            <button class="intercom-btn danger" type="button" id="btnIntercomReject">掛斷</button>
+            <button class="intercom-btn primary" type="button" id="btnIntercomAccept">接通</button>
+          </div>
         </div>
       </div>
     `.trim();
@@ -11424,23 +11462,33 @@
   function ensureIntercomCallModal() {
     const modal = ensureModal("intercomCallModal80", "modal-intercom-call", "80%");
     modal.innerHTML = `
-      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-backdrop"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="intercomCallTitle">
         <div class="modal-hd">
           <h3 class="modal-title" id="intercomCallTitle">通話（對講）</h3>
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <div class="modal-body">
-          <div style="display:grid; gap:10px;">
-            <div style="font-weight:900; font-size:18px;" id="intercomPeerName">—</div>
-            <div class="muted" id="intercomPeerSub">—</div>
-            <div class="status" id="intercomCallStatus" hidden></div>
+          <div class="intercom-card">
+            <div class="intercom-peer">
+              <div class="intercom-avatar" id="intercomPeerInitial" aria-hidden="true">—</div>
+              <div class="intercom-peer-meta">
+                <div class="intercom-peer-name" id="intercomPeerName">—</div>
+                <div class="intercom-peer-sub" id="intercomPeerSub">—</div>
+              </div>
+            </div>
+            <div class="intercom-meta">
+              <span class="intercom-chip" id="intercomCallState">—</span>
+              <span class="intercom-timer" id="intercomTimer">00:00</span>
+            </div>
             <audio id="intercomRemoteAudioAdmin" autoplay playsinline></audio>
           </div>
         </div>
-        <div class="modal-ft" style="display:flex; gap:10px; justify-content:flex-end;">
-          <button class="btn" type="button" id="btnIntercomMute">靜音</button>
-          <button class="btn danger" type="button" id="btnIntercomHangup">掛斷</button>
+        <div class="modal-ft">
+          <div class="intercom-actions">
+            <button class="intercom-btn ghost" type="button" id="btnIntercomMute">靜音</button>
+            <button class="intercom-btn danger" type="button" id="btnIntercomHangup">掛斷</button>
+          </div>
         </div>
       </div>
     `.trim();
@@ -11452,6 +11500,9 @@
     intercomActive = null;
     stopIntercomRingtone();
     if (!active) return;
+    try {
+      if (active.timerId) window.clearInterval(active.timerId);
+    } catch {}
     try {
       if (updateStatus && active.callDocRef) {
         await active.callDocRef.set(
@@ -11500,18 +11551,23 @@
       cleanupIntercomActive({ updateStatus: "ended" });
     });
 
+    const initialEl = modal.querySelector("#intercomPeerInitial");
     const peerNameEl = modal.querySelector("#intercomPeerName");
     const peerSubEl = modal.querySelector("#intercomPeerSub");
     const muteBtn = modal.querySelector("#btnIntercomMute");
     const hangupBtn = modal.querySelector("#btnIntercomHangup");
+    const timerEl = modal.querySelector("#intercomTimer");
 
     const toHouseNo = String(r.houseNo || r.unit || "").trim();
     const toSubUnit = String(r.subUnit || r.subHouseNo || "").trim();
     const toDisplayUnit = toSubUnit ? `${toHouseNo}-${toSubUnit}` : toHouseNo;
     const toName = String(r.displayName || r.name || r.email || "").trim() || "住戶";
+    const initial = (toName.slice(0, 1).toUpperCase() || "U").trim() || "U";
 
     if (peerNameEl) peerNameEl.textContent = toName;
     if (peerSubEl) peerSubEl.textContent = [toDisplayUnit].filter(Boolean).join("｜") || "—";
+    if (initialEl) initialEl.textContent = initial;
+    if (timerEl) timerEl.textContent = "00:00";
     setIntercomCallStatus("正在呼叫…", false);
     modal.hidden = false;
 
@@ -11616,6 +11672,7 @@
           } catch {}
         }
         setIntercomCallStatus("已接通", false);
+        if (intercomActive && !intercomActive.timerId) startIntercomTimer(Date.now());
         return;
       }
       if (st === "rejected" || st === "ended" || st === "busy" || st === "missed") {
@@ -11658,15 +11715,20 @@
       cleanupIntercomActive({ updateStatus: "ended" });
     });
 
+    const initialEl = modal.querySelector("#intercomPeerInitial");
     const peerNameEl = modal.querySelector("#intercomPeerName");
     const peerSubEl = modal.querySelector("#intercomPeerSub");
     const muteBtn = modal.querySelector("#btnIntercomMute");
     const hangupBtn = modal.querySelector("#btnIntercomHangup");
+    const timerEl = modal.querySelector("#intercomTimer");
 
     const fromName = String(d.fromName || "住戶").trim() || "住戶";
     const fromHouse = String(d.fromHouseNo || "").trim();
+    const initial = (fromName.slice(0, 1).toUpperCase() || "U").trim() || "U";
     if (peerNameEl) peerNameEl.textContent = fromName;
     if (peerSubEl) peerSubEl.textContent = fromHouse || "—";
+    if (initialEl) initialEl.textContent = initial;
+    if (timerEl) timerEl.textContent = "00:00";
 
     setIntercomCallStatus("接通中…", false);
     modal.hidden = false;
@@ -11727,10 +11789,11 @@
     const fromProfile = await readUserProfileForCall(user.uid);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
+    const startedAtMs = Date.now();
     await callDocRef.set(
       {
         status: "accepted",
-        acceptedAtMs: Date.now(),
+        acceptedAtMs: startedAtMs,
         acceptedAt: FieldValue.serverTimestamp(),
         acceptedByUid: String(user.uid),
         acceptedByName: String(fromProfile.name || user.email || "後台").trim(),
@@ -11776,6 +11839,7 @@
       unsubCandidates: unsubOfferCandidates,
       detachModal: detach,
     };
+    startIntercomTimer(startedAtMs);
 
     modal.hidden = false;
   }
@@ -11821,11 +11885,16 @@
         }
 
         const prompt = ensureIntercomIncomingModal();
+        const callDocRef = db.collection("calls").doc(callId);
         let detach = () => {};
         detach = bindModalClose(prompt, () => {
           detach();
           stopIntercomRingtone();
+          callDocRef
+            .set({ status: "missed", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true })
+            .catch(() => {});
         });
+        const initialEl = prompt.querySelector("#intercomIncomingInitial");
         const nameEl = prompt.querySelector("#intercomIncomingName");
         const subEl = prompt.querySelector("#intercomIncomingSub");
         const btnAccept = prompt.querySelector("#btnIntercomAccept");
@@ -11833,10 +11902,10 @@
 
         const fromName = String(latest.fromName || "住戶").trim() || "住戶";
         const fromHouse = String(latest.fromHouseNo || "").trim();
+        const initial = (fromName.slice(0, 1).toUpperCase() || "U").trim() || "U";
+        if (initialEl) initialEl.textContent = initial;
         if (nameEl) nameEl.textContent = fromName;
         if (subEl) subEl.textContent = fromHouse || "—";
-
-        const callDocRef = db.collection("calls").doc(callId);
 
         if (btnReject) {
           btnReject.onclick = async () => {

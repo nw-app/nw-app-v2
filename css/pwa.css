@@ -548,8 +548,8 @@ html.force-portrait-rotate .pwa-install {
 .modal-dialog {
   position: relative;
   z-index: 1;
-  width: 90%;
-  height: 90%;
+  width: var(--modal-width, 90%);
+  height: var(--modal-height, 90%);
   max-width: 1200px;
   max-height: 90vh;
   background: rgba(255, 255, 255, 0.98);
@@ -592,6 +592,141 @@ html.force-portrait-rotate .pwa-install {
   background: #d32f2f;
   color: #fff;
   border-color: rgba(0, 0, 0, 0);
+}
+
+.modal-intercom-call .modal-dialog {
+  max-width: 720px;
+  max-height: 80vh;
+  height: var(--modal-height, 80%);
+}
+
+.modal-intercom-incoming .modal-dialog {
+  max-width: 420px;
+  height: auto;
+  grid-template-rows: auto auto auto;
+}
+
+.intercom-card {
+  display: grid;
+  gap: 14px;
+}
+
+.intercom-peer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.intercom-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.06);
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 20px;
+  color: rgba(31, 41, 55, 0.85);
+  flex: 0 0 auto;
+}
+
+.intercom-peer-meta {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.intercom-peer-name {
+  font-size: 18px;
+  font-weight: 900;
+  color: rgba(17, 24, 39, 0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.intercom-peer-sub {
+  font-size: 13px;
+  color: rgba(31, 41, 55, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.intercom-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: rgba(17, 24, 39, 0.03);
+}
+
+.intercom-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 900;
+  color: rgba(31, 41, 55, 0.82);
+}
+
+.intercom-chip.error {
+  color: #9f1c1c;
+}
+
+.intercom-timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 900;
+  color: rgba(31, 41, 55, 0.72);
+}
+
+.intercom-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.intercom-actions.single {
+  grid-template-columns: 1fr;
+}
+
+.intercom-actions.triple {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.intercom-btn {
+  height: 52px;
+  border-radius: 16px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: #fff;
+  color: rgba(17, 24, 39, 0.9);
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.intercom-btn.primary {
+  background: #d32f2f;
+  color: #fff;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.intercom-btn.danger {
+  background: #111827;
+  color: #fff;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.intercom-btn.ghost {
+  background: rgba(17, 24, 39, 0.04);
 }
 .modal-hd {
   display: flex;
@@ -1183,21 +1318,25 @@ html.force-portrait-rotate .pwa-install {
   margin-right: auto;
   justify-content: flex-start;
 }
-#profileModal .profile-switch .btn {
+#profileModal .profile-switch .icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 44px;
-  padding: 0 14px;
-  line-height: 1;
-  font-weight: 900;
+  width: 48px;
+  height: 48px;
+  padding: 0;
   color: rgba(31, 41, 55, 0.92);
   background: #fff;
   border: 1px solid rgba(17, 24, 39, 0.12);
-  border-radius: 14px;
+  border-radius: 999px;
   cursor: pointer;
 }
-#profileModal .profile-switch .btn:hover {
+#profileModal .profile-switch .icon-btn svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+#profileModal .profile-switch .icon-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 14px 28px rgba(17, 24, 39, 0.12);
 }
@@ -1213,6 +1352,69 @@ html.force-portrait-rotate .pwa-install {
   gap: 10px;
 }
 .community-picker-item .btn { width: 100%; }
+
+.modal-community-picker .modal-dialog {
+  max-width: 520px;
+  height: auto;
+  grid-template-rows: auto auto auto;
+}
+
+.community-picker-btn {
+  width: 100%;
+  height: 56px;
+  border-radius: 18px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: #fff;
+  color: rgba(17, 24, 39, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 14px;
+  cursor: pointer;
+  font-weight: 950;
+}
+
+.community-picker-btn:hover {
+  background: rgba(17, 24, 39, 0.03);
+}
+
+.community-picker-btn.active {
+  background: rgba(211, 47, 47, 0.1);
+  border-color: rgba(211, 47, 47, 0.24);
+  color: #9f1c1c;
+}
+
+.community-picker-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-picker-code {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.3px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: rgba(17, 24, 39, 0.04);
+  color: rgba(31, 41, 55, 0.72);
+}
+
+.community-picker-btn.active .community-picker-code {
+  border-color: rgba(211, 47, 47, 0.22);
+  background: rgba(211, 47, 47, 0.12);
+  color: rgba(159, 28, 28, 0.95);
+}
+
+.community-picker-close {
+  height: 48px;
+  border-radius: 16px;
+  width: 100%;
+}
 #profileModal .modal-body { align-items: center; text-align: center; }
 #profileModal .profile-item { justify-items: center; width: 100%; }
 #profileModal .profile-label { display: none; }

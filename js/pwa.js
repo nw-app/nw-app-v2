@@ -176,6 +176,13 @@
     const defaultProfileQrToken = "A000ADDT";
 
     const ensureProfileHouseNoQr = () => {
+      const roleRaw = String(sessionStorage.getItem("csp_role") || "").trim().toLowerCase();
+      const isResidentRole = roleRaw === "resident" || roleRaw === "住戶";
+      if (!isResidentRole) {
+        const existing = document.getElementById("profileHouseNoQrWrap");
+        if (existing && existing.parentElement) existing.parentElement.removeChild(existing);
+        return null;
+      }
       if (!houseNoText || !houseNoItem) return null;
       let wrap = document.getElementById("profileHouseNoQrWrap");
       if (wrap && houseNoItem.contains(wrap)) return wrap;
@@ -291,6 +298,9 @@
       if (r === "admin") return "系統管理員";
       if (r === "community") return "社區";
       if (r === "resident") return "住戶";
+      if (r === "board") return "看板";
+      if (r === "table") return "桌板";
+      if (r === "shop") return "商店";
       return "—";
     };
 
@@ -322,10 +332,13 @@
     const getSessionRole = () => {
       try {
         const r = String(sessionStorage.getItem("csp_role") || "").trim().toLowerCase();
-        if (r === "admin" || r === "community" || r === "resident") return r;
+        if (r === "admin" || r === "community" || r === "resident" || r === "board" || r === "table" || r === "shop") return r;
         if (r === "系統管理員" || r === "系統管理者" || r === "系統") return "admin";
         if (r === "社區") return "community";
         if (r === "住戶") return "resident";
+        if (r === "看板") return "board";
+        if (r === "桌板") return "table";
+        if (r === "商店") return "shop";
         return "";
       } catch {
         return "";
@@ -348,7 +361,41 @@
 
     const isCommunityPickerSupportedPage = () => {
       const page = String(location.pathname || "").split("/").pop().toLowerCase();
-      return page === "admin.html" || page === "member.html" || page === "system.html";
+      return page === "admin.html" || page === "member.html" || page === "system.html" || page === "ead.html" || page === "tad.html" || page === "shop.html";
+    };
+
+    const readAllowedCommunityKeys = () => {
+      try {
+        const raw = String(sessionStorage.getItem("csp_allowed_community_keys") || "").trim();
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.map((x) => String(x || "").trim()).filter(Boolean);
+      } catch {
+        return [];
+      }
+    };
+
+    const writeAllowedCommunityKeys = (keys) => {
+      try {
+        const list = Array.isArray(keys) ? keys.map((x) => String(x || "").trim()).filter(Boolean) : [];
+        sessionStorage.setItem("csp_allowed_community_keys", JSON.stringify(list));
+      } catch {}
+    };
+
+    const ensureUrlCommunityKeyFromAllowed = (allowedKeys) => {
+      const keys = Array.isArray(allowedKeys) ? allowedKeys.map((x) => String(x || "").trim()).filter(Boolean) : [];
+      if (!keys.length) return;
+      try {
+        const u = new URL(location.href);
+        const current = String(u.searchParams.get("c") || "").trim();
+        const ok = current && keys.some((k) => k.toLowerCase() === current.toLowerCase());
+        if (!ok) {
+          u.searchParams.set("c", keys[0]);
+          history.replaceState(null, "", u.toString());
+        }
+        try { sessionStorage.setItem("csp_last_cid", String(u.searchParams.get("c") || keys[0])); } catch {}
+      } catch {}
     };
 
     const ensureCommunityPickerModal = () => {
@@ -356,7 +403,7 @@
       if (el) return el;
       el = document.createElement("div");
       el.id = "communityPickerModal";
-      el.className = "modal";
+      el.className = "modal modal-community-picker";
       el.hidden = true;
       el.innerHTML = `
         <div class="modal-backdrop" data-modal-close="1"></div>
@@ -371,7 +418,7 @@
             </div>
           </div>
           <div class="modal-ft">
-            <button class="btn" type="button" data-modal-close="1">關閉</button>
+            <button class="intercom-btn ghost community-picker-close" type="button" data-modal-close="1">關閉</button>
           </div>
         </div>
       `;
@@ -379,7 +426,7 @@
       return el;
     };
 
-    const openCommunityPicker = async (db, targetPage, activeCodeOrId) => {
+    const openCommunityPicker = async (db, targetPage, activeCodeOrId, allowedKeys) => {
       const modal = ensureCommunityPickerModal();
       const listEl = document.getElementById("communityPickerList");
       modal.hidden = false;
@@ -405,7 +452,7 @@
 
       try {
         const snap = await db.collection("communities").get();
-        const list = snap.docs.map((d) => {
+        let list = snap.docs.map((d) => {
           const v = d.data() || {};
           return {
             id: String(v.id || d.id),
@@ -416,12 +463,24 @@
           };
         }).filter((x) => x && x.name);
 
-        const areaOrder = { "台北": 1, "新北": 2, "桃園": 3 };
+        const allowed = Array.isArray(allowedKeys) ? allowedKeys.map((x) => String(x || "").trim()).filter(Boolean) : [];
+        if (allowed.length) {
+          const set = new Set(allowed.map((x) => x.toLowerCase()));
+          list = list.filter((c) => {
+            const id = String(c.id || "").trim().toLowerCase();
+            const user = String(c.username || "").trim().toLowerCase();
+            return set.has(id) || set.has(user);
+          });
+        }
+
         list.sort((a, b) => {
-          const oa = areaOrder[a.area] || 99;
-          const ob = areaOrder[b.area] || 99;
-          if (oa !== ob) return oa - ob;
-          return String(a.username || a.name || "").localeCompare(String(b.username || b.name || ""), "zh-TW", { numeric: true });
+          const ka = String(a.username || a.id || "").trim();
+          const kb = String(b.username || b.id || "").trim();
+          const ca = ka.toLowerCase();
+          const cb = kb.toLowerCase();
+          const byKey = ca.localeCompare(cb, "en", { numeric: true, sensitivity: "base" });
+          if (byKey !== 0) return byKey;
+          return String(a.name || "").localeCompare(String(b.name || ""), "zh-TW", { numeric: true, sensitivity: "base" });
         });
 
         if (!listEl) return;
@@ -434,8 +493,15 @@
         listEl.innerHTML = list.map((c) => {
           const key = String(c.username || c.id || "").trim();
           const isActive = activeKey && (key.toLowerCase() === activeKey || String(c.id || "").toLowerCase() === activeKey);
-          const cls = isActive ? "btn btn-primary" : "btn";
-          return `<div class="community-picker-item"><button type="button" class="${cls}" data-community-key="${encodeURIComponent(key)}">${c.name}</button></div>`;
+          const cls = isActive ? "community-picker-btn active" : "community-picker-btn";
+          return `
+            <div class="community-picker-item">
+              <button type="button" class="${cls}" data-community-key="${encodeURIComponent(key)}">
+                <span class="community-picker-name">${c.name}</span>
+                <span class="community-picker-code">${key}</span>
+              </button>
+            </div>
+          `.trim();
         }).join("");
 
         listEl.querySelectorAll("[data-community-key]").forEach((b) => {
@@ -443,10 +509,35 @@
             const key = decodeURIComponent(String(b.getAttribute("data-community-key") || "").trim());
             if (!key) return;
             try { sessionStorage.setItem("csp_last_cid", key); } catch {}
-            try { sessionStorage.setItem("csp_role", targetPage === "admin" ? "community" : "resident"); } catch {}
+            const target = String(targetPage || "").trim().toLowerCase();
             const cPart = `?c=${encodeURIComponent(key)}`;
-            if (targetPage === "admin") location.href = `admin.html${cPart}#community/community-dashboard`;
-            else location.href = `member.html${cPart}`;
+            if (target === "admin") {
+              try { sessionStorage.setItem("csp_role", "community"); } catch {}
+              location.href = `admin.html${cPart}#community/community-dashboard`;
+              return;
+            }
+            if (target === "member") {
+              try { sessionStorage.setItem("csp_role", "resident"); } catch {}
+              location.href = `member.html${cPart}`;
+              return;
+            }
+            if (target === "board") {
+              try { sessionStorage.setItem("csp_role", "board"); } catch {}
+              location.href = `ead.html${cPart}`;
+              return;
+            }
+            if (target === "table") {
+              try { sessionStorage.setItem("csp_role", "table"); } catch {}
+              location.href = `tad.html${cPart}`;
+              return;
+            }
+            if (target === "shop") {
+              try { sessionStorage.setItem("csp_role", "shop"); } catch {}
+              location.href = `shop.html${cPart}`;
+              return;
+            }
+            try { sessionStorage.setItem("csp_role", "community"); } catch {}
+            location.href = `admin.html${cPart}#community/community-dashboard`;
           });
         });
       } catch (e) {
@@ -503,9 +594,12 @@
 
     const resolveSwitchTargets = () => {
       const page = String(location.pathname || "").split("/").pop().toLowerCase();
-      if (page === "system.html") return ["admin", "member"];
-      if (page === "admin.html") return ["system", "member"];
-      if (page === "member.html") return ["system", "admin"];
+      if (page === "system.html") return ["admin", "member", "board", "table", "shop"];
+      if (page === "admin.html") return ["system", "member", "board", "table", "shop"];
+      if (page === "member.html") return ["system", "admin", "board", "table", "shop"];
+      if (page === "ead.html") return ["system", "admin", "member", "table", "shop"];
+      if (page === "tad.html") return ["system", "admin", "member", "board", "shop"];
+      if (page === "shop.html") return ["system", "admin", "member", "board", "table"];
       return [];
     };
 
@@ -515,6 +609,9 @@
       if (target === "system") return "system.html";
       if (target === "admin") return `admin.html${cPart}#community/community-dashboard`;
       if (target === "member") return `member.html${cPart}`;
+      if (target === "board") return `ead.html${cPart}`;
+      if (target === "table") return `tad.html${cPart}`;
+      if (target === "shop") return `shop.html${cPart}`;
       return "";
     };
 
@@ -522,6 +619,9 @@
       if (target === "system") return "admin";
       if (target === "admin") return "community";
       if (target === "member") return "resident";
+      if (target === "board") return "board";
+      if (target === "table") return "table";
+      if (target === "shop") return "shop";
       return "";
     };
 
@@ -529,6 +629,62 @@
       if (target === "system") return "系統";
       if (target === "admin") return "社區";
       if (target === "member") return "住戶";
+      if (target === "board") return "看板";
+      if (target === "table") return "桌板";
+      if (target === "shop") return "商店";
+      return "";
+    };
+
+    const iconForTarget = (target) => {
+      if (target === "system") {
+        return `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.7"></path>
+            <path d="M19.2 12a7.2 7.2 0 0 0-.1-1.1l2-1.6-1.8-3.1-2.5 1a7.2 7.2 0 0 0-1.9-1.1l-.4-2.7H9.5l-.4 2.7a7.2 7.2 0 0 0-1.9 1.1l-2.5-1-1.8 3.1 2 1.6A7.2 7.2 0 0 0 4.8 12c0 .4 0 .7.1 1.1l-2 1.6 1.8 3.1 2.5-1a7.2 7.2 0 0 0 1.9 1.1l.4 2.7h5l.4-2.7a7.2 7.2 0 0 0 1.9-1.1l2.5 1 1.8-3.1-2-1.6c.1-.4.1-.7.1-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" opacity="0.8"></path>
+          </svg>
+        `.trim();
+      }
+      if (target === "admin") {
+        return `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4.5 10.3 12 5.7l7.5 4.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M6.2 10.3V19h11.6v-8.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M9 19v-5.3h6V19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        `.trim();
+      }
+      if (target === "member") {
+        return `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z" stroke="currentColor" stroke-width="1.7"></path>
+            <path d="M4 20a8 8 0 0 1 16 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+          </svg>
+        `.trim();
+      }
+      if (target === "board") {
+        return `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="4" y="5" width="16" height="11" rx="2" stroke="currentColor" stroke-width="1.7"></rect>
+            <path d="M9 19h6M12 16v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+          </svg>
+        `.trim();
+      }
+      if (target === "table") {
+        return `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="5" y="4.5" width="14" height="15" rx="2" stroke="currentColor" stroke-width="1.7"></rect>
+            <path d="M9 9h6M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+          </svg>
+        `.trim();
+      }
+      if (target === "shop") {
+        return `
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M5 9h14l-1 10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 9Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+            <path d="M9 9V7a3 3 0 0 1 6 0v2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+          </svg>
+        `.trim();
+      }
       return "";
     };
 
@@ -560,7 +716,11 @@
         return;
       }
       switchEl.hidden = false;
-      switchEl.innerHTML = targets.map((t) => `<button class="btn" type="button" data-profile-switch="${t}">${labelForTarget(t)}</button>`).join("");
+      switchEl.innerHTML = targets.map((t) => `
+        <button class="icon-btn" type="button" data-profile-switch="${t}" aria-label="${labelForTarget(t)}" title="${labelForTarget(t)}">
+          ${iconForTarget(t)}
+        </button>
+      `).join("");
     };
     const bindCommunityNameSubPicker = () => {
       if (!communityNameSub) return;
@@ -569,7 +729,10 @@
       const sessionRole = getSessionRole();
       const fb = window.firebase;
       const user = fb && fb.auth ? fb.auth().currentUser : null;
-      const hintClickable = Boolean(isSystemPage || sessionRole === "admin" || isSystemAdminFlag() || isSystemAdminSession(user));
+      const allowedKeys = readAllowedCommunityKeys();
+      const multiRole = sessionRole === "community" || sessionRole === "board" || sessionRole === "table" || sessionRole === "shop";
+      const multiEnabled = Boolean(multiRole && allowedKeys.length > 1);
+      const hintClickable = Boolean(isSystemPage || sessionRole === "admin" || isSystemAdminFlag() || isSystemAdminSession(user) || multiEnabled);
       communityNameSub.classList.toggle("clickable", hintClickable);
       if (communityNameSub._pickerHandler) return;
       communityNameSub._pickerHandler = async (e) => {
@@ -579,7 +742,10 @@
         } catch {}
         const fb2 = window.firebase;
         const u = fb2 && fb2.auth ? fb2.auth().currentUser : null;
-        let ok = Boolean(isSystemAdminFlag() || isSystemAdminSession(u));
+        const allowedKeys2 = readAllowedCommunityKeys();
+        const role2 = getSessionRole();
+        const multiRole2 = role2 === "community" || role2 === "board" || role2 === "table" || role2 === "shop";
+        let ok = Boolean(isSystemAdminFlag() || isSystemAdminSession(u) || (multiRole2 && allowedKeys2.length > 1));
         if (!ok) {
           const p = String(location.pathname || "").split("/").pop().toLowerCase();
           if (p === "system.html") ok = true;
@@ -606,11 +772,17 @@
         }
         if (!ok) return;
         const p = String(location.pathname || "").split("/").pop().toLowerCase();
-        const target = p === "member.html" ? "member" : "admin";
+        const target =
+          p === "member.html" ? "member" :
+          p === "ead.html" ? "board" :
+          p === "tad.html" ? "table" :
+          p === "shop.html" ? "shop" :
+          "admin";
         openCommunityPicker(
           ensureDb(),
           target,
-          new URLSearchParams(location.search).get("c") || sessionStorage.getItem("csp_last_cid") || localStorage.getItem("csp_active_community_v1") || ""
+          new URLSearchParams(location.search).get("c") || sessionStorage.getItem("csp_last_cid") || localStorage.getItem("csp_active_community_v1") || "",
+          allowedKeys2
         );
       };
       communityNameSub.addEventListener("click", communityNameSub._pickerHandler, true);
@@ -692,6 +864,49 @@
       }
       markSystemAdminSession(user, sysAdmin);
       updateSwitchButtons();
+      try {
+        const role = getSessionRole();
+        const supportsMulti = role === "community" || role === "board" || role === "table" || role === "shop";
+        if (supportsMulti && db) {
+          const idsRaw = Array.isArray(data && data.communityIds ? data.communityIds : null) ? data.communityIds : [];
+          const ids = idsRaw.map((x) => String(x || "").trim()).filter(Boolean);
+          const codesRaw = Array.isArray(data && data.communityCodes ? data.communityCodes : null) ? data.communityCodes : [];
+          let keys = codesRaw.map((x) => String(x || "").trim()).filter(Boolean);
+          if (!keys.length) {
+            keys = [];
+            for (const id of ids) {
+              if (!id) continue;
+              try {
+                const cdoc = await db.collection("communities").doc(String(id)).get();
+                if (cdoc && cdoc.exists) {
+                  const cdata = cdoc.data() || {};
+                  const code = String(cdata.username || cdata.id || id).trim();
+                  if (code) keys.push(code);
+                } else {
+                  keys.push(id);
+                }
+              } catch {
+                keys.push(id);
+              }
+            }
+          }
+          const uniq = [];
+          const seen = new Set();
+          keys.forEach((k) => {
+            const key = String(k || "").trim();
+            const low = key.toLowerCase();
+            if (!key || seen.has(low)) return;
+            seen.add(low);
+            uniq.push(key);
+          });
+          writeAllowedCommunityKeys(uniq);
+          ensureUrlCommunityKeyFromAllowed(uniq);
+        } else {
+          writeAllowedCommunityKeys([]);
+        }
+      } catch {
+        writeAllowedCommunityKeys([]);
+      }
       bindCommunityNameSubPicker();
       const displayName = String(
         data.displayName ||
@@ -734,8 +949,7 @@
           if (houseNoItem) houseNoItem.hidden = true;
           const qrWrap = document.getElementById("profileHouseNoQrWrap");
           if (qrWrap) {
-            qrWrap.hidden = true;
-            qrWrap.style.display = "none";
+            try { qrWrap.parentElement && qrWrap.parentElement.removeChild(qrWrap); } catch {}
           }
           if (roleEl) {
             roleEl.textContent = "";
@@ -743,7 +957,14 @@
           }
         } else {
           communityItemEl.classList.remove("single");
-          if (houseNoItem) {
+          const staffRole = sessionRole === "community" || sessionRole === "board" || sessionRole === "table" || sessionRole === "shop";
+          const qrWrap = document.getElementById("profileHouseNoQrWrap");
+          if (staffRole) {
+            if (houseNoItem) houseNoItem.hidden = true;
+            if (qrWrap) {
+              try { qrWrap.parentElement && qrWrap.parentElement.removeChild(qrWrap); } catch {}
+            }
+          } else if (houseNoItem) {
             houseNoItem.hidden = false;
             const base = String(data.houseNo || data.unit || "").trim();
             const sub = String(data.subHouseNo || data.subUnit || data.sub || "").trim();
