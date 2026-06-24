@@ -251,6 +251,12 @@
     if (String(d.status || "").trim() !== "ringing") return;
     if (String(d.toRole || "").trim() !== "resident") return;
     if (String(d.toUid || "").trim() !== String(user.uid)) return;
+    showIntercomIncomingNotification({
+      callId: id,
+      community: String(d.community || "").trim(),
+      fromName: String(d.fromName || "社區後台").trim(),
+      fromHouseNo: String(d.fromHouseNo || "").trim(),
+    }).catch(() => {});
 
     const prompt = ensureIntercomIncomingModal();
     prepareIntercomModal(prompt);
@@ -1151,12 +1157,55 @@
   let intercomRingCtx = null;
   let intercomRingOsc = null;
   let intercomRingGain = null;
+  let intercomRingCompressor = null;
   let intercomRingTimer = null;
   let intercomLastIncomingMs = 0;
   let intercomLastIncomingId = "";
+  let intercomLastIncomingNotifyId = "";
   let intercomIncomingPromptEl = null;
   let intercomIncomingPromptCallId = "";
   let intercomIncomingPromptUnsubDoc = null;
+
+  async function showIntercomIncomingNotification({ callId, community, fromName, fromHouseNo }) {
+    const id = String(callId || "").trim();
+    if (!id) return;
+    if (id === intercomLastIncomingNotifyId) return;
+    intercomLastIncomingNotifyId = id;
+    if (!("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+    if (!("serviceWorker" in navigator)) return;
+    let reg = null;
+    try { reg = await navigator.serviceWorker.ready; } catch { reg = null; }
+    if (!reg || typeof reg.showNotification !== "function") return;
+
+    const c = String(community || "").trim();
+    const fn = String(fromName || "社區後台").trim() || "社區後台";
+    const fh = String(fromHouseNo || "").trim();
+    const title = "生活網｜社區後台來電";
+    const body = fh ? `${fn}｜${fh}` : fn;
+
+    const q = new URLSearchParams();
+    if (c) q.set("c", c);
+    q.set("call", id);
+    const url = q.toString() ? `./member.html?${q.toString()}` : "./member.html";
+    const tag = `intercom_${id}`;
+    try {
+      await reg.showNotification(title, {
+        body,
+        icon: "./icon-192.png?v=2",
+        badge: "./icon-192.png?v=2",
+        tag,
+        renotify: true,
+        requireInteraction: true,
+        vibrate: [120, 80, 120, 80, 220],
+        actions: [
+          { action: "answer", title: "接通" },
+          { action: "reject", title: "拒接" },
+        ],
+        data: { type: "intercom", callId: id, community: c, toRole: "resident", url },
+      });
+    } catch {}
+  }
 
   function startIntercomRingtone(mode = "incoming") {
     stopIntercomRingtone();
@@ -1169,7 +1218,16 @@
       }
       intercomRingGain = intercomRingCtx.createGain();
       intercomRingGain.gain.value = 0.0001;
-      intercomRingGain.connect(intercomRingCtx.destination);
+      intercomRingCompressor = intercomRingCtx.createDynamicsCompressor();
+      try {
+        intercomRingCompressor.threshold.setValueAtTime(-24, intercomRingCtx.currentTime);
+        intercomRingCompressor.knee.setValueAtTime(30, intercomRingCtx.currentTime);
+        intercomRingCompressor.ratio.setValueAtTime(12, intercomRingCtx.currentTime);
+        intercomRingCompressor.attack.setValueAtTime(0.003, intercomRingCtx.currentTime);
+        intercomRingCompressor.release.setValueAtTime(0.25, intercomRingCtx.currentTime);
+      } catch {}
+      intercomRingGain.connect(intercomRingCompressor);
+      intercomRingCompressor.connect(intercomRingCtx.destination);
       intercomRingOsc = [];
 
       const m = String(mode || "incoming").trim() || "incoming";
@@ -1185,11 +1243,11 @@
 
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
-        osc.type = "sine";
+        osc.type = "triangle";
         osc.frequency.setValueAtTime(Number(freq || 440), now);
 
         g.gain.setValueAtTime(0.0001, now);
-        g.gain.linearRampToValueAtTime(0.07, now + 0.02);
+        g.gain.linearRampToValueAtTime(0.9, now + 0.02);
         g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
 
         osc.connect(g);
@@ -1201,7 +1259,7 @@
 
       const tick = () => {
         if (!intercomRingCtx || !intercomRingGain) return;
-        const volume = m === "waiting" ? 0.035 : 0.055;
+        const volume = m === "waiting" ? 0.18 : 0.26;
         try { intercomRingGain.gain.setTargetAtTime(volume, intercomRingCtx.currentTime, 0.05); } catch {}
         if (m === "waiting") {
           playNote(waitingNotes[i % waitingNotes.length], 140);
@@ -1233,6 +1291,7 @@
     } catch {}
     intercomRingOsc = null;
     intercomRingGain = null;
+    intercomRingCompressor = null;
   }
 
   function createIntercomPeerConnection() {
@@ -1929,6 +1988,12 @@
 
         const fromName = String(latest.fromName || "社區後台").trim() || "社區後台";
         const fromHouse = String(latest.fromHouseNo || "").trim();
+        showIntercomIncomingNotification({
+          callId,
+          community: String(latest.community || cid || "").trim(),
+          fromName,
+          fromHouseNo: fromHouse,
+        }).catch(() => {});
         setIntercomPeerVisual(prompt, {
           avatarSelector: "#intercomIncomingInitialMember",
           imageSelector: "#intercomIncomingAvatarMember",

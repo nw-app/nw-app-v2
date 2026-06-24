@@ -22,9 +22,9 @@ service cloud.firestore {
     }
 
     function isCommunityStaff() {
-       return exists(/databases/$(database)/documents/users/$(request.auth.uid))
-         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') != "住戶"
-         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') != "停用";
+       return request.auth != null
+         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+         && !(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') in ["住戶", "resident", "停用"]);
     }
 
     function asString(v) {
@@ -448,10 +448,10 @@ service cloud.firestore {
 
     function isCallParticipantByDoc(doc) {
       return request.auth != null && (
-        isAdmin() ||
-        (isCommunityStaff() && doc.community == getUserData().community) ||
         doc.fromUid == request.auth.uid ||
-        doc.toUid == request.auth.uid
+        doc.toUid == request.auth.uid ||
+        isAdmin() ||
+        (isCommunityStaff() && doc.community == getUserData().community)
       );
     }
 

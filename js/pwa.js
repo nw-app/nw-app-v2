@@ -52,7 +52,14 @@
   }
 
   function isStandalone() {
-    return window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
+    try {
+      if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) return true;
+    } catch {}
+    try {
+      return Boolean(window.navigator && window.navigator.standalone);
+    } catch {
+      return false;
+    }
   }
 
   async function updateOrientationLock() {
@@ -1282,7 +1289,14 @@
       if (!btn) return;
       const action = btn.getAttribute("data-action");
       if (action === "install") {
-        await onInstall?.();
+        if (typeof onInstall !== "function") {
+          try {
+            alert("請使用瀏覽器選單的「安裝應用程式」或「加入主畫面」來安裝。");
+          } catch {}
+          return;
+        }
+        const didPrompt = await onInstall();
+        if (didPrompt === false) return;
         banner.hidden = true;
         dismiss();
         cleanup();
@@ -1294,8 +1308,11 @@
     };
 
     const cleanup = () => {
-      banner.removeEventListener("click", onClick);
+      if (banner._nwPwaInstallOnClick) banner.removeEventListener("click", banner._nwPwaInstallOnClick);
+      banner._nwPwaInstallOnClick = null;
     };
+    if (banner._nwPwaInstallOnClick) banner.removeEventListener("click", banner._nwPwaInstallOnClick);
+    banner._nwPwaInstallOnClick = onClick;
     banner.addEventListener("click", onClick);
   }
   
@@ -1346,6 +1363,24 @@
 
     // 为 iOS 设备显示安装提示
     showIOSInstallPrompt();
+    setTimeout(() => {
+      if (isIOSSafari()) return;
+      if (!isPhoneLike()) return;
+      showBanner(async () => {
+        if (!deferredPrompt) {
+          try {
+            alert("請使用瀏覽器選單的「安裝應用程式」或「加入主畫面」來安裝。");
+          } catch {}
+          return false;
+        }
+        deferredPrompt.prompt();
+        try {
+          await deferredPrompt.userChoice;
+        } catch {}
+        deferredPrompt = null;
+        return true;
+      });
+    }, 1500);
 
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.register("./sw.js").then((reg) => {
@@ -1400,12 +1435,13 @@
     e.preventDefault();
     deferredPrompt = e;
     showBanner(async () => {
-      if (!deferredPrompt) return;
+      if (!deferredPrompt) return false;
       deferredPrompt.prompt();
       try {
         await deferredPrompt.userChoice;
       } catch {}
       deferredPrompt = null;
+      return true;
     });
   });
 
