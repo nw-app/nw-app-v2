@@ -2938,6 +2938,23 @@ a { color: inherit; text-decoration: none; }
   margin-top: 22px;
 }
 
+.intercom-permission-help {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: left;
+  max-width: min(92vw, 420px);
+}
+
+.intercom-permission-help.error {
+  background: rgba(191, 38, 38, 0.18);
+  color: #fff;
+}
+
 .intercom-chip {
   display: inline-flex;
   align-items: center;

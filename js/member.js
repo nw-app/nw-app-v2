@@ -1126,6 +1126,40 @@
     return audio;
   }
 
+  function isStandaloneIntercomApp() {
+    try {
+      return Boolean(
+        (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+        navigator.standalone
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function setIntercomPermissionHelp(message, isError) {
+    const modal = document.getElementById("intercomCallModal90");
+    if (!modal) return;
+    const el = modal.querySelector("#intercomPermissionHelp");
+    if (!el) return;
+    const text = String(message || "").trim();
+    el.textContent = text;
+    el.hidden = !text;
+    el.classList.toggle("error", Boolean(isError));
+  }
+
+  function buildMicrophonePermissionMessage(err) {
+    const code = String((err && (err.name || err.code || err.message)) || "").toLowerCase();
+    const standalone = isStandaloneIntercomApp();
+    if (standalone) {
+      return "請先開啟此桌面應用程式的麥克風權限，並確認系統麥克風權限已允許。Windows 可到 設定 > 隱私權與安全性 > 麥克風 開啟。";
+    }
+    if (code.includes("denied") || code.includes("notallowed")) {
+      return "請點網址列權限圖示，將麥克風改成允許後，再重新撥打。";
+    }
+    return "請確認裝置已有可用麥克風，並已開啟網站麥克風權限。";
+  }
+
   function setIntercomCallStatus(text, isError) {
     const modal = document.getElementById("intercomCallModal90");
     if (!modal) return;
@@ -1220,6 +1254,7 @@
               <span class="intercom-chip" id="intercomCallState">待命</span>
               <span class="intercom-timer big" id="intercomTimer">00:00</span>
             </div>
+            <div class="intercom-permission-help" id="intercomPermissionHelp" hidden></div>
             <audio id="intercomRemoteAudioMember" autoplay playsinline></audio>
           </div>
           <div class="intercom-screen-bottom">
@@ -1239,6 +1274,10 @@
     intercomActive = null;
     stopIntercomRingtone();
     if (!active) return;
+    if (active.modalEl) {
+      if (Number(closeDelayMs || 0) > 0) scheduleIntercomModalHide(active.modalEl, closeDelayMs);
+      else active.modalEl.hidden = true;
+    }
     try {
       if (active.timerId) window.clearInterval(active.timerId);
     } catch {}
@@ -1268,10 +1307,6 @@
         audio.srcObject = null;
       }
     } catch {}
-    if (active.modalEl) {
-      if (Number(closeDelayMs || 0) > 0) scheduleIntercomModalHide(active.modalEl, closeDelayMs);
-      else active.modalEl.hidden = true;
-    }
   }
 
   async function intercomStartOutgoingToAdmin({ communityId }) {
@@ -1294,6 +1329,7 @@
     setIntercomCallStatus("正在呼叫…", false);
     const timerEl = modal.querySelector("#intercomTimer");
     if (timerEl) timerEl.textContent = "00:00";
+    setIntercomPermissionHelp("", false);
 
     const callDocRef = db.collection("calls").doc();
     const pc = createIntercomPeerConnection();
@@ -1317,8 +1353,9 @@
 
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    } catch {
+    } catch (err) {
       setIntercomCallStatus("無法開啟麥克風，請確認瀏覽器權限。", true);
+      setIntercomPermissionHelp(buildMicrophonePermissionMessage(err), true);
       try { pc.close(); } catch {}
       if (callBtn) callBtn.disabled = false;
       return;
@@ -1360,6 +1397,7 @@
           try { await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); } catch {}
         }
         setIntercomCallStatus("已接通", false);
+        setIntercomPermissionHelp("", false);
         if (intercomActive && !intercomActive.timerId) startIntercomTimer(Date.now());
         return;
       }
@@ -1423,6 +1461,7 @@
       fallbackInitial: fromName,
     });
     if (timerEl) timerEl.textContent = "00:00";
+    setIntercomPermissionHelp("", false);
 
     setIntercomCallStatus("接通中…", false);
 
@@ -1447,8 +1486,9 @@
 
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    } catch {
+    } catch (err) {
       setIntercomCallStatus("無法開啟麥克風，請確認瀏覽器權限。", true);
+      setIntercomPermissionHelp(buildMicrophonePermissionMessage(err), true);
       try { pc.close(); } catch {}
       return;
     }
@@ -1480,6 +1520,7 @@
       { merge: true }
     );
     setIntercomCallStatus("已接通", false);
+    setIntercomPermissionHelp("", false);
 
     if (hangupBtn) hangupBtn.onclick = () => {
       setIntercomCallStatus("通話已結束", false);
@@ -1650,6 +1691,7 @@
       const timerEl = modal.querySelector("#intercomTimer");
       if (timerEl) timerEl.textContent = "00:00";
       setIntercomCallStatus("待命", false);
+      setIntercomPermissionHelp("", false);
       prepareIntercomModal(modal);
     });
   }
