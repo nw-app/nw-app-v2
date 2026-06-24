@@ -11455,6 +11455,41 @@
     }
   }
 
+  function scheduleIntercomModalHide(modal, delayMs = 1000) {
+    if (!modal) return;
+    const token = `${Date.now()}_${Math.random()}`;
+    modal.dataset.intercomHideToken = token;
+    window.setTimeout(() => {
+      if (modal.dataset.intercomHideToken === token) modal.hidden = true;
+    }, Math.max(0, Number(delayMs || 0)));
+  }
+
+  function prepareIntercomModal(modal) {
+    if (!modal) return;
+    modal.hidden = false;
+    modal.dataset.intercomHideToken = "";
+  }
+
+  function attachIntercomRemoteAudio(audioId, remoteStream) {
+    const audio = document.getElementById(String(audioId || ""));
+    if (!audio) return null;
+    audio.autoplay = true;
+    audio.playsInline = true;
+    audio.muted = false;
+    audio.volume = 1;
+    audio.srcObject = remoteStream || null;
+    const tryPlay = () => {
+      try { return audio.play(); } catch { return null; }
+    };
+    audio.onloadedmetadata = () => {
+      const p = tryPlay();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    };
+    const p = tryPlay();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+    return audio;
+  }
+
   function setIntercomCallStatus(text, isError) {
     const modal = document.getElementById("intercomCallModal80");
     if (!modal) return;
@@ -11548,8 +11583,7 @@
             <audio id="intercomRemoteAudioAdmin" autoplay playsinline></audio>
           </div>
           <div class="intercom-screen-bottom">
-            <div class="intercom-actions round-two">
-              <button class="intercom-btn ghost round small" type="button" id="btnIntercomMute"><span>靜音</span></button>
+            <div class="intercom-actions round-one">
               <button class="intercom-btn danger round" type="button" id="btnIntercomHangup"><span>掛斷</span></button>
             </div>
           </div>
@@ -11559,7 +11593,7 @@
     return modal;
   }
 
-  async function cleanupIntercomActive({ updateStatus } = {}) {
+  async function cleanupIntercomActive({ updateStatus, closeDelayMs = 0 } = {}) {
     const active = intercomActive;
     intercomActive = null;
     stopIntercomRingtone();
@@ -11592,8 +11626,15 @@
     } catch {}
     try {
       const audio = document.getElementById("intercomRemoteAudioAdmin");
-      if (audio) audio.srcObject = null;
+      if (audio) {
+        audio.pause();
+        audio.srcObject = null;
+      }
     } catch {}
+    if (active.modalEl) {
+      if (Number(closeDelayMs || 0) > 0) scheduleIntercomModalHide(active.modalEl, closeDelayMs);
+      else active.modalEl.hidden = true;
+    }
   }
 
   async function intercomStartOutgoingToResident({ communityId, resident }) {
@@ -11609,13 +11650,13 @@
 
     await cleanupIntercomActive();
     const modal = ensureIntercomCallModal();
+    prepareIntercomModal(modal);
     let detach = () => {};
     detach = bindModalClose(modal, () => {
       detach();
       cleanupIntercomActive({ updateStatus: "ended" });
     });
 
-    const muteBtn = modal.querySelector("#btnIntercomMute");
     const hangupBtn = modal.querySelector("#btnIntercomHangup");
     const timerEl = modal.querySelector("#intercomTimer");
 
@@ -11647,8 +11688,8 @@
     let callDocRef = null;
     let pc = null;
     const remoteStream = new MediaStream();
+    attachIntercomRemoteAudio("intercomRemoteAudioAdmin", remoteStream);
     let localStream = null;
-    let muted = false;
 
     try {
       callDocRef = db.collection("calls").doc();
@@ -11661,11 +11702,7 @@
     pc.ontrack = (ev) => {
       const list = ev && ev.streams && ev.streams[0] ? ev.streams[0].getTracks() : [];
       list.forEach((t) => remoteStream.addTrack(t));
-      const audio = document.getElementById("intercomRemoteAudioAdmin");
-      if (audio) {
-        audio.srcObject = remoteStream;
-        audio.play().catch(() => {});
-      }
+      attachIntercomRemoteAudio("intercomRemoteAudioAdmin", remoteStream);
     };
 
     const offerCandidatesRef = callDocRef.collection("offerCandidates");
@@ -11721,11 +11758,10 @@
     if (hangupBtn) {
       hangupBtn.onclick = () => cleanupIntercomActive({ updateStatus: "ended" });
     }
-    if (muteBtn) {
-      muteBtn.onclick = () => {
-        muted = !muted;
-        (localStream ? localStream.getAudioTracks() : []).forEach((t) => (t.enabled = !muted));
-        muteBtn.innerHTML = `<span>${muted ? "開音" : "靜音"}</span>`;
+    if (hangupBtn) {
+      hangupBtn.onclick = () => {
+        setIntercomCallStatus("通話已結束", false);
+        cleanupIntercomActive({ updateStatus: "ended", closeDelayMs: 1000 });
       };
     }
 
@@ -11745,7 +11781,7 @@
       }
       if (st === "rejected" || st === "ended" || st === "busy" || st === "missed") {
         setIntercomCallStatus(st === "rejected" ? "對方已掛斷" : (st === "busy" ? "對方忙線中" : "通話已結束"), false);
-        await cleanupIntercomActive();
+        await cleanupIntercomActive({ closeDelayMs: 1000 });
       }
     });
 
@@ -11766,6 +11802,7 @@
       unsubDoc,
       unsubCandidates: unsubAnswerCandidates,
       detachModal: detach,
+      modalEl: modal,
     };
   }
 
@@ -11777,13 +11814,13 @@
 
     await cleanupIntercomActive();
     const modal = ensureIntercomCallModal();
+    prepareIntercomModal(modal);
     let detach = () => {};
     detach = bindModalClose(modal, () => {
       detach();
       cleanupIntercomActive({ updateStatus: "ended" });
     });
 
-    const muteBtn = modal.querySelector("#btnIntercomMute");
     const hangupBtn = modal.querySelector("#btnIntercomHangup");
     const timerEl = modal.querySelector("#intercomTimer");
 
@@ -11819,17 +11856,13 @@
       return;
     }
     const remoteStream = new MediaStream();
+    attachIntercomRemoteAudio("intercomRemoteAudioAdmin", remoteStream);
     let localStream = null;
-    let muted = false;
 
     pc.ontrack = (ev) => {
       const list = ev && ev.streams && ev.streams[0] ? ev.streams[0].getTracks() : [];
       list.forEach((t) => remoteStream.addTrack(t));
-      const audio = document.getElementById("intercomRemoteAudioAdmin");
-      if (audio) {
-        audio.srcObject = remoteStream;
-        audio.play().catch(() => {});
-      }
+      attachIntercomRemoteAudio("intercomRemoteAudioAdmin", remoteStream);
     };
 
     const answerCandidatesRef = callDocRef.collection("answerCandidates");
@@ -11873,14 +11906,10 @@
       { merge: true }
     );
 
-    if (hangupBtn) hangupBtn.onclick = () => cleanupIntercomActive({ updateStatus: "ended" });
-    if (muteBtn) {
-      muteBtn.onclick = () => {
-        muted = !muted;
-        (localStream ? localStream.getAudioTracks() : []).forEach((t) => (t.enabled = !muted));
-        muteBtn.innerHTML = `<span>${muted ? "開音" : "靜音"}</span>`;
-      };
-    }
+    if (hangupBtn) hangupBtn.onclick = () => {
+      setIntercomCallStatus("通話已結束", false);
+      cleanupIntercomActive({ updateStatus: "ended", closeDelayMs: 1000 });
+    };
 
     const unsubOfferCandidates = callDocRef.collection("offerCandidates").onSnapshot((snap) => {
       (snap.docChanges ? snap.docChanges() : []).forEach((ch) => {
@@ -11897,7 +11926,7 @@
       const st = String(v.status || "").trim();
       if (st === "ended" || st === "rejected") {
         setIntercomCallStatus("通話已結束", false);
-        await cleanupIntercomActive();
+        await cleanupIntercomActive({ closeDelayMs: 1000 });
       }
     });
 
@@ -11909,10 +11938,11 @@
       unsubDoc,
       unsubCandidates: unsubOfferCandidates,
       detachModal: detach,
+      modalEl: modal,
     };
     startIntercomTimer(startedAtMs);
 
-    modal.hidden = false;
+    prepareIntercomModal(modal);
   }
 
   function startAdminIntercomIncomingListener(communityId) {
@@ -11956,6 +11986,7 @@
         }
 
         const prompt = ensureIntercomIncomingModal();
+        prepareIntercomModal(prompt);
         const callDocRef = db.collection("calls").doc(callId);
         let detach = () => {};
         detach = bindModalClose(prompt, () => {
@@ -11985,7 +12016,7 @@
           btnReject.onclick = async () => {
             stopIntercomRingtone();
             try { await callDocRef.set({ status: "rejected", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true }); } catch {}
-            prompt.hidden = true;
+            scheduleIntercomModalHide(prompt, 1000);
           };
         }
         if (btnAccept) {
@@ -11997,7 +12028,7 @@
         }
 
         startIntercomRingtone();
-        prompt.hidden = false;
+        prepareIntercomModal(prompt);
       }, () => {
         toast("來電監聽失敗");
       });

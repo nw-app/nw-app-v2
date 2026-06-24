@@ -1091,6 +1091,41 @@
     }
   }
 
+  function scheduleIntercomModalHide(modal, delayMs = 1000) {
+    if (!modal) return;
+    const token = `${Date.now()}_${Math.random()}`;
+    modal.dataset.intercomHideToken = token;
+    window.setTimeout(() => {
+      if (modal.dataset.intercomHideToken === token) modal.hidden = true;
+    }, Math.max(0, Number(delayMs || 0)));
+  }
+
+  function prepareIntercomModal(modal) {
+    if (!modal) return;
+    modal.hidden = false;
+    modal.dataset.intercomHideToken = "";
+  }
+
+  function attachIntercomRemoteAudio(audioId, remoteStream) {
+    const audio = document.getElementById(String(audioId || ""));
+    if (!audio) return null;
+    audio.autoplay = true;
+    audio.playsInline = true;
+    audio.muted = false;
+    audio.volume = 1;
+    audio.srcObject = remoteStream || null;
+    const tryPlay = () => {
+      try { return audio.play(); } catch { return null; }
+    };
+    audio.onloadedmetadata = () => {
+      const p = tryPlay();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    };
+    const p = tryPlay();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+    return audio;
+  }
+
   function setIntercomCallStatus(text, isError) {
     const modal = document.getElementById("intercomCallModal90");
     if (!modal) return;
@@ -1188,8 +1223,7 @@
             <audio id="intercomRemoteAudioMember" autoplay playsinline></audio>
           </div>
           <div class="intercom-screen-bottom">
-            <div class="intercom-actions round-three">
-              <button class="intercom-btn ghost round small" type="button" id="btnIntercomMute"><span>靜音</span></button>
+            <div class="intercom-actions round-two">
               <button class="intercom-btn danger round" type="button" id="btnIntercomHangup"><span>掛斷</span></button>
               <button class="intercom-btn success round" type="button" id="btnIntercomCallAdmin"><span>呼叫</span></button>
             </div>
@@ -1200,7 +1234,7 @@
     return modal;
   }
 
-  async function cleanupIntercomActive({ updateStatus } = {}) {
+  async function cleanupIntercomActive({ updateStatus, closeDelayMs = 0 } = {}) {
     const active = intercomActive;
     intercomActive = null;
     stopIntercomRingtone();
@@ -1229,8 +1263,15 @@
     try { if (active.localStream) active.localStream.getTracks().forEach((t) => t.stop()); } catch {}
     try {
       const audio = document.getElementById("intercomRemoteAudioMember");
-      if (audio) audio.srcObject = null;
+      if (audio) {
+        audio.pause();
+        audio.srcObject = null;
+      }
     } catch {}
+    if (active.modalEl) {
+      if (Number(closeDelayMs || 0) > 0) scheduleIntercomModalHide(active.modalEl, closeDelayMs);
+      else active.modalEl.hidden = true;
+    }
   }
 
   async function intercomStartOutgoingToAdmin({ communityId }) {
@@ -1240,13 +1281,13 @@
 
     await cleanupIntercomActive();
     const modal = ensureIntercomCallModal();
+    prepareIntercomModal(modal);
     let detach = () => {};
     detach = bindModalClose(modal, () => {
       detach();
       cleanupIntercomActive({ updateStatus: "ended" });
     });
 
-    const muteBtn = modal.querySelector("#btnIntercomMute");
     const hangupBtn = modal.querySelector("#btnIntercomHangup");
     const callBtn = modal.querySelector("#btnIntercomCallAdmin");
     if (callBtn) callBtn.disabled = true;
@@ -1257,17 +1298,13 @@
     const callDocRef = db.collection("calls").doc();
     const pc = createIntercomPeerConnection();
     const remoteStream = new MediaStream();
+    attachIntercomRemoteAudio("intercomRemoteAudioMember", remoteStream);
     let localStream = null;
-    let muted = false;
 
     pc.ontrack = (ev) => {
       const list = ev && ev.streams && ev.streams[0] ? ev.streams[0].getTracks() : [];
       list.forEach((t) => remoteStream.addTrack(t));
-      const audio = document.getElementById("intercomRemoteAudioMember");
-      if (audio) {
-        audio.srcObject = remoteStream;
-        audio.play().catch(() => {});
-      }
+      attachIntercomRemoteAudio("intercomRemoteAudioMember", remoteStream);
     };
 
     const offerCandidatesRef = callDocRef.collection("offerCandidates");
@@ -1309,14 +1346,10 @@
       { merge: true }
     );
 
-    if (hangupBtn) hangupBtn.onclick = () => cleanupIntercomActive({ updateStatus: "ended" });
-    if (muteBtn) {
-      muteBtn.onclick = () => {
-        muted = !muted;
-        (localStream ? localStream.getAudioTracks() : []).forEach((t) => (t.enabled = !muted));
-        muteBtn.innerHTML = `<span>${muted ? "開音" : "靜音"}</span>`;
-      };
-    }
+    if (hangupBtn) hangupBtn.onclick = () => {
+      setIntercomCallStatus("通話已結束", false);
+      cleanupIntercomActive({ updateStatus: "ended", closeDelayMs: 1000 });
+    };
 
     const unsubDoc = callDocRef.onSnapshot(async (snap) => {
       const data = snap && snap.exists ? (snap.data() || {}) : null;
@@ -1332,7 +1365,7 @@
       }
       if (st === "rejected" || st === "ended" || st === "busy" || st === "missed") {
         setIntercomCallStatus(st === "busy" ? "後台忙線中" : (st === "rejected" ? "後台已掛斷" : "通話已結束"), false);
-        await cleanupIntercomActive();
+        await cleanupIntercomActive({ closeDelayMs: 1000 });
       }
     });
 
@@ -1353,6 +1386,7 @@
       unsubDoc,
       unsubCandidates: unsubAnswerCandidates,
       detachModal: detach,
+      modalEl: modal,
     };
   }
 
@@ -1364,13 +1398,13 @@
 
     await cleanupIntercomActive();
     const modal = ensureIntercomCallModal();
+    prepareIntercomModal(modal);
     let detach = () => {};
     detach = bindModalClose(modal, () => {
       detach();
       cleanupIntercomActive({ updateStatus: "ended" });
     });
 
-    const muteBtn = modal.querySelector("#btnIntercomMute");
     const hangupBtn = modal.querySelector("#btnIntercomHangup");
     const callBtn = modal.querySelector("#btnIntercomCallAdmin");
     if (callBtn) callBtn.hidden = true;
@@ -1394,17 +1428,13 @@
 
     const pc = createIntercomPeerConnection();
     const remoteStream = new MediaStream();
+    attachIntercomRemoteAudio("intercomRemoteAudioMember", remoteStream);
     let localStream = null;
-    let muted = false;
 
     pc.ontrack = (ev) => {
       const list = ev && ev.streams && ev.streams[0] ? ev.streams[0].getTracks() : [];
       list.forEach((t) => remoteStream.addTrack(t));
-      const audio = document.getElementById("intercomRemoteAudioMember");
-      if (audio) {
-        audio.srcObject = remoteStream;
-        audio.play().catch(() => {});
-      }
+      attachIntercomRemoteAudio("intercomRemoteAudioMember", remoteStream);
     };
 
     const answerCandidatesRef = callDocRef.collection("answerCandidates");
@@ -1451,14 +1481,10 @@
     );
     setIntercomCallStatus("已接通", false);
 
-    if (hangupBtn) hangupBtn.onclick = () => cleanupIntercomActive({ updateStatus: "ended" });
-    if (muteBtn) {
-      muteBtn.onclick = () => {
-        muted = !muted;
-        (localStream ? localStream.getAudioTracks() : []).forEach((t) => (t.enabled = !muted));
-        muteBtn.innerHTML = `<span>${muted ? "開音" : "靜音"}</span>`;
-      };
-    }
+    if (hangupBtn) hangupBtn.onclick = () => {
+      setIntercomCallStatus("通話已結束", false);
+      cleanupIntercomActive({ updateStatus: "ended", closeDelayMs: 1000 });
+    };
 
     const unsubOfferCandidates = callDocRef.collection("offerCandidates").onSnapshot((snap) => {
       (snap.docChanges ? snap.docChanges() : []).forEach((ch) => {
@@ -1475,7 +1501,7 @@
       const st = String(v.status || "").trim();
       if (st === "ended" || st === "rejected") {
         setIntercomCallStatus("通話已結束", false);
-        await cleanupIntercomActive();
+        await cleanupIntercomActive({ closeDelayMs: 1000 });
       }
     });
 
@@ -1487,10 +1513,11 @@
       unsubDoc,
       unsubCandidates: unsubOfferCandidates,
       detachModal: detach,
+      modalEl: modal,
     };
     startIntercomTimer(startedAtMs);
 
-    modal.hidden = false;
+    prepareIntercomModal(modal);
   }
 
   function startMemberIntercomIncomingListener(communityId) {
@@ -1536,6 +1563,7 @@
         }
 
         const prompt = ensureIntercomIncomingModal();
+        prepareIntercomModal(prompt);
         const callDocRef = db.collection("calls").doc(callId);
         let detach = () => {};
         detach = bindModalClose(prompt, () => {
@@ -1565,7 +1593,7 @@
           btnReject.onclick = async () => {
             stopIntercomRingtone();
             try { await callDocRef.set({ status: "rejected", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true }); } catch {}
-            prompt.hidden = true;
+            scheduleIntercomModalHide(prompt, 1000);
           };
         }
         if (btnAccept) {
@@ -1577,7 +1605,7 @@
         }
 
         startIntercomRingtone();
-        prompt.hidden = false;
+        prepareIntercomModal(prompt);
       }, () => {
         try {
           if (!window.__nw_intercom_incoming_error_shown) {
@@ -1592,6 +1620,7 @@
   if (btnNotification) {
     btnNotification.addEventListener("click", () => {
       const modal = ensureIntercomCallModal();
+      prepareIntercomModal(modal);
       let detach = () => {};
       detach = bindModalClose(modal, () => {
         detach();
@@ -1599,14 +1628,15 @@
       });
       const callBtn = modal.querySelector("#btnIntercomCallAdmin");
       const hangupBtn = modal.querySelector("#btnIntercomHangup");
-      const muteBtn = modal.querySelector("#btnIntercomMute");
       if (callBtn) {
         callBtn.hidden = false;
         callBtn.disabled = false;
         callBtn.onclick = () => intercomStartOutgoingToAdmin({ communityId: resolveActiveCommunityId() });
       }
-      if (hangupBtn) hangupBtn.onclick = () => cleanupIntercomActive({ updateStatus: "ended" });
-      if (muteBtn) muteBtn.innerHTML = "<span>靜音</span>";
+      if (hangupBtn) hangupBtn.onclick = () => {
+        setIntercomCallStatus("通話已結束", false);
+        cleanupIntercomActive({ updateStatus: "ended", closeDelayMs: 1000 });
+      };
       setIntercomPeerVisual(modal, {
         avatarSelector: "#intercomPeerInitialMember",
         imageSelector: "#intercomPeerAvatarMember",
@@ -1620,7 +1650,7 @@
       const timerEl = modal.querySelector("#intercomTimer");
       if (timerEl) timerEl.textContent = "00:00";
       setIntercomCallStatus("待命", false);
-      modal.hidden = false;
+      prepareIntercomModal(modal);
     });
   }
 
