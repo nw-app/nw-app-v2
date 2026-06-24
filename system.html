@@ -316,6 +316,7 @@
                     <button class="unit-tab-btn" type="button" data-unit-tab="row-f" role="tab" aria-selected="false">生紐</button>
                     <button class="unit-tab-btn" type="button" data-unit-tab="service" role="tab" aria-selected="false">客服</button>
                     <button class="unit-tab-btn" type="button" data-unit-tab="ads" role="tab" aria-selected="false">廣告</button>
+                    <button class="unit-tab-btn" type="button" data-unit-tab="committee" role="tab" aria-selected="false">委員</button>
                   </div>
                   <button class="modal-close" type="button" id="btnCloseUnitModal" aria-label="關閉">×</button>
                 </div>
@@ -434,6 +435,15 @@
                             <input id="modal_ads_interval" type="number" min="1" max="60" placeholder="預設 3" />
                           </div>
                           <div id="adsImageList" class="image-settings-list"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="unit-tab-panel" data-unit-panel="committee" role="tabpanel" hidden>
+                      <div class="field">
+                        <label>管委會按鈕設定 (8個)</label>
+                        <p class="muted">設定住戶前台「管委會」分頁的 8 個按鈕、圖示與連結網址。</p>
+                        <div id="committeeButtonList" class="button-settings-list">
+                          <!-- JS will generate 8 button slots here -->
                         </div>
                       </div>
                     </div>

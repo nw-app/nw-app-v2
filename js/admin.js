@@ -31,6 +31,10 @@
     unsubPendingBadge: null,
     creatorLabelByUid: new Map(),
     creatorFetches: new Map(),
+    currentResidents: [],
+    currentCommunityUnits: [],
+    currentResidentsCommunityId: "",
+    reloadResidents: null,
   };
 
   const pad2 = (n) => String(n).padStart(2, "0");
@@ -72,8 +76,33 @@
     const name = String(r.displayName || r.name || r.email || "U").trim();
     const initial = name.slice(0, 1).toUpperCase() || "U";
     const url = String(r.avatarDataUrl || "").trim();
-    if (url) return `<img class="avatar-sm avatar-img" alt="" src="${url}">`;
-    return `<span class="avatar-fallback" aria-hidden="true">${initial}</span>`;
+    const category = String(r.category || "").trim();
+    const isCommittee = category === "委員" || category.includes("委員");
+    const crown = isCommittee ? `
+      <span class="avatar-crown" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4.25 9.25 8.5 13.5 12 8.75 15.5 13.5 19.75 9.25 18 18H6l-1.75-8.75Z" fill="currentColor"/>
+          <path d="M6 18h12l-.6 3H6.6L6 18Z" fill="currentColor"/>
+        </svg>
+      </span>
+    `.trim() : "";
+    const base = url ? `<img class="avatar-sm avatar-img" alt="" src="${url}">` : `<span class="avatar-fallback" aria-hidden="true">${initial}</span>`;
+    return `${base}${crown}`;
+  }
+
+  function normalizeResidentUnitList(list) {
+    const raw = Array.isArray(list) ? list : [];
+    const uniq = [];
+    const seen = new Set();
+    for (const x of raw) {
+      let v = "";
+      if (typeof x === "object" && x !== null) v = String(x.id || "").trim();
+      else v = String(x || "").trim();
+      if (!v || seen.has(v)) continue;
+      seen.add(v);
+      uniq.push(v);
+    }
+    return uniq;
   }
 
   function loadAccounts() {
@@ -657,6 +686,10 @@
        try { state.unsubResidents(); } catch {}
        state.unsubResidents = null;
      }
+     state.currentResidents = [];
+     state.currentCommunityUnits = [];
+     state.currentResidentsCommunityId = "";
+     state.reloadResidents = null;
    }
 
   function stopParcelsSubscription() {
@@ -8134,24 +8167,12 @@
 
     let residents = [];
     let communityUnits = Array.isArray(c && c.units) ? c.units : [];
+    state.currentResidents = residents;
+    state.currentCommunityUnits = communityUnits;
+    state.currentResidentsCommunityId = String(cid || "");
 
     const normalizeUnitList = (list) => {
-      const raw = Array.isArray(list) ? list : [];
-      const uniq = [];
-      const seen = new Set();
-      for (const x of raw) {
-        let v = "";
-        if (typeof x === "object" && x !== null) {
-          v = String(x.id || "").trim();
-        } else {
-          v = String(x || "").trim();
-        }
-        if (!v) continue;
-        if (seen.has(v)) continue;
-        seen.add(v);
-        uniq.push(v);
-      }
-      return uniq;
+      return normalizeResidentUnitList(list);
     };
 
     const refreshUnitTotals = () => {
@@ -8262,6 +8283,7 @@
                 return {
                   id: d.id,
                   role: String(v.role || ""),
+                  community: String(v.community || cid || "default"),
                   houseNo: String(v.houseNo || v.unit || ""),
                   subUnit: String(v.subUnit || ""),
                   displayName: String(v.displayName || v.name || ""),
@@ -8271,6 +8293,9 @@
                   address: String(v.address || ""),
                   building: String(v.building || v.block || ""),
                   avatarDataUrl: String(v.avatarDataUrl || ""),
+                  category: String(v.category || v.residentCategory || ""),
+                  residentRoles: Array.isArray(v.residentRoles) ? v.residentRoles : [],
+                  residentRoleOther: String(v.residentRoleOther || ""),
                   phoneNormalized: String(v.phoneNormalized || ""),
                   status: String(v.status || ""),
                   qrToken: String(v.qrToken || ""),
@@ -8289,12 +8314,17 @@
             });
 
             residents = list;
+            state.currentResidents = list;
+            state.currentCommunityUnits = communityUnits;
+            state.currentResidentsCommunityId = String(cid || "");
+            state.reloadResidents = loadResidents;
             setStatus("", false);
             renderList();
           }, (err) => {
             const code = String(err && err.code ? err.code : "");
             setStatus(code.includes("permission-denied") ? "沒有權限讀取住戶資料。" : "讀取失敗，請稍後再試。", true);
             residents = [];
+            state.currentResidents = [];
             renderList();
           });
       } catch (err) {
@@ -8380,6 +8410,7 @@
           try {
             await db.collection("users").doc(String(id)).delete();
             residents = residents.filter((x) => String(x.id || "") !== String(id || ""));
+            state.currentResidents = residents;
             renderList();
           } catch {
             toast("刪除失敗");
@@ -8415,6 +8446,7 @@
       });
     }
 
+    state.reloadResidents = loadResidents;
     loadResidents();
   };
 
@@ -9325,6 +9357,9 @@
     };
 
     const openResidentEditor = (mode, resident) => {
+      const activeResidentsCid = String(state.currentResidentsCommunityId || resolveActiveCommunityId() || "default");
+      const getResidents = () => (Array.isArray(state.currentResidents) ? state.currentResidents : []);
+      const getCommunityUnits = () => (Array.isArray(state.currentCommunityUnits) ? state.currentCommunityUnits : []);
       const modal = ensureResidentEditorModal();
       let detach = () => {};
       detach = bindModalClose(modal, () => detach());
@@ -9374,7 +9409,7 @@
       if (inputCategory) inputCategory.value = isEdit ? String(data.category || "住戶") : "住戶";
       
       if (inputCommunity) {
-        const currentCid = isEdit ? String(data.community || cid || "default") : String(cid || "default");
+        const currentCid = isEdit ? String(data.community || activeResidentsCid || "default") : String(activeResidentsCid || "default");
         const options = 
           `<option value="" selected>全部</option>` + 
           (state.communities || []).map(c => 
@@ -9461,7 +9496,7 @@
           return;
         }
         const unit = normalizeText(inputUnit.value);
-        const ok = Boolean(unit) && normalizeUnitList(communityUnits).some((x) => x.toLowerCase() === unit.toLowerCase());
+        const ok = Boolean(unit) && normalizeResidentUnitList(getCommunityUnits()).some((x) => x.toLowerCase() === unit.toLowerCase());
         unitMatchBadge.hidden = !ok;
         unitMatchBadge.classList.toggle("show", ok);
         unitMatchBadge.style.display = ok ? "inline-flex" : "none";
@@ -9556,7 +9591,7 @@
         // 自動填寫地址
         const unitVal = normalizeText(inputUnit.value);
         if (unitVal && inputAddr && !inputAddr.value.trim()) {
-          const found = (Array.isArray(communityUnits) ? communityUnits : []).find(u => {
+          const found = getCommunityUnits().find(u => {
             const uid = (typeof u === "object" && u !== null) ? String(u.id || "") : String(u || "");
             return uid.trim().toLowerCase() === unitVal.toLowerCase();
           });
@@ -9608,9 +9643,10 @@
         }
 
         // 檢查子戶號重複性 (同社區、同戶號下不可重複)
-        const selectedCid = normalizeText(inputCommunity ? inputCommunity.value : cid) || cid || "default";
-        const isDuplicateSubUnit = residents.some(r => 
+        const selectedCid = normalizeText(inputCommunity ? inputCommunity.value : activeResidentsCid) || activeResidentsCid || "default";
+        const isDuplicateSubUnit = getResidents().some(r => 
           r.id !== data.id && 
+          String(r.community || activeResidentsCid || "default") === selectedCid &&
           r.houseNo.toLowerCase() === unit.toLowerCase() && 
           r.subUnit.toLowerCase() === subUnit.toLowerCase()
         );
@@ -9658,7 +9694,7 @@
           const id = isEdit ? String(data.id || "") : String(createdAuth && createdAuth.uid ? createdAuth.uid : "");
           if (!id) throw new Error("no-id");
 
-          const selectedCid = normalizeText(inputCommunity ? inputCommunity.value : cid) || cid || "default";
+          const selectedCid = normalizeText(inputCommunity ? inputCommunity.value : activeResidentsCid) || activeResidentsCid || "default";
           const selectedCommunity = (state.communities || []).find(c => c.id === selectedCid) || {};
           const communityCode = String(selectedCommunity.username || "");
           
@@ -9694,7 +9730,7 @@
 
           modal.hidden = true;
           detach();
-          await loadResidents();
+          if (typeof state.reloadResidents === "function") await state.reloadResidents();
         } catch (err) {
           console.error("Save resident error:", err);
           const code = String(err && err.code ? err.code : "");
@@ -11382,9 +11418,40 @@
         houseNo: String(data.houseNo || data.unit || "").trim(),
         subUnit: String(data.subUnit || data.subHouseNo || "").trim(),
         community: String(data.community || "").trim(),
+        avatarDataUrl: String(data.avatarDataUrl || "").trim(),
       };
     } catch {
       return { uid: id };
+    }
+  }
+
+  function setIntercomPeerVisual(modal, { avatarSelector, imageSelector, nameSelector, subSelector, name, sub, avatarDataUrl, fallbackInitial }) {
+    if (!modal) return;
+    const avatarEl = modal.querySelector(avatarSelector);
+    const imageEl = modal.querySelector(imageSelector);
+    const textEl = avatarEl ? avatarEl.querySelector(".intercom-avatar-text") : null;
+    const nameEl = modal.querySelector(nameSelector);
+    const subEl = modal.querySelector(subSelector);
+    const displayName = String(name || "").trim() || "使用者";
+    const displaySub = String(sub || "").trim() || "語音通話";
+    const avatar = String(avatarDataUrl || "").trim();
+    const initial = String(fallbackInitial || displayName.slice(0, 1) || "U").trim().slice(0, 1).toUpperCase() || "U";
+
+    if (nameEl) nameEl.textContent = displayName;
+    if (subEl) subEl.textContent = displaySub;
+    if (textEl) textEl.textContent = initial;
+    else if (avatarEl) avatarEl.textContent = initial;
+    if (avatarEl) avatarEl.classList.toggle("has-image", Boolean(avatar));
+    if (imageEl) {
+      if (avatar) {
+        imageEl.src = avatar;
+        imageEl.alt = displayName;
+        imageEl.hidden = false;
+      } else {
+        imageEl.removeAttribute("src");
+        imageEl.alt = "";
+        imageEl.hidden = true;
+      }
     }
   }
 
@@ -11429,29 +11496,27 @@
     modal.innerHTML = `
       <div class="modal-backdrop"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="intercomIncomingTitle">
-        <div class="modal-hd">
-          <h3 class="modal-title" id="intercomIncomingTitle">來電提示</h3>
-          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="intercom-card">
-            <div class="intercom-peer">
-              <div class="intercom-avatar" id="intercomIncomingInitial" aria-hidden="true">—</div>
-              <div class="intercom-peer-meta">
-                <div class="intercom-peer-name" id="intercomIncomingName">—</div>
-                <div class="intercom-peer-sub" id="intercomIncomingSub">—</div>
-              </div>
+        <div class="intercom-screen incoming">
+          <div class="intercom-screen-top">
+            <div class="intercom-screen-badge" id="intercomIncomingTitle">來電中</div>
+            <button class="modal-close intercom-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          </div>
+          <div class="intercom-screen-main">
+            <div class="intercom-avatar intercom-avatar-xl" id="intercomIncomingInitial" aria-hidden="true">
+              <img id="intercomIncomingAvatar" class="intercom-avatar-image" alt="" hidden />
+              <span class="intercom-avatar-text">—</span>
             </div>
-            <div class="intercom-meta">
-              <span class="intercom-chip">來電中</span>
-              <span class="intercom-timer" aria-hidden="true">—</span>
+            <div class="intercom-peer-name intercom-peer-name-xl" id="intercomIncomingName">—</div>
+            <div class="intercom-peer-sub intercom-peer-sub-xl" id="intercomIncomingSub">—</div>
+            <div class="intercom-center-meta">
+              <span class="intercom-chip pulse">等待接聽</span>
             </div>
           </div>
-        </div>
-        <div class="modal-ft">
-          <div class="intercom-actions">
-            <button class="intercom-btn danger" type="button" id="btnIntercomReject">掛斷</button>
-            <button class="intercom-btn primary" type="button" id="btnIntercomAccept">接通</button>
+          <div class="intercom-screen-bottom">
+            <div class="intercom-actions round-two">
+              <button class="intercom-btn danger round" type="button" id="btnIntercomReject"><span>掛斷</span></button>
+              <button class="intercom-btn success round" type="button" id="btnIntercomAccept"><span>接通</span></button>
+            </div>
           </div>
         </div>
       </div>
@@ -11464,30 +11529,29 @@
     modal.innerHTML = `
       <div class="modal-backdrop"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="intercomCallTitle">
-        <div class="modal-hd">
-          <h3 class="modal-title" id="intercomCallTitle">通話（對講）</h3>
-          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="intercom-card">
-            <div class="intercom-peer">
-              <div class="intercom-avatar" id="intercomPeerInitial" aria-hidden="true">—</div>
-              <div class="intercom-peer-meta">
-                <div class="intercom-peer-name" id="intercomPeerName">—</div>
-                <div class="intercom-peer-sub" id="intercomPeerSub">—</div>
-              </div>
+        <div class="intercom-screen active">
+          <div class="intercom-screen-top">
+            <div class="intercom-screen-badge" id="intercomCallTitle">語音通話</div>
+            <button class="modal-close intercom-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          </div>
+          <div class="intercom-screen-main">
+            <div class="intercom-avatar intercom-avatar-xl" id="intercomPeerInitial" aria-hidden="true">
+              <img id="intercomPeerAvatar" class="intercom-avatar-image" alt="" hidden />
+              <span class="intercom-avatar-text">—</span>
             </div>
-            <div class="intercom-meta">
-              <span class="intercom-chip" id="intercomCallState">—</span>
-              <span class="intercom-timer" id="intercomTimer">00:00</span>
+            <div class="intercom-peer-name intercom-peer-name-xl" id="intercomPeerName">—</div>
+            <div class="intercom-peer-sub intercom-peer-sub-xl" id="intercomPeerSub">語音通話</div>
+            <div class="intercom-center-meta stacked">
+              <span class="intercom-chip" id="intercomCallState">待命</span>
+              <span class="intercom-timer big" id="intercomTimer">00:00</span>
             </div>
             <audio id="intercomRemoteAudioAdmin" autoplay playsinline></audio>
           </div>
-        </div>
-        <div class="modal-ft">
-          <div class="intercom-actions">
-            <button class="intercom-btn ghost" type="button" id="btnIntercomMute">靜音</button>
-            <button class="intercom-btn danger" type="button" id="btnIntercomHangup">掛斷</button>
+          <div class="intercom-screen-bottom">
+            <div class="intercom-actions round-two">
+              <button class="intercom-btn ghost round small" type="button" id="btnIntercomMute"><span>靜音</span></button>
+              <button class="intercom-btn danger round" type="button" id="btnIntercomHangup"><span>掛斷</span></button>
+            </div>
           </div>
         </div>
       </div>
@@ -11551,9 +11615,6 @@
       cleanupIntercomActive({ updateStatus: "ended" });
     });
 
-    const initialEl = modal.querySelector("#intercomPeerInitial");
-    const peerNameEl = modal.querySelector("#intercomPeerName");
-    const peerSubEl = modal.querySelector("#intercomPeerSub");
     const muteBtn = modal.querySelector("#btnIntercomMute");
     const hangupBtn = modal.querySelector("#btnIntercomHangup");
     const timerEl = modal.querySelector("#intercomTimer");
@@ -11562,11 +11623,16 @@
     const toSubUnit = String(r.subUnit || r.subHouseNo || "").trim();
     const toDisplayUnit = toSubUnit ? `${toHouseNo}-${toSubUnit}` : toHouseNo;
     const toName = String(r.displayName || r.name || r.email || "").trim() || "住戶";
-    const initial = (toName.slice(0, 1).toUpperCase() || "U").trim() || "U";
-
-    if (peerNameEl) peerNameEl.textContent = toName;
-    if (peerSubEl) peerSubEl.textContent = [toDisplayUnit].filter(Boolean).join("｜") || "—";
-    if (initialEl) initialEl.textContent = initial;
+    setIntercomPeerVisual(modal, {
+      avatarSelector: "#intercomPeerInitial",
+      imageSelector: "#intercomPeerAvatar",
+      nameSelector: "#intercomPeerName",
+      subSelector: "#intercomPeerSub",
+      name: toName,
+      sub: [toDisplayUnit].filter(Boolean).join("｜") || "住戶語音通話",
+      avatarDataUrl: String(r.avatarDataUrl || "").trim(),
+      fallbackInitial: toName,
+    });
     if (timerEl) timerEl.textContent = "00:00";
     setIntercomCallStatus("正在呼叫…", false);
     modal.hidden = false;
@@ -11631,11 +11697,13 @@
           fromRole: "admin",
           fromName: String(fromProfile.name || user.email || "後台").trim(),
           fromHouseNo: String(fromProfile.houseNo || "").trim(),
+          fromAvatarDataUrl: String(fromProfile.avatarDataUrl || "").trim(),
           toUid,
           toRole: "resident",
           toName,
           toHouseNo,
           toSubUnit,
+          toAvatarDataUrl: String(r.avatarDataUrl || "").trim(),
           status: "ringing",
           createdAt: FieldValue.serverTimestamp(),
           createdAtMs: Date.now(),
@@ -11657,7 +11725,7 @@
       muteBtn.onclick = () => {
         muted = !muted;
         (localStream ? localStream.getAudioTracks() : []).forEach((t) => (t.enabled = !muted));
-        muteBtn.textContent = muted ? "取消靜音" : "靜音";
+        muteBtn.innerHTML = `<span>${muted ? "開音" : "靜音"}</span>`;
       };
     }
 
@@ -11715,19 +11783,22 @@
       cleanupIntercomActive({ updateStatus: "ended" });
     });
 
-    const initialEl = modal.querySelector("#intercomPeerInitial");
-    const peerNameEl = modal.querySelector("#intercomPeerName");
-    const peerSubEl = modal.querySelector("#intercomPeerSub");
     const muteBtn = modal.querySelector("#btnIntercomMute");
     const hangupBtn = modal.querySelector("#btnIntercomHangup");
     const timerEl = modal.querySelector("#intercomTimer");
 
     const fromName = String(d.fromName || "住戶").trim() || "住戶";
     const fromHouse = String(d.fromHouseNo || "").trim();
-    const initial = (fromName.slice(0, 1).toUpperCase() || "U").trim() || "U";
-    if (peerNameEl) peerNameEl.textContent = fromName;
-    if (peerSubEl) peerSubEl.textContent = fromHouse || "—";
-    if (initialEl) initialEl.textContent = initial;
+    setIntercomPeerVisual(modal, {
+      avatarSelector: "#intercomPeerInitial",
+      imageSelector: "#intercomPeerAvatar",
+      nameSelector: "#intercomPeerName",
+      subSelector: "#intercomPeerSub",
+      name: fromName,
+      sub: fromHouse || "住戶語音通話",
+      avatarDataUrl: String(d.fromAvatarDataUrl || "").trim(),
+      fallbackInitial: fromName,
+    });
     if (timerEl) timerEl.textContent = "00:00";
 
     setIntercomCallStatus("接通中…", false);
@@ -11807,7 +11878,7 @@
       muteBtn.onclick = () => {
         muted = !muted;
         (localStream ? localStream.getAudioTracks() : []).forEach((t) => (t.enabled = !muted));
-        muteBtn.textContent = muted ? "取消靜音" : "靜音";
+        muteBtn.innerHTML = `<span>${muted ? "開音" : "靜音"}</span>`;
       };
     }
 
@@ -11894,18 +11965,21 @@
             .set({ status: "missed", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true })
             .catch(() => {});
         });
-        const initialEl = prompt.querySelector("#intercomIncomingInitial");
-        const nameEl = prompt.querySelector("#intercomIncomingName");
-        const subEl = prompt.querySelector("#intercomIncomingSub");
         const btnAccept = prompt.querySelector("#btnIntercomAccept");
         const btnReject = prompt.querySelector("#btnIntercomReject");
 
         const fromName = String(latest.fromName || "住戶").trim() || "住戶";
         const fromHouse = String(latest.fromHouseNo || "").trim();
-        const initial = (fromName.slice(0, 1).toUpperCase() || "U").trim() || "U";
-        if (initialEl) initialEl.textContent = initial;
-        if (nameEl) nameEl.textContent = fromName;
-        if (subEl) subEl.textContent = fromHouse || "—";
+        setIntercomPeerVisual(prompt, {
+          avatarSelector: "#intercomIncomingInitial",
+          imageSelector: "#intercomIncomingAvatar",
+          nameSelector: "#intercomIncomingName",
+          subSelector: "#intercomIncomingSub",
+          name: fromName,
+          sub: fromHouse || "住戶來電",
+          avatarDataUrl: String(latest.fromAvatarDataUrl || "").trim(),
+          fallbackInitial: fromName,
+        });
 
         if (btnReject) {
           btnReject.onclick = async () => {

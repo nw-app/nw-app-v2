@@ -1538,11 +1538,28 @@ a { color: inherit; text-decoration: none; }
   display: grid;
   place-items: center;
   overflow: hidden;
+  position: relative;
   flex: 0 0 auto;
 }
 .residents-page .resident-item .avatar-sm { cursor: pointer; }
 .avatar-sm .avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .avatar-sm .avatar-fallback { font-size: 14px; font-weight: 900; color: rgba(31, 41, 55, 0.8); }
+.avatar-crown {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(184, 134, 11, 0.55);
+  color: #b8860b;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 6px rgba(17, 24, 39, 0.18);
+  pointer-events: none;
+}
+.avatar-crown svg { width: 12px; height: 12px; display: block; }
 .units-text {
   width: 100%;
   min-height: 320px;
@@ -2771,4 +2788,251 @@ a { color: inherit; text-decoration: none; }
     justify-content: flex-start;
     flex-wrap: wrap;
   }
+}
+
+.modal-intercom-call,
+.modal-intercom-incoming {
+  z-index: 1200;
+}
+
+.modal-intercom-call .modal-backdrop,
+.modal-intercom-incoming .modal-backdrop {
+  background: rgba(76, 78, 96, 0.78);
+  backdrop-filter: blur(8px);
+}
+
+.modal-intercom-call .modal-dialog,
+.modal-intercom-incoming .modal-dialog {
+  width: min(100vw, 520px);
+  max-width: none;
+  max-height: none;
+  height: min(100vh, 920px);
+  margin: 0 auto;
+  border-radius: 0;
+  overflow: hidden;
+  background: linear-gradient(180deg, #747688 0%, #7a7c92 100%);
+  color: #fff;
+  box-shadow: none;
+  display: grid;
+}
+
+.intercom-screen {
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 24px 22px 36px;
+  box-sizing: border-box;
+}
+
+.intercom-screen-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.intercom-screen-main {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  text-align: center;
+  padding-top: 42px;
+}
+
+.intercom-screen-bottom {
+  padding-top: 28px;
+}
+
+.intercom-screen-badge {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.96);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.intercom-close {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.intercom-avatar {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  border-radius: 999px;
+  background: rgba(213, 235, 246, 0.95);
+  color: rgba(255, 255, 255, 0.98);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.14);
+}
+
+.intercom-avatar-xl {
+  width: clamp(180px, 42vw, 300px);
+  height: clamp(180px, 42vw, 300px);
+  margin-top: 18px;
+}
+
+.intercom-avatar-text {
+  font-size: clamp(56px, 11vw, 110px);
+  font-weight: 800;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.intercom-avatar-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.intercom-avatar.has-image .intercom-avatar-text {
+  opacity: 0;
+}
+
+.intercom-peer-name {
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.intercom-peer-name-xl {
+  margin-top: 28px;
+  font-size: clamp(28px, 7vw, 56px);
+  line-height: 1.1;
+  max-width: 100%;
+}
+
+.intercom-peer-sub {
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.intercom-peer-sub-xl {
+  margin-top: 10px;
+  font-size: clamp(14px, 3.6vw, 20px);
+  max-width: 100%;
+}
+
+.intercom-center-meta {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.intercom-center-meta.stacked {
+  margin-top: 22px;
+}
+
+.intercom-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+}
+
+.intercom-chip.error {
+  background: rgba(191, 38, 38, 0.22);
+  color: #fff;
+}
+
+.intercom-chip.pulse::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  margin-right: 8px;
+  background: #4ade80;
+  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.48);
+  animation: intercomPulse 1.6s infinite;
+}
+
+.intercom-timer {
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 800;
+}
+
+.intercom-timer.big {
+  font-size: clamp(28px, 8vw, 56px);
+  line-height: 1;
+}
+
+.intercom-actions {
+  display: grid;
+  align-items: end;
+  gap: 18px;
+}
+
+.intercom-actions.round-two {
+  grid-template-columns: 1fr 1fr;
+}
+
+.intercom-btn {
+  min-height: 58px;
+  border: 0;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.intercom-btn.round {
+  width: min(31vw, 112px);
+  height: min(31vw, 112px);
+  margin: 0 auto;
+  border-radius: 999px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+}
+
+.intercom-btn.round.small {
+  width: min(25vw, 92px);
+  height: min(25vw, 92px);
+}
+
+.intercom-btn span {
+  font-size: 18px;
+  letter-spacing: 0.5px;
+}
+
+.intercom-btn.success {
+  background: #52d669;
+  color: #fff;
+}
+
+.intercom-btn.danger {
+  background: #ff3656;
+  color: #fff;
+}
+
+.intercom-btn.ghost {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+@keyframes intercomPulse {
+  0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.48); }
+  70% { box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
 }

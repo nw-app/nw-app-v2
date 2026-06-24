@@ -175,6 +175,37 @@
     const houseNoItem = document.getElementById("profileHouseNoItem");
     const defaultProfileQrToken = "A000ADDT";
 
+    const ensureProfileAvatarCrown = () => {
+      const container = (profileAvatarImg && profileAvatarImg.closest) ? profileAvatarImg.closest(".profile-avatar") : document.querySelector("#profileModal .profile-avatar");
+      if (!container) return null;
+      let el = container.querySelector(".profile-avatar-crown");
+      if (el) return el;
+      el = document.createElement("span");
+      el.className = "profile-avatar-crown";
+      el.setAttribute("aria-hidden", "true");
+      el.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4.25 9.25 8.5 13.5 12 8.75 15.5 13.5 19.75 9.25 18 18H6l-1.75-8.75Z" fill="currentColor"/>
+          <path d="M6 18h12l-.6 3H6.6L6 18Z" fill="currentColor"/>
+        </svg>
+      `.trim();
+      container.appendChild(el);
+      return el;
+    };
+
+    const setProfileAvatarCrownVisible = (visible) => {
+      const container = (profileAvatarImg && profileAvatarImg.closest) ? profileAvatarImg.closest(".profile-avatar") : document.querySelector("#profileModal .profile-avatar");
+      if (!container) return;
+      const existing = container.querySelector(".profile-avatar-crown");
+      if (!visible) {
+        if (existing) {
+          try { container.removeChild(existing); } catch {}
+        }
+        return;
+      }
+      ensureProfileAvatarCrown();
+    };
+
     const ensureProfileHouseNoQr = () => {
       const roleRaw = String(sessionStorage.getItem("csp_role") || "").trim().toLowerCase();
       const isResidentRole = roleRaw === "resident" || roleRaw === "住戶";
@@ -813,6 +844,7 @@
       if (headerAvatar) headerAvatar.style.display = "";
       if (profileAvatarImg) profileAvatarImg.style.display = "none";
       if (profileAvatar) profileAvatar.style.display = "";
+      setProfileAvatarCrownVisible(false);
       if (greetingEl) greetingEl.textContent = "Hi~";
 
       const db = ensureDb();
@@ -959,11 +991,14 @@
           communityItemEl.classList.remove("single");
           const staffRole = sessionRole === "community" || sessionRole === "board" || sessionRole === "table" || sessionRole === "shop";
           const qrWrap = document.getElementById("profileHouseNoQrWrap");
+          const residentCategory = String((data && (data.category || data.residentCategory)) || "").trim();
+          const isCommitteeResident = sessionRole === "resident" && (residentCategory === "委員" || residentCategory.includes("委員"));
           if (staffRole) {
             if (houseNoItem) houseNoItem.hidden = true;
             if (qrWrap) {
               try { qrWrap.parentElement && qrWrap.parentElement.removeChild(qrWrap); } catch {}
             }
+            setProfileAvatarCrownVisible(false);
           } else if (houseNoItem) {
             houseNoItem.hidden = false;
             const base = String(data.houseNo || data.unit || "").trim();
@@ -971,10 +1006,11 @@
             const full = base ? (sub ? `${base}-${sub}` : base) : "—";
             if (houseNoText) houseNoText.textContent = full;
             renderProfileHouseNoQr(String(data.qrToken || "").trim(), data).catch(() => {});
+            setProfileAvatarCrownVisible(isCommitteeResident);
           }
           if (roleEl) {
             roleEl.style.display = "";
-            roleEl.textContent = getRoleText();
+            roleEl.textContent = isCommitteeResident ? "委員" : getRoleText();
           }
           const cid = String(data.community || localStorage.getItem("csp_active_community_v1") || "").trim();
           if (cid && cid !== "default") {

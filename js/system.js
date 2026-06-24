@@ -142,6 +142,12 @@
     { name: "電子書", icon: "photo/b15.png", url: "https://www.pubu.com.tw/", openExternal: true },
     { name: "遊戲網", icon: "photo/b16.png", url: "https://www.pubu.com.tw/", openExternal: false },
   ];
+  const defaultCommitteeButtons = Array.from({ length: 8 }, (_, i) => ({
+    name: `委員功能${i + 1}`,
+    icon: "",
+    url: "#",
+    openExternal: false,
+  }));
 
   function defaultConfig() {
     const toButton = (x) => ({ enabled: true, url: x.defaultUrl });
@@ -150,6 +156,7 @@
       residentButtons: Object.fromEntries(catalogResidentButtons.map((x) => [x.id, toButton(x)])),
       rowDButtons: defaultRowDButtons.map(b => ({ ...b })),
       rowFButtons: defaultRowFButtons.map(b => ({ ...b })),
+      committeeButtons: defaultCommitteeButtons.map(b => ({ ...b })),
     };
   }
 
@@ -189,6 +196,7 @@
         residentButtons: { ...d.residentButtons, ...(parsed.residentButtons || {}) },
         rowDButtons: parsed.rowDButtons || d.rowDButtons,
         rowFButtons: parsed.rowFButtons || d.rowFButtons,
+        committeeButtons: parsed.committeeButtons || d.committeeButtons,
       };
     } catch {
       return defaultConfig();
@@ -203,6 +211,7 @@
         residentButtons: cfg && cfg.residentButtons ? cfg.residentButtons : {},
         rowDButtons: cfg && cfg.rowDButtons ? cfg.rowDButtons : [],
         rowFButtons: cfg && cfg.rowFButtons ? cfg.rowFButtons : [],
+        committeeButtons: cfg && cfg.committeeButtons ? cfg.committeeButtons : [],
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
@@ -619,7 +628,18 @@
       const dataUrl = u && u.avatarDataUrl ? String(u.avatarDataUrl || "") : "";
       const name = String(u && (u.username || u.name) ? (u.username || u.name) : "U");
       const initial = name.trim().slice(0, 1).toUpperCase() || "U";
-      return dataUrl ? `<img src="${dataUrl}" alt="">` : `<div class="fallback">${initial}</div>`;
+      const category = String(u && u.category ? u.category : "").trim();
+      const isCommittee = category === "委員" || category.includes("委員");
+      const crown = isCommittee ? `
+        <span class="avatar-crown" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4.25 9.25 8.5 13.5 12 8.75 15.5 13.5 19.75 9.25 18 18H6l-1.75-8.75Z" fill="currentColor"/>
+            <path d="M6 18h12l-.6 3H6.6L6 18Z" fill="currentColor"/>
+          </svg>
+        </span>
+      `.trim() : "";
+      const base = dataUrl ? `<img src="${dataUrl}" alt="">` : `<div class="fallback">${initial}</div>`;
+      return `${base}${crown}`;
     };
 
     const renderUserList = () => {
@@ -1704,7 +1724,7 @@
     };
 
     const setActiveUnitTab = (tabId) => {
-      const validTabs = ["units", "features", "row-a", "row-b", "row-d", "row-f", "service", "ads"];
+      const validTabs = ["units", "features", "row-a", "row-b", "row-d", "row-f", "service", "ads", "committee"];
       const next = validTabs.includes(tabId) ? tabId : "units";
       unitActiveTab = next;
       if (!unitModal) return;
@@ -1732,6 +1752,8 @@
         if (unitTitleTextEl) unitTitleTextEl.textContent = "客服設定";
       } else if (next === "ads") {
         if (unitTitleTextEl) unitTitleTextEl.textContent = "廣告設定";
+      } else if (next === "committee") {
+        if (unitTitleTextEl) unitTitleTextEl.textContent = "委員設定";
       } else {
         if (unitTitleTextEl) unitTitleTextEl.textContent = "戶號列表";
       }
@@ -2282,6 +2304,7 @@
           renderRowAImageSettings(unitConfigCache);
           renderRowButtonSettings("rowDButtonList", "rowDButtons", defaultRowDButtons);
           renderRowButtonSettings("rowFButtonList", "rowFButtons", defaultRowFButtons);
+          renderRowButtonSettings("committeeButtonList", "committeeButtons", defaultCommitteeButtons);
           renderServiceSettings(unitConfigCache);
           renderAdsFooterSettings(unitConfigCache);
         }).catch(() => {
@@ -2290,6 +2313,7 @@
           renderRowAImageSettings(unitConfigCache);
           renderRowButtonSettings("rowDButtonList", "rowDButtons", defaultRowDButtons);
           renderRowButtonSettings("rowFButtonList", "rowFButtons", defaultRowFButtons);
+          renderRowButtonSettings("committeeButtonList", "committeeButtons", defaultCommitteeButtons);
           renderServiceSettings(unitConfigCache);
           renderAdsFooterSettings(unitConfigCache);
         });
@@ -2580,6 +2604,7 @@
 
           const rowDButtons = getButtonsFromDom("rowDButtonList", defaultRowDButtons) || (unitConfigCache.rowDButtons || defaultRowDButtons.map(b => ({ ...b })));
           const rowFButtons = getButtonsFromDom("rowFButtonList", defaultRowFButtons) || (unitConfigCache.rowFButtons || defaultRowFButtons.map(b => ({ ...b })));
+          const committeeButtons = getButtonsFromDom("committeeButtonList", defaultCommitteeButtons) || (unitConfigCache.committeeButtons || defaultCommitteeButtons.map(b => ({ ...b })));
           const serviceUrl = document.getElementById("modal_service_url")?.value || "";
           persistAdsPageFromDom();
           const adsFooter = { pages: adsDraftPages };
@@ -2597,6 +2622,7 @@
                 rowAInterval,
                 rowDButtons,
                 rowFButtons,
+                committeeButtons,
                 serviceUrl,
                 adsFooter,
                 updatedAt: FieldValue.serverTimestamp() 

@@ -219,12 +219,21 @@
     { name: "電子書", icon: "photo/b15.png", url: "https://www.pubu.com.tw/", openExternal: true },
     { name: "遊戲網", icon: "photo/b16.png", url: "https://www.pubu.com.tw/", openExternal: false },
   ];
+  const defaultCommitteeButtons = Array.from({ length: 8 }, (_, i) => ({
+    name: `委員功能${i + 1}`,
+    icon: "",
+    url: "#",
+    openExternal: false,
+  }));
 
   const state = {
     communities: [],
     config: null,
+    currentUserProfile: null,
+    currentUserRole: "",
   };
   const catalogResidentButtons = [
+    { id: "resident-committee", name: "管委會", defaultUrl: "#resident/resident-committee", hint: "", icon: "committee" },
     { id: "resident-service", name: "客服", defaultUrl: "#resident/resident-service", hint: "", icon: "headset" },
   ];
 
@@ -241,6 +250,7 @@
       rowAInterval: 5,
       rowDButtons: defaultRowDButtons.map(b => ({ ...b })),
       rowFButtons: defaultRowFButtons.map(b => ({ ...b })),
+      committeeButtons: defaultCommitteeButtons.map(b => ({ ...b })),
       serviceUrl: "",
       sosActionMode: "backend",
       sosPhoneNumber: ""
@@ -366,6 +376,7 @@
         rowAInterval: parsed.rowAInterval || 5,
         rowDButtons: mergeButtons(parsed.rowDButtons, defaultRowDButtons),
         rowFButtons: mergeButtons(parsed.rowFButtons, defaultRowFButtons),
+        committeeButtons: mergeButtons(parsed.committeeButtons, defaultCommitteeButtons),
         serviceUrl: parsed.serviceUrl || "",
         sosActionMode: String(parsed.sosActionMode || d.sosActionMode || "backend").trim() || "backend",
         sosPhoneNumber: String(parsed.sosPhoneNumber || d.sosPhoneNumber || "").trim()
@@ -426,12 +437,46 @@
     return { moduleId: parts[1] || "home" };
   }
 
+  function normalizeSessionOrDocRole(roleValue) {
+    const role = String(roleValue || "").trim().toLowerCase();
+    if (role === "admin" || role === "系統管理員" || role === "系統管理者" || role === "系統") return "admin";
+    if (role === "resident" || role === "住戶") return "resident";
+    if (role === "community" || role === "社區") return "community";
+    return role;
+  }
+
+  function canViewResidentCommittee() {
+    try {
+      if (String(sessionStorage.getItem("csp_sysadmin") || "") === "1") return true;
+    } catch {}
+    try {
+      const me = auth && auth.currentUser ? auth.currentUser : null;
+      if (me && me.uid && String(sessionStorage.getItem("csp_system_admin_uid") || "") === String(me.uid)) return true;
+    } catch {}
+    const role = normalizeSessionOrDocRole(state.currentUserRole || sessionStorage.getItem("csp_role") || "");
+    if (role === "admin") return true;
+    const profileRole = normalizeSessionOrDocRole(state.currentUserProfile && state.currentUserProfile.role);
+    if (profileRole === "admin") return true;
+    if (role !== "resident") return false;
+    const category = String(
+      (state.currentUserProfile && (state.currentUserProfile.category || state.currentUserProfile.residentCategory)) || ""
+    ).trim();
+    return category === "委員" || category.includes("委員");
+  }
+
+  function isResidentModuleAllowed(moduleId) {
+    const id = String(moduleId || "").trim();
+    if (!id || id === "home" || id === "resident-service") return true;
+    if (id === "resident-committee") return canViewResidentCommittee();
+    return true;
+  }
+
   function buildNav() {
     const cfg = loadConfig();
     const items = [{ id: "home", name: "首頁", hint: "Home", icon: "home", enabled: true, url: "#resident/home" }]
       .concat(catalogResidentButtons.map((x) => ({ ...x, ...cfg.residentButtons[x.id] })));
     navEl.innerHTML = items
-      .filter((x) => x.enabled)
+      .filter((x) => x.enabled && isResidentModuleAllowed(x.id))
       .map((m) => `
             <a href="${m.url || "#resident/home"}" data-id="${m.id}" aria-current="false">
               <span aria-hidden="true">${icon(m.icon || "dot")}</span>
@@ -444,6 +489,14 @@
       a.addEventListener("click", (e) => {
         e.preventDefault();
         const moduleId = a.getAttribute("data-id");
+        if (!isResidentModuleAllowed(moduleId)) {
+          location.hash = "#resident/home";
+          return;
+        }
+        if (moduleId === "resident-committee") {
+          location.hash = a.getAttribute("href");
+          return;
+        }
         if (moduleId === "resident-service") {
           const cfg = loadConfig();
           openPageModal(cfg.serviceUrl || "", "客服中心");
@@ -481,6 +534,16 @@
             </svg>
           `;
     }
+    if (kind === "committee") {
+      return `
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M12 4.2 19 7.5 12 10.8 5 7.5 12 4.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              <path d="M7.5 10.5V16.2c0 .6.3 1.1.8 1.4 1 .7 2.4 1.2 3.7 1.2s2.7-.5 3.7-1.2c.5-.3.8-.9.8-1.4v-5.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M19 8v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M19 17.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" fill="currentColor"/>
+            </svg>
+          `;
+    }
     return `
           <svg viewBox="0 0 24 24" fill="none">
             <path d="M12 21.5c5.247 0 9.5-4.253 9.5-9.5S17.247 2.5 12 2.5 2.5 6.753 2.5 12 6.753 21.5 12 21.5Z" stroke="currentColor" stroke-width="1.7" opacity="0.9"/>
@@ -491,8 +554,20 @@
   }
 
   function setActive(moduleId) {
+    if (!isResidentModuleAllowed(moduleId)) {
+      moduleId = "home";
+      if (location.hash !== "#resident/home") {
+        history.replaceState(null, "", `${location.pathname}${location.search}#resident/home`);
+      }
+    }
     navEl.querySelectorAll("a").forEach((a) => a.setAttribute("aria-current", a.dataset.id === moduleId ? "page" : "false"));
 
+    if (moduleId === "resident-committee") {
+      pageTitleEl.textContent = "管委會";
+      pageSubtitleEl.textContent = "管委會專區";
+      contentEl.innerHTML = committeeView();
+      return;
+    }
     if (moduleId === "resident-service") {
       pageTitleEl.textContent = "客服中心";
       pageSubtitleEl.textContent = "聯繫社區管理處或系統客服（開發中）";
@@ -703,29 +778,29 @@
     }
   }
   
+  function renderButtonGrid(buttons) {
+    if (!buttons || buttons.length === 0) return "";
+    return `
+      <div class="button-grid">
+        ${buttons.map(b => {
+          const isRemoteIcon = b.icon && (b.icon.startsWith("http") || b.icon.startsWith("//"));
+          const imgSrc = isRemoteIcon ? b.icon : (b.data || b.icon || "photo/logo.png?v=2");
+          const isExternal = b.openExternal ? "1" : "";
+          return `
+            <a href="${b.url || "#"}" class="grid-btn" data-url="${b.url || ""}" data-name="${b.name || ""}" data-external="${isExternal}">
+              <div class="grid-btn-icon">
+                <img src="${imgSrc}" alt="${b.name}" />
+              </div>
+              <div class="grid-btn-label">${b.name}</div>
+            </a>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
   function homeView() {
     const cfg = loadConfig();
-    const renderButtonGrid = (buttons) => {
-      if (!buttons || buttons.length === 0) return "";
-      return `
-        <div class="button-grid">
-          ${buttons.map(b => {
-            const isRemoteIcon = b.icon && (b.icon.startsWith("http") || b.icon.startsWith("//"));
-            const imgSrc = isRemoteIcon ? b.icon : (b.data || b.icon || "photo/logo.png?v=2");
-            const isExternal = b.openExternal ? "1" : "";
-            return `
-              <a href="${b.url || "#"}" class="grid-btn" data-url="${b.url || ""}" data-name="${b.name || ""}" data-external="${isExternal}">
-                <div class="grid-btn-icon">
-                  <img src="${imgSrc}" alt="${b.name}" />
-                </div>
-                <div class="grid-btn-label">${b.name}</div>
-              </a>
-            `;
-          }).join("")}
-        </div>
-      `;
-    };
-
     return `
       <div class="home-grid">
         <section class="row-a" id="rowACarousel">
@@ -744,6 +819,18 @@
         <section class="row-e">生活服務</section>
         <section class="row-f">
           ${renderButtonGrid(cfg.rowFButtons)}
+        </section>
+      </div>
+    `;
+  }
+
+  function committeeView() {
+    const cfg = loadConfig();
+    return `
+      <div class="home-grid">
+        <section class="row-c">管委會</section>
+        <section class="row-d">
+          ${renderButtonGrid(cfg.committeeButtons)}
         </section>
       </div>
     `;
@@ -967,9 +1054,40 @@
         houseNo: String(data.houseNo || data.unit || "").trim(),
         subUnit: String(data.subUnit || data.subHouseNo || "").trim(),
         community: String(data.community || "").trim(),
+        avatarDataUrl: String(data.avatarDataUrl || "").trim(),
       };
     } catch {
       return { uid: id };
+    }
+  }
+
+  function setIntercomPeerVisual(modal, { avatarSelector, imageSelector, nameSelector, subSelector, name, sub, avatarDataUrl, fallbackInitial }) {
+    if (!modal) return;
+    const avatarEl = modal.querySelector(avatarSelector);
+    const imageEl = modal.querySelector(imageSelector);
+    const textEl = avatarEl ? avatarEl.querySelector(".intercom-avatar-text") : null;
+    const nameEl = modal.querySelector(nameSelector);
+    const subEl = modal.querySelector(subSelector);
+    const displayName = String(name || "").trim() || "使用者";
+    const displaySub = String(sub || "").trim() || "語音通話";
+    const avatar = String(avatarDataUrl || "").trim();
+    const initial = String(fallbackInitial || displayName.slice(0, 1) || "U").trim().slice(0, 1).toUpperCase() || "U";
+
+    if (nameEl) nameEl.textContent = displayName;
+    if (subEl) subEl.textContent = displaySub;
+    if (textEl) textEl.textContent = initial;
+    else if (avatarEl) avatarEl.textContent = initial;
+    if (avatarEl) avatarEl.classList.toggle("has-image", Boolean(avatar));
+    if (imageEl) {
+      if (avatar) {
+        imageEl.src = avatar;
+        imageEl.alt = displayName;
+        imageEl.hidden = false;
+      } else {
+        imageEl.removeAttribute("src");
+        imageEl.alt = "";
+        imageEl.hidden = true;
+      }
     }
   }
 
@@ -1015,29 +1133,27 @@
     modal.innerHTML = `
       <div class="modal-backdrop"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="intercomIncomingTitleMember">
-        <div class="modal-hd">
-          <h3 class="modal-title" id="intercomIncomingTitleMember">來電提示</h3>
-          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="intercom-card">
-            <div class="intercom-peer">
-              <div class="intercom-avatar" id="intercomIncomingInitialMember" aria-hidden="true">—</div>
-              <div class="intercom-peer-meta">
-                <div class="intercom-peer-name" id="intercomIncomingNameMember">—</div>
-                <div class="intercom-peer-sub" id="intercomIncomingSubMember">—</div>
-              </div>
+        <div class="intercom-screen incoming">
+          <div class="intercom-screen-top">
+            <div class="intercom-screen-badge" id="intercomIncomingTitleMember">來電中</div>
+            <button class="modal-close intercom-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          </div>
+          <div class="intercom-screen-main">
+            <div class="intercom-avatar intercom-avatar-xl" id="intercomIncomingInitialMember" aria-hidden="true">
+              <img id="intercomIncomingAvatarMember" class="intercom-avatar-image" alt="" hidden />
+              <span class="intercom-avatar-text">—</span>
             </div>
-            <div class="intercom-meta">
-              <span class="intercom-chip">來電中</span>
-              <span class="intercom-timer" aria-hidden="true">—</span>
+            <div class="intercom-peer-name intercom-peer-name-xl" id="intercomIncomingNameMember">—</div>
+            <div class="intercom-peer-sub intercom-peer-sub-xl" id="intercomIncomingSubMember">—</div>
+            <div class="intercom-center-meta">
+              <span class="intercom-chip pulse">等待接聽</span>
             </div>
           </div>
-        </div>
-        <div class="modal-ft">
-          <div class="intercom-actions">
-            <button class="intercom-btn danger" type="button" id="btnIntercomRejectMember">掛斷</button>
-            <button class="intercom-btn primary" type="button" id="btnIntercomAcceptMember">接通</button>
+          <div class="intercom-screen-bottom">
+            <div class="intercom-actions round-two">
+              <button class="intercom-btn danger round" type="button" id="btnIntercomRejectMember"><span>掛斷</span></button>
+              <button class="intercom-btn success round" type="button" id="btnIntercomAcceptMember"><span>接通</span></button>
+            </div>
           </div>
         </div>
       </div>
@@ -1053,31 +1169,30 @@
     modal.innerHTML = `
       <div class="modal-backdrop"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="intercomCallTitleMember">
-        <div class="modal-hd">
-          <h3 class="modal-title" id="intercomCallTitleMember">通話（對講）</h3>
-          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="intercom-card">
-            <div class="intercom-peer">
-              <div class="intercom-avatar" id="intercomPeerInitialMember" aria-hidden="true">社</div>
-              <div class="intercom-peer-meta">
-                <div class="intercom-peer-name" id="intercomPeerName">社區後台</div>
-                <div class="intercom-peer-sub" id="intercomPeerSub">—</div>
-              </div>
+        <div class="intercom-screen active">
+          <div class="intercom-screen-top">
+            <div class="intercom-screen-badge" id="intercomCallTitleMember">語音通話</div>
+            <button class="modal-close intercom-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          </div>
+          <div class="intercom-screen-main">
+            <div class="intercom-avatar intercom-avatar-xl" id="intercomPeerInitialMember" aria-hidden="true">
+              <img id="intercomPeerAvatarMember" class="intercom-avatar-image" alt="" hidden />
+              <span class="intercom-avatar-text">社</span>
             </div>
-            <div class="intercom-meta">
+            <div class="intercom-peer-name intercom-peer-name-xl" id="intercomPeerName">社區後台</div>
+            <div class="intercom-peer-sub intercom-peer-sub-xl" id="intercomPeerSub">語音通話</div>
+            <div class="intercom-center-meta stacked">
               <span class="intercom-chip" id="intercomCallState">待命</span>
-              <span class="intercom-timer" id="intercomTimer">00:00</span>
+              <span class="intercom-timer big" id="intercomTimer">00:00</span>
             </div>
             <audio id="intercomRemoteAudioMember" autoplay playsinline></audio>
           </div>
-        </div>
-        <div class="modal-ft">
-          <div class="intercom-actions triple">
-            <button class="intercom-btn ghost" type="button" id="btnIntercomMute">靜音</button>
-            <button class="intercom-btn danger" type="button" id="btnIntercomHangup">掛斷</button>
-            <button class="intercom-btn primary" type="button" id="btnIntercomCallAdmin">呼叫後台</button>
+          <div class="intercom-screen-bottom">
+            <div class="intercom-actions round-three">
+              <button class="intercom-btn ghost round small" type="button" id="btnIntercomMute"><span>靜音</span></button>
+              <button class="intercom-btn danger round" type="button" id="btnIntercomHangup"><span>掛斷</span></button>
+              <button class="intercom-btn success round" type="button" id="btnIntercomCallAdmin"><span>呼叫</span></button>
+            </div>
           </div>
         </div>
       </div>
@@ -1184,6 +1299,7 @@
         fromRole: "resident",
         fromName: String(fromProfile.name || user.email || "住戶").trim(),
         fromHouseNo: String(fromProfile.houseNo || "").trim(),
+        fromAvatarDataUrl: String(fromProfile.avatarDataUrl || "").trim(),
         toRole: "admin",
         status: "ringing",
         createdAt: FieldValue.serverTimestamp(),
@@ -1198,7 +1314,7 @@
       muteBtn.onclick = () => {
         muted = !muted;
         (localStream ? localStream.getAudioTracks() : []).forEach((t) => (t.enabled = !muted));
-        muteBtn.textContent = muted ? "取消靜音" : "靜音";
+        muteBtn.innerHTML = `<span>${muted ? "開音" : "靜音"}</span>`;
       };
     }
 
@@ -1254,9 +1370,6 @@
       cleanupIntercomActive({ updateStatus: "ended" });
     });
 
-    const initialEl = modal.querySelector("#intercomPeerInitialMember");
-    const peerNameEl = modal.querySelector("#intercomPeerName");
-    const peerSubEl = modal.querySelector("#intercomPeerSub");
     const muteBtn = modal.querySelector("#btnIntercomMute");
     const hangupBtn = modal.querySelector("#btnIntercomHangup");
     const callBtn = modal.querySelector("#btnIntercomCallAdmin");
@@ -1265,10 +1378,16 @@
 
     const fromName = String(d.fromName || "社區後台").trim() || "社區後台";
     const fromSub = String(d.fromHouseNo || "").trim();
-    const initial = (fromName.slice(0, 1).toUpperCase() || "U").trim() || "U";
-    if (initialEl) initialEl.textContent = initial;
-    if (peerNameEl) peerNameEl.textContent = fromName;
-    if (peerSubEl) peerSubEl.textContent = fromSub || "—";
+    setIntercomPeerVisual(modal, {
+      avatarSelector: "#intercomPeerInitialMember",
+      imageSelector: "#intercomPeerAvatarMember",
+      nameSelector: "#intercomPeerName",
+      subSelector: "#intercomPeerSub",
+      name: fromName,
+      sub: fromSub || "社區後台",
+      avatarDataUrl: String(d.fromAvatarDataUrl || "").trim(),
+      fallbackInitial: fromName,
+    });
     if (timerEl) timerEl.textContent = "00:00";
 
     setIntercomCallStatus("接通中…", false);
@@ -1337,7 +1456,7 @@
       muteBtn.onclick = () => {
         muted = !muted;
         (localStream ? localStream.getAudioTracks() : []).forEach((t) => (t.enabled = !muted));
-        muteBtn.textContent = muted ? "取消靜音" : "靜音";
+        muteBtn.innerHTML = `<span>${muted ? "開音" : "靜音"}</span>`;
       };
     }
 
@@ -1426,18 +1545,21 @@
             .set({ status: "missed", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true })
             .catch(() => {});
         });
-        const initialEl = prompt.querySelector("#intercomIncomingInitialMember");
-        const nameEl = prompt.querySelector("#intercomIncomingNameMember");
-        const subEl = prompt.querySelector("#intercomIncomingSubMember");
         const btnAccept = prompt.querySelector("#btnIntercomAcceptMember");
         const btnReject = prompt.querySelector("#btnIntercomRejectMember");
 
         const fromName = String(latest.fromName || "社區後台").trim() || "社區後台";
         const fromHouse = String(latest.fromHouseNo || "").trim();
-        const initial = (fromName.slice(0, 1).toUpperCase() || "U").trim() || "U";
-        if (initialEl) initialEl.textContent = initial;
-        if (nameEl) nameEl.textContent = fromName;
-        if (subEl) subEl.textContent = fromHouse || "—";
+        setIntercomPeerVisual(prompt, {
+          avatarSelector: "#intercomIncomingInitialMember",
+          imageSelector: "#intercomIncomingAvatarMember",
+          nameSelector: "#intercomIncomingNameMember",
+          subSelector: "#intercomIncomingSubMember",
+          name: fromName,
+          sub: fromHouse || "社區後台",
+          avatarDataUrl: String(latest.fromAvatarDataUrl || "").trim(),
+          fallbackInitial: fromName,
+        });
 
         if (btnReject) {
           btnReject.onclick = async () => {
@@ -1484,9 +1606,17 @@
         callBtn.onclick = () => intercomStartOutgoingToAdmin({ communityId: resolveActiveCommunityId() });
       }
       if (hangupBtn) hangupBtn.onclick = () => cleanupIntercomActive({ updateStatus: "ended" });
-      if (muteBtn) muteBtn.textContent = "靜音";
-      const initialEl = modal.querySelector("#intercomPeerInitialMember");
-      if (initialEl) initialEl.textContent = "社";
+      if (muteBtn) muteBtn.innerHTML = "<span>靜音</span>";
+      setIntercomPeerVisual(modal, {
+        avatarSelector: "#intercomPeerInitialMember",
+        imageSelector: "#intercomPeerAvatarMember",
+        nameSelector: "#intercomPeerName",
+        subSelector: "#intercomPeerSub",
+        name: "社區後台",
+        sub: "點擊下方開始撥號",
+        avatarDataUrl: "",
+        fallbackInitial: "社",
+      });
       const timerEl = modal.querySelector("#intercomTimer");
       if (timerEl) timerEl.textContent = "00:00";
       setIntercomCallStatus("待命", false);
@@ -1544,10 +1674,12 @@
     }
 
     let role = String(sessionStorage.getItem("csp_role") || "").trim().toLowerCase();
+    let userProfile = null;
     if (!role) {
       try {
         const udoc = await db.collection("users").doc(String(user.uid)).get();
         const udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
+        userProfile = udata;
         const r = String(udata.role || "").trim();
         if (r === "admin" || r === "系統管理員" || r === "系統管理者" || r === "系統") role = "admin";
         else if (r === "community" || r === "社區") role = "community";
@@ -1555,6 +1687,16 @@
         if (role) sessionStorage.setItem("csp_role", role);
       } catch {}
     }
+    if (!userProfile) {
+      try {
+        const udoc = await db.collection("users").doc(String(user.uid)).get();
+        userProfile = udoc && udoc.exists ? (udoc.data() || {}) : {};
+      } catch {
+        userProfile = {};
+      }
+    }
+    state.currentUserProfile = userProfile || {};
+    state.currentUserRole = normalizeSessionOrDocRole(role || (userProfile && userProfile.role) || "");
 
     if (role && role !== "resident" && role !== "admin") {
       if (role === "community") {
