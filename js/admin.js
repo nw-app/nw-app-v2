@@ -11347,8 +11347,11 @@
   let intercomRingTimer = null;
   let intercomLastIncomingMs = 0;
   let intercomLastIncomingId = "";
+  let intercomIncomingPromptEl = null;
+  let intercomIncomingPromptCallId = "";
+  let intercomIncomingPromptUnsubDoc = null;
 
-  function startIntercomRingtone() {
+  function startIntercomRingtone(mode = "incoming") {
     stopIntercomRingtone();
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -11361,23 +11364,35 @@
       intercomRingGain.gain.value = 0.0001;
       intercomRingGain.connect(intercomRingCtx.destination);
 
-      intercomRingOsc = intercomRingCtx.createOscillator();
-      intercomRingOsc.type = "sine";
-      intercomRingOsc.frequency.value = 880;
-      intercomRingOsc.connect(intercomRingGain);
-      intercomRingOsc.start();
+      const osc1 = intercomRingCtx.createOscillator();
+      const osc2 = intercomRingCtx.createOscillator();
+      osc1.type = "triangle";
+      osc2.type = "sine";
+      osc1.frequency.value = 523.25;
+      osc2.frequency.value = 659.25;
+      osc1.connect(intercomRingGain);
+      osc2.connect(intercomRingGain);
+      osc1.start();
+      osc2.start();
+      intercomRingOsc = [osc1, osc2];
 
+      const m = String(mode || "incoming").trim() || "incoming";
+      const pattern = m === "waiting" ? [1, 0, 0, 0] : [1, 1, 0, 0, 1, 1, 0, 0, 0, 0];
+      const intervalMs = m === "waiting" ? 480 : 340;
       let phase = 0;
       const tick = () => {
-        if (!intercomRingGain) return;
-        phase = (phase + 1) % 6;
-        const on = phase === 1 || phase === 2;
+        if (!intercomRingGain || !intercomRingCtx) return;
+        const on = Boolean(pattern[phase % pattern.length]);
+        phase += 1;
+        const target = on ? 0.06 : 0.0001;
         try {
-          intercomRingGain.gain.value = on ? 0.12 : 0.0001;
-        } catch {}
+          intercomRingGain.gain.setTargetAtTime(target, intercomRingCtx.currentTime, 0.03);
+        } catch {
+          try { intercomRingGain.gain.value = target; } catch {}
+        }
       };
       tick();
-      intercomRingTimer = window.setInterval(tick, 420);
+      intercomRingTimer = window.setInterval(tick, intervalMs);
     } catch {}
   }
 
@@ -11390,7 +11405,10 @@
       if (intercomRingGain) intercomRingGain.gain.value = 0;
     } catch {}
     try {
-      if (intercomRingOsc) intercomRingOsc.stop();
+      const list = Array.isArray(intercomRingOsc) ? intercomRingOsc : (intercomRingOsc ? [intercomRingOsc] : []);
+      list.forEach((osc) => {
+        try { osc.stop(); } catch {}
+      });
     } catch {}
     intercomRingOsc = null;
     intercomRingGain = null;
@@ -11464,6 +11482,20 @@
     }, Math.max(0, Number(delayMs || 0)));
   }
 
+  function closeIntercomIncomingPrompt({ delayMs = 0 } = {}) {
+    const prompt = intercomIncomingPromptEl;
+    intercomIncomingPromptEl = null;
+    intercomIncomingPromptCallId = "";
+    if (intercomIncomingPromptUnsubDoc) {
+      try { intercomIncomingPromptUnsubDoc(); } catch {}
+      intercomIncomingPromptUnsubDoc = null;
+    }
+    stopIntercomRingtone();
+    if (!prompt) return;
+    if (Number(delayMs || 0) > 0) scheduleIntercomModalHide(prompt, delayMs);
+    else prompt.hidden = true;
+  }
+
   function prepareIntercomModal(modal) {
     if (!modal) return;
     modal.hidden = false;
@@ -11522,6 +11554,64 @@
       return "請點網址列權限圖示，將麥克風改成允許後，再重新撥打。";
     }
     return "請確認裝置已有可用麥克風，並已開啟網站麥克風權限。";
+  }
+
+  async function setIntercomAudioOutputMode(mode) {
+    const modal = document.getElementById("intercomCallModal80");
+    if (!modal) return false;
+    const audio = document.getElementById("intercomRemoteAudioAdmin");
+    if (!audio) return false;
+    if (typeof audio.setSinkId !== "function") {
+      setIntercomPermissionHelp("此裝置/瀏覽器不支援切換「聽筒/擴音」。", false);
+      return false;
+    }
+    const m = String(mode || "earpiece").trim() || "earpiece";
+    const wantSpeaker = m === "speaker";
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const outputs = (devices || []).filter((d) => d && d.kind === "audiooutput");
+      let speakerId = "";
+      if (wantSpeaker) {
+        const prefer = outputs.find((d) => /speaker|擴音|喇叭/i.test(String(d.label || "")) && String(d.deviceId || "") !== "default");
+        const fallback = outputs.find((d) => String(d.deviceId || "") !== "default");
+        speakerId = String((prefer || fallback || {}).deviceId || "").trim();
+      }
+      const sinkId = wantSpeaker ? speakerId : "default";
+      await audio.setSinkId(sinkId);
+      if (intercomActive) intercomActive.audioOutputMode = wantSpeaker ? "speaker" : "earpiece";
+      setIntercomPermissionHelp("", false);
+      return true;
+    } catch {
+      setIntercomPermissionHelp("無法切換音訊輸出，請確認瀏覽器允許切換音訊裝置。", false);
+      return false;
+    }
+  }
+
+  function bindIntercomSpeakerButton(modal) {
+    if (!modal) return;
+    const btn = modal.querySelector("#btnIntercomSpeaker");
+    if (!btn) return;
+    const audio = document.getElementById("intercomRemoteAudioAdmin");
+    const supported = Boolean(audio && typeof audio.setSinkId === "function");
+    btn.hidden = true;
+    btn.dataset.supported = supported ? "1" : "0";
+    btn.disabled = true;
+    btn.innerHTML = "<span>擴音</span>";
+    btn.onclick = async () => {
+      const current = intercomActive && intercomActive.audioOutputMode ? String(intercomActive.audioOutputMode) : "earpiece";
+      const next = current === "speaker" ? "earpiece" : "speaker";
+      const ok = await setIntercomAudioOutputMode(next);
+      if (ok) btn.innerHTML = `<span>${next === "speaker" ? "聽筒" : "擴音"}</span>`;
+    };
+  }
+
+  function setIntercomSpeakerButtonEnabled(modal, enabled) {
+    if (!modal) return;
+    const btn = modal.querySelector("#btnIntercomSpeaker");
+    if (!btn) return;
+    const on = Boolean(enabled);
+    btn.hidden = !on;
+    btn.disabled = !on;
   }
 
   function setIntercomCallStatus(text, isError) {
@@ -11618,7 +11708,8 @@
             <audio id="intercomRemoteAudioAdmin" autoplay playsinline></audio>
           </div>
           <div class="intercom-screen-bottom">
-            <div class="intercom-actions round-one">
+            <div class="intercom-actions round-two">
+              <button class="intercom-btn ghost round small" type="button" id="btnIntercomSpeaker" hidden><span>擴音</span></button>
               <button class="intercom-btn danger round" type="button" id="btnIntercomHangup"><span>掛斷</span></button>
             </div>
           </div>
@@ -11686,6 +11777,7 @@
     await cleanupIntercomActive();
     const modal = ensureIntercomCallModal();
     prepareIntercomModal(modal);
+    bindIntercomSpeakerButton(modal);
     let detach = () => {};
     detach = bindModalClose(modal, () => {
       detach();
@@ -11712,7 +11804,9 @@
     if (timerEl) timerEl.textContent = "00:00";
     setIntercomCallStatus("正在呼叫…", false);
     setIntercomPermissionHelp("", false);
+    setIntercomSpeakerButtonEnabled(modal, false);
     modal.hidden = false;
+    startIntercomRingtone("waiting");
 
     if (hangupBtn) {
       hangupBtn.onclick = () => {
@@ -11752,6 +11846,7 @@
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     } catch (err) {
+      stopIntercomRingtone();
       setIntercomCallStatus("無法開啟麥克風，請確認瀏覽器權限。", true);
       setIntercomPermissionHelp(buildMicrophonePermissionMessage(err), true);
       try { pc.close(); } catch {}
@@ -11786,6 +11881,7 @@
         { merge: true }
       );
     } catch {
+      stopIntercomRingtone();
       setIntercomCallStatus("呼叫失敗：可能沒有權限或網路異常。", true);
       toast("呼叫失敗");
       try { pc.close(); } catch {}
@@ -11810,7 +11906,13 @@
           } catch {}
         }
         setIntercomCallStatus("已接通", false);
+        stopIntercomRingtone();
         setIntercomPermissionHelp("", false);
+        setIntercomSpeakerButtonEnabled(modal, true);
+        {
+          const audio = document.getElementById("intercomRemoteAudioAdmin");
+          if (audio && typeof audio.setSinkId === "function") await setIntercomAudioOutputMode("earpiece");
+        }
         if (intercomActive && !intercomActive.timerId) startIntercomTimer(Date.now());
         return;
       }
@@ -11834,6 +11936,7 @@
       pc,
       localStream,
       remoteStream,
+      audioOutputMode: "earpiece",
       unsubDoc,
       unsubCandidates: unsubAnswerCandidates,
       detachModal: detach,
@@ -11850,6 +11953,7 @@
     await cleanupIntercomActive();
     const modal = ensureIntercomCallModal();
     prepareIntercomModal(modal);
+    bindIntercomSpeakerButton(modal);
     let detach = () => {};
     detach = bindModalClose(modal, () => {
       detach();
@@ -11872,6 +11976,7 @@
       fallbackInitial: fromName,
     });
     if (timerEl) timerEl.textContent = "00:00";
+    setIntercomSpeakerButtonEnabled(modal, false);
     setIntercomPermissionHelp("", false);
 
     setIntercomCallStatus("接通中…", false);
@@ -11942,7 +12047,14 @@
       },
       { merge: true }
     );
+    setIntercomCallStatus("已接通", false);
+    stopIntercomRingtone();
     setIntercomPermissionHelp("", false);
+    setIntercomSpeakerButtonEnabled(modal, true);
+    {
+      const audio = document.getElementById("intercomRemoteAudioAdmin");
+      if (audio && typeof audio.setSinkId === "function") await setIntercomAudioOutputMode("earpiece");
+    }
 
     if (hangupBtn) hangupBtn.onclick = () => {
       setIntercomCallStatus("通話已結束", false);
@@ -11973,6 +12085,7 @@
       pc,
       localStream,
       remoteStream,
+      audioOutputMode: "earpiece",
       unsubDoc,
       unsubCandidates: unsubOfferCandidates,
       detachModal: detach,
@@ -12007,10 +12120,14 @@
           .filter((x) => x && String(x.status || "") === "ringing")
           .sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
         const latest = list[0] || null;
-        if (!latest) return;
+        if (!latest) {
+          closeIntercomIncomingPrompt({ delayMs: 0 });
+          return;
+        }
         const createdAtMs = Number(latest.createdAtMs || 0);
         const callId = String(latest.id || "").trim();
         if (!callId) return;
+        if (callId === intercomIncomingPromptCallId) return;
         if (callId === intercomLastIncomingId) return;
         if (createdAtMs && createdAtMs < minMs) return;
         intercomLastIncomingMs = createdAtMs;
@@ -12023,16 +12140,28 @@
           return;
         }
 
+        closeIntercomIncomingPrompt({ delayMs: 0 });
         const prompt = ensureIntercomIncomingModal();
         prepareIntercomModal(prompt);
+        intercomIncomingPromptEl = prompt;
+        intercomIncomingPromptCallId = callId;
         const callDocRef = db.collection("calls").doc(callId);
+        if (intercomIncomingPromptUnsubDoc) {
+          try { intercomIncomingPromptUnsubDoc(); } catch {}
+          intercomIncomingPromptUnsubDoc = null;
+        }
+        intercomIncomingPromptUnsubDoc = callDocRef.onSnapshot((docSnap) => {
+          const v = docSnap && docSnap.exists ? (docSnap.data() || {}) : null;
+          const st = String((v && v.status) || "").trim();
+          if (!v || (st && st !== "ringing")) closeIntercomIncomingPrompt({ delayMs: 0 });
+        }, () => {});
         let detach = () => {};
         detach = bindModalClose(prompt, () => {
           detach();
-          stopIntercomRingtone();
           callDocRef
             .set({ status: "missed", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true })
             .catch(() => {});
+          closeIntercomIncomingPrompt({ delayMs: 0 });
         });
         const btnAccept = prompt.querySelector("#btnIntercomAccept");
         const btnReject = prompt.querySelector("#btnIntercomReject");
@@ -12052,20 +12181,18 @@
 
         if (btnReject) {
           btnReject.onclick = async () => {
-            stopIntercomRingtone();
             try { await callDocRef.set({ status: "rejected", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true }); } catch {}
-            scheduleIntercomModalHide(prompt, 1000);
+            closeIntercomIncomingPrompt({ delayMs: 1000 });
           };
         }
         if (btnAccept) {
           btnAccept.onclick = async () => {
-            stopIntercomRingtone();
-            prompt.hidden = true;
+            closeIntercomIncomingPrompt({ delayMs: 0 });
             await intercomAnswerIncomingCall(callDocRef, latest);
           };
         }
 
-        startIntercomRingtone();
+        startIntercomRingtone("incoming");
         prepareIntercomModal(prompt);
       }, () => {
         toast("來電監聽失敗");
