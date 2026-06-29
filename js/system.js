@@ -1346,6 +1346,7 @@
       tr.innerHTML = `
         <td><input type="text" class="u-id" value="${u.id || ""}" placeholder="戶號" /></td>
         <td><input type="text" class="u-address" value="${u.address || ""}" placeholder="地址" /></td>
+        <td><input type="text" class="u-building" value="${u.building || ""}" placeholder="棟別" /></td>
         <td><input type="text" class="u-area" value="${u.area || ""}" placeholder="坪數" /></td>
         <td><input type="text" class="u-ownership" value="${u.ownership || ""}" placeholder="%" /></td>
         <td><div class="remove-row" title="刪除">&times;</div></td>
@@ -2343,6 +2344,7 @@
       const data = rows.map(tr => ({
         "戶號": tr.querySelector(".u-id").value.trim(),
         "地址": tr.querySelector(".u-address").value.trim(),
+        "棟別": tr.querySelector(".u-building").value.trim(),
         "坪數": tr.querySelector(".u-area").value.trim(),
         "區分所有權人%": tr.querySelector(".u-ownership").value.trim()
       })).filter(x => x["戶號"]);
@@ -2377,11 +2379,13 @@
           if (tbody) {
             tbody.innerHTML = "";
             json.forEach(row => {
+              const values = Object.values(row);
               const id = String(row["戶號"] || row["id"] || row["戶"] || Object.values(row)[0] || "").trim();
               const addr = String(row["地址"] || row["address"] || Object.values(row)[1] || "").trim();
-              const area = String(row["坪數"] || row["area"] || Object.values(row)[2] || "").trim();
-              const own = String(row["區分所有權人%"] || row["ownership"] || Object.values(row)[3] || "").trim();
-              if (id) tbody.appendChild(createUnitRow({ id, address: addr, area, ownership: own }));
+              const building = String(row["棟別"] || row["building"] || (values.length >= 5 ? values[2] : "") || "").trim();
+              const area = String(row["坪數"] || row["area"] || (values.length >= 5 ? values[3] : values[2]) || "").trim();
+              const own = String(row["區分所有權人%"] || row["ownership"] || (values.length >= 5 ? values[4] : values[3]) || "").trim();
+              if (id) tbody.appendChild(createUnitRow({ id, address: addr, building, area, ownership: own }));
             });
             updateUnitHeaderCounts();
           }
@@ -2526,6 +2530,7 @@
         for (const tr of rows) {
           const uId = tr.querySelector(".u-id").value.trim();
           const address = tr.querySelector(".u-address").value.trim();
+          const building = tr.querySelector(".u-building").value.trim();
           const area = tr.querySelector(".u-area").value.trim();
           const ownership = tr.querySelector(".u-ownership").value.trim();
           
@@ -2533,7 +2538,7 @@
           if (seen.has(uId)) continue;
           seen.add(uId);
 
-          uniq.push({ id: uId, address, area, ownership });
+          uniq.push({ id: uId, address, building, area, ownership });
         }
 
         if (uniq.length === 0) {

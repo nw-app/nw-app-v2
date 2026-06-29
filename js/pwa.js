@@ -3,7 +3,7 @@
   const DISMISS_DAYS = 30;
   const shouldSuppressFirestoreAbort = (err) => {
     const msg = String((err && (err.message || err.reason?.message)) || err || "");
-    if (!msg.includes("net::ERR_ABORTED")) return false;
+    if (!(msg.includes("net::ERR_ABORTED") || msg.includes("net::ERR_CONNECTION_RESET"))) return false;
     return (
       msg.includes("google.firestore.v1.Firestore/Listen/channel") ||
       msg.includes("firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel")

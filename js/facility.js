@@ -1131,7 +1131,7 @@ async function loadFacilities(userData) {
 
     // 先用基本信息更新标题
     const basicName = String(user.displayName || nameFromEmail(user.email) || '姓名').trim();
-    communityFacilityTitle.textContent = `戶號 ${basicName}`;
+    communityFacilityTitle.textContent = `棟別 ${basicName}`;
 
     let data = {};
     try {
@@ -1192,7 +1192,8 @@ async function loadFacilities(userData) {
     currentUserHouseNo = fullHouseNo;
     
     console.log('Setting title - houseNo:', houseNo, 'subHouseNo:', subHouseNo, 'displayName:', displayName);
-    communityFacilityTitle.textContent = `${fullHouseNo || '戶號'} ${displayName || '姓名'}`;
+    const buildingText = String(data.building || data.block || '').trim();
+    communityFacilityTitle.textContent = `${buildingText || '棟別'} ${displayName || '姓名'}`;
 
     if (houseNoTextEl) {
       houseNoTextEl.textContent = fullHouseNo || '—';

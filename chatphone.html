@@ -1,0 +1,1073 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Chat Phone｜社區系統</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg?v=4" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#d32f2f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="icon-192.png?v=2" />
+    <link rel="stylesheet" href="css/pwa.css" />
+    <style>
+      :root {
+        color-scheme: light;
+        --cp-bg: #f5f7fb;
+        --cp-card: #ffffff;
+        --cp-border: rgba(15, 23, 42, 0.08);
+        --cp-text: #0f172a;
+        --cp-sub: #64748b;
+        --cp-brand: #d32f2f;
+        --cp-brand-soft: rgba(211, 47, 47, 0.08);
+        --cp-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--cp-bg);
+        color: var(--cp-text);
+        font-family: "Segoe UI", "Noto Sans TC", Arial, sans-serif;
+      }
+
+      body {
+        min-height: 100vh;
+      }
+
+      .chatphone-layout {
+        height: 100dvh;
+        display: grid;
+        grid-template-rows: 8% 84% 8%;
+      }
+
+      .chatphone-hd {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--cp-brand);
+        color: #fff;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+        padding: calc(10px + env(safe-area-inset-top)) 18px 10px;
+      }
+
+      .chatphone-title {
+        margin: 0;
+        text-align: center;
+        font-size: 18px;
+        font-weight: 900;
+        letter-spacing: 0.2px;
+        color: #fff;
+      }
+
+      .chatphone-mid {
+        overflow: auto;
+        padding: 14px 18px;
+      }
+
+      .chatphone-status {
+        min-height: 160px;
+        border: 1px dashed rgba(100, 116, 139, 0.3);
+        border-radius: 22px;
+        display: grid;
+        place-items: center;
+        color: var(--cp-sub);
+        background: rgba(255, 255, 255, 0.66);
+        text-align: center;
+        padding: 24px;
+      }
+
+      .chatphone-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+        gap: 10px;
+      }
+
+      .account-card {
+        aspect-ratio: 1 / 1;
+        border-radius: 18px;
+        border: 1px solid var(--cp-border);
+        background: var(--cp-card);
+        box-shadow: var(--cp-shadow);
+        padding: 10px 8px;
+        display: grid;
+        grid-template-rows: auto auto auto;
+        justify-items: center;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+      }
+
+      .account-card:hover,
+      .account-card:focus-visible {
+        transform: translateY(-1px);
+        border-color: rgba(211, 47, 47, 0.24);
+        box-shadow: 0 14px 30px rgba(211, 47, 47, 0.14);
+        outline: none;
+      }
+
+      .account-avatar {
+        width: min(30vw, 60px);
+        height: min(30vw, 60px);
+        border-radius: 999px;
+        overflow: hidden;
+        background: linear-gradient(135deg, #fde68a, #fca5a5 55%, #c4b5fd);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 22px;
+        font-weight: 900;
+        box-shadow: 0 10px 24px rgba(211, 47, 47, 0.18);
+      }
+
+      .account-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .account-house,
+      .account-sub,
+      .account-address {
+        width: 100%;
+        text-align: center;
+        word-break: break-word;
+      }
+
+      .account-unit-row {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        align-items: start;
+      }
+
+      .account-label {
+        font-size: 10px;
+        color: var(--cp-sub);
+        margin-bottom: 2px;
+      }
+
+      .account-value {
+        font-size: 14px;
+        font-weight: 800;
+        line-height: 1.25;
+      }
+
+      .account-address .account-value {
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.2;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .chatphone-ft {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.96);
+        backdrop-filter: blur(14px);
+        border-top: 1px solid var(--cp-border);
+        padding:
+          12px
+          14px
+          calc(12px + env(safe-area-inset-bottom));
+      }
+
+      .filter-row {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 10px;
+        justify-content: flex-start;
+      }
+
+      .filter-btn {
+        min-height: 42px;
+        padding: 0 16px;
+        border-radius: 999px;
+        border: 1px solid rgba(211, 47, 47, 0.18);
+        background: #fff;
+        color: var(--cp-text);
+        font-size: 14px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .filter-btn.active {
+        background: var(--cp-brand);
+        color: #fff;
+        border-color: transparent;
+        box-shadow: 0 10px 24px rgba(211, 47, 47, 0.24);
+      }
+
+      .chatcall-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 1200;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(15, 23, 42, 0.56);
+      }
+
+      .chatcall-modal[hidden] {
+        display: none;
+      }
+
+      .chatcall-panel {
+        width: min(100%, 360px);
+        border-radius: 28px;
+        background: linear-gradient(180deg, #fff5f5 0%, #ffffff 100%);
+        box-shadow: 0 28px 60px rgba(15, 23, 42, 0.28);
+        padding: 22px 20px 18px;
+        text-align: center;
+      }
+
+      .chatcall-avatar {
+        width: 88px;
+        height: 88px;
+        margin: 0 auto 14px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: linear-gradient(135deg, #fde68a, #fca5a5 55%, #c4b5fd);
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 30px;
+        font-weight: 900;
+      }
+
+      .chatcall-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .chatcall-name {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 900;
+        color: #111827;
+      }
+
+      .chatcall-sub {
+        margin-top: 6px;
+        color: var(--cp-sub);
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .chatcall-status {
+        margin-top: 18px;
+        color: #374151;
+        font-size: 15px;
+        font-weight: 800;
+      }
+
+      .chatcall-status.error {
+        color: #b91c1c;
+      }
+
+      .chatcall-timer {
+        margin-top: 8px;
+        color: var(--cp-brand);
+        font-size: 15px;
+        font-weight: 900;
+        letter-spacing: 1px;
+      }
+
+      .chatcall-help {
+        margin-top: 10px;
+        color: var(--cp-sub);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .chatcall-help.error {
+        color: #b91c1c;
+      }
+
+      .chatcall-actions {
+        margin-top: 18px;
+      }
+
+      .chatcall-btn {
+        min-height: 48px;
+        min-width: 120px;
+        border: none;
+        border-radius: 999px;
+        background: #d32f2f;
+        color: #fff;
+        font-size: 16px;
+        font-weight: 900;
+        cursor: pointer;
+      }
+
+      @media (max-width: 420px) {
+        .chatphone-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="chatphone-layout">
+      <header class="chatphone-hd">
+        <h1 class="chatphone-title" id="communityName">社區名稱</h1>
+      </header>
+
+      <main class="chatphone-mid">
+        <div class="chatphone-grid" id="accountGrid"></div>
+      </main>
+
+      <footer class="chatphone-ft">
+        <section aria-label="棟別篩選">
+          <div class="filter-row" id="buildingFilters">
+            <button class="filter-btn active" type="button" data-building="all">全部</button>
+          </div>
+        </section>
+      </footer>
+    </div>
+
+    <div class="chatcall-modal" id="chatCallModal" hidden>
+      <div class="chatcall-panel" role="dialog" aria-modal="true" aria-labelledby="chatCallName">
+        <div class="chatcall-avatar">
+          <img id="chatCallAvatarImg" alt="" hidden>
+          <span id="chatCallAvatarText">U</span>
+        </div>
+        <h2 class="chatcall-name" id="chatCallName">聯絡人</h2>
+        <div class="chatcall-sub" id="chatCallSub">語音通話</div>
+        <div class="chatcall-status" id="chatCallStatus">正在呼叫…</div>
+        <div class="chatcall-timer" id="chatCallTimer">00:00</div>
+        <div class="chatcall-help" id="chatCallHelp" hidden></div>
+        <div class="chatcall-actions">
+          <button class="chatcall-btn" type="button" id="btnChatCallHangup">掛斷</button>
+        </div>
+      </div>
+      <audio id="chatCallRemoteAudio" autoplay playsinline></audio>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/pwa.js?v=4"></script>
+    <script>
+      (function () {
+        "use strict";
+
+        const firebaseConfig = window.FIREBASE_CONFIG;
+        if (!firebaseConfig) throw new Error("Missing FIREBASE_CONFIG");
+
+        try {
+          firebase.initializeApp(firebaseConfig);
+        } catch {}
+
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const FieldValue = firebase.firestore.FieldValue;
+        try {
+          db.settings({
+            experimentalAutoDetectLongPolling: true,
+            experimentalForceLongPolling: true,
+            useFetchStreams: false,
+            ignoreUndefinedProperties: true,
+          });
+        } catch {}
+
+        const communityNameEl = document.getElementById("communityName");
+        const gridEl = document.getElementById("accountGrid");
+        const filtersEl = document.getElementById("buildingFilters");
+        const callModalEl = document.getElementById("chatCallModal");
+        const callAvatarImgEl = document.getElementById("chatCallAvatarImg");
+        const callAvatarTextEl = document.getElementById("chatCallAvatarText");
+        const callNameEl = document.getElementById("chatCallName");
+        const callSubEl = document.getElementById("chatCallSub");
+        const callStatusEl = document.getElementById("chatCallStatus");
+        const callTimerEl = document.getElementById("chatCallTimer");
+        const callHelpEl = document.getElementById("chatCallHelp");
+        const callHangupBtn = document.getElementById("btnChatCallHangup");
+
+        let allAccounts = [];
+        let buildingOptions = [];
+        let activeBuilding = "all";
+        let currentUserData = null;
+        let currentCommunityKey = "";
+        let chatCallState = null;
+
+        function readCommunityKey() {
+          try {
+            const url = new URL(String(location.href));
+            const q = String(url.searchParams.get("c") || "").trim();
+            if (q) return q;
+          } catch {}
+          try {
+            const s = String(sessionStorage.getItem("csp_last_cid") || "").trim();
+            if (s) return s;
+          } catch {}
+          try {
+            const l = String(localStorage.getItem("csp_active_community_v1") || "").trim();
+            if (l) return l;
+          } catch {}
+          return "";
+        }
+
+        function escapeHtml(str) {
+          return String(str || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+        }
+
+        function pickInitial(name, houseNo) {
+          const source = String(name || "").trim() || String(houseNo || "").trim() || "U";
+          return source.slice(0, 1).toUpperCase();
+        }
+
+        function normalizeRoleText(role) {
+          const value = String(role || "").trim().toLowerCase();
+          if (value === "admin" || value === "系統管理員" || value === "系統管理者" || value === "system") return "admin";
+          return "resident";
+        }
+
+        function normalizeUnit(v) {
+          return String(v || "").trim();
+        }
+
+        function compareUnit(a, b) {
+          return String(a || "").localeCompare(String(b || ""), "zh-Hant", { numeric: true, sensitivity: "base" });
+        }
+
+        function extractBuilding(unit) {
+          const value = normalizeUnit(unit);
+          if (!value) return "未設定";
+          const matchWithBuilding = value.match(/^(.+?棟)/);
+          if (matchWithBuilding && matchWithBuilding[1]) return matchWithBuilding[1];
+          const firstPart = value.split(/[-\s]/).filter(Boolean)[0] || "";
+          return firstPart || "未設定";
+        }
+
+        function normalizeUnitBuilding(v) {
+          const value = String(v || "").trim();
+          if (!value) return "未設定";
+          return value.endsWith("棟") ? value : value;
+        }
+
+        function buildUnitMetaMap(units) {
+          const map = new Map();
+          const raw = Array.isArray(units) ? units : [];
+          for (const x of raw) {
+            const id = (x && typeof x === "object") ? String(x.id || "").trim() : String(x || "").trim();
+            if (!id) continue;
+            const key = id.toLowerCase();
+            if (map.has(key)) continue;
+            const building = (x && typeof x === "object") ? normalizeUnitBuilding(x.building || x.block || "") : "未設定";
+            const address = (x && typeof x === "object") ? String(x.address || "").trim() : "";
+            map.set(key, {
+              building: building || "未設定",
+              address,
+            });
+          }
+          return map;
+        }
+
+        function setStatus(message) {
+          gridEl.innerHTML = `<div class="chatphone-status">${escapeHtml(message)}</div>`;
+        }
+
+        function createIntercomPeerConnection() {
+          return new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+        }
+
+        function attachRemoteAudio(remoteStream) {
+          const audio = document.getElementById("chatCallRemoteAudio");
+          if (!audio) return;
+          audio.muted = false;
+          audio.volume = 1;
+          audio.srcObject = remoteStream || null;
+          const p = audio.play();
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        }
+
+        function setCallStatus(message, isError) {
+          if (!callStatusEl) return;
+          callStatusEl.textContent = String(message || "").trim() || "—";
+          callStatusEl.classList.toggle("error", Boolean(isError));
+        }
+
+        function setCallHelp(message, isError) {
+          if (!callHelpEl) return;
+          const text = String(message || "").trim();
+          callHelpEl.textContent = text;
+          callHelpEl.hidden = !text;
+          callHelpEl.classList.toggle("error", Boolean(isError));
+        }
+
+        function setCallPeer(target) {
+          const name = String(target && target.displayName || "").trim() || "聯絡人";
+          const house = normalizeUnit(target && target.houseNo);
+          const sub = normalizeUnit(target && target.subUnit);
+          const avatar = String(target && target.avatarDataUrl || "").trim();
+          if (callNameEl) callNameEl.textContent = name;
+          if (callSubEl) callSubEl.textContent = [house, sub].filter(Boolean).join("｜") || "語音通話";
+          if (callAvatarTextEl) callAvatarTextEl.textContent = pickInitial(name, house);
+          if (callAvatarImgEl) {
+            if (avatar) {
+              callAvatarImgEl.src = avatar;
+              callAvatarImgEl.alt = name;
+              callAvatarImgEl.hidden = false;
+              if (callAvatarTextEl) callAvatarTextEl.hidden = true;
+            } else {
+              callAvatarImgEl.hidden = true;
+              callAvatarImgEl.removeAttribute("src");
+              if (callAvatarTextEl) callAvatarTextEl.hidden = false;
+            }
+          }
+        }
+
+        function openCallModal(target) {
+          setCallPeer(target);
+          setCallStatus("正在呼叫…", false);
+          setCallHelp("", false);
+          if (callTimerEl) callTimerEl.textContent = "00:00";
+          if (callModalEl) {
+            callModalEl.hidden = false;
+            callModalEl.dataset.hideToken = "";
+          }
+        }
+
+        function startCallTimer() {
+          if (!callTimerEl) return null;
+          const startAt = Date.now();
+          const tick = () => {
+            const sec = Math.max(0, Math.floor((Date.now() - startAt) / 1000));
+            callTimerEl.textContent = `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`;
+          };
+          tick();
+          return window.setInterval(tick, 1000);
+        }
+
+        function scheduleCallModalHide(delayMs = 1000) {
+          if (!callModalEl) return;
+          const token = `${Date.now()}_${Math.random()}`;
+          callModalEl.dataset.hideToken = token;
+          window.setTimeout(() => {
+            if (callModalEl.dataset.hideToken === token) callModalEl.hidden = true;
+          }, Math.max(0, Number(delayMs || 0)));
+        }
+
+        function buildMicrophonePermissionMessage(err) {
+          const code = String((err && (err.name || err.code || err.message)) || "").toLowerCase();
+          if (code.includes("denied") || code.includes("notallowed")) return "請先允許此頁面的麥克風權限，再重新撥打。";
+          return "請確認裝置已有可用麥克風，並已開啟網站麥克風權限。";
+        }
+
+        async function cleanupChatCall({ updateStatus, closeDelayMs = 0 } = {}) {
+          const active = chatCallState;
+          chatCallState = null;
+          if (active) {
+            try {
+              if (active.timerId) window.clearInterval(active.timerId);
+            } catch {}
+            try {
+              if (updateStatus && active.callDocRef && active.canUpdateStatus) {
+                await active.callDocRef.set({
+                  status: String(updateStatus),
+                  endedAtMs: Date.now(),
+                  endedAt: FieldValue.serverTimestamp(),
+                  endedByUid: String(auth.currentUser ? auth.currentUser.uid : ""),
+                }, { merge: true });
+              }
+            } catch {}
+            try { if (active.unsubDoc) active.unsubDoc(); } catch {}
+            try { if (active.unsubCandidates) active.unsubCandidates(); } catch {}
+            try { if (active.pc) active.pc.close(); } catch {}
+            try { if (active.localStream) active.localStream.getTracks().forEach((t) => t.stop()); } catch {}
+            try {
+              const audio = document.getElementById("chatCallRemoteAudio");
+              if (audio) {
+                audio.pause();
+                audio.srcObject = null;
+              }
+            } catch {}
+          }
+          if (!callModalEl) return;
+          if (Number(closeDelayMs || 0) > 0) scheduleCallModalHide(closeDelayMs);
+          else callModalEl.hidden = true;
+        }
+
+        async function releaseChatCallResources({ keepModalOpen = false } = {}) {
+          const active = chatCallState;
+          chatCallState = null;
+          if (!active) return;
+          try {
+            if (active.timerId) window.clearInterval(active.timerId);
+          } catch {}
+          try { if (active.unsubDoc) active.unsubDoc(); } catch {}
+          try { if (active.unsubCandidates) active.unsubCandidates(); } catch {}
+          try { if (active.pc) active.pc.close(); } catch {}
+          try { if (active.localStream) active.localStream.getTracks().forEach((t) => t.stop()); } catch {}
+          try {
+            const audio = document.getElementById("chatCallRemoteAudio");
+            if (audio) {
+              audio.pause();
+              audio.srcObject = null;
+            }
+          } catch {}
+          if (!keepModalOpen && callModalEl) callModalEl.hidden = true;
+        }
+
+        function dedupeAccounts(list) {
+          const raw = Array.isArray(list) ? list : [];
+          const map = new Map();
+          for (const item of raw) {
+            if (!item || typeof item !== "object") continue;
+            const houseNo = normalizeUnit(item.houseNo);
+            const subUnit = normalizeUnit(item.subUnit);
+            const key = houseNo
+              ? `${houseNo.toLowerCase()}__${subUnit.toLowerCase()}`
+              : `id__${String(item.id || "").trim().toLowerCase()}`;
+            if (!map.has(key)) {
+              map.set(key, { ...item });
+              continue;
+            }
+            const prev = map.get(key) || {};
+            map.set(key, {
+              ...prev,
+              ...item,
+              avatarDataUrl: String(prev.avatarDataUrl || item.avatarDataUrl || "").trim(),
+              address: String(prev.address || item.address || "").trim(),
+              displayName: String(prev.displayName || item.displayName || "").trim(),
+              building: String(prev.building || item.building || "").trim() || "未設定",
+            });
+          }
+          return Array.from(map.values());
+        }
+
+        function removeParentAccountsWhenSubUnitsExist(list) {
+          const raw = Array.isArray(list) ? list : [];
+          const housesWithSubUnits = new Set(
+            raw
+              .filter((item) => normalizeUnit(item && item.subUnit))
+              .map((item) => normalizeUnit(item && item.houseNo).toLowerCase())
+              .filter(Boolean)
+          );
+          return raw.filter((item) => {
+            const houseNo = normalizeUnit(item && item.houseNo).toLowerCase();
+            const subUnit = normalizeUnit(item && item.subUnit);
+            if (!houseNo) return true;
+            if (!housesWithSubUnits.has(houseNo)) return true;
+            return Boolean(subUnit);
+          });
+        }
+
+        function renderFilters() {
+          const buildings = Array.isArray(buildingOptions) && buildingOptions.length
+            ? buildingOptions
+            : Array.from(new Set(allAccounts.map((item) => item.building).filter(Boolean)));
+          const buttons = ['<button class="filter-btn' + (activeBuilding === "all" ? " active" : "") + '" type="button" data-building="all">全部</button>'].concat(
+            buildings.map((building) => (
+              '<button class="filter-btn' + (activeBuilding === building ? " active" : "") + '" type="button" data-building="' + escapeHtml(building) + '">' + escapeHtml(building) + "</button>"
+            ))
+          );
+          filtersEl.innerHTML = buttons.join("");
+          Array.from(filtersEl.querySelectorAll(".filter-btn")).forEach((btn) => {
+            btn.addEventListener("click", () => {
+              activeBuilding = String(btn.getAttribute("data-building") || "all");
+              renderFilters();
+              renderGrid();
+            });
+          });
+        }
+
+        function renderGrid() {
+          const list = allAccounts.filter((item) => activeBuilding === "all" || item.building === activeBuilding);
+          if (!list.length) {
+            setStatus("目前沒有符合棟別的帳號資料");
+            return;
+          }
+
+          gridEl.innerHTML = list.map((item) => {
+            const avatar = String(item.avatarDataUrl || "").trim();
+            const houseNo = normalizeUnit(item.houseNo) || "—";
+            const subUnit = normalizeUnit(item.subUnit) || "—";
+            const address = String(item.address || "").trim() || "—";
+            const initial = pickInitial(item.displayName, houseNo);
+            return `
+              <section class="account-card" tabindex="0" role="button" data-uid="${escapeHtml(item.id)}">
+                <div class="account-avatar">
+                  ${avatar ? `<img src="${escapeHtml(avatar)}" alt="">` : `<span>${escapeHtml(initial)}</span>`}
+                </div>
+                <div class="account-unit-row">
+                  <div class="account-house">
+                    <div class="account-label">戶號</div>
+                    <div class="account-value">${escapeHtml(houseNo)}</div>
+                  </div>
+                  <div class="account-sub">
+                    <div class="account-label">子戶號</div>
+                    <div class="account-value">${escapeHtml(subUnit)}</div>
+                  </div>
+                </div>
+                <div class="account-address">
+                  <div class="account-label">地址</div>
+                  <div class="account-value">${escapeHtml(address)}</div>
+                </div>
+              </section>
+            `;
+          }).join("");
+        }
+
+        async function resolveCommunityName(communityKey) {
+          const key = String(communityKey || "").trim();
+          if (!key) return "社區名稱";
+          try {
+            const direct = await db.collection("communities").doc(key).get();
+            if (direct && direct.exists) {
+              const data = direct.data() || {};
+              return String(data.name || data.displayName || data.title || data.communityName || key).trim() || key;
+            }
+          } catch {}
+
+          try {
+            const byUsername = await db.collection("communities").where("username", "==", key).limit(1).get();
+            if (!byUsername.empty) {
+              const data = byUsername.docs[0].data() || {};
+              return String(data.name || data.displayName || data.title || data.communityName || key).trim() || key;
+            }
+          } catch {}
+
+          try {
+            const byId = await db.collection("communities").where("id", "==", key).limit(1).get();
+            if (!byId.empty) {
+              const data = byId.docs[0].data() || {};
+              return String(data.name || data.displayName || data.title || data.communityName || key).trim() || key;
+            }
+          } catch {}
+
+          return key;
+        }
+
+        async function resolveCommunityDoc(communityKey) {
+          const key = String(communityKey || "").trim();
+          if (!key) return null;
+          try {
+            const direct = await db.collection("communities").doc(key).get();
+            if (direct && direct.exists) return { id: direct.id, data: direct.data() || {} };
+          } catch {}
+
+          try {
+            const byUsername = await db.collection("communities").where("username", "==", key).limit(1).get();
+            if (byUsername && !byUsername.empty) return { id: byUsername.docs[0].id, data: byUsername.docs[0].data() || {} };
+          } catch {}
+
+          try {
+            const byId = await db.collection("communities").where("id", "==", key).limit(1).get();
+            if (byId && !byId.empty) return { id: byId.docs[0].id, data: byId.docs[0].data() || {} };
+          } catch {}
+
+          return null;
+        }
+
+        async function loadAccounts(user) {
+          let communityKey = readCommunityKey();
+          currentUserData = null;
+
+          try {
+            const userSnap = await db.collection("users").doc(String(user.uid)).get();
+            currentUserData = userSnap && userSnap.exists ? (userSnap.data() || {}) : {};
+          } catch {
+            currentUserData = {};
+          }
+
+          if (!communityKey) {
+            communityKey = String((currentUserData && currentUserData.community) || "").trim();
+          }
+          if (!communityKey) {
+            setStatus("找不到社區資料");
+            return;
+          }
+          currentCommunityKey = communityKey;
+
+          try { sessionStorage.setItem("csp_last_cid", communityKey); } catch {}
+          try { localStorage.setItem("csp_active_community_v1", communityKey); } catch {}
+
+          const communityDoc = await resolveCommunityDoc(communityKey);
+          const communityData = communityDoc ? (communityDoc.data || {}) : {};
+          const nameText = String(communityData.name || communityData.displayName || communityData.title || communityData.communityName || (await resolveCommunityName(communityKey))).trim() || "社區名稱";
+          communityNameEl.textContent = "聯絡人";
+
+          const unitMetaMap = buildUnitMetaMap(communityData.units);
+          buildingOptions = Array.from(new Set(Array.from(unitMetaMap.values()).map((item) => item && item.building).filter(Boolean)));
+
+          const candidateKeys = Array.from(new Set([
+            communityKey,
+            communityDoc ? String(communityDoc.id || "").trim() : "",
+            String(communityData.username || "").trim(),
+            String(communityData.id || "").trim(),
+          ].filter(Boolean)));
+
+          const seenUsers = new Set();
+          const docs = [];
+          for (const key of candidateKeys) {
+            try {
+              const s = await db.collection("users").where("community", "==", key).get();
+              const arr = (s && s.docs) ? s.docs : [];
+              for (const d of arr) {
+                if (!d || !d.id || seenUsers.has(d.id)) continue;
+                seenUsers.add(d.id);
+                docs.push(d);
+              }
+              if (docs.length) break;
+            } catch (err) {
+              console.error(err);
+            }
+          }
+          if (!docs.length) {
+            setStatus("目前沒有帳號資料");
+            allAccounts = [];
+            activeBuilding = "all";
+            renderFilters();
+            return;
+          }
+
+          allAccounts = removeParentAccountsWhenSubUnitsExist(
+            dedupeAccounts(
+              docs
+                .map((doc) => {
+                  const data = doc.data() || {};
+                  const houseNo = normalizeUnit(data.houseNo || data.unit);
+                  const subUnit = normalizeUnit(data.subUnit || data.subHouseNo);
+                  const unitMeta = unitMetaMap.get(String(houseNo || "").toLowerCase()) || null;
+                  const building = (unitMeta && unitMeta.building) || extractBuilding(houseNo);
+                  return {
+                    id: doc.id,
+                    displayName: String(data.displayName || data.name || "").trim(),
+                    avatarDataUrl: String(data.avatarDataUrl || "").trim(),
+                    houseNo,
+                    subUnit,
+                    address: String((unitMeta && unitMeta.address) || data.address || "").trim(),
+                    building: building || "未設定",
+                  };
+                })
+            )
+          ).sort((a, b) => compareUnit(a.houseNo, b.houseNo) || compareUnit(a.subUnit, b.subUnit) || compareUnit(a.displayName, b.displayName));
+
+          if (!allAccounts.length) {
+            setStatus("目前沒有帳號資料");
+            renderFilters();
+            return;
+          }
+
+          buildingOptions = Array.from(new Set([
+            ...buildingOptions,
+            ...allAccounts.map((item) => item.building),
+          ].filter(Boolean))).sort((a, b) => {
+            if (a === "未設定" && b !== "未設定") return 1;
+            if (b === "未設定" && a !== "未設定") return -1;
+            return String(a || "").localeCompare(String(b || ""), "zh-Hant", { numeric: true, sensitivity: "base" });
+          });
+
+          activeBuilding = "all";
+          renderFilters();
+          renderGrid();
+        }
+
+        async function startOutgoingResidentCall(targetUid) {
+          const uid = String(targetUid || "").trim();
+          const user = auth.currentUser;
+          if (!user || !uid) return;
+          if (uid === String(user.uid || "").trim()) {
+            window.alert("不能撥打給自己。");
+            return;
+          }
+          const target = allAccounts.find((item) => String(item.id || "").trim() === uid);
+          if (!target) {
+            window.alert("找不到聯絡人資料。");
+            return;
+          }
+
+          await cleanupChatCall();
+          openCallModal(target);
+
+          let pc = null;
+          let callDocRef = null;
+          let localStream = null;
+          const remoteStream = new MediaStream();
+
+          try {
+            pc = createIntercomPeerConnection();
+            callDocRef = db.collection("calls").doc();
+          } catch {
+            setCallStatus("此裝置/瀏覽器不支援通話。", true);
+            return;
+          }
+
+          chatCallState = {
+            pc,
+            localStream: null,
+            callDocRef,
+            unsubDoc: null,
+            unsubCandidates: null,
+            timerId: null,
+            canUpdateStatus: false,
+          };
+
+          attachRemoteAudio(remoteStream);
+          pc.ontrack = (ev) => {
+            const list = ev && ev.streams && ev.streams[0] ? ev.streams[0].getTracks() : [];
+            list.forEach((t) => remoteStream.addTrack(t));
+            attachRemoteAudio(remoteStream);
+          };
+
+          const offerCandidatesRef = callDocRef.collection("offerCandidates");
+          pc.onicecandidate = (ev) => {
+            if (!ev || !ev.candidate) return;
+            const c = ev.candidate;
+            const json = typeof c.toJSON === "function"
+              ? c.toJSON()
+              : { candidate: c.candidate, sdpMid: c.sdpMid, sdpMLineIndex: c.sdpMLineIndex };
+            offerCandidatesRef.add({ ...json, createdAtMs: Date.now() }).catch(() => {});
+          };
+
+          try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          } catch (err) {
+            setCallStatus("無法開啟麥克風。", true);
+            setCallHelp(buildMicrophonePermissionMessage(err), true);
+            await releaseChatCallResources({ keepModalOpen: true });
+            return;
+          }
+          localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+          if (chatCallState) chatCallState.localStream = localStream;
+
+          const fromRole = normalizeRoleText(currentUserData && currentUserData.role);
+          const fromName = String(
+            (currentUserData && (currentUserData.displayName || currentUserData.name || currentUserData.email)) ||
+            user.displayName ||
+            user.email ||
+            "住戶"
+          ).trim();
+          const fromHouseNo = normalizeUnit(currentUserData && (currentUserData.houseNo || currentUserData.unit));
+          const offer = await pc.createOffer({ offerToReceiveAudio: true });
+          await pc.setLocalDescription(offer);
+
+          try {
+            await callDocRef.set({
+              community: String((currentUserData && currentUserData.community) || currentCommunityKey || "").trim(),
+              fromUid: String(user.uid),
+              fromRole,
+              fromName,
+              fromHouseNo,
+              fromAvatarDataUrl: String((currentUserData && currentUserData.avatarDataUrl) || user.photoURL || "").trim(),
+              toUid: uid,
+              toRole: "resident",
+              toName: String(target.displayName || "").trim(),
+              toHouseNo: normalizeUnit(target.houseNo),
+              toSubUnit: normalizeUnit(target.subUnit),
+              toAvatarDataUrl: String(target.avatarDataUrl || "").trim(),
+              status: "ringing",
+              createdAt: FieldValue.serverTimestamp(),
+              createdAtMs: Date.now(),
+              offer: { type: offer.type, sdp: offer.sdp },
+            }, { merge: true });
+          } catch (err) {
+            console.error(err);
+            setCallStatus("呼叫失敗：可能沒有權限或網路異常。", true);
+            setCallHelp("請檢查 Firestore 權限、通知/麥克風權限，或稍後再試。", true);
+            await releaseChatCallResources({ keepModalOpen: true });
+            return;
+          }
+          if (chatCallState) chatCallState.canUpdateStatus = true;
+
+          const unsubDoc = callDocRef.onSnapshot(async (snap) => {
+            const data = snap && snap.exists ? (snap.data() || {}) : null;
+            if (!data) return;
+            const st = String(data.status || "").trim();
+            if (st === "accepted") {
+              if (!pc.currentRemoteDescription && data.answer && data.answer.type && data.answer.sdp) {
+                try { await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); } catch {}
+              }
+              setCallStatus("已接通", false);
+              setCallHelp("", false);
+              if (chatCallState && !chatCallState.timerId) chatCallState.timerId = startCallTimer();
+              return;
+            }
+            if (st === "rejected" || st === "ended" || st === "busy" || st === "missed") {
+              setCallStatus(st === "busy" ? "對方忙線中" : (st === "rejected" ? "對方已掛斷" : "通話已結束"), false);
+              await cleanupChatCall({ closeDelayMs: 1000 });
+            }
+          });
+
+          const unsubAnswerCandidates = callDocRef.collection("answerCandidates").onSnapshot((snap) => {
+            (snap.docChanges ? snap.docChanges() : []).forEach((ch) => {
+              if (!ch || ch.type !== "added") return;
+              const v = ch.doc && ch.doc.data ? (ch.doc.data() || {}) : {};
+              if (!v || !v.candidate) return;
+              try { pc.addIceCandidate(new RTCIceCandidate(v)); } catch {}
+            });
+          });
+
+          if (chatCallState) {
+            chatCallState.unsubDoc = unsubDoc;
+            chatCallState.unsubCandidates = unsubAnswerCandidates;
+          }
+        }
+
+        if (callHangupBtn) {
+          callHangupBtn.onclick = () => {
+            setCallStatus("通話已結束", false);
+            cleanupChatCall({ updateStatus: "ended", closeDelayMs: 1000 }).catch(() => {
+              if (callModalEl) callModalEl.hidden = true;
+            });
+          };
+        }
+
+        gridEl.addEventListener("click", (ev) => {
+          const card = ev.target && ev.target.closest ? ev.target.closest(".account-card") : null;
+          if (!card) return;
+          startOutgoingResidentCall(card.getAttribute("data-uid")).catch((err) => {
+            console.error(err);
+            setCallStatus("呼叫失敗，請稍後再試。", true);
+          });
+        });
+
+        gridEl.addEventListener("keydown", (ev) => {
+          const card = ev.target && ev.target.closest ? ev.target.closest(".account-card") : null;
+          if (!card) return;
+          if (ev.key !== "Enter" && ev.key !== " ") return;
+          ev.preventDefault();
+          startOutgoingResidentCall(card.getAttribute("data-uid")).catch((err) => {
+            console.error(err);
+            setCallStatus("呼叫失敗，請稍後再試。", true);
+          });
+        });
+
+        auth.onAuthStateChanged((user) => {
+          if (!user) {
+            setStatus("請先登入");
+            return;
+          }
+          setStatus("載入中...");
+          loadAccounts(user).catch((err) => {
+            console.error(err);
+            setStatus("頁面載入失敗");
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

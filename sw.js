@@ -1,4 +1,4 @@
-const CACHE_VERSION = "nwapp-v145";
+const CACHE_VERSION = "nwapp-v154";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -11,8 +11,8 @@ const PRECACHE = [
   "./css/admin.css",
   "./css/member.css",
   "./js/index.js",
-  "./js/system.js",
-  "./js/admin.js",
+  "./js/system.js?v=3",
+  "./js/admin.js?v=121",
   "./js/member.js",
   "./js/visitor.js",
   "./js/pwa.js",

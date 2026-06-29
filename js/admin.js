@@ -275,6 +275,35 @@
     return uniq;
   }
 
+  function normalizeCommunityUnitRows(list) {
+    const raw = Array.isArray(list) ? list : [];
+    const uniq = [];
+    const seen = new Set();
+    for (const x of raw) {
+      let id = "";
+      let row = null;
+      if (typeof x === "object" && x !== null) {
+        id = String(x.id || "").trim();
+        row = x;
+      } else {
+        id = String(x || "").trim();
+        row = null;
+      }
+      if (!id) continue;
+      const key = id.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const base = row && typeof row === "object" ? row : {};
+      uniq.push({
+        ...base,
+        id,
+        address: String(base.address || "").trim(),
+        building: String(base.building || base.block || "").trim(),
+      });
+    }
+    return uniq;
+  }
+
   function loadAccounts() {
     return { communities: state.communities, residents: [] };
   }
@@ -3108,6 +3137,7 @@
                       <th style="width: 100px;">戶號</th>
                       <th style="width: 180px;">區分所有權人</th>
                       <th>地址</th>
+                      <th style="width: 100px;">棟別</th>
                       <th style="width: 100px;">坪數</th>
                       <th style="width: 120px;">所有權人%</th>
                       <th style="width: 50px;"></th>
@@ -3126,6 +3156,34 @@
       </div>
     `.trim();
     document.body.appendChild(modal);
+    return modal;
+  }
+
+  function ensureChatphoneModal80() {
+    const modal = ensureModal("chatphoneModal80", "modal-chatphone", "80%");
+    if (modal.dataset.initialized === "1") return modal;
+    modal.dataset.initialized = "1";
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="chatphoneModalTitle" style="width:min(1200px,80vw);max-width:80vw;height:80vh;display:flex;flex-direction:column;">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="chatphoneModalTitle">通話</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body" style="padding:0;flex:1;min-height:0;overflow:hidden;">
+          <iframe
+            id="chatphoneFrame80"
+            title="社區通話"
+            loading="lazy"
+            referrerpolicy="strict-origin-when-cross-origin"
+            style="width:100%;height:100%;border:0;display:block;background:#fff;"
+          ></iframe>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
     return modal;
   }
 
@@ -8295,12 +8353,19 @@
                 <p>住戶/承租/車位/聯絡方式彙整</p>
               </div>
             </div>
-            <button class="icon-btn sm" type="button" id="btnUnits" aria-label="戶號列表" title="戶號列表">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M8 7h12M8 12h12M8 17h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                <path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
-              </svg>
-            </button>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button class="icon-btn sm" type="button" id="btnChatphone" aria-label="通話" title="通話">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M7.8 4.8h2.4c.4 0 .8.3.9.7l.7 3.1c.1.4 0 .8-.3 1.1l-1.4 1.4a13.2 13.2 0 0 0 4.8 4.8l1.4-1.4c.3-.3.7-.4 1.1-.3l3.1.7c.4.1.7.5.7.9v2.4c0 .5-.4 1-1 1C12.4 20.8 3.2 11.6 3.2 5.8c0-.6.4-1 1-1Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <button class="icon-btn sm" type="button" id="btnUnits" aria-label="戶號列表" title="戶號列表">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M8 7h12M8 12h12M8 17h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  <path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
           </div>
           <div class="card-bd">
             <div class="resident-toolbar">
@@ -8323,6 +8388,7 @@
     const statusEl = document.getElementById("residentStatus");
     const searchEl = document.getElementById("residentSearch");
     const addBtn = document.getElementById("btnAddResident");
+    const chatphoneBtn = document.getElementById("btnChatphone");
     const unitsBtn = document.getElementById("btnUnits");
     const unitTotalEl = document.getElementById("unitTotal");
     const peopleTotalEl = document.getElementById("peopleTotal");
@@ -8336,7 +8402,7 @@
     };
 
     let residents = [];
-    let communityUnits = Array.isArray(c && c.units) ? c.units : [];
+    let communityUnits = normalizeCommunityUnitRows(Array.isArray(c && c.units) ? c.units : []);
     state.currentResidents = residents;
     state.currentCommunityUnits = communityUnits;
     state.currentResidentsCommunityId = String(cid || "");
@@ -8502,8 +8568,33 @@
       }
     };
 
+    const openChatphoneWindow = () => {
+      const communityId = String(cid || "").trim();
+      if (!communityId) {
+        setStatus("找不到社區資料，無法開啟通話頁面。", true);
+        return;
+      }
+      const modal = ensureChatphoneModal80();
+      let detach = () => {};
+      detach = bindModalClose(modal, () => {
+        const frame = modal.querySelector("#chatphoneFrame80");
+        if (frame) frame.removeAttribute("src");
+        detach();
+      });
+      const titleEl = modal.querySelector("#chatphoneModalTitle");
+      const frame = modal.querySelector("#chatphoneFrame80");
+      const base = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}`;
+      const url = new URL("chatphone.html", base);
+      url.searchParams.set("c", communityId);
+      if (titleEl) titleEl.textContent = `通話${cname ? `｜${String(cname).trim()}` : ""}`;
+      if (frame) frame.src = url.toString();
+      modal.hidden = false;
+      setStatus("", false);
+    };
+
     if (searchEl) searchEl.addEventListener("input", renderList);
     if (addBtn) addBtn.addEventListener("click", () => openResidentEditor("create"));
+    if (chatphoneBtn) chatphoneBtn.addEventListener("click", openChatphoneWindow);
     if (unitsBtn) unitsBtn.addEventListener("click", openUnitsEditor);
 
     if (listEl) {
@@ -9526,7 +9617,7 @@
         });
     };
 
-    const openResidentEditor = (mode, resident) => {
+    const openResidentEditor = async (mode, resident) => {
       const activeResidentsCid = String(state.currentResidentsCommunityId || resolveActiveCommunityId() || "default");
       const getResidents = () => (Array.isArray(state.currentResidents) ? state.currentResidents : []);
       const getCommunityUnits = () => (Array.isArray(state.currentCommunityUnits) ? state.currentCommunityUnits : []);
@@ -9567,6 +9658,39 @@
         st.textContent = t;
         st.hidden = !t;
         st.classList.toggle("error", Boolean(isError));
+      };
+
+      const ensureCommunityUnitsLoaded = async () => {
+        const current = getCommunityUnits();
+        const hasMeta = Array.isArray(current) && current.some((x) => x && typeof x === "object" && (String(x.building || x.block || "").trim() || String(x.address || "").trim()));
+        if (hasMeta) return;
+        const cid = normalizeText(inputCommunity ? inputCommunity.value : activeResidentsCid) || activeResidentsCid || "default";
+        try {
+          const doc = await db.collection("communities").doc(String(cid)).get();
+          const v = doc && doc.exists ? (doc.data() || {}) : {};
+          state.currentCommunityUnits = normalizeCommunityUnitRows(v.units);
+        } catch {}
+      };
+
+      const findCommunityUnitMeta = (unit) => {
+        const unitVal = normalizeText(unit);
+        if (!unitVal) return null;
+        const found = getCommunityUnits().find((u) => {
+          const uid = (typeof u === "object" && u !== null) ? String(u.id || "") : String(u || "");
+          return uid.trim().toLowerCase() === unitVal.toLowerCase();
+        });
+        return (found && typeof found === "object") ? found : null;
+      };
+
+      const syncResidentUnitMeta = ({ forceAddress = false, forceBuilding = false } = {}) => {
+        const found = findCommunityUnitMeta(inputUnit ? inputUnit.value : "");
+        if (!found) return;
+        if (inputAddr && (forceAddress || !inputAddr.value.trim()) && String(found.address || "").trim()) {
+          inputAddr.value = String(found.address || "").trim();
+        }
+        if (inputBuilding && (forceBuilding || !inputBuilding.value.trim()) && String(found.building || found.block || "").trim()) {
+          inputBuilding.value = String(found.building || found.block || "").trim();
+        }
       };
 
       const isEdit = mode === "edit";
@@ -9615,6 +9739,8 @@
       if (inputAddr) inputAddr.value = isEdit ? String(data.address || "") : "";
       if (inputBuilding) inputBuilding.value = isEdit ? String(data.building || data.block || "") : "";
       if (inputEnabled) inputEnabled.value = String((isEdit ? data.enabled !== false : true) ? "true" : "false");
+      await ensureCommunityUnitsLoaded();
+      syncResidentUnitMeta();
       if (inputPassword) inputPassword.value = "";
       if (inputEmail) inputEmail.disabled = Boolean(isEdit);
       if (submitBtn) submitBtn.textContent = isEdit ? "更新" : "建立";
@@ -9757,20 +9883,12 @@
       const onUnitInput = () => {
         unitTouched = true;
         updateUnitMatch();
-        
-        // 自動填寫地址
-        const unitVal = normalizeText(inputUnit.value);
-        if (unitVal && inputAddr && !inputAddr.value.trim()) {
-          const found = getCommunityUnits().find(u => {
-            const uid = (typeof u === "object" && u !== null) ? String(u.id || "") : String(u || "");
-            return uid.trim().toLowerCase() === unitVal.toLowerCase();
-          });
-          if (found && typeof found === "object" && found.address) {
-            inputAddr.value = found.address;
-          }
-        }
+        syncResidentUnitMeta({ forceBuilding: true });
       };
       if (inputUnit) inputUnit.addEventListener("input", onUnitInput);
+      if (inputUnit) inputUnit.addEventListener("change", onUnitInput);
+      if (inputUnit) inputUnit.addEventListener("blur", onUnitInput);
+      if (inputUnit) inputUnit.addEventListener("paste", () => setTimeout(onUnitInput, 0));
 
       const onOtherChk = () => syncOtherRoleInput();
       if (roleOtherChk) roleOtherChk.addEventListener("change", onOtherChk);
@@ -9972,6 +10090,7 @@
           <td><input type="text" class="u-id" value="${u.id || ""}" placeholder="戶號" /></td>
           <td><input type="text" class="u-owner" value="${ownerName}" placeholder="區分所有權人" /></td>
           <td><input type="text" class="u-address" value="${u.address || ""}" placeholder="地址" /></td>
+          <td><input type="text" class="u-building" value="${u.building || u.block || ""}" placeholder="棟別" /></td>
           <td><input type="text" class="u-area" value="${u.area || ""}" placeholder="坪數" /></td>
           <td><input type="text" class="u-ownership" value="${u.ownership || ""}" placeholder="%" /></td>
           <td><div class="remove-row" title="刪除">&times;</div></td>
@@ -10065,6 +10184,7 @@
           const id = tr.querySelector(".u-id").value.trim();
           const ownerName = tr.querySelector(".u-owner").value.trim();
           const address = tr.querySelector(".u-address").value.trim();
+          const building = tr.querySelector(".u-building").value.trim();
           const area = tr.querySelector(".u-area").value.trim();
           const ownership = tr.querySelector(".u-ownership").value.trim();
           
@@ -10072,7 +10192,7 @@
           if (seen.has(id)) continue;
           seen.add(id);
 
-          uniq.push({ qrToken, id, ownerName, address, area, ownership });
+          uniq.push({ qrToken, id, ownerName, address, building, area, ownership });
         }
 
         if (uniq.length === 0) {
@@ -10086,6 +10206,8 @@
             { units: uniq, updatedAt: FieldValue.serverTimestamp() },
             { merge: true }
           );
+          communityUnits = normalizeCommunityUnitRows(uniq);
+          state.currentCommunityUnits = communityUnits;
           
           // 更新頁面上的總戶數顯示
           const unitTotalEl = document.getElementById("unitTotal");
@@ -10115,7 +10237,15 @@
           detach();
         } catch (err) {
           const code = String(err && err.code ? err.code : "");
-          setModalStatus(code.includes("permission-denied") ? "沒有權限執行此操作。" : "儲存失敗，請稍後再試。", true);
+          const msg = String(err && err.message ? err.message : "");
+          try { console.error("Save units failed:", err); } catch {}
+          if (code.includes("permission-denied")) {
+            setModalStatus("沒有權限執行此操作（請更新 Firestore 規則後重整再試）。", true);
+          } else if (msg) {
+            setModalStatus(`儲存失敗：${msg}`, true);
+          } else {
+            setModalStatus("儲存失敗，請稍後再試。", true);
+          }
         }
       };
 
@@ -10135,6 +10265,7 @@
           "戶號": tr.querySelector(".u-id").value.trim(),
           "區分所有權人": tr.querySelector(".u-owner").value.trim(),
           "地址": tr.querySelector(".u-address").value.trim(),
+          "棟別": tr.querySelector(".u-building").value.trim(),
           "坪數": tr.querySelector(".u-area").value.trim(),
           "所有權人%": tr.querySelector(".u-ownership").value.trim()
         })).filter(x => x["戶號"]);
@@ -10175,15 +10306,19 @@
                 const id = String(row["戶號"] || row["id"] || row["戶"] || Object.values(row)[0] || "").trim();
                 let ownerName = String(row["區分所有權人"] || row["所有權人"] || row["ownerName"] || row["owner"] || "").trim();
                 let addr = String(row["地址"] || row["address"] || "").trim();
+                let building = String(row["棟別"] || row["building"] || row["block"] || "").trim();
                 let area = String(row["坪數"] || row["area"] || "").trim();
                 let own = String(row["所有權人%"] || row["區分所有權人%"] || row["ownership"] || "").trim();
 
-                if (!addr && !ownerName && values.length >= 2) addr = String(values[1] || "").trim();
-                if (!area && values.length >= 3) area = String(values[2] || "").trim();
-                if (!own && values.length >= 4) own = String(values[3] || "").trim();
-                if (!ownerName && values.length >= 5) ownerName = String(values[4] || "").trim();
+                if (!ownerName && values.length >= 3) ownerName = String(values[2] || "").trim();
+                if (!addr && values.length >= 4) addr = String(values[3] || "").trim();
+                if (!building && values.length >= 7) building = String(values[4] || "").trim();
+                if (!area && values.length >= 7) area = String(values[5] || "").trim();
+                if (!own && values.length >= 7) own = String(values[6] || "").trim();
+                if (!area && values.length >= 6) area = String(values[4] || "").trim();
+                if (!own && values.length >= 6) own = String(values[5] || "").trim();
 
-                if (id) tbody.appendChild(createRow({ qrToken, id, ownerName, address: addr, area, ownership: own }));
+                if (id) tbody.appendChild(createRow({ qrToken, id, ownerName, address: addr, building, area, ownership: own }));
               });
               updateCount();
             }
@@ -10222,7 +10357,8 @@
       try {
         const doc = await db.collection("communities").doc(String(cid || "default")).get();
         const v = doc && doc.exists ? (doc.data() || {}) : {};
-        communityUnits = normalizeUnitList(v.units);
+        communityUnits = normalizeCommunityUnitRows(v.units);
+        state.currentCommunityUnits = communityUnits;
         if (currentPage === "list") {
           refreshUnitTotals();
         }

@@ -227,7 +227,15 @@ service cloud.firestore {
     
     match /communities/{slug} {
       allow read: if true;
-      allow update: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+      allow update: if request.auth != null && (
+        isAdmin() || (
+          isCommunityStaff() && (
+            slug == getUserData().community
+            || resource.data.get('username', '') == getUserData().community
+            || resource.data.get('id', '') == getUserData().community
+          )
+        )
+      );
       allow create, delete: if isAdmin();
       
       match /app_modules/{module} {
