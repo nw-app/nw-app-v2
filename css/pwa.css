@@ -594,6 +594,122 @@ html.force-portrait-rotate .pwa-install {
   border-color: rgba(0, 0, 0, 0);
 }
 
+.chatcall-body {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 22px 20px 18px;
+}
+
+.chatcall-avatar {
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #fde68a, #fca5a5 55%, #c4b5fd);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 30px;
+  font-weight: 900;
+  box-shadow: 0 10px 24px rgba(211, 47, 47, 0.18);
+}
+
+.chatcall-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.chatcall-name {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  color: #111827;
+}
+
+.chatcall-sub {
+  margin-top: 6px;
+  color: rgba(31, 41, 55, 0.65);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.chatcall-status {
+  margin-top: 18px;
+  color: #374151;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.chatcall-status.error {
+  color: #b91c1c;
+}
+
+.chatcall-timer {
+  margin-top: 8px;
+  color: var(--brand, #d32f2f);
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.chatcall-help {
+  margin-top: 10px;
+  color: rgba(31, 41, 55, 0.65);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.chatcall-help.error {
+  color: #b91c1c;
+}
+
+.chatcall-actions {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.chatcall-btn {
+  min-height: 48px;
+  min-width: 120px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 999px;
+  background: #d32f2f;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.chatcall-btn.small {
+  min-height: 44px;
+  min-width: 96px;
+  font-size: 15px;
+}
+
+.chatcall-btn.danger {
+  background: #d32f2f;
+}
+
+.chatcall-btn.success {
+  background: #16a34a;
+}
+
+.chatcall-btn.ghost {
+  background: transparent;
+  border: 1px solid rgba(17, 24, 39, 0.18);
+  color: rgba(31, 41, 55, 0.9);
+}
+
 .modal-intercom-call,
 .modal-intercom-incoming {
   z-index: 1200;

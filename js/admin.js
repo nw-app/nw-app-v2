@@ -3160,12 +3160,12 @@
   }
 
   function ensureChatphoneModal80() {
-    const modal = ensureModal("chatphoneModal80", "modal-chatphone", "80%");
+    const modal = ensureModal("chatphoneModal80", "modal-chatphone", "90%");
     if (modal.dataset.initialized === "1") return modal;
     modal.dataset.initialized = "1";
     modal.innerHTML = `
       <div class="modal-backdrop" data-modal-close="1"></div>
-      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="chatphoneModalTitle" style="width:min(1200px,80vw);max-width:80vw;height:80vh;display:flex;flex-direction:column;">
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="chatphoneModalTitle" style="width:min(1200px,90vw);max-width:90vw;height:90vh;display:flex;flex-direction:column;">
         <div class="modal-hd">
           <h3 class="modal-title" id="chatphoneModalTitle">通話</h3>
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
@@ -12042,31 +12042,29 @@
   }
 
   function ensureIntercomIncomingModal() {
-    const modal = ensureModal("intercomIncomingModal", "modal-intercom-incoming", "min(460px, 92vw)");
+    const modal = ensureModal("intercomIncomingModal", "modal-chatcall", "90%");
+    modal.style.zIndex = "1200";
+    modal.style.setProperty("--modal-height", "90%");
     modal.innerHTML = `
-      <div class="modal-backdrop"></div>
-      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="intercomIncomingTitle">
-        <div class="intercom-screen incoming">
-          <div class="intercom-screen-top">
-            <div class="intercom-screen-badge" id="intercomIncomingTitle">來電中</div>
-            <button class="modal-close intercom-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog trae-browser-inspect-draggable" role="dialog" aria-modal="true" aria-labelledby="intercomIncomingTitle" style="width:min(1200px,90vw);max-width:90vw;height:90vh;display:flex;flex-direction:column;">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="intercomIncomingTitle">通話</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body chatcall-body">
+          <div class="chatcall-avatar" id="intercomIncomingInitial" aria-hidden="true">
+            <img id="intercomIncomingAvatar" alt="" hidden />
+            <span class="intercom-avatar-text">—</span>
           </div>
-          <div class="intercom-screen-main">
-            <div class="intercom-avatar intercom-avatar-xl" id="intercomIncomingInitial" aria-hidden="true">
-              <img id="intercomIncomingAvatar" class="intercom-avatar-image" alt="" hidden />
-              <span class="intercom-avatar-text">—</span>
-            </div>
-            <div class="intercom-peer-name intercom-peer-name-xl" id="intercomIncomingName">—</div>
-            <div class="intercom-peer-sub intercom-peer-sub-xl" id="intercomIncomingSub">—</div>
-            <div class="intercom-center-meta">
-              <span class="intercom-chip pulse">等待接聽</span>
-            </div>
-          </div>
-          <div class="intercom-screen-bottom">
-            <div class="intercom-actions round-two">
-              <button class="intercom-btn danger round" type="button" id="btnIntercomReject"><span>掛斷</span></button>
-              <button class="intercom-btn success round" type="button" id="btnIntercomAccept"><span>接通</span></button>
-            </div>
+          <h2 class="chatcall-name" id="intercomIncomingName">—</h2>
+          <div class="chatcall-sub" id="intercomIncomingSub">—</div>
+          <div class="chatcall-status" id="intercomIncomingState">等待接聽</div>
+        </div>
+        <div class="modal-ft" style="justify-content:center;">
+          <div class="chatcall-actions">
+            <button class="chatcall-btn danger" type="button" id="btnIntercomReject">掛斷</button>
+            <button class="chatcall-btn success" type="button" id="btnIntercomAccept">接通</button>
           </div>
         </div>
       </div>
@@ -12075,34 +12073,32 @@
   }
 
   function ensureIntercomCallModal() {
-    const modal = ensureModal("intercomCallModal80", "modal-intercom-call", "80%");
+    const modal = ensureModal("intercomCallModal80", "modal-chatcall", "90%");
+    modal.style.zIndex = "1200";
+    modal.style.setProperty("--modal-height", "90%");
     modal.innerHTML = `
-      <div class="modal-backdrop"></div>
-      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="intercomCallTitle">
-        <div class="intercom-screen active">
-          <div class="intercom-screen-top">
-            <div class="intercom-screen-badge" id="intercomCallTitle">語音通話</div>
-            <button class="modal-close intercom-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog trae-browser-inspect-draggable" role="dialog" aria-modal="true" aria-labelledby="intercomCallTitle" style="width:min(1200px,90vw);max-width:90vw;height:90vh;display:flex;flex-direction:column;">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="intercomCallTitle">通話</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body chatcall-body">
+          <div class="chatcall-avatar" id="intercomPeerInitial" aria-hidden="true">
+            <img id="intercomPeerAvatar" alt="" hidden />
+            <span class="intercom-avatar-text">—</span>
           </div>
-          <div class="intercom-screen-main">
-            <div class="intercom-avatar intercom-avatar-xl" id="intercomPeerInitial" aria-hidden="true">
-              <img id="intercomPeerAvatar" class="intercom-avatar-image" alt="" hidden />
-              <span class="intercom-avatar-text">—</span>
-            </div>
-            <div class="intercom-peer-name intercom-peer-name-xl" id="intercomPeerName">—</div>
-            <div class="intercom-peer-sub intercom-peer-sub-xl" id="intercomPeerSub">語音通話</div>
-            <div class="intercom-center-meta stacked">
-              <span class="intercom-chip" id="intercomCallState">待命</span>
-              <span class="intercom-timer big" id="intercomTimer">00:00</span>
-            </div>
-            <div class="intercom-permission-help" id="intercomPermissionHelp" hidden></div>
-            <audio id="intercomRemoteAudioAdmin" autoplay playsinline></audio>
-          </div>
-          <div class="intercom-screen-bottom">
-            <div class="intercom-actions round-two">
-              <button class="intercom-btn ghost round small" type="button" id="btnIntercomSpeaker" hidden><span>擴音</span></button>
-              <button class="intercom-btn danger round" type="button" id="btnIntercomHangup"><span>掛斷</span></button>
-            </div>
+          <h2 class="chatcall-name" id="intercomPeerName">—</h2>
+          <div class="chatcall-sub" id="intercomPeerSub">語音通話</div>
+          <div class="chatcall-status" id="intercomCallState">待命</div>
+          <div class="chatcall-timer" id="intercomTimer">00:00</div>
+          <div class="chatcall-help" id="intercomPermissionHelp" hidden></div>
+          <audio id="intercomRemoteAudioAdmin" autoplay playsinline></audio>
+        </div>
+        <div class="modal-ft" style="justify-content:center;">
+          <div class="chatcall-actions">
+            <button class="chatcall-btn ghost small" type="button" id="btnIntercomSpeaker" hidden>擴音</button>
+            <button class="chatcall-btn danger small" type="button" id="btnIntercomHangup">掛斷</button>
           </div>
         </div>
       </div>

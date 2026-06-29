@@ -210,109 +210,12 @@
         box-shadow: 0 10px 24px rgba(211, 47, 47, 0.24);
       }
 
-      .chatcall-modal {
-        position: fixed;
-        inset: 0;
+      #chatCallModal {
         z-index: 1200;
-        display: flex;
-        align-items: center;
+      }
+
+      #chatCallModal .modal-ft {
         justify-content: center;
-        padding: 20px;
-        background: rgba(15, 23, 42, 0.56);
-      }
-
-      .chatcall-modal[hidden] {
-        display: none;
-      }
-
-      .chatcall-panel {
-        width: min(100%, 360px);
-        border-radius: 28px;
-        background: linear-gradient(180deg, #fff5f5 0%, #ffffff 100%);
-        box-shadow: 0 28px 60px rgba(15, 23, 42, 0.28);
-        padding: 22px 20px 18px;
-        text-align: center;
-      }
-
-      .chatcall-avatar {
-        width: 88px;
-        height: 88px;
-        margin: 0 auto 14px;
-        border-radius: 999px;
-        overflow: hidden;
-        background: linear-gradient(135deg, #fde68a, #fca5a5 55%, #c4b5fd);
-        display: grid;
-        place-items: center;
-        color: #fff;
-        font-size: 30px;
-        font-weight: 900;
-      }
-
-      .chatcall-avatar img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        display: block;
-      }
-
-      .chatcall-name {
-        margin: 0;
-        font-size: 22px;
-        font-weight: 900;
-        color: #111827;
-      }
-
-      .chatcall-sub {
-        margin-top: 6px;
-        color: var(--cp-sub);
-        font-size: 14px;
-        font-weight: 700;
-      }
-
-      .chatcall-status {
-        margin-top: 18px;
-        color: #374151;
-        font-size: 15px;
-        font-weight: 800;
-      }
-
-      .chatcall-status.error {
-        color: #b91c1c;
-      }
-
-      .chatcall-timer {
-        margin-top: 8px;
-        color: var(--cp-brand);
-        font-size: 15px;
-        font-weight: 900;
-        letter-spacing: 1px;
-      }
-
-      .chatcall-help {
-        margin-top: 10px;
-        color: var(--cp-sub);
-        font-size: 12px;
-        line-height: 1.45;
-      }
-
-      .chatcall-help.error {
-        color: #b91c1c;
-      }
-
-      .chatcall-actions {
-        margin-top: 18px;
-      }
-
-      .chatcall-btn {
-        min-height: 48px;
-        min-width: 120px;
-        border: none;
-        border-radius: 999px;
-        background: #d32f2f;
-        color: #fff;
-        font-size: 16px;
-        font-weight: 900;
-        cursor: pointer;
       }
 
       @media (max-width: 420px) {
@@ -341,18 +244,25 @@
       </footer>
     </div>
 
-    <div class="chatcall-modal" id="chatCallModal" hidden>
-      <div class="chatcall-panel" role="dialog" aria-modal="true" aria-labelledby="chatCallName">
-        <div class="chatcall-avatar">
-          <img id="chatCallAvatarImg" alt="" hidden>
-          <span id="chatCallAvatarText">U</span>
+    <div class="modal" id="chatCallModal" hidden>
+      <div class="modal-backdrop"></div>
+      <div class="modal-dialog trae-browser-inspect-draggable" role="dialog" aria-modal="true" aria-labelledby="chatCallModalTitle" style="width:min(1200px,90vw);max-width:90vw;height:90vh;display:flex;flex-direction:column;">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="chatCallModalTitle">通話</h3>
+          <button class="modal-close" type="button" id="btnChatCallClose" aria-label="關閉">×</button>
         </div>
-        <h2 class="chatcall-name" id="chatCallName">聯絡人</h2>
-        <div class="chatcall-sub" id="chatCallSub">語音通話</div>
-        <div class="chatcall-status" id="chatCallStatus">正在呼叫…</div>
-        <div class="chatcall-timer" id="chatCallTimer">00:00</div>
-        <div class="chatcall-help" id="chatCallHelp" hidden></div>
-        <div class="chatcall-actions">
+        <div class="modal-body chatcall-body">
+          <div class="chatcall-avatar">
+            <img id="chatCallAvatarImg" alt="" hidden>
+            <span id="chatCallAvatarText" class="intercom-avatar-text">U</span>
+          </div>
+          <h2 class="chatcall-name" id="chatCallName">聯絡人</h2>
+          <div class="chatcall-sub" id="chatCallSub">語音通話</div>
+          <div class="chatcall-status" id="chatCallStatus">正在呼叫…</div>
+          <div class="chatcall-timer" id="chatCallTimer">00:00</div>
+          <div class="chatcall-help" id="chatCallHelp" hidden></div>
+        </div>
+        <div class="modal-ft">
           <button class="chatcall-btn" type="button" id="btnChatCallHangup">掛斷</button>
         </div>
       </div>
@@ -399,6 +309,7 @@
         const callTimerEl = document.getElementById("chatCallTimer");
         const callHelpEl = document.getElementById("chatCallHelp");
         const callHangupBtn = document.getElementById("btnChatCallHangup");
+        const callCloseBtn = document.getElementById("btnChatCallClose");
 
         let allAccounts = [];
         let buildingOptions = [];
@@ -1033,6 +944,16 @@
             cleanupChatCall({ updateStatus: "ended", closeDelayMs: 1000 }).catch(() => {
               if (callModalEl) callModalEl.hidden = true;
             });
+          };
+        }
+
+        if (callCloseBtn) {
+          callCloseBtn.onclick = () => {
+            if (callHangupBtn && typeof callHangupBtn.onclick === "function") {
+              callHangupBtn.onclick();
+              return;
+            }
+            if (callModalEl) callModalEl.hidden = true;
           };
         }
 
