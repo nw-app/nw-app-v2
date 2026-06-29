@@ -11686,7 +11686,8 @@
     const q = new URLSearchParams();
     if (c) q.set("c", c);
     q.set("call", id);
-    const url = q.toString() ? `./admin.html?${q.toString()}#community/community-dashboard` : "./admin.html#community/community-dashboard";
+    q.set("toRole", "admin");
+    const url = q.toString() ? `./callrecord.html?${q.toString()}` : "./callrecord.html";
     const tag = `intercom_${id}`;
     try {
       if ("serviceWorker" in navigator) {

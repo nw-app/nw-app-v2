@@ -37,37 +37,8 @@
   </head>
   <body>
     <div class="callrecord-page">
-      <header class="callrecord-hd">
-        <div class="callrecord-hd-left">
-          <button class="btn" type="button" id="btnBack">返回</button>
-        </div>
-        <div class="callrecord-hd-center">
-          <div class="callrecord-hd-title">來電／通話紀錄</div>
-          <div class="callrecord-hd-sub" id="subTitle"></div>
-        </div>
-        <div class="callrecord-hd-right"></div>
-      </header>
-
       <main class="callrecord-bd">
         <section class="content" aria-live="polite">
-          <div class="card">
-            <div class="card-hd">
-              <div>
-                <h2>本次來電</h2>
-                <p id="callSummarySub">載入中</p>
-              </div>
-              <span class="tag" id="callStatusTag">載入中</span>
-            </div>
-            <div class="card-bd">
-              <div id="callDetail" class="callrecord-empty">載入中...</div>
-              <div class="callrecord-actions" id="actionRow" hidden>
-                <button class="btn btn-primary" type="button" id="btnAnswer">接通</button>
-                <button class="btn" type="button" id="btnReject">拒接</button>
-              </div>
-              <div id="actionHint" class="callrecord-empty"></div>
-            </div>
-          </div>
-
           <div class="card">
             <div class="card-hd">
               <div>
@@ -77,7 +48,6 @@
               <button class="btn" type="button" id="btnReload">重新整理</button>
             </div>
             <div class="card-bd">
-              <div id="historyStatus" class="callrecord-empty">尚未載入</div>
               <div class="list" id="historyList"></div>
             </div>
           </div>
@@ -100,7 +70,6 @@
         try { firebase.initializeApp(firebaseConfig); } catch {}
         const auth = firebase.auth();
         const db = firebase.firestore();
-        const FieldValue = firebase.firestore.FieldValue;
         try {
           db.settings({
             experimentalAutoDetectLongPolling: true,
@@ -110,29 +79,13 @@
           });
         } catch {}
 
-        const subTitleEl = document.getElementById("subTitle");
-        const callSummarySubEl = document.getElementById("callSummarySub");
-        const callStatusTagEl = document.getElementById("callStatusTag");
-        const callDetailEl = document.getElementById("callDetail");
-        const actionRowEl = document.getElementById("actionRow");
-        const actionHintEl = document.getElementById("actionHint");
-        const btnAnswer = document.getElementById("btnAnswer");
-        const btnReject = document.getElementById("btnReject");
-        const btnBack = document.getElementById("btnBack");
         const btnReload = document.getElementById("btnReload");
-        const historyStatusEl = document.getElementById("historyStatus");
         const historyListEl = document.getElementById("historyList");
 
         const params = new URLSearchParams(location.search || "");
         const community = String(params.get("c") || "").trim();
-        const callId = String(params.get("call") || "").trim();
-        const action = String(params.get("action") || "").trim();
+        const peerUid = String(params.get("peer") || "").trim();
         const toRoleHint = String(params.get("toRole") || "").trim();
-
-        subTitleEl.textContent = [
-          community ? `社區：${community}` : "",
-          callId ? `Call：${callId}` : "",
-        ].filter(Boolean).join("　");
 
         function esc(s) {
           return String(s ?? "").replace(/[&<>"']/g, (ch) => ({
@@ -180,156 +133,12 @@
           return "";
         }
 
-        function resolveTargetPage(role) {
-          const r = String(role || "").trim();
-          if (r === "admin") return "./admin.html";
-          return "./member.html";
-        }
-
-        function buildTargetUrl(base, c, id) {
-          const q = new URLSearchParams();
-          if (c) q.set("c", c);
-          if (id) q.set("call", id);
-          const qs = q.toString();
-          return qs ? `${base}?${qs}` : base;
-        }
-
-        let latestCallData = null;
-        let autoRejectDone = false;
-        let unsubCallDoc = null;
-
-        function renderCallDetail(data) {
-          const d = data && typeof data === "object" ? data : {};
-          const st = String(d.status || "").trim();
-          const fromName = String(d.fromName || "").trim();
-          const fromHouseNo = String(d.fromHouseNo || "").trim();
-          const toName = String(d.toName || "").trim();
-          const toHouseNo = String(d.toHouseNo || "").trim();
-          const toSubUnit = String(d.toSubUnit || "").trim();
-          const c = String(d.community || community || "").trim();
-          const createdAtMs = Number(d.createdAtMs || 0);
-          const endedAtMs = Number(d.endedAtMs || 0);
-          const role = String(d.toRole || toRoleHint || "").trim();
-
-          callSummarySubEl.textContent = [
-            fromName ? `來電：${fromName}` : "",
-            fromHouseNo ? `戶號：${fromHouseNo}` : "",
-          ].filter(Boolean).join("　") || "—";
-
-          callStatusTagEl.className = `tag ${statusTagClass(st)}`.trim();
-          callStatusTagEl.textContent = statusText(st);
-
-          const toUnitText = [toHouseNo, toSubUnit].filter(Boolean).join("-");
-          const lines = [
-            ["社區", c],
-            ["Call ID", callId],
-            ["狀態", statusText(st)],
-            ["來電者", [fromName, fromHouseNo].filter(Boolean).join("｜")],
-            ["接聽者", [toName, toUnitText].filter(Boolean).join("｜")],
-            ["來電時間", fmtTime(createdAtMs)],
-            ["結束時間", fmtTime(endedAtMs)],
-          ].filter((x) => x[1]);
-
-          if (!lines.length) {
-            callDetailEl.className = "callrecord-empty";
-            callDetailEl.textContent = "找不到通話資料";
-            return;
-          }
-
-          callDetailEl.className = "";
-          callDetailEl.innerHTML = `
-            <div class="callrecord-kv">
-              ${lines.map(([k, v]) => `
-                <div class="callrecord-k">${esc(k)}</div>
-                <div class="callrecord-v">${esc(v)}</div>
-              `).join("")}
-            </div>
-          `;
-
-          const canAct = st === "ringing";
-          actionRowEl.hidden = !canAct;
-          if (canAct) {
-            const targetBase = resolveTargetPage(role);
-            btnAnswer.onclick = () => { location.href = buildTargetUrl(targetBase, c, callId); };
-            btnReject.onclick = async () => {
-              try {
-                btnReject.disabled = true;
-                await db.collection("calls").doc(callId).set(
-                  { status: "rejected", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() },
-                  { merge: true }
-                );
-              } catch {}
-              try { btnReject.disabled = false; } catch {}
-            };
-            actionHintEl.className = "callrecord-empty";
-            actionHintEl.textContent = "若已錯過接聽，可透過「最近通話」查看紀錄。";
-          } else {
-            btnAnswer.onclick = null;
-            btnReject.onclick = null;
-            actionHintEl.className = "callrecord-empty";
-            actionHintEl.textContent = "此通話已結束。";
-          }
-
-          if (!autoRejectDone && action === "reject" && st === "ringing") {
-            autoRejectDone = true;
-            db.collection("calls").doc(callId).set(
-              { status: "rejected", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() },
-              { merge: true }
-            ).catch(() => {});
-          }
-        }
-
-        async function bindCallDocListener() {
-          if (!callId) {
-            callSummarySubEl.textContent = "缺少 call 參數";
-            callStatusTagEl.className = "tag red";
-            callStatusTagEl.textContent = "無法載入";
-            callDetailEl.className = "callrecord-err";
-            callDetailEl.textContent = "推播沒有帶入 callId，因此無法顯示本次來電詳情。";
-            actionRowEl.hidden = true;
-            return;
-          }
-
-          try { if (unsubCallDoc) unsubCallDoc(); } catch {}
-          unsubCallDoc = null;
-          latestCallData = null;
-          callSummarySubEl.textContent = "載入中";
-          callStatusTagEl.className = "tag";
-          callStatusTagEl.textContent = "載入中";
-          callDetailEl.className = "callrecord-empty";
-          callDetailEl.textContent = "載入中...";
-
-          const ref = db.collection("calls").doc(callId);
-          unsubCallDoc = ref.onSnapshot((snap) => {
-            if (!snap || !snap.exists) {
-              callStatusTagEl.className = "tag red";
-              callStatusTagEl.textContent = "找不到";
-              callDetailEl.className = "callrecord-err";
-              callDetailEl.textContent = "找不到此通話資料（可能已被刪除或沒有權限）。";
-              actionRowEl.hidden = true;
-              return;
-            }
-            const d = snap.data() || {};
-            latestCallData = d;
-            renderCallDetail(d);
-          }, () => {
-            callStatusTagEl.className = "tag red";
-            callStatusTagEl.textContent = "讀取失敗";
-            callDetailEl.className = "callrecord-err";
-            callDetailEl.textContent = "讀取通話資料失敗，請稍後再試。";
-            actionRowEl.hidden = true;
-          });
-        }
-
         function renderHistory(items) {
           const arr = Array.isArray(items) ? items : [];
           if (!arr.length) {
-            historyStatusEl.className = "callrecord-empty";
-            historyStatusEl.textContent = "目前沒有通話紀錄";
-            historyListEl.innerHTML = "";
+            historyListEl.innerHTML = `<p class="callrecord-empty">${esc(peerUid ? "目前沒有此對象的通話紀錄" : "目前沒有通話紀錄")}</p>`;
             return;
           }
-          historyStatusEl.textContent = "";
           historyListEl.innerHTML = arr.map((it) => {
             const d = it && typeof it === "object" ? it : {};
             const st = String(d.status || "").trim();
@@ -339,7 +148,7 @@
             const title = [fromName, fromHouseNo].filter(Boolean).join("｜") || "通話";
             const sub = [statusText(st), t].filter(Boolean).join("　") || "—";
             return `
-              <div class="item" role="button" tabindex="0" data-call="${esc(d.id || "")}">
+              <div class="item">
                 <div>
                   <div style="font-weight: 900;">${esc(title)}</div>
                   <div class="meta">
@@ -347,7 +156,7 @@
                     <span class="tag">${esc(t || "—")}</span>
                   </div>
                 </div>
-                <div class="tag">查看</div>
+                <div class="tag">${esc(sub)}</div>
               </div>
             `;
           }).join("");
@@ -356,66 +165,52 @@
         async function loadHistory(user) {
           const u = user && user.uid ? String(user.uid).trim() : "";
           if (!u) {
-            historyStatusEl.className = "callrecord-empty";
-            historyStatusEl.textContent = "請先登入後查看通話紀錄";
-            historyListEl.innerHTML = "";
+            historyListEl.innerHTML = `<p class="callrecord-empty">${esc("請先登入後查看通話紀錄")}</p>`;
             return;
           }
-          historyStatusEl.className = "callrecord-empty";
-          historyStatusEl.textContent = "載入中...";
-          historyListEl.innerHTML = "";
+          historyListEl.innerHTML = `<p class="callrecord-empty">${esc("載入中...")}</p>`;
 
           try {
-            const q1 = await db.collection("calls").where("toUid", "==", u).orderBy("createdAtMs", "desc").limit(20).get();
-            const q2 = await db.collection("calls").where("fromUid", "==", u).orderBy("createdAtMs", "desc").limit(20).get();
             const map = new Map();
-            (q1 && q1.docs ? q1.docs : []).forEach((doc) => map.set(doc.id, { id: doc.id, ...(doc.data() || {}) }));
-            (q2 && q2.docs ? q2.docs : []).forEach((doc) => map.set(doc.id, { id: doc.id, ...(doc.data() || {}) }));
-            const out = Array.from(map.values()).sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
+            const isAdminHint = toRoleHint === "admin";
+            if (isAdminHint && community) {
+              const q = await db.collection("calls").where("community", "==", community).limit(150).get();
+              (q && q.docs ? q.docs : []).forEach((doc) => map.set(doc.id, { id: doc.id, ...(doc.data() || {}) }));
+            } else {
+              const q1 = await db.collection("calls").where("toUid", "==", u).limit(80).get();
+              const q2 = await db.collection("calls").where("fromUid", "==", u).limit(80).get();
+              (q1 && q1.docs ? q1.docs : []).forEach((doc) => map.set(doc.id, { id: doc.id, ...(doc.data() || {}) }));
+              (q2 && q2.docs ? q2.docs : []).forEach((doc) => map.set(doc.id, { id: doc.id, ...(doc.data() || {}) }));
+            }
+
+            const filtered = peerUid
+              ? Array.from(map.values()).filter((d) => {
+                  const fromUid = String(d && d.fromUid || "").trim();
+                  const toUid = String(d && d.toUid || "").trim();
+                  return fromUid === peerUid || toUid === peerUid;
+                })
+              : Array.from(map.values());
+
+            const out = filtered.sort((a, b) => {
+              const am = Number(a && a.createdAtMs || 0);
+              const bm = Number(b && b.createdAtMs || 0);
+              if (bm !== am) return bm - am;
+              return String(b && b.id || "").localeCompare(String(a && a.id || ""), "en");
+            });
             renderHistory(out);
           } catch {
-            historyStatusEl.className = "callrecord-err";
-            historyStatusEl.textContent = "載入通話紀錄失敗（可能需要 Firestore 索引或權限不足）";
-            historyListEl.innerHTML = "";
+            historyListEl.innerHTML = `<p class="callrecord-err">${esc("載入通話紀錄失敗（權限不足或網路異常）")}</p>`;
           }
         }
-
-        historyListEl.addEventListener("click", (ev) => {
-          const el = ev.target && ev.target.closest ? ev.target.closest("[data-call]") : null;
-          if (!el) return;
-          const id = String(el.getAttribute("data-call") || "").trim();
-          if (!id) return;
-          const c = (latestCallData && latestCallData.community) ? String(latestCallData.community || "").trim() : community;
-          const role = (latestCallData && latestCallData.toRole) ? String(latestCallData.toRole || "").trim() : toRoleHint;
-          const base = resolveTargetPage(role);
-          location.href = buildTargetUrl("./callrecord.html", c, id);
-        });
-
-        historyListEl.addEventListener("keydown", (ev) => {
-          const el = ev.target && ev.target.closest ? ev.target.closest("[data-call]") : null;
-          if (!el) return;
-          if (ev.key !== "Enter" && ev.key !== " ") return;
-          ev.preventDefault();
-          el.click();
-        });
-
-        btnBack.onclick = () => {
-          try {
-            if (history.length > 1) { history.back(); return; }
-          } catch {}
-          location.href = "./";
-        };
 
         btnReload.onclick = () => {
           loadHistory(auth.currentUser).catch(() => {});
         };
 
         auth.onAuthStateChanged((user) => {
-          bindCallDocListener().catch(() => {});
           loadHistory(user).catch(() => {});
         });
       })();
     </script>
   </body>
 </html>
-

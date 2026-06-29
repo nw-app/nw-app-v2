@@ -1193,7 +1193,8 @@
     const q = new URLSearchParams();
     if (c) q.set("c", c);
     q.set("call", id);
-    const url = q.toString() ? `./member.html?${q.toString()}` : "./member.html";
+    q.set("toRole", "resident");
+    const url = q.toString() ? `./callrecord.html?${q.toString()}` : "./callrecord.html";
     const tag = `intercom_${id}`;
     try {
       if ("serviceWorker" in navigator) {
@@ -1493,13 +1494,16 @@
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const outputs = (devices || []).filter((d) => d && d.kind === "audiooutput");
-      let speakerId = "";
-      if (wantSpeaker) {
-        const prefer = outputs.find((d) => /speaker|擴音|喇叭/i.test(String(d.label || "")) && String(d.deviceId || "") !== "default");
-        const fallback = outputs.find((d) => String(d.deviceId || "") !== "default");
-        speakerId = String((prefer || fallback || {}).deviceId || "").trim();
-      }
-      const sinkId = wantSpeaker ? speakerId : "default";
+      const normalize = (s) => String(s || "").trim().toLowerCase();
+      const isDefault = (d) => normalize(d && d.deviceId) === "default";
+      const isCommunications = (d) => normalize(d && d.deviceId) === "communications" || /communications|通訊|通话|通話/i.test(String(d && d.label || ""));
+      const isSpeaker = (d) => /speaker|擴音|喇叭/i.test(String(d && d.label || ""));
+      const nonDefault = outputs.filter((d) => d && !isDefault(d));
+      const comm = nonDefault.find(isCommunications) || outputs.find(isCommunications) || null;
+      const speaker = nonDefault.find(isSpeaker) || nonDefault[0] || null;
+      const sinkId = wantSpeaker
+        ? String((speaker && speaker.deviceId) || "default").trim() || "default"
+        : String((comm && comm.deviceId) || "default").trim() || "default";
       await audio.setSinkId(sinkId);
       if (intercomActive) intercomActive.audioOutputMode = wantSpeaker ? "speaker" : "earpiece";
       setIntercomPermissionHelp("", false);
@@ -1508,6 +1512,52 @@
       setIntercomPermissionHelp("無法切換音訊輸出，請確認瀏覽器允許切換音訊裝置。", false);
       return false;
     }
+  }
+
+  function ensureIntercomHistoryModal() {
+    const modal = ensureModal("intercomHistoryModal90");
+    modal.style.zIndex = "1210";
+    modal.style.setProperty("--modal-width", "90%");
+    modal.style.setProperty("--modal-height", "90%");
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog trae-browser-inspect-draggable" role="dialog" aria-modal="true" aria-labelledby="intercomHistoryTitle" style="display:flex;flex-direction:column;">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="intercomHistoryTitle">通話紀錄</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body" style="padding:0;min-height:0;flex:1 1 auto;">
+          <iframe id="intercomHistoryIframe" src="" frameborder="0" style="width:100%;height:100%;display:block;"></iframe>
+        </div>
+      </div>
+    `.trim();
+    return modal;
+  }
+
+  function openIntercomHistoryModal({ communityId, toRole } = {}) {
+    const cid = String(communityId || resolveActiveCommunityId() || "").trim();
+    const role = String(toRole || "resident").trim() || "resident";
+    const modal = ensureIntercomHistoryModal();
+    const iframe = modal.querySelector("#intercomHistoryIframe");
+    if (!iframe) return;
+    const q = new URLSearchParams();
+    if (cid) q.set("c", cid);
+    if (role) q.set("toRole", role);
+    const url = q.toString() ? `./callrecord.html?${q.toString()}` : "./callrecord.html";
+    iframe.src = url;
+    prepareIntercomModal(modal);
+    let detach = () => {};
+    detach = bindModalClose(modal, () => {
+      detach();
+      try { iframe.src = ""; } catch {}
+    });
+  }
+
+  function bindIntercomHistoryButton(modal, { communityId, toRole } = {}) {
+    if (!modal) return;
+    const btn = modal.querySelector("#btnIntercomHistory");
+    if (!btn) return;
+    btn.onclick = () => openIntercomHistoryModal({ communityId, toRole });
   }
 
   function bindIntercomSpeakerButton(modal) {
@@ -1636,6 +1686,7 @@
             <button class="chatcall-btn ghost small" type="button" id="btnIntercomSpeaker" hidden>擴音</button>
             <button class="chatcall-btn danger small" type="button" id="btnIntercomHangup">掛斷</button>
             <button class="chatcall-btn success small" type="button" id="btnIntercomCallAdmin">呼叫</button>
+            <button class="chatcall-btn ghost small" type="button" id="btnIntercomHistory">通話紀錄</button>
           </div>
         </div>
       </div>
@@ -1692,6 +1743,7 @@
     const modal = ensureIntercomCallModal();
     prepareIntercomModal(modal);
     bindIntercomSpeakerButton(modal);
+    bindIntercomHistoryButton(modal, { communityId: cid, toRole: "resident" });
     if (intercomActive) intercomActive.audioOutputMode = "earpiece";
     let detach = () => {};
     detach = bindModalClose(modal, () => {
@@ -1825,6 +1877,7 @@
     const modal = ensureIntercomCallModal();
     prepareIntercomModal(modal);
     bindIntercomSpeakerButton(modal);
+    bindIntercomHistoryButton(modal, { communityId: String(d.community || resolveActiveCommunityId() || "").trim(), toRole: "resident" });
     if (intercomActive) intercomActive.audioOutputMode = "earpiece";
     let detach = () => {};
     detach = bindModalClose(modal, () => {
@@ -2080,6 +2133,7 @@
       const modal = ensureIntercomCallModal();
       prepareIntercomModal(modal);
       bindIntercomSpeakerButton(modal);
+      bindIntercomHistoryButton(modal, { communityId: resolveActiveCommunityId(), toRole: "resident" });
       let detach = () => {};
       detach = bindModalClose(modal, () => {
         detach();
