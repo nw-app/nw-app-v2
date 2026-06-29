@@ -11652,6 +11652,7 @@
   let intercomRingGain = null;
   let intercomRingCompressor = null;
   let intercomRingTimer = null;
+  let intercomRingAudio = null;
   let intercomLastIncomingMs = 0;
   let intercomLastIncomingId = "";
   let intercomLastIncomingNotifyId = "";
@@ -11718,8 +11719,7 @@
     } catch {}
   }
 
-  function startIntercomRingtone(mode = "incoming") {
-    stopIntercomRingtone();
+  function startIntercomOscillatorRingtone(mode = "incoming") {
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return;
@@ -11786,11 +11786,41 @@
     } catch {}
   }
 
+  function startIntercomRingtone(mode = "incoming") {
+    stopIntercomRingtone();
+    const m = String(mode || "incoming").trim() || "incoming";
+    try {
+      intercomRingAudio = new Audio("./mp3/ring.mp3");
+      intercomRingAudio.loop = true;
+      intercomRingAudio.preload = "auto";
+      intercomRingAudio.volume = m === "waiting" ? 0.65 : 0.85;
+      const p = intercomRingAudio.play();
+      if (p && typeof p.then === "function") {
+        let ok = false;
+        p.then(() => { ok = true; }).catch(() => { ok = false; });
+        window.setTimeout(() => {
+          if (!ok && !intercomRingTimer) startIntercomOscillatorRingtone(m);
+        }, 220);
+        return;
+      }
+      if (intercomRingAudio.paused) startIntercomOscillatorRingtone(m);
+      return;
+    } catch {}
+    startIntercomOscillatorRingtone(m);
+  }
+
   function stopIntercomRingtone() {
     if (intercomRingTimer) {
       window.clearInterval(intercomRingTimer);
       intercomRingTimer = null;
     }
+    try {
+      if (intercomRingAudio) {
+        intercomRingAudio.pause();
+        intercomRingAudio.currentTime = 0;
+      }
+    } catch {}
+    intercomRingAudio = null;
     try {
       if (intercomRingGain) intercomRingGain.gain.value = 0;
     } catch {}

@@ -1,10 +1,11 @@
-const CACHE_VERSION = "nwapp-v154";
+const CACHE_VERSION = "nwapp-v155";
 const PRECACHE = [
   "./",
   "./index.html",
   "./system.html",
   "./admin.html",
   "./member.html",
+  "./callrecord.html",
   "./visitor.html",
   "./css/index.css",
   "./css/system.css",
@@ -33,6 +34,14 @@ try {
   try { __nwMessaging = firebase.messaging(); } catch {}
 } catch {}
 
+function resolveAppUrl(raw) {
+  const v = String(raw || "").trim() || "./";
+  const cleaned = v.startsWith("/") ? v.replace(/^\/+/, "") : v;
+  try { return new URL(cleaned, self.registration.scope).toString(); } catch {}
+  try { return new URL(cleaned, self.location.href).toString(); } catch {}
+  return v;
+}
+
 try {
   if (__nwMessaging && typeof __nwMessaging.onBackgroundMessage === "function") {
     __nwMessaging.onBackgroundMessage(async (payload) => {
@@ -40,7 +49,7 @@ try {
       const callId = String(data.callId || "").trim();
       const community = String(data.community || "").trim();
       const toRole = String(data.toRole || "").trim();
-      const url = String(data.url || "").trim() || "./";
+      const url = resolveAppUrl(String(data.url || "").trim() || "./");
       const title = String(data.title || "生活網｜來電").trim() || "生活網｜來電";
       const body = String(data.body || "點此開啟生活網接聽/拒接").trim();
       const autoOpen = String(data.autoOpen || "").trim() === "1";
@@ -89,12 +98,12 @@ self.addEventListener("notificationclick", (event) => {
   try {
     const n = event.notification;
     const d = n && n.data ? n.data : {};
-    const baseUrl = String(d.url || "./").trim() || "./";
+    const baseUrl = resolveAppUrl(String(d.url || "./").trim() || "./");
     const callId = String(d.callId || "").trim();
     const action = String(event.action || "").trim();
     let url = baseUrl;
     try {
-      const u = new URL(baseUrl, self.location.origin);
+      const u = new URL(baseUrl, self.registration.scope);
       if (callId) u.searchParams.set("call", callId);
       if (action === "reject") u.searchParams.set("action", "reject");
       url = u.toString();

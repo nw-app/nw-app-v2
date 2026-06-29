@@ -100,6 +100,8 @@
         gap: 6px;
         cursor: pointer;
         transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
       }
 
       .account-card:hover,
@@ -129,6 +131,7 @@
         height: 100%;
         object-fit: cover;
         display: block;
+        pointer-events: none;
       }
 
       .account-house,
@@ -414,6 +417,29 @@
           if (p && typeof p.catch === "function") p.catch(() => {});
         }
 
+        let chatCallRingAudio = null;
+        function startChatCallRingtone(mode = "waiting") {
+          stopChatCallRingtone();
+          try {
+            chatCallRingAudio = new Audio("./mp3/ring.mp3");
+            chatCallRingAudio.loop = true;
+            chatCallRingAudio.preload = "auto";
+            chatCallRingAudio.volume = String(mode || "").trim() === "incoming" ? 0.85 : 0.65;
+            const p = chatCallRingAudio.play();
+            if (p && typeof p.catch === "function") p.catch(() => {});
+          } catch {}
+        }
+
+        function stopChatCallRingtone() {
+          try {
+            if (chatCallRingAudio) {
+              chatCallRingAudio.pause();
+              chatCallRingAudio.currentTime = 0;
+            }
+          } catch {}
+          chatCallRingAudio = null;
+        }
+
         function setCallStatus(message, isError) {
           if (!callStatusEl) return;
           callStatusEl.textContent = String(message || "").trim() || "—";
@@ -455,6 +481,7 @@
           setCallStatus("正在呼叫…", false);
           setCallHelp("", false);
           if (callTimerEl) callTimerEl.textContent = "00:00";
+          startChatCallRingtone("waiting");
           if (callModalEl) {
             callModalEl.hidden = false;
             callModalEl.dataset.hideToken = "";
@@ -490,6 +517,7 @@
         async function cleanupChatCall({ updateStatus, closeDelayMs = 0 } = {}) {
           const active = chatCallState;
           chatCallState = null;
+          stopChatCallRingtone();
           if (active) {
             try {
               if (active.timerId) window.clearInterval(active.timerId);
@@ -621,7 +649,7 @@
             return `
               <section class="account-card" tabindex="0" role="button" data-uid="${escapeHtml(item.id)}">
                 <div class="account-avatar">
-                  ${avatar ? `<img src="${escapeHtml(avatar)}" alt="">` : `<span>${escapeHtml(initial)}</span>`}
+                  ${avatar ? `<img src="${escapeHtml(avatar)}" alt="" draggable="false">` : `<span>${escapeHtml(initial)}</span>`}
                 </div>
                 <div class="account-unit-row">
                   <div class="account-house">
@@ -909,6 +937,7 @@
             if (!data) return;
             const st = String(data.status || "").trim();
             if (st === "accepted") {
+              stopChatCallRingtone();
               if (!pc.currentRemoteDescription && data.answer && data.answer.type && data.answer.sdp) {
                 try { await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); } catch {}
               }
@@ -957,13 +986,51 @@
           };
         }
 
-        gridEl.addEventListener("click", (ev) => {
-          const card = ev.target && ev.target.closest ? ev.target.closest(".account-card") : null;
-          if (!card) return;
-          startOutgoingResidentCall(card.getAttribute("data-uid")).catch((err) => {
+        let __nwDialLastMs = 0;
+        function triggerDialByUid(uid) {
+          const id = String(uid || "").trim();
+          if (!id) return;
+          const now = Date.now();
+          if (now - __nwDialLastMs < 650) return;
+          __nwDialLastMs = now;
+          startOutgoingResidentCall(id).catch((err) => {
             console.error(err);
             setCallStatus("呼叫失敗，請稍後再試。", true);
           });
+        }
+
+        let __nwTapStart = null;
+        try {
+          gridEl.addEventListener("pointerdown", (ev) => {
+            const card = ev.target && ev.target.closest ? ev.target.closest(".account-card") : null;
+            if (!card) return;
+            __nwTapStart = {
+              pointerId: ev.pointerId,
+              x: Number(ev.clientX || 0),
+              y: Number(ev.clientY || 0),
+              t: Date.now(),
+              uid: String(card.getAttribute("data-uid") || "").trim(),
+            };
+          }, { passive: true });
+
+          gridEl.addEventListener("pointerup", (ev) => {
+            const s = __nwTapStart;
+            __nwTapStart = null;
+            if (!s || s.pointerId !== ev.pointerId) return;
+            const dx = Math.abs(Number(ev.clientX || 0) - s.x);
+            const dy = Math.abs(Number(ev.clientY || 0) - s.y);
+            if (dx > 12 || dy > 12) return;
+            if (Date.now() - s.t > 900) return;
+            triggerDialByUid(s.uid);
+          }, { passive: true });
+
+          gridEl.addEventListener("pointercancel", () => { __nwTapStart = null; }, { passive: true });
+        } catch {}
+
+        gridEl.addEventListener("click", (ev) => {
+          const card = ev.target && ev.target.closest ? ev.target.closest(".account-card") : null;
+          if (!card) return;
+          triggerDialByUid(card.getAttribute("data-uid"));
         });
 
         gridEl.addEventListener("keydown", (ev) => {
@@ -971,10 +1038,7 @@
           if (!card) return;
           if (ev.key !== "Enter" && ev.key !== " ") return;
           ev.preventDefault();
-          startOutgoingResidentCall(card.getAttribute("data-uid")).catch((err) => {
-            console.error(err);
-            setCallStatus("呼叫失敗，請稍後再試。", true);
-          });
+          triggerDialByUid(card.getAttribute("data-uid"));
         });
 
         auth.onAuthStateChanged((user) => {

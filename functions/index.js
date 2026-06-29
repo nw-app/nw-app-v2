@@ -68,7 +68,8 @@ exports.onCallCreated = functions.firestore.document("calls/{callId}").onCreate(
   const q = new URLSearchParams();
   if (community) q.set("c", community);
   if (callId) q.set("call", callId);
-  const base = toRole === "resident" ? "/member.html" : "/admin.html";
+  if (toRole) q.set("toRole", toRole);
+  const base = "callrecord.html";
   const url = q.toString() ? `${base}?${q.toString()}` : base;
 
   const message = {
