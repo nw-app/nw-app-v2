@@ -643,13 +643,16 @@
         ${x.id === "residents" ? `<span class="nav-badge" id="badgeNavResidents" hidden>0</span>` : ""}
         ${x.id === "visitor" ? `<span class="nav-badge" id="badgeNavVisitor" hidden>0</span>` : ""}
         ${x.id === "facility" ? `<span class="nav-badge" id="badgeNavFacility" hidden>0</span>` : ""}
+        ${x.id === "care" ? `<span class="nav-badge" id="badgeNavCare" hidden>0</span>` : ""}
         <span class="label">${String(x.label)}</span>
       </a>
     `.trim()).join("");
     ensureParcelPendingCountSubscription(resolveActiveCommunityId());
     ensureResidentsPendingCountSubscription(resolveActiveCommunityId());
+    ensureIntercomMissedCountSubscription(resolveActiveCommunityId());
     ensureVisitorsPendingCountSubscription(resolveActiveCommunityId());
     ensureFacilityPendingCountSubscription(resolveActiveCommunityId());
+    updateCareNavBadgeFromSos(_lastSosActiveCount);
   }
 
   function normalizeText(v) {
@@ -932,6 +935,24 @@
     _residentsPendingCountCid = null;
     _lastResidentsPendingCount = 0;
   }
+  let _unsubIntercomMissedCount = null;
+  let _intercomMissedCountCid = null;
+  let _lastIntercomMissedCount = 0;
+  function stopIntercomMissedCountSubscription() {
+    if (_unsubIntercomMissedCount) {
+      try { _unsubIntercomMissedCount(); } catch {}
+      _unsubIntercomMissedCount = null;
+    }
+    _intercomMissedCountCid = null;
+    _lastIntercomMissedCount = 0;
+  }
+  function updateResidentsNavBadgeCombined() {
+    const navBadge = document.getElementById("badgeNavResidents");
+    if (!navBadge) return;
+    const total = (Number(_lastResidentsPendingCount) || 0) + (Number(_lastIntercomMissedCount) || 0);
+    navBadge.textContent = String(total);
+    navBadge.hidden = total === 0;
+  }
   function updateResidentsPendingBadges(count) {
     const n = Number.isFinite(Number(count)) ? Number(count) : 0;
     _lastResidentsPendingCount = n;
@@ -940,11 +961,7 @@
       subnavBadge.textContent = String(n);
       subnavBadge.hidden = n === 0;
     }
-    const navBadge = document.getElementById("badgeNavResidents");
-    if (navBadge) {
-      navBadge.textContent = String(n);
-      navBadge.hidden = n === 0;
-    }
+    updateResidentsNavBadgeCombined();
   }
   function ensureResidentsPendingCountSubscription(cid) {
     const communityId = String(cid || "").trim();
@@ -966,6 +983,42 @@
         }, () => {});
     } catch {
       stopResidentsPendingCountSubscription();
+    }
+  }
+
+  function updateIntercomMissedBadges(count) {
+    const n = Number.isFinite(Number(count)) ? Number(count) : 0;
+    _lastIntercomMissedCount = n;
+
+    const btnBadge = document.getElementById("chatphoneMissedBadge");
+    if (btnBadge) {
+      btnBadge.textContent = String(n);
+      btnBadge.hidden = n === 0;
+    }
+
+    updateResidentsNavBadgeCombined();
+  }
+
+  function ensureIntercomMissedCountSubscription(cid) {
+    const communityId = String(cid || "").trim();
+    if (!communityId) return;
+    if (_intercomMissedCountCid === communityId && _unsubIntercomMissedCount) {
+      updateIntercomMissedBadges(_lastIntercomMissedCount);
+      return;
+    }
+    stopIntercomMissedCountSubscription();
+    _intercomMissedCountCid = communityId;
+    try {
+      _unsubIntercomMissedCount = db
+        .collection("calls")
+        .where("community", "==", communityId)
+        .where("toRole", "==", "admin")
+        .where("status", "==", "missed")
+        .onSnapshot((snap) => {
+          updateIntercomMissedBadges(snap && typeof snap.size === "number" ? snap.size : 0);
+        }, () => {});
+    } catch {
+      stopIntercomMissedCountSubscription();
     }
   }
 
@@ -8319,7 +8372,10 @@
         </button>
         <button class="btn btn-sm ${currentPage === "list" ? "btn-primary" : ""}" type="button" id="btnResidentsList">住戶造冊</button>
         <button class="btn btn-sm ${currentPage === "points" ? "btn-primary" : ""}" type="button" id="btnResidentsPoints">住戶點數</button>
-        <button class="btn btn-sm ${currentPage === "chatphone" ? "btn-primary" : ""}" type="button" id="btnChatphone">對講機</button>
+        <button class="btn btn-sm ${currentPage === "chatphone" ? "btn-primary" : ""}" type="button" id="btnChatphone">
+          <span class="badge-inline" id="chatphoneMissedBadge" hidden>0</span>
+          對講機
+        </button>
       `.trim();
       
       // 获取按钮引用
@@ -8353,8 +8409,9 @@
         };
       }
       
-      // 确保 pending badge 被正确更新
+      // 确保 badges 被正确更新
       ensureResidentsPendingCountSubscription(cid);
+      ensureIntercomMissedCountSubscription(cid);
     };
 
     // 初始渲染 subnav
@@ -8430,6 +8487,7 @@
           </div>
         </section>
       `.trim();
+      updateIntercomMissedBadges(_lastIntercomMissedCount);
     };
 
     const renderResidentsList = () => {
@@ -11665,11 +11723,21 @@
   let sosUnsub = null;
   let sosRecords = [];
   let sosLastNotifiedMs = 0;
+  let _lastSosActiveCount = 0;
   let sosAudioCtx = null;
   let sosOsc = null;
   let sosGain = null;
   let sosBeepTimer = null;
   let sosStatusFilter = "all";
+
+  function updateCareNavBadgeFromSos(activeCount) {
+    const n = Number.isFinite(Number(activeCount)) ? Number(activeCount) : 0;
+    _lastSosActiveCount = n;
+    const navBadge = document.getElementById("badgeNavCare");
+    if (!navBadge) return;
+    navBadge.textContent = String(n);
+    navBadge.hidden = n === 0;
+  }
 
   function startSosAlarm() {
     if (sosBeepTimer) return;
@@ -12786,6 +12854,7 @@
             .sort((a, b) => (Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0)));
           list = await enrichSosRecordsWithSubUnit(list);
           sosRecords = list;
+          updateCareNavBadgeFromSos(list.filter((record) => String(record.status || "").trim() !== "已完成").length);
 
           const latest = list[0] || null;
           if (latest && Number(latest.createdAtMs || 0) > sosLastNotifiedMs && String(latest.status || "").trim() === "待處理") {
