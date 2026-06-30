@@ -721,6 +721,33 @@
               </section>
             `;
           }).join("");
+
+          Array.from(gridEl.querySelectorAll(".account-calllog-btn")).forEach((btn) => {
+            btn.addEventListener("click", (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              const card = btn.closest ? btn.closest(".account-card") : null;
+              if (!card) return;
+              openHistoryModal(card.getAttribute("data-uid"));
+            });
+          });
+
+          Array.from(gridEl.querySelectorAll(".account-card")).forEach((card) => {
+            card.addEventListener("click", (ev) => {
+              const targetEl = getEventTargetElement(ev);
+              if (targetEl && targetEl.closest && targetEl.closest('[data-action="history"]')) return;
+              // #region debug-point A:card-direct-click
+              fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"A",location:"chatphone.html:card-direct-click",msg:"[DEBUG] direct card click trigger dial",data:{uid:String(card.getAttribute("data-uid")||""),tag:String((targetEl&&targetEl.tagName)||"").toLowerCase(),nodeType:Number((ev.target&&ev.target.nodeType)||0)},ts:Date.now()})}).catch(()=>{});
+              // #endregion
+              triggerDialByUid(card.getAttribute("data-uid"));
+            });
+
+            card.addEventListener("keydown", (ev) => {
+              if (ev.key !== "Enter" && ev.key !== " ") return;
+              ev.preventDefault();
+              triggerDialByUid(card.getAttribute("data-uid"));
+            });
+          });
         }
 
         async function resolveCommunityName(communityKey) {
@@ -1106,72 +1133,6 @@
           if (target.nodeType === 1) return target;
           return target.parentElement || null;
         }
-
-        let __nwTapStart = null;
-        try {
-          gridEl.addEventListener("pointerdown", (ev) => {
-            const targetEl = getEventTargetElement(ev);
-            const card = targetEl && targetEl.closest ? targetEl.closest(".account-card") : null;
-            if (!card) return;
-            if (targetEl && targetEl.closest && targetEl.closest('[data-action="history"]')) return;
-            // #region debug-point A:pointerdown-card
-            fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"A",location:"chatphone.html:pointerdown",msg:"[DEBUG] pointerdown on card",data:{uid:String(card.getAttribute("data-uid")||""),tag:String((targetEl&&targetEl.tagName)||"").toLowerCase(),nodeType:Number((ev.target&&ev.target.nodeType)||0)},ts:Date.now()})}).catch(()=>{});
-            // #endregion
-            __nwTapStart = {
-              pointerId: ev.pointerId,
-              x: Number(ev.clientX || 0),
-              y: Number(ev.clientY || 0),
-              t: Date.now(),
-              uid: String(card.getAttribute("data-uid") || "").trim(),
-            };
-          }, { passive: true });
-
-          gridEl.addEventListener("pointerup", (ev) => {
-            const s = __nwTapStart;
-            __nwTapStart = null;
-            const targetEl = getEventTargetElement(ev);
-            if (!s || s.pointerId !== ev.pointerId) return;
-            if (targetEl && targetEl.closest && targetEl.closest('[data-action="history"]')) return;
-            const dx = Math.abs(Number(ev.clientX || 0) - s.x);
-            const dy = Math.abs(Number(ev.clientY || 0) - s.y);
-            if (dx > 12 || dy > 12) return;
-            if (Date.now() - s.t > 900) return;
-            // #region debug-point A:pointerup-trigger
-            fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"A",location:"chatphone.html:pointerup",msg:"[DEBUG] pointerup trigger dial",data:{uid:s.uid,tag:String((targetEl&&targetEl.tagName)||"").toLowerCase(),nodeType:Number((ev.target&&ev.target.nodeType)||0),dx,dy,elapsed:Date.now()-s.t},ts:Date.now()})}).catch(()=>{});
-            // #endregion
-            triggerDialByUid(s.uid);
-          }, { passive: true });
-
-          gridEl.addEventListener("pointercancel", () => { __nwTapStart = null; }, { passive: true });
-        } catch {}
-
-        gridEl.addEventListener("click", (ev) => {
-          const targetEl = getEventTargetElement(ev);
-          const actionBtn = targetEl && targetEl.closest ? targetEl.closest('[data-action="history"]') : null;
-          if (actionBtn) {
-            ev.preventDefault();
-            ev.stopPropagation();
-            const card = actionBtn.closest ? actionBtn.closest(".account-card") : null;
-            if (!card) return;
-            openHistoryModal(card.getAttribute("data-uid"));
-            return;
-          }
-          const card = targetEl && targetEl.closest ? targetEl.closest(".account-card") : null;
-          if (!card) return;
-          // #region debug-point A:click-card
-          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"A",location:"chatphone.html:click",msg:"[DEBUG] click trigger dial",data:{uid:String(card.getAttribute("data-uid")||""),tag:String((targetEl&&targetEl.tagName)||"").toLowerCase(),nodeType:Number((ev.target&&ev.target.nodeType)||0)},ts:Date.now()})}).catch(()=>{});
-          // #endregion
-          triggerDialByUid(card.getAttribute("data-uid"));
-        });
-
-        gridEl.addEventListener("keydown", (ev) => {
-          const targetEl = getEventTargetElement(ev);
-          const card = targetEl && targetEl.closest ? targetEl.closest(".account-card") : null;
-          if (!card) return;
-          if (ev.key !== "Enter" && ev.key !== " ") return;
-          ev.preventDefault();
-          triggerDialByUid(card.getAttribute("data-uid"));
-        });
 
         auth.onAuthStateChanged((user) => {
           if (!user) {
