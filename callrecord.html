@@ -28,6 +28,36 @@
         min-height: 0;
         padding: 0;
       }
+      .callrecord-summary {
+        position: sticky;
+        top: 0;
+        z-index: 15;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 10px 14px;
+        background: rgba(255, 255, 255, 0.96);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid rgba(17, 24, 39, 0.08);
+      }
+      .callrecord-summary-item {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(17, 24, 39, 0.1);
+        background: #fff;
+        color: #111827;
+        font-size: 13px;
+        font-weight: 800;
+        line-height: 1;
+      }
+      .callrecord-summary-item .num {
+        font-weight: 900;
+        color: #d32f2f;
+      }
       .callrecord-toolbar {
         position: sticky;
         top: 0;
@@ -153,6 +183,11 @@
               <button class="btn btn-primary" type="button" id="btnDeleteSelected">刪除</button>
             </div>
             <div class="card-bd callrecord-list">
+              <div class="callrecord-summary" id="historySummary">
+                <div class="callrecord-summary-item">已撥：<span class="num" id="summaryOutgoing">0</span></div>
+                <div class="callrecord-summary-item">已接：<span class="num" id="summaryAnswered">0</span></div>
+                <div class="callrecord-summary-item">未接：<span class="num" id="summaryMissed">0</span></div>
+              </div>
               <div class="list" id="historyList"></div>
             </div>
           </div>
@@ -186,6 +221,9 @@
         } catch {}
 
         const historyListEl = document.getElementById("historyList");
+        const summaryOutgoingEl = document.getElementById("summaryOutgoing");
+        const summaryAnsweredEl = document.getElementById("summaryAnswered");
+        const summaryMissedEl = document.getElementById("summaryMissed");
         const selectionToolbarEl = document.getElementById("selectionToolbar");
         const selectionCountEl = document.getElementById("selectionCount");
         const btnSelectAll = document.getElementById("btnSelectAll");
@@ -344,9 +382,37 @@
           });
         }
 
+        function isAnsweredCall(data) {
+          const d = data && typeof data === "object" ? data : {};
+          const st = String(d.status || "").trim();
+          if (st === "accepted") return true;
+          const ans = d.answer && typeof d.answer === "object" ? d.answer : null;
+          if (ans && ans.sdp) return true;
+          return false;
+        }
+
+        function updateHistorySummary(items, currentUid) {
+          const list = Array.isArray(items) ? items : [];
+          let outgoing = 0;
+          let answered = 0;
+          let missed = 0;
+          for (const it of list) {
+            const d = it && typeof it === "object" ? it : {};
+            const st = String(d.status || "").trim();
+            const peer = pickPeerInfo(d, currentUid);
+            if (peer && peer.direction === "outgoing") outgoing += 1;
+            if (st === "missed") missed += 1;
+            if (isAnsweredCall(d)) answered += 1;
+          }
+          if (summaryOutgoingEl) summaryOutgoingEl.textContent = String(outgoing);
+          if (summaryAnsweredEl) summaryAnsweredEl.textContent = String(answered);
+          if (summaryMissedEl) summaryMissedEl.textContent = String(missed);
+        }
+
         function renderHistory(items, currentUid) {
           const arr = Array.isArray(items) ? items.filter((d) => !hiddenCallIdSet.has(String(d && d.id || "").trim())) : [];
           currentItems = arr.slice();
+          updateHistorySummary(arr, currentUid);
           if (!arr.length) {
             exitSelectionMode();
             historyListEl.innerHTML = `<p class="callrecord-empty">${esc(peerUid ? "目前沒有此對象的通話紀錄" : "目前沒有通話紀錄")}</p>`;

@@ -395,10 +395,15 @@
         let activeBuilding = "all";
         let currentUserData = null;
         let currentCommunityKey = "";
+        let viewerIsAdminLike = false;
         let chatCallState = null;
         let _unsubResidentMissedCounts = null;
         let _residentMissedCountsCid = "";
         let _residentMissedCountsByUid = new Map();
+        let _residentMissedCountsByUnitKey = new Map();
+        let _hiddenCallIdsUid = "";
+        let _hiddenCallIdsUnsub = null;
+        let _hiddenCallIdSet = new Set();
 
         function readCommunityKey() {
           try {
@@ -435,6 +440,23 @@
           const value = String(role || "").trim().toLowerCase();
           if (value === "admin" || value === "系統管理員" || value === "系統管理者" || value === "system") return "admin";
           return "resident";
+        }
+
+        function normalizeSessionRoleText(role) {
+          const value = String(role || "").trim().toLowerCase();
+          if (value === "admin" || value === "系統管理員" || value === "系統管理者" || value === "系統") return "admin";
+          if (value === "community" || value === "社區") return "community";
+          if (value === "resident" || value === "住戶") return "resident";
+          return "";
+        }
+
+        function resolveViewerIsAdminLike() {
+          let sessionRole = "";
+          try { sessionRole = normalizeSessionRoleText(sessionStorage.getItem("csp_role") || ""); } catch {}
+          if (sessionRole === "admin" || sessionRole === "community") return true;
+          const docRole = normalizeSessionRoleText(currentUserData && currentUserData.role);
+          if (docRole === "admin" || docRole === "community") return true;
+          return false;
         }
 
         function normalizeUnit(v) {
@@ -489,6 +511,38 @@
           }
           _residentMissedCountsCid = "";
           _residentMissedCountsByUid = new Map();
+          _residentMissedCountsByUnitKey = new Map();
+        }
+
+        function stopHiddenCallIdsSubscription() {
+          if (_hiddenCallIdsUnsub) {
+            try { _hiddenCallIdsUnsub(); } catch {}
+            _hiddenCallIdsUnsub = null;
+          }
+          _hiddenCallIdsUid = "";
+          _hiddenCallIdSet = new Set();
+        }
+
+        function ensureHiddenCallIdsSubscription(uid) {
+          const id = String(uid || "").trim();
+          if (!id) {
+            stopHiddenCallIdsSubscription();
+            updateResidentMissedBadgesInGrid();
+            return;
+          }
+          if (_hiddenCallIdsUid === id && _hiddenCallIdsUnsub) return;
+          stopHiddenCallIdsSubscription();
+          _hiddenCallIdsUid = id;
+          try {
+            _hiddenCallIdsUnsub = db.collection("users").doc(id).onSnapshot((snap) => {
+              const data = snap && snap.exists ? (snap.data() || {}) : {};
+              const list = Array.isArray(data.hiddenCallIds) ? data.hiddenCallIds : [];
+              _hiddenCallIdSet = new Set(list.map((x) => String(x || "").trim()).filter(Boolean));
+              updateResidentMissedBadgesInGrid();
+            }, () => {});
+          } catch {
+            stopHiddenCallIdsSubscription();
+          }
         }
 
         function formatBadgeNumber(n) {
@@ -497,11 +551,22 @@
           return String(num);
         }
 
+        function buildUnitKey(houseNo, subUnit) {
+          const h = normalizeUnit(houseNo).toLowerCase();
+          const s = normalizeUnit(subUnit).toLowerCase();
+          if (!h) return "";
+          return `${h}__${s || "_"}`;
+        }
+
         function updateResidentMissedBadgesInGrid() {
           if (!gridEl) return;
           Array.from(gridEl.querySelectorAll(".account-card")).forEach((card) => {
             const uid = String(card.getAttribute("data-uid") || "").trim();
-            const n = Number(_residentMissedCountsByUid.get(uid) || 0);
+            const houseNo = String(card.getAttribute("data-house") || "").trim();
+            const subUnit = String(card.getAttribute("data-sub") || "").trim();
+            const unitKey = buildUnitKey(houseNo, subUnit);
+            let n = Number(_residentMissedCountsByUid.get(uid) || 0);
+            if (!uid && n === 0) n = Number((unitKey ? _residentMissedCountsByUnitKey.get(unitKey) : 0) || 0);
             const badge = card.querySelector('[data-missed-badge="1"]');
             if (!badge) return;
             badge.textContent = formatBadgeNumber(n);
@@ -523,24 +588,47 @@
           stopResidentMissedCountsSubscription();
           _residentMissedCountsCid = communityId;
           try {
-            _unsubResidentMissedCounts = db
-              .collection("calls")
-              .where("community", "==", communityId)
-              .where("toRole", "==", "admin")
-              .where("status", "==", "missed")
-              .onSnapshot((snap) => {
-                const next = new Map();
-                try {
-                  snap.forEach((doc) => {
-                    const d = doc && doc.data ? (doc.data() || {}) : {};
-                    const fromUid = String(d.fromUid || "").trim();
-                    if (!fromUid) return;
-                    next.set(fromUid, (Number(next.get(fromUid) || 0) + 1));
-                  });
-                } catch {}
-                _residentMissedCountsByUid = next;
-                updateResidentMissedBadgesInGrid();
-              }, () => {});
+            const baseQuery = viewerIsAdminLike
+              ? db.collection("calls").where("community", "==", communityId).limit(150)
+              : db.collection("calls").where("community", "==", communityId).where("toRole", "==", "admin").where("status", "==", "missed");
+
+            _unsubResidentMissedCounts = baseQuery.onSnapshot((snap) => {
+              const next = new Map();
+              const nextUnit = new Map();
+              try {
+                snap.forEach((doc) => {
+                  const callId = String(doc && doc.id ? doc.id : "").trim();
+                  if (callId && _hiddenCallIdSet && _hiddenCallIdSet.has(callId)) return;
+                  const d = doc && doc.data ? (doc.data() || {}) : {};
+                  const st = String(d.status || "").trim();
+                  if (st !== "missed") return;
+
+                  const fromUid = String(d.fromUid || "").trim();
+                  const toUid = String(d.toUid || "").trim();
+                  const fromRoleRaw = String(d.fromRole || "").trim().toLowerCase();
+                  const toRoleRaw = String(d.toRole || "").trim().toLowerCase();
+                  const normCallRole = (raw) => {
+                    const v = String(raw || "").trim().toLowerCase();
+                    if (v === "resident" || v === "住戶") return "resident";
+                    if (v === "admin" || v === "系統管理員" || v === "系統管理者" || v === "system" || v === "community" || v === "社區") return "admin";
+                    return "";
+                  };
+                  const fromRole = normCallRole(fromRoleRaw);
+                  const toRole = normCallRole(toRoleRaw);
+
+                  if (toRole !== "admin") return;
+                  if (fromRole !== "resident") return;
+                  if (!fromUid) return;
+                  next.set(fromUid, (Number(next.get(fromUid) || 0) + 1));
+
+                  const fromUnitKey = buildUnitKey(d.fromHouseNo, d.fromSubHouseNo || d.fromSubUnit || d.subUnit);
+                  if (fromUnitKey) nextUnit.set(fromUnitKey, (Number(nextUnit.get(fromUnitKey) || 0) + 1));
+                });
+              } catch {}
+              _residentMissedCountsByUid = next;
+              _residentMissedCountsByUnitKey = nextUnit;
+              updateResidentMissedBadgesInGrid();
+            }, () => {});
           } catch {
             stopResidentMissedCountsSubscription();
           }
@@ -790,7 +878,7 @@
             const address = String(item.address || "").trim() || "—";
             const initial = pickInitial(item.displayName, houseNo);
             return `
-              <section class="account-card" tabindex="0" role="button" data-uid="${escapeHtml(item.id)}">
+              <section class="account-card" tabindex="0" role="button" data-uid="${escapeHtml(item.id)}" data-house="${escapeHtml(houseNo)}" data-sub="${escapeHtml(subUnit)}">
                 <span class="account-missed-badge" data-missed-badge="1" hidden>0</span>
                 <button class="account-calllog-btn" type="button" data-action="history" aria-label="通話紀錄">
                   <svg viewBox="0 0 24 24" fill="none">
@@ -931,6 +1019,7 @@
             return;
           }
           currentCommunityKey = communityKey;
+          viewerIsAdminLike = resolveViewerIsAdminLike();
 
           try { sessionStorage.setItem("csp_last_cid", communityKey); } catch {}
           try { localStorage.setItem("csp_active_community_v1", communityKey); } catch {}
@@ -1043,7 +1132,7 @@
           fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"B",location:"chatphone.html:startOutgoingResidentCall:target-found",msg:"[DEBUG] target found",data:{targetUid:uid,targetName:String(target.displayName||""),targetHouseNo:String(target.houseNo||""),targetSubUnit:String(target.subUnit||"")},ts:Date.now()})}).catch(()=>{});
           // #endregion
 
-          await cleanupChatCall();
+          cleanupChatCall();
           openCallModal(target);
 
           let pc = null;
@@ -1229,6 +1318,7 @@
           const q = new URLSearchParams();
           if (currentCommunityKey) q.set("c", String(currentCommunityKey));
           q.set("peer", id);
+          if (viewerIsAdminLike) q.set("toRole", "admin");
           const url = q.toString() ? `./callrecord.html?${q.toString()}` : "./callrecord.html";
           historyIframeEl.src = url;
           historyModalEl.hidden = false;
@@ -1254,6 +1344,7 @@
             setStatus("請先登入");
             return;
           }
+          ensureHiddenCallIdsSubscription(user.uid);
           setStatus("載入中...");
           loadAccounts(user).catch((err) => {
             console.error(err);
