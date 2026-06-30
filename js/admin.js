@@ -938,6 +938,10 @@
   let _unsubIntercomMissedCount = null;
   let _intercomMissedCountCid = null;
   let _lastIntercomMissedCount = 0;
+  let _unsubIntercomHiddenCallIds = null;
+  let _intercomHiddenUid = null;
+  let _intercomHiddenCallIdSet = new Set();
+  let _intercomMissedDocsCache = [];
   function stopIntercomMissedCountSubscription() {
     if (_unsubIntercomMissedCount) {
       try { _unsubIntercomMissedCount(); } catch {}
@@ -945,6 +949,58 @@
     }
     _intercomMissedCountCid = null;
     _lastIntercomMissedCount = 0;
+    _intercomMissedDocsCache = [];
+  }
+  function stopIntercomHiddenCallIdsSubscription() {
+    if (_unsubIntercomHiddenCallIds) {
+      try { _unsubIntercomHiddenCallIds(); } catch {}
+      _unsubIntercomHiddenCallIds = null;
+    }
+    _intercomHiddenUid = null;
+    _intercomHiddenCallIdSet = new Set();
+  }
+  function computeIntercomMissedCountFromCache() {
+    const docs = Array.isArray(_intercomMissedDocsCache) ? _intercomMissedDocsCache : [];
+    const normRole = (raw) => {
+      const v = String(raw || "").trim().toLowerCase();
+      if (v === "resident" || v === "住戶") return "resident";
+      if (v === "admin" || v === "系統管理員" || v === "系統管理者" || v === "system" || v === "community" || v === "社區") return "admin";
+      return "";
+    };
+    let n = 0;
+    for (const it of docs) {
+      const callId = String(it && it.id ? it.id : "").trim();
+      if (callId && _intercomHiddenCallIdSet && _intercomHiddenCallIdSet.has(callId)) continue;
+      const d = it && it.data && typeof it.data === "object" ? it.data : {};
+      if (String(d.status || "").trim() !== "missed") continue;
+      const fromRole = normRole(d.fromRole);
+      const toRole = normRole(d.toRole);
+      if (fromRole !== "resident") continue;
+      if (toRole !== "admin") continue;
+      n += 1;
+    }
+    return n;
+  }
+  function ensureIntercomHiddenCallIdsSubscription(uid) {
+    const id = String(uid || "").trim();
+    if (!id) {
+      stopIntercomHiddenCallIdsSubscription();
+      updateIntercomMissedBadges(computeIntercomMissedCountFromCache());
+      return;
+    }
+    if (_intercomHiddenUid === id && _unsubIntercomHiddenCallIds) return;
+    stopIntercomHiddenCallIdsSubscription();
+    _intercomHiddenUid = id;
+    try {
+      _unsubIntercomHiddenCallIds = db.collection("users").doc(id).onSnapshot((snap) => {
+        const data = snap && snap.exists ? (snap.data() || {}) : {};
+        const list = Array.isArray(data.hiddenCallIds) ? data.hiddenCallIds : [];
+        _intercomHiddenCallIdSet = new Set(list.map((x) => String(x || "").trim()).filter(Boolean));
+        updateIntercomMissedBadges(computeIntercomMissedCountFromCache());
+      }, () => {});
+    } catch {
+      stopIntercomHiddenCallIdsSubscription();
+    }
   }
   function updateResidentsNavBadgeCombined() {
     const navBadge = document.getElementById("badgeNavResidents");
@@ -1015,7 +1071,8 @@
         .where("toRole", "==", "admin")
         .where("status", "==", "missed")
         .onSnapshot((snap) => {
-          updateIntercomMissedBadges(snap && typeof snap.size === "number" ? snap.size : 0);
+          _intercomMissedDocsCache = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, data: (d.data() || {}) }));
+          updateIntercomMissedBadges(computeIntercomMissedCountFromCache());
         }, () => {});
     } catch {
       stopIntercomMissedCountSubscription();
@@ -13526,6 +13583,7 @@
     ensureUrlCommunityKey(user).then(() => refreshLoginInfo(user)).catch(() => {});
     const fallback = document.getElementById("userAvatarFallback");
     if (fallback) fallback.textContent = String(user.email || "U").trim().slice(0, 1).toUpperCase() || "U";
+    ensureIntercomHiddenCallIdsSubscription(String(user.uid || ""));
     ensureCommunitiesSubscription(user);
     initIntercomPush(user).catch(() => {});
     handleIntercomDeepLinkFromUrl().catch(() => {});
