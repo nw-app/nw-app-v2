@@ -8359,7 +8359,7 @@
     const accounts = loadAccounts();
     const c = (accounts.communities || []).find((x) => x && String(x.id || "") === String(cid || "")) || null;
     const cname = c ? String(c.name || "").trim() : "";
-    let currentPage = "list"; // "list"、"points"、"pending" 或 "chatphone"
+    let currentPage = "list"; // "list"、"points"、"pending"
 
     // 渲染 subnav 按钮的函数
     const renderSubnav = () => {
@@ -8372,7 +8372,7 @@
         </button>
         <button class="btn btn-sm ${currentPage === "list" ? "btn-primary" : ""}" type="button" id="btnResidentsList">住戶造冊</button>
         <button class="btn btn-sm ${currentPage === "points" ? "btn-primary" : ""}" type="button" id="btnResidentsPoints">住戶點數</button>
-        <button class="btn btn-sm ${currentPage === "chatphone" ? "btn-primary" : ""}" type="button" id="btnChatphone">
+        <button class="btn btn-sm" type="button" id="btnChatphone">
           <span class="badge-inline" id="chatphoneMissedBadge" hidden>0</span>
           對講機
         </button>
@@ -8404,8 +8404,7 @@
       }
       if (chatphoneBtn) {
         chatphoneBtn.onclick = () => {
-          currentPage = "chatphone";
-          renderPage();
+          openChatphoneModal90();
         };
       }
       
@@ -8417,77 +8416,35 @@
     // 初始渲染 subnav
     renderSubnav();
 
+    const openChatphoneModal90 = () => {
+      const communityId = String(cid || "").trim();
+      if (!communityId) return;
+      const modal = ensureChatphoneModal80();
+      let detach = () => {};
+      detach = bindModalClose(modal, () => {
+        const frame = modal.querySelector("#chatphoneFrame80");
+        if (frame) frame.removeAttribute("src");
+        detach();
+      });
+      const titleEl = modal.querySelector("#chatphoneModalTitle");
+      const frame = modal.querySelector("#chatphoneFrame80");
+      const base = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}`;
+      const url = new URL("chatphone.html", base);
+      url.searchParams.set("c", communityId);
+      if (titleEl) titleEl.textContent = `通話${cname ? `｜${String(cname).trim()}` : ""}`;
+      if (frame) frame.src = url.toString();
+      modal.hidden = false;
+    };
+
     const renderPage = () => {
-      // 重新渲染 subnav 以更新 active 状态
       renderSubnav();
-      if (contentEl && contentEl.classList) {
-        contentEl.classList.toggle("chatphone-host", currentPage === "chatphone");
-      }
-      try {
-        const frameBdEl = contentEl && contentEl.closest ? contentEl.closest(".frame-bd") : null;
-        if (frameBdEl && frameBdEl.classList) {
-          frameBdEl.classList.toggle("chatphone-main-padding", currentPage === "chatphone");
-        }
-      } catch {}
-      
       if (currentPage === "list") {
         renderResidentsList();
       } else if (currentPage === "points") {
         renderResidentsPoints();
       } else if (currentPage === "pending") {
         renderPendingResidents();
-      } else if (currentPage === "chatphone") {
-        renderChatphonePage();
       }
-    };
-
-    const renderChatphonePage = () => {
-      const communityId = String(cid || "").trim();
-      if (!communityId) {
-        contentEl.innerHTML = `
-          <section class="card residents-page">
-            <div class="card-hd">
-              <div class="left">
-                <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
-                <div style="min-width:0;">
-                  <h2>對講機</h2>
-                  <p>找不到社區資料</p>
-                </div>
-              </div>
-            </div>
-            <div class="card-bd">
-              <div class="status error">找不到社區資料，無法開啟通話頁面。</div>
-            </div>
-          </section>
-        `.trim();
-        return;
-      }
-      const base = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}`;
-      const url = new URL("chatphone.html", base);
-      url.searchParams.set("c", communityId);
-      contentEl.innerHTML = `
-        <section class="card residents-page">
-          <div class="card-hd">
-            <div class="left">
-              <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
-              <div style="min-width:0;">
-                <h2>對講機${cname ? `｜${escapeHtml(cname)}` : ""}</h2>
-                <p>社區撥號與通話紀錄</p>
-              </div>
-            </div>
-          </div>
-          <div class="card-bd" style="padding:0;flex:1 1 auto;min-height:0;height:100%;">
-            <iframe
-              id="chatphoneFrameInline"
-              title="社區通話"
-              loading="lazy"
-              referrerpolicy="strict-origin-when-cross-origin"
-              style="width:100%;height:100%;border:0;display:block;background:#fff;"
-              src="${escapeHtml(url.toString())}"></iframe>
-          </div>
-        </section>
-      `.trim();
-      updateIntercomMissedBadges(_lastIntercomMissedCount);
     };
 
     const renderResidentsList = () => {
