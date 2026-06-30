@@ -41,26 +41,26 @@
       .chatphone-layout {
         height: 100dvh;
         display: grid;
-        grid-template-rows: 8% 84% 8%;
+        grid-template-rows: 6% 84% 10%;
       }
 
       .chatphone-hd {
         display: flex;
         align-items: center;
-        justify-content: center;
-        background: var(--cp-brand);
-        color: #fff;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.18);
-        padding: calc(10px + env(safe-area-inset-top)) 18px 10px;
+        justify-content: flex-start;
+        background: #fff;
+        color: var(--cp-text);
+        border-bottom: 1px solid var(--cp-border);
+        padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
       }
 
       .chatphone-title {
         margin: 0;
-        text-align: center;
+        text-align: left;
         font-size: 18px;
-        font-weight: 900;
+        font-weight: 400;
         letter-spacing: 0.2px;
-        color: #fff;
+        color: var(--cp-text);
       }
 
       .chatphone-mid {

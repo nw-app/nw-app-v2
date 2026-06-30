@@ -343,6 +343,26 @@
       return;
     }
 
+    try {
+      const ref = db.collection("calls").doc(callId);
+      const snap = await ref.get();
+      const d = snap && snap.exists ? (snap.data() || {}) : null;
+      if (d && String(d.toRole || "").trim() === "resident" && String(d.toUid || "").trim() === String(user.uid)) {
+        const st = String(d.status || "").trim();
+        if (st && st !== "ringing") {
+          try {
+            const q = new URLSearchParams();
+            const cid = String(d.community || "").trim();
+            if (cid) q.set("c", cid);
+            q.set("call", String(callId));
+            q.set("toRole", "resident");
+            location.href = `./callrecord.html?${q.toString()}`;
+            return;
+          } catch {}
+        }
+      }
+    } catch {}
+
     await handleIntercomPushCallId(callId);
     try {
       const u2 = new URL(String(location.href));

@@ -362,6 +362,7 @@ a { color: inherit; text-decoration: none; }
 #facilitySubnavButtons80 > button.btn-primary { background: var(--brand); color: #fff; border-color: rgba(0, 0, 0, 0); }
 
 .frame-bd { overflow: auto; overflow-x: visible; padding: 12px 16px 14px; min-height: 0; }
+.frame-bd.chatphone-main-padding { padding: 8px 12px; }
 .layout.visitor-main-lock .frame-bd { overflow: hidden; }
 .layout.visitor-main-lock #content {
   height: 100%;
@@ -371,6 +372,20 @@ a { color: inherit; text-decoration: none; }
 .layout.visitor-main-lock #content > .card.visitor-page {
   flex: 1 1 auto;
   min-height: 0;
+}
+.frame-bd > #content.chatphone-host {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.frame-bd > #content.chatphone-host > .residents-page.chatphone-page,
+.frame-bd > #content.chatphone-host > section.card.residents-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .grid {
@@ -533,7 +548,6 @@ a { color: inherit; text-decoration: none; }
 #btnNewCommunityPost,
 #btnCourierConfig,
 #btnVisitorQr,
-#btnChatphone,
 #btnUnits,
 #btnPointsSettings,
 #btnFacilityExpense80,
@@ -548,7 +562,6 @@ a { color: inherit; text-decoration: none; }
 #btnNewCommunityPost svg,
 #btnCourierConfig svg,
 #btnVisitorQr svg,
-#btnChatphone svg,
 #btnUnits svg,
 #btnPointsSettings svg,
 #btnFacilityExpense80 svg,
@@ -1544,6 +1557,16 @@ a { color: inherit; text-decoration: none; }
   flex: 0 0 auto;
 }
 .residents-page .resident-item .avatar-sm { cursor: pointer; }
+.residents-page.chatphone-page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.residents-page.chatphone-page .card-bd {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .avatar-sm .avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .avatar-sm .avatar-fallback { font-size: 14px; font-weight: 900; color: rgba(31, 41, 55, 0.8); }
 .avatar-crown {

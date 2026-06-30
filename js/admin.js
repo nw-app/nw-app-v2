@@ -164,6 +164,29 @@
       return;
     }
 
+    try {
+      const ref = db.collection("calls").doc(callId);
+      const snap = await ref.get();
+      const d = snap && snap.exists ? (snap.data() || {}) : null;
+      const cid = String(resolveActiveCommunityId() || "").trim();
+      if (d && String(d.toRole || "").trim() === "admin") {
+        const c = String(d.community || "").trim();
+        if (!cid || !c || c === cid) {
+          const st = String(d.status || "").trim();
+          if (st && st !== "ringing") {
+            try {
+              const q = new URLSearchParams();
+              if (c) q.set("c", c);
+              q.set("call", String(callId));
+              q.set("toRole", "admin");
+              location.href = `./callrecord.html?${q.toString()}`;
+              return;
+            } catch {}
+          }
+        }
+      }
+    } catch {}
+
     await handleIntercomPushCallId(callId);
     try {
       const u2 = new URL(String(location.href));
@@ -8260,7 +8283,7 @@
     if (subnavEl) subnavEl.innerHTML = "";
     if (!Array.isArray(state.communities) || state.communities.length === 0) {
       contentEl.innerHTML = `
-        <section class="card residents-page">
+        <section class="card residents-page chatphone-page">
           <div class="card-hd">
             <div class="left">
               <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
@@ -8283,7 +8306,7 @@
     const accounts = loadAccounts();
     const c = (accounts.communities || []).find((x) => x && String(x.id || "") === String(cid || "")) || null;
     const cname = c ? String(c.name || "").trim() : "";
-    let currentPage = "list"; // "list"、"points" 或 "pending"
+    let currentPage = "list"; // "list"、"points"、"pending" 或 "chatphone"
 
     // 渲染 subnav 按钮的函数
     const renderSubnav = () => {
@@ -8296,12 +8319,14 @@
         </button>
         <button class="btn btn-sm ${currentPage === "list" ? "btn-primary" : ""}" type="button" id="btnResidentsList">住戶造冊</button>
         <button class="btn btn-sm ${currentPage === "points" ? "btn-primary" : ""}" type="button" id="btnResidentsPoints">住戶點數</button>
+        <button class="btn btn-sm ${currentPage === "chatphone" ? "btn-primary" : ""}" type="button" id="btnChatphone">對講機</button>
       `.trim();
       
       // 获取按钮引用
       const pendingBtn = document.getElementById("btnPendingResidents");
       const listBtn = document.getElementById("btnResidentsList");
       const pointsBtn = document.getElementById("btnResidentsPoints");
+      const chatphoneBtn = document.getElementById("btnChatphone");
       
       if (pendingBtn) {
         pendingBtn.onclick = () => {
@@ -8321,6 +8346,12 @@
           renderPage();
         };
       }
+      if (chatphoneBtn) {
+        chatphoneBtn.onclick = () => {
+          currentPage = "chatphone";
+          renderPage();
+        };
+      }
       
       // 确保 pending badge 被正确更新
       ensureResidentsPendingCountSubscription(cid);
@@ -8332,6 +8363,15 @@
     const renderPage = () => {
       // 重新渲染 subnav 以更新 active 状态
       renderSubnav();
+      if (contentEl && contentEl.classList) {
+        contentEl.classList.toggle("chatphone-host", currentPage === "chatphone");
+      }
+      try {
+        const frameBdEl = contentEl && contentEl.closest ? contentEl.closest(".frame-bd") : null;
+        if (frameBdEl && frameBdEl.classList) {
+          frameBdEl.classList.toggle("chatphone-main-padding", currentPage === "chatphone");
+        }
+      } catch {}
       
       if (currentPage === "list") {
         renderResidentsList();
@@ -8339,7 +8379,57 @@
         renderResidentsPoints();
       } else if (currentPage === "pending") {
         renderPendingResidents();
+      } else if (currentPage === "chatphone") {
+        renderChatphonePage();
       }
+    };
+
+    const renderChatphonePage = () => {
+      const communityId = String(cid || "").trim();
+      if (!communityId) {
+        contentEl.innerHTML = `
+          <section class="card residents-page">
+            <div class="card-hd">
+              <div class="left">
+                <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
+                <div style="min-width:0;">
+                  <h2>對講機</h2>
+                  <p>找不到社區資料</p>
+                </div>
+              </div>
+            </div>
+            <div class="card-bd">
+              <div class="status error">找不到社區資料，無法開啟通話頁面。</div>
+            </div>
+          </section>
+        `.trim();
+        return;
+      }
+      const base = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}`;
+      const url = new URL("chatphone.html", base);
+      url.searchParams.set("c", communityId);
+      contentEl.innerHTML = `
+        <section class="card residents-page">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
+              <div style="min-width:0;">
+                <h2>對講機${cname ? `｜${escapeHtml(cname)}` : ""}</h2>
+                <p>社區撥號與通話紀錄</p>
+              </div>
+            </div>
+          </div>
+          <div class="card-bd" style="padding:0;flex:1 1 auto;min-height:0;height:100%;">
+            <iframe
+              id="chatphoneFrameInline"
+              title="社區通話"
+              loading="lazy"
+              referrerpolicy="strict-origin-when-cross-origin"
+              style="width:100%;height:100%;border:0;display:block;background:#fff;"
+              src="${escapeHtml(url.toString())}"></iframe>
+          </div>
+        </section>
+      `.trim();
     };
 
     const renderResidentsList = () => {
@@ -8354,11 +8444,6 @@
               </div>
             </div>
             <div style="display:flex; gap:8px; align-items:center;">
-              <button class="icon-btn sm" type="button" id="btnChatphone" aria-label="通話" title="通話">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M7.8 4.8h2.4c.4 0 .8.3.9.7l.7 3.1c.1.4 0 .8-.3 1.1l-1.4 1.4a13.2 13.2 0 0 0 4.8 4.8l1.4-1.4c.3-.3.7-.4 1.1-.3l3.1.7c.4.1.7.5.7.9v2.4c0 .5-.4 1-1 1C12.4 20.8 3.2 11.6 3.2 5.8c0-.6.4-1 1-1Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                </svg>
-              </button>
               <button class="icon-btn sm" type="button" id="btnUnits" aria-label="戶號列表" title="戶號列表">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M8 7h12M8 12h12M8 17h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
@@ -8388,7 +8473,6 @@
     const statusEl = document.getElementById("residentStatus");
     const searchEl = document.getElementById("residentSearch");
     const addBtn = document.getElementById("btnAddResident");
-    const chatphoneBtn = document.getElementById("btnChatphone");
     const unitsBtn = document.getElementById("btnUnits");
     const unitTotalEl = document.getElementById("unitTotal");
     const peopleTotalEl = document.getElementById("peopleTotal");
@@ -8594,7 +8678,6 @@
 
     if (searchEl) searchEl.addEventListener("input", renderList);
     if (addBtn) addBtn.addEventListener("click", () => openResidentEditor("create"));
-    if (chatphoneBtn) chatphoneBtn.addEventListener("click", openChatphoneWindow);
     if (unitsBtn) unitsBtn.addEventListener("click", openUnitsEditor);
 
     if (listEl) {

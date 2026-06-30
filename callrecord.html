@@ -13,24 +13,130 @@
     <link rel="stylesheet" href="css/member.css" />
     <link rel="stylesheet" href="css/pwa.css" />
     <style>
-      .callrecord-page { min-height: 100dvh; display: flex; flex-direction: column; }
-      .callrecord-hd {
-        background: linear-gradient(180deg, #c62828 0%, #d32f2f 45%, #b71c1c 100%);
-        color: #fff;
-        padding: 12px 14px;
+      html, body { height: 100%; }
+      body { overflow: hidden; }
+      .callrecord-page { height: 100dvh; display: flex; flex-direction: column; }
+      .callrecord-bd {
+        flex: 1 1 auto;
+        min-height: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .callrecord-content {
+        flex: 1 1 auto;
+        min-height: 0;
+        padding: 0;
+      }
+      .callrecord-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: none;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        background: rgba(255, 255, 255, 0.96);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid rgba(17, 24, 39, 0.08);
+      }
+      .callrecord-toolbar.active {
+        display: flex;
+      }
+      .callrecord-toolbar-count {
+        margin-right: auto;
+        font-size: 13px;
+        font-weight: 800;
+      }
+      .callrecord-card {
+        height: 100%;
+        border-radius: 0;
+        border: 0;
+        box-shadow: none;
+      }
+      .callrecord-list {
+        height: 100%;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 14px;
+      }
+      .callrecord-item {
+        position: relative;
         display: grid;
-        grid-template-columns: auto 1fr auto;
+        grid-template-columns: 44px 1fr;
         gap: 12px;
         align-items: center;
+        padding: 12px;
+        border-radius: var(--radius-sm);
+        background: #fff;
+        border: 1px solid rgba(17, 24, 39, 0.1);
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
       }
-      .callrecord-hd-center { text-align: center; min-width: 0; }
-      .callrecord-hd-title { font-weight: 900; letter-spacing: 0.2px; }
-      .callrecord-hd-sub { font-size: 12px; opacity: 0.92; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .callrecord-bd { flex: 1 1 auto; min-height: 0; padding: 14px; }
-      .callrecord-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
-      .callrecord-kv { display: grid; grid-template-columns: 92px 1fr; gap: 8px 12px; align-items: start; }
-      .callrecord-k { font-size: 12px; color: var(--muted); padding-top: 2px; }
-      .callrecord-v { font-size: 14px; word-break: break-word; }
+      .callrecord-item.selected {
+        border-color: rgba(211, 47, 47, 0.28);
+        box-shadow: 0 10px 24px rgba(211, 47, 47, 0.1);
+      }
+      .callrecord-check {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 22px;
+        height: 22px;
+        border-radius: 999px;
+        border: 1px solid rgba(17, 24, 39, 0.16);
+        background: #fff;
+        color: #fff;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 900;
+      }
+      .selection-mode .callrecord-check {
+        display: inline-flex;
+      }
+      .callrecord-item.selected .callrecord-check {
+        background: #d32f2f;
+        border-color: #d32f2f;
+      }
+      .callrecord-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        background: rgba(211, 47, 47, 0.08);
+        color: #b71c1c;
+      }
+      .callrecord-icon.incoming {
+        background: rgba(37, 99, 235, 0.1);
+        color: #1d4ed8;
+      }
+      .callrecord-icon svg {
+        width: 20px;
+        height: 20px;
+      }
+      .callrecord-main {
+        min-width: 0;
+      }
+      .callrecord-name {
+        font-size: 15px;
+        font-weight: 900;
+        line-height: 1.35;
+        word-break: break-word;
+      }
+      .callrecord-meta {
+        margin-top: 6px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .callrecord-time {
+        font-size: 12px;
+        color: var(--muted);
+      }
       .callrecord-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
       .callrecord-err { color: #9f1c1c; font-size: 13px; padding: 8px 0; }
     </style>
@@ -38,16 +144,15 @@
   <body>
     <div class="callrecord-page">
       <main class="callrecord-bd">
-        <section class="content" aria-live="polite">
-          <div class="card">
-            <div class="card-hd">
-              <div>
-                <h2>最近通話</h2>
-                <p>僅顯示與你相關的紀錄</p>
-              </div>
-              <button class="btn" type="button" id="btnReload">重新整理</button>
+        <section class="content callrecord-content" aria-live="polite">
+          <div class="card callrecord-card">
+            <div class="callrecord-toolbar" id="selectionToolbar">
+              <div class="callrecord-toolbar-count" id="selectionCount">已選取 0 筆</div>
+              <button class="btn" type="button" id="btnSelectAll">全選</button>
+              <button class="btn" type="button" id="btnCancelSelection">取消</button>
+              <button class="btn btn-primary" type="button" id="btnDeleteSelected">刪除</button>
             </div>
-            <div class="card-bd">
+            <div class="card-bd callrecord-list">
               <div class="list" id="historyList"></div>
             </div>
           </div>
@@ -70,6 +175,7 @@
         try { firebase.initializeApp(firebaseConfig); } catch {}
         const auth = firebase.auth();
         const db = firebase.firestore();
+        const FieldValue = firebase.firestore.FieldValue;
         try {
           db.settings({
             experimentalAutoDetectLongPolling: true,
@@ -79,13 +185,24 @@
           });
         } catch {}
 
-        const btnReload = document.getElementById("btnReload");
         const historyListEl = document.getElementById("historyList");
+        const selectionToolbarEl = document.getElementById("selectionToolbar");
+        const selectionCountEl = document.getElementById("selectionCount");
+        const btnSelectAll = document.getElementById("btnSelectAll");
+        const btnCancelSelection = document.getElementById("btnCancelSelection");
+        const btnDeleteSelected = document.getElementById("btnDeleteSelected");
 
         const params = new URLSearchParams(location.search || "");
         const community = String(params.get("c") || "").trim();
         const peerUid = String(params.get("peer") || "").trim();
         const toRoleHint = String(params.get("toRole") || "").trim();
+        let currentUserId = "";
+        let currentItems = [];
+        let hiddenCallIdSet = new Set();
+        let selectionMode = false;
+        let selectedIds = new Set();
+        let longPressTimer = null;
+        let longPressMeta = null;
 
         function esc(s) {
           return String(s ?? "").replace(/[&<>"']/g, (ch) => ({
@@ -133,41 +250,179 @@
           return "";
         }
 
-        function renderHistory(items) {
-          const arr = Array.isArray(items) ? items : [];
+        function pickPeerInfo(data, currentUid) {
+          const d = data && typeof data === "object" ? data : {};
+          const uid = String(currentUid || "").trim();
+          const fromUid = String(d.fromUid || "").trim();
+          const toUid = String(d.toUid || "").trim();
+          const outgoing = !!uid && fromUid === uid && toUid !== uid;
+          const incoming = !!uid && toUid === uid && fromUid !== uid;
+          if (outgoing) {
+            return {
+              direction: "outgoing",
+              name: String(d.toName || "").trim() || "通話對象",
+              unit: [String(d.toHouseNo || "").trim(), String(d.toSubUnit || "").trim()].filter(Boolean).join("-"),
+            };
+          }
+          if (incoming) {
+            return {
+              direction: "incoming",
+              name: String(d.fromName || "").trim() || "通話對象",
+              unit: String(d.fromHouseNo || "").trim(),
+            };
+          }
+          const fallbackIsOutgoing = String(d.fromRole || "").trim() === "resident";
+          return {
+            direction: fallbackIsOutgoing ? "outgoing" : "incoming",
+            name: fallbackIsOutgoing
+              ? (String(d.toName || "").trim() || "通話對象")
+              : (String(d.fromName || "").trim() || "通話對象"),
+            unit: fallbackIsOutgoing
+              ? [String(d.toHouseNo || "").trim(), String(d.toSubUnit || "").trim()].filter(Boolean).join("-")
+              : String(d.fromHouseNo || "").trim(),
+          };
+        }
+
+        function renderDirectionIcon(direction) {
+          if (String(direction || "") === "incoming") {
+            return `
+              <div class="callrecord-icon incoming" aria-label="接入" title="接入">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M7 7h10v10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M17 7 7 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            `;
+          }
+          return `
+            <div class="callrecord-icon" aria-label="撥出" title="撥出">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M17 17H7V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M7 17 17 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          `;
+        }
+
+        function updateSelectionToolbar() {
+          if (!selectionToolbarEl || !selectionCountEl) return;
+          selectionToolbarEl.classList.toggle("active", selectionMode);
+          selectionCountEl.textContent = `已選取 ${selectedIds.size} 筆`;
+        }
+
+        function exitSelectionMode() {
+          selectionMode = false;
+          selectedIds = new Set();
+          updateSelectionToolbar();
+          historyListEl.classList.remove("selection-mode");
+          Array.from(historyListEl.querySelectorAll(".callrecord-item")).forEach((el) => {
+            el.classList.remove("selected");
+          });
+        }
+
+        function enterSelectionMode(id) {
+          selectionMode = true;
+          historyListEl.classList.add("selection-mode");
+          if (id) selectedIds.add(String(id));
+          updateSelectionToolbar();
+        }
+
+        function toggleSelected(id) {
+          const key = String(id || "").trim();
+          if (!key) return;
+          if (!selectionMode) enterSelectionMode(key);
+          else if (selectedIds.has(key)) selectedIds.delete(key);
+          else selectedIds.add(key);
+          if (selectionMode && selectedIds.size === 0) {
+            exitSelectionMode();
+            return;
+          }
+          updateSelectionToolbar();
+          Array.from(historyListEl.querySelectorAll(".callrecord-item")).forEach((el) => {
+            const itemId = String(el.getAttribute("data-id") || "").trim();
+            el.classList.toggle("selected", selectedIds.has(itemId));
+          });
+        }
+
+        function renderHistory(items, currentUid) {
+          const arr = Array.isArray(items) ? items.filter((d) => !hiddenCallIdSet.has(String(d && d.id || "").trim())) : [];
+          currentItems = arr.slice();
           if (!arr.length) {
+            exitSelectionMode();
             historyListEl.innerHTML = `<p class="callrecord-empty">${esc(peerUid ? "目前沒有此對象的通話紀錄" : "目前沒有通話紀錄")}</p>`;
             return;
           }
           historyListEl.innerHTML = arr.map((it) => {
             const d = it && typeof it === "object" ? it : {};
             const st = String(d.status || "").trim();
-            const fromName = String(d.fromName || "").trim();
-            const fromHouseNo = String(d.fromHouseNo || "").trim();
+            const peer = pickPeerInfo(d, currentUid);
             const t = fmtTime(Number(d.createdAtMs || 0)) || "";
-            const title = [fromName, fromHouseNo].filter(Boolean).join("｜") || "通話";
-            const sub = [statusText(st), t].filter(Boolean).join("　") || "—";
+            const title = [peer.name, peer.unit].filter(Boolean).join("｜") || "通話對象";
             return `
-              <div class="item">
-                <div>
-                  <div style="font-weight: 900;">${esc(title)}</div>
-                  <div class="meta">
+              <div class="callrecord-item${selectedIds.has(String(d.id || "").trim()) ? " selected" : ""}" data-id="${esc(d.id || "")}">
+                <div class="callrecord-check">✓</div>
+                ${renderDirectionIcon(peer.direction)}
+                <div class="callrecord-main">
+                  <div class="callrecord-name">${esc(title)}</div>
+                  <div class="callrecord-meta">
                     <span class="tag ${esc(statusTagClass(st))}">${esc(statusText(st))}</span>
-                    <span class="tag">${esc(t || "—")}</span>
+                    <div class="callrecord-time">${esc(t || "—")}</div>
                   </div>
                 </div>
-                <div class="tag">${esc(sub)}</div>
               </div>
             `;
           }).join("");
+          historyListEl.classList.toggle("selection-mode", selectionMode);
+          updateSelectionToolbar();
+        }
+
+        async function loadHiddenCallIds(user) {
+          const uid = user && user.uid ? String(user.uid).trim() : "";
+          hiddenCallIdSet = new Set();
+          if (!uid) return;
+          try {
+            const snap = await db.collection("users").doc(uid).get();
+            const data = snap && snap.exists ? (snap.data() || {}) : {};
+            const raw = Array.isArray(data.hiddenCallIds) ? data.hiddenCallIds : [];
+            hiddenCallIdSet = new Set(raw.map((x) => String(x || "").trim()).filter(Boolean));
+          } catch {
+            hiddenCallIdSet = new Set();
+          }
+        }
+
+        async function deleteSelectedForCurrentUser() {
+          if (!currentUserId || !selectedIds.size) return;
+          const ids = Array.from(selectedIds).map((x) => String(x || "").trim()).filter(Boolean);
+          if (!ids.length) return;
+          try {
+            btnDeleteSelected.disabled = true;
+            await db.collection("users").doc(currentUserId).set(
+              {
+                hiddenCallIds: FieldValue.arrayUnion(...ids),
+                hiddenCallIdsUpdatedAtMs: Date.now(),
+              },
+              { merge: true }
+            );
+            ids.forEach((id) => hiddenCallIdSet.add(id));
+            currentItems = currentItems.filter((item) => !hiddenCallIdSet.has(String(item && item.id || "").trim()));
+            exitSelectionMode();
+            renderHistory(currentItems, currentUserId);
+          } catch {
+            historyListEl.insertAdjacentHTML("afterbegin", `<p class="callrecord-err">${esc("刪除失敗，請稍後再試")}</p>`);
+          } finally {
+            btnDeleteSelected.disabled = false;
+          }
         }
 
         async function loadHistory(user) {
           const u = user && user.uid ? String(user.uid).trim() : "";
+          currentUserId = u;
           if (!u) {
+            exitSelectionMode();
             historyListEl.innerHTML = `<p class="callrecord-empty">${esc("請先登入後查看通話紀錄")}</p>`;
             return;
           }
+          await loadHiddenCallIds(user);
           historyListEl.innerHTML = `<p class="callrecord-empty">${esc("載入中...")}</p>`;
 
           try {
@@ -197,15 +452,70 @@
               if (bm !== am) return bm - am;
               return String(b && b.id || "").localeCompare(String(a && a.id || ""), "en");
             });
-            renderHistory(out);
+            renderHistory(out, u);
           } catch {
+            exitSelectionMode();
             historyListEl.innerHTML = `<p class="callrecord-err">${esc("載入通話紀錄失敗（權限不足或網路異常）")}</p>`;
           }
         }
 
-        btnReload.onclick = () => {
-          loadHistory(auth.currentUser).catch(() => {});
+        if (btnSelectAll) {
+          btnSelectAll.onclick = () => {
+            selectionMode = true;
+            selectedIds = new Set(currentItems.map((item) => String(item && item.id || "").trim()).filter(Boolean));
+            renderHistory(currentItems, currentUserId);
+          };
+        }
+
+        if (btnCancelSelection) btnCancelSelection.onclick = exitSelectionMode;
+        if (btnDeleteSelected) btnDeleteSelected.onclick = () => { deleteSelectedForCurrentUser().catch(() => {}); };
+
+        historyListEl.addEventListener("click", (ev) => {
+          const item = ev.target && ev.target.closest ? ev.target.closest(".callrecord-item") : null;
+          if (!item) return;
+          const id = String(item.getAttribute("data-id") || "").trim();
+          if (!id) return;
+          if (!selectionMode) return;
+          toggleSelected(id);
+        });
+
+        historyListEl.addEventListener("pointerdown", (ev) => {
+          const item = ev.target && ev.target.closest ? ev.target.closest(".callrecord-item") : null;
+          if (!item || selectionMode) return;
+          longPressMeta = {
+            id: String(item.getAttribute("data-id") || "").trim(),
+            x: Number(ev.clientX || 0),
+            y: Number(ev.clientY || 0),
+          };
+          longPressTimer = window.setTimeout(() => {
+            const id = longPressMeta && longPressMeta.id ? String(longPressMeta.id) : "";
+            longPressTimer = null;
+            longPressMeta = null;
+            if (!id) return;
+            enterSelectionMode(id);
+            renderHistory(currentItems, currentUserId);
+          }, 520);
+        }, { passive: true });
+
+        historyListEl.addEventListener("pointermove", (ev) => {
+          if (!longPressTimer || !longPressMeta) return;
+          const dx = Math.abs(Number(ev.clientX || 0) - longPressMeta.x);
+          const dy = Math.abs(Number(ev.clientY || 0) - longPressMeta.y);
+          if (dx > 10 || dy > 10) {
+            window.clearTimeout(longPressTimer);
+            longPressTimer = null;
+            longPressMeta = null;
+          }
+        }, { passive: true });
+
+        const clearLongPress = () => {
+          if (longPressTimer) window.clearTimeout(longPressTimer);
+          longPressTimer = null;
+          longPressMeta = null;
         };
+        historyListEl.addEventListener("pointerup", clearLongPress, { passive: true });
+        historyListEl.addEventListener("pointercancel", clearLongPress, { passive: true });
+        historyListEl.addEventListener("pointerleave", clearLongPress, { passive: true });
 
         auth.onAuthStateChanged((user) => {
           loadHistory(user).catch(() => {});
