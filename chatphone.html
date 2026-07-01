@@ -1072,6 +1072,9 @@
               docs
                 .map((doc) => {
                   const data = doc.data() || {};
+                  const role = normalizeSessionRoleText(data.role);
+                  if (role !== "resident") return null;
+                  if (String(doc.id || "").trim() === String(user.uid || "").trim()) return null;
                   const houseNo = normalizeUnit(data.houseNo || data.unit);
                   const subUnit = normalizeUnit(data.subUnit || data.subHouseNo);
                   const unitMeta = unitMetaMap.get(String(houseNo || "").toLowerCase()) || null;
@@ -1086,11 +1089,12 @@
                     building: building || "未設定",
                   };
                 })
+                .filter(Boolean)
             )
           ).sort((a, b) => compareUnit(a.houseNo, b.houseNo) || compareUnit(a.subUnit, b.subUnit) || compareUnit(a.displayName, b.displayName));
 
           if (!allAccounts.length) {
-            setStatus("目前沒有帳號資料");
+            setStatus("目前沒有住戶帳號資料");
             renderFilters();
             return;
           }

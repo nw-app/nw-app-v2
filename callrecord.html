@@ -408,6 +408,13 @@
           return toRoleHint === "admin" && !!peerUid;
         }
 
+        function isCommunityIncomingAdminCall(data) {
+          const d = data && typeof data === "object" ? data : {};
+          if (String(d.community || "").trim() !== community) return false;
+          if (normalizeCallRole(d.toRole) !== "admin") return false;
+          return normalizeCallRole(d.fromRole) === "resident";
+        }
+
         function pickPeerInfo(data, currentUid) {
           const d = data && typeof data === "object" ? data : {};
           const uid = String(currentUid || "").trim();
@@ -812,7 +819,16 @@
                   });
                   emit();
                 }, onError);
-                _unsubHistory = () => { try { unsub1(); } catch {} try { unsub2(); } catch {} };
+                const unsub3 = db.collection("calls").where("toRole", "==", "admin").limit(500).onSnapshot((snap) => {
+                  (snap && snap.docs ? snap.docs : []).forEach((doc) => {
+                    const d = { id: doc.id, ...(doc.data() || {}) };
+                    if (!isCommunityIncomingAdminCall(d)) return;
+                    if (String(d && d.fromUid || "").trim() !== peerUid) return;
+                    byId.set(doc.id, d);
+                  });
+                  emit();
+                }, onError);
+                _unsubHistory = () => { try { unsub1(); } catch {} try { unsub2(); } catch {} try { unsub3(); } catch {} };
                 return;
               }
 
@@ -838,7 +854,15 @@
                 });
                 emit();
               });
-              _unsubHistory = () => { try { unsub1(); } catch {} try { unsub2(); } catch {} };
+              const unsub3 = db.collection("calls").where("toRole", "==", "admin").limit(500).onSnapshot((snap) => {
+                (snap && snap.docs ? snap.docs : []).forEach((doc) => {
+                  const d = { id: doc.id, ...(doc.data() || {}) };
+                  if (!isCommunityIncomingAdminCall(d)) return;
+                  byId.set(doc.id, d);
+                });
+                emit();
+              });
+              _unsubHistory = () => { try { unsub1(); } catch {} try { unsub2(); } catch {} try { unsub3(); } catch {} };
               return;
             } else {
               const map = new Map();

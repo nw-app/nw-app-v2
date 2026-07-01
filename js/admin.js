@@ -228,6 +228,8 @@
     currentCommunityUnits: [],
     currentResidentsCommunityId: "",
     reloadResidents: null,
+    currentUserUid: "",
+    currentUserRole: "",
   };
 
   const pad2 = (n) => String(n).padStart(2, "0");
@@ -683,6 +685,78 @@
     return "";
   }
 
+  function currentRoleText() {
+    const fromState = normalizeRoleText(state.currentUserRole);
+    if (fromState) return fromState;
+    try {
+      return normalizeRoleText(sessionStorage.getItem("csp_role") || "");
+    } catch {
+      return "";
+    }
+  }
+
+  function isCurrentSystemAdmin() {
+    return currentRoleText() === "admin";
+  }
+
+  function isCurrentCommunityRole() {
+    return currentRoleText() === "community";
+  }
+
+  function getResidentsSubnavCommunityTabs() {
+    const cfg = loadConfig(resolveActiveCommunityId());
+    const gate = cfg && cfg.residentsSubnav && typeof cfg.residentsSubnav === "object" ? cfg.residentsSubnav : null;
+    const tabs = gate && gate.communityTabs && typeof gate.communityTabs === "object" ? gate.communityTabs : null;
+    const legacyEnabled = gate && Object.prototype.hasOwnProperty.call(gate, "communityEnabled") ? gate.communityEnabled !== false : true;
+    const base = {
+      list: true,
+      points: true,
+      pending: true,
+      chatphone: true,
+    };
+    if (!legacyEnabled) {
+      return { list: false, points: false, pending: false, chatphone: false };
+    }
+    return {
+      list: tabs && Object.prototype.hasOwnProperty.call(tabs, "list") ? tabs.list !== false : base.list,
+      points: tabs && Object.prototype.hasOwnProperty.call(tabs, "points") ? tabs.points !== false : base.points,
+      pending: tabs && Object.prototype.hasOwnProperty.call(tabs, "pending") ? tabs.pending !== false : base.pending,
+      chatphone: tabs && Object.prototype.hasOwnProperty.call(tabs, "chatphone") ? tabs.chatphone !== false : base.chatphone,
+    };
+  }
+
+  function getCareSubnavCommunityTabs() {
+    const cfg = loadConfig(resolveActiveCommunityId());
+    const gate = cfg && cfg.careSubnav && typeof cfg.careSubnav === "object" ? cfg.careSubnav : null;
+    const tabs = gate && gate.communityTabs && typeof gate.communityTabs === "object" ? gate.communityTabs : null;
+    const base = {
+      sos: true,
+      "72h": true,
+      reminder: true,
+    };
+    return {
+      sos: tabs && Object.prototype.hasOwnProperty.call(tabs, "sos") ? tabs.sos !== false : base.sos,
+      "72h": tabs && Object.prototype.hasOwnProperty.call(tabs, "72h") ? tabs["72h"] !== false : base["72h"],
+      reminder: tabs && Object.prototype.hasOwnProperty.call(tabs, "reminder") ? tabs.reminder !== false : base.reminder,
+    };
+  }
+
+  function isCareSubnavEnabledForCommunity() {
+    const t = getCareSubnavCommunityTabs();
+    return !!(t && (t.sos || t["72h"] || t.reminder));
+  }
+
+  function isResidentsSubnavEnabledForCommunity() {
+    const t = getResidentsSubnavCommunityTabs();
+    return !!(t && (t.list || t.points || t.pending || t.chatphone));
+  }
+
+  function canCurrentUserUseResidentsSubnav() {
+    if (isCurrentSystemAdmin()) return true;
+    if (isCurrentCommunityRole()) return isResidentsSubnavEnabledForCommunity();
+    return false;
+  }
+
   function creatorLabelFromUserData(data) {
     const d = data && typeof data === "object" ? data : {};
     const role = normalizeRoleText(d.role);
@@ -942,14 +1016,22 @@
   let _intercomHiddenUid = null;
   let _intercomHiddenCallIdSet = new Set();
   let _intercomMissedDocsCache = [];
+  let _intercomMissedDocsByStatus = new Map();
   function stopIntercomMissedCountSubscription() {
     if (_unsubIntercomMissedCount) {
-      try { _unsubIntercomMissedCount(); } catch {}
+      try {
+        if (Array.isArray(_unsubIntercomMissedCount)) {
+          _unsubIntercomMissedCount.forEach((fn) => { try { if (typeof fn === "function") fn(); } catch {} });
+        } else {
+          _unsubIntercomMissedCount();
+        }
+      } catch {}
       _unsubIntercomMissedCount = null;
     }
     _intercomMissedCountCid = null;
     _lastIntercomMissedCount = 0;
     _intercomMissedDocsCache = [];
+    _intercomMissedDocsByStatus = new Map();
   }
   function stopIntercomHiddenCallIdsSubscription() {
     if (_unsubIntercomHiddenCallIds) {
@@ -967,16 +1049,32 @@
       if (v === "admin" || v === "系統管理員" || v === "系統管理者" || v === "system" || v === "community" || v === "社區") return "admin";
       return "";
     };
+    const isAnsweredCall = (data) => {
+      const d = data && typeof data === "object" ? data : {};
+      const st = String(d.status || "").trim();
+      if (st === "accepted") return true;
+      const ans = d.answer && typeof d.answer === "object" ? d.answer : null;
+      if (ans && ans.sdp) return true;
+      return false;
+    };
+    const isMissedCall = (data) => {
+      const d = data && typeof data === "object" ? data : {};
+      if (isAnsweredCall(d)) return false;
+      const st = String(d.status || "").trim();
+      if (st === "missed" || st === "rejected" || st === "busy") return true;
+      if (st === "ended") return true;
+      return false;
+    };
     let n = 0;
     for (const it of docs) {
       const callId = String(it && it.id ? it.id : "").trim();
       if (callId && _intercomHiddenCallIdSet && _intercomHiddenCallIdSet.has(callId)) continue;
       const d = it && it.data && typeof it.data === "object" ? it.data : {};
-      if (String(d.status || "").trim() !== "missed") continue;
       const fromRole = normRole(d.fromRole);
       const toRole = normRole(d.toRole);
       if (fromRole !== "resident") continue;
       if (toRole !== "admin") continue;
+      if (!isMissedCall(d)) continue;
       n += 1;
     }
     return n;
@@ -1065,15 +1163,30 @@
     stopIntercomMissedCountSubscription();
     _intercomMissedCountCid = communityId;
     try {
-      _unsubIntercomMissedCount = db
+      const statuses = ["missed", "rejected", "busy", "ended"];
+      _intercomMissedDocsByStatus = new Map();
+      const mergeCache = () => {
+        const byId = new Map();
+        Array.from(_intercomMissedDocsByStatus.values()).forEach((arr) => {
+          (Array.isArray(arr) ? arr : []).forEach((it) => {
+            const id = String(it && it.id ? it.id : "").trim();
+            if (!id) return;
+            byId.set(id, it);
+          });
+        });
+        _intercomMissedDocsCache = Array.from(byId.values());
+        updateIntercomMissedBadges(computeIntercomMissedCountFromCache());
+      };
+      _unsubIntercomMissedCount = statuses.map((st) => db
         .collection("calls")
         .where("community", "==", communityId)
         .where("toRole", "==", "admin")
-        .where("status", "==", "missed")
+        .where("status", "==", st)
         .onSnapshot((snap) => {
-          _intercomMissedDocsCache = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, data: (d.data() || {}) }));
-          updateIntercomMissedBadges(computeIntercomMissedCountFromCache());
-        }, () => {});
+          const next = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, data: (d.data() || {}) }));
+          _intercomMissedDocsByStatus.set(st, next);
+          mergeCache();
+        }, () => {}));
     } catch {
       stopIntercomMissedCountSubscription();
     }
@@ -3318,6 +3431,142 @@
       </div>
     `.trim();
     return modal;
+  }
+
+  function ensureResidentsSubnavSettingsModal80() {
+    const modal = ensureModal("residentsSubnavSettingsModal80", "modal-residents-subnav-settings", "80%");
+    if (modal.dataset.initialized === "1") return modal;
+    modal.dataset.initialized = "1";
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="residentsSubnavSettingsTitle" style="width:min(900px,80vw);max-width:80vw;max-height:80vh;display:flex;flex-direction:column;">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="residentsSubnavSettingsTitle">子分頁設定</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body" style="display:flex;flex-direction:column;gap:16px;">
+          <div style="padding:16px 18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#f9fafb;">
+            <div style="font-size:16px;font-weight:800;color:#111827;">社區角色子分頁</div>
+            <div style="margin-top:6px;color:#6b7280;line-height:1.65;">控制社區角色是否顯示住戶模組上方子分頁列。每個子分頁可獨立開關；關閉的子分頁在社區角色下不顯示且不可操作。</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#fff;">
+            <div id="residentsSubnavSettingsHint" style="color:#6b7280;">請設定社區角色可見的子分頁</div>
+            ${[
+              { id: "pending", label: "待審帳號" },
+              { id: "list", label: "住戶造冊" },
+              { id: "points", label: "住戶點數" },
+              { id: "chatphone", label: "對講機" },
+            ].map((x) => `
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 12px;border:1px solid rgba(17,24,39,0.08);border-radius:14px;background:#f9fafb;">
+                <div style="font-size:15px;font-weight:800;color:#111827;">${x.label}</div>
+                <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
+                  <span data-subnav-off="${x.id}" style="font-weight:700;color:#9ca3af;">關閉</span>
+                  <label class="switch" aria-label="切換 ${x.label}">
+                    <input type="checkbox" data-subnav-toggle="${x.id}" />
+                    <span class="slider"></span>
+                  </label>
+                  <span data-subnav-on="${x.id}" style="font-weight:700;color:#15803d;">開啟</span>
+                </div>
+              </div>
+            `.trim()).join("")}
+          </div>
+          <div class="status" id="residentsSubnavSettingsStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+          <button class="btn btn-primary" type="button" id="btnSaveResidentsSubnavSettings">儲存</button>
+        </div>
+      </div>
+    `.trim();
+    return modal;
+  }
+
+  function openResidentsSubnavSettingsModal80({ communityId, communityName }) {
+    if (!isCurrentSystemAdmin()) {
+      toast("只有系統管理員可設定");
+      return;
+    }
+    const cid = String(communityId || "").trim();
+    if (!cid) {
+      toast("缺少社區資料");
+      return;
+    }
+    const modal = ensureResidentsSubnavSettingsModal80();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => {
+      detach();
+    });
+    const titleEl = modal.querySelector("#residentsSubnavSettingsTitle");
+    const hintEl = modal.querySelector("#residentsSubnavSettingsHint");
+    const statusEl = modal.querySelector("#residentsSubnavSettingsStatus");
+    const saveBtn = modal.querySelector("#btnSaveResidentsSubnavSettings");
+    const currentTabs = getResidentsSubnavCommunityTabs();
+    if (titleEl) titleEl.textContent = `子分頁設定${communityName ? `｜${String(communityName).trim()}` : ""}`;
+    const toggleEls = Array.from(modal.querySelectorAll("[data-subnav-toggle]"));
+    const syncToggleText = () => {
+      const next = {};
+      toggleEls.forEach((el) => {
+        const key = String(el.getAttribute("data-subnav-toggle") || "").trim();
+        if (!key) return;
+        next[key] = !!el.checked;
+        const off = modal.querySelector(`[data-subnav-off="${CSS.escape(key)}"]`);
+        const on = modal.querySelector(`[data-subnav-on="${CSS.escape(key)}"]`);
+        if (off) off.style.color = el.checked ? "#9ca3af" : "#b91c1c";
+        if (on) on.style.color = el.checked ? "#15803d" : "#9ca3af";
+      });
+      const any = !!(next.pending || next.list || next.points || next.chatphone);
+      if (hintEl) hintEl.textContent = any ? "至少保留一個子分頁為開啟，社區角色才會顯示子分頁列。" : "目前全部關閉：社區角色不顯示子分頁列且不可使用。";
+    };
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const text = String(msg || "").trim();
+      statusEl.hidden = !text;
+      statusEl.textContent = text;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+    toggleEls.forEach((el) => {
+      const key = String(el.getAttribute("data-subnav-toggle") || "").trim();
+      if (!key) return;
+      el.checked = !!(currentTabs && Object.prototype.hasOwnProperty.call(currentTabs, key) ? currentTabs[key] : true);
+      el.onchange = syncToggleText;
+    });
+    syncToggleText();
+    if (saveBtn) {
+      saveBtn.onclick = async () => {
+        const nextTabs = {};
+        toggleEls.forEach((el) => {
+          const key = String(el.getAttribute("data-subnav-toggle") || "").trim();
+          if (!key) return;
+          nextTabs[key] = !!el.checked;
+        });
+        setStatus("儲存中...", false);
+        try {
+          await configDocRef(cid).set(
+            {
+              residentsSubnav: {
+                communityEnabled: !!(nextTabs.pending || nextTabs.list || nextTabs.points || nextTabs.chatphone),
+                communityTabs: {
+                  pending: !!nextTabs.pending,
+                  list: !!nextTabs.list,
+                  points: !!nextTabs.points,
+                  chatphone: !!nextTabs.chatphone,
+                },
+              },
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+          setStatus("已儲存", false);
+          setTimeout(() => {
+            modal.hidden = true;
+            detach();
+          }, 350);
+        } catch {
+          setStatus("儲存失敗", true);
+        }
+      };
+    }
+    modal.hidden = false;
   }
 
   function ensurePendingResidentsModal80() {
@@ -8421,18 +8670,26 @@
     // 渲染 subnav 按钮的函数
     const renderSubnav = () => {
       if (!subnavEl) return;
-      
+      if (!canCurrentUserUseResidentsSubnav()) {
+        subnavEl.innerHTML = "";
+        return;
+      }
+      const t = isCurrentCommunityRole() ? getResidentsSubnavCommunityTabs() : { pending: true, list: true, points: true, chatphone: true };
+      const allowPending = !isCurrentCommunityRole() || !!t.pending;
+      const allowList = !isCurrentCommunityRole() || !!t.list;
+      const allowPoints = !isCurrentCommunityRole() || !!t.points;
+      const allowChatphone = !isCurrentCommunityRole() || !!t.chatphone;
       subnavEl.innerHTML = `
-        <button class="btn btn-sm ${currentPage === "pending" ? "btn-primary" : ""}" type="button" id="btnPendingResidents">
+        ${allowPending ? `<button class="btn btn-sm ${currentPage === "pending" ? "btn-primary" : ""}" type="button" id="btnPendingResidents">
           <span class="badge-inline" id="pendingBadge" hidden>0</span>
           待審帳號
-        </button>
-        <button class="btn btn-sm ${currentPage === "list" ? "btn-primary" : ""}" type="button" id="btnResidentsList">住戶造冊</button>
-        <button class="btn btn-sm ${currentPage === "points" ? "btn-primary" : ""}" type="button" id="btnResidentsPoints">住戶點數</button>
-        <button class="btn btn-sm" type="button" id="btnChatphone">
+        </button>` : ""}
+        ${allowList ? `<button class="btn btn-sm ${currentPage === "list" ? "btn-primary" : ""}" type="button" id="btnResidentsList">住戶造冊</button>` : ""}
+        ${allowPoints ? `<button class="btn btn-sm ${currentPage === "points" ? "btn-primary" : ""}" type="button" id="btnResidentsPoints">住戶點數</button>` : ""}
+        ${allowChatphone ? `<button class="btn btn-sm" type="button" id="btnChatphone">
           <span class="badge-inline" id="chatphoneMissedBadge" hidden>0</span>
           對講機
-        </button>
+        </button>` : ""}
       `.trim();
       
       // 获取按钮引用
@@ -8466,11 +8723,19 @@
       }
       
       // 确保 badges 被正确更新
-      ensureResidentsPendingCountSubscription(cid);
-      ensureIntercomMissedCountSubscription(cid);
+      if (pendingBtn) ensureResidentsPendingCountSubscription(cid);
+      if (chatphoneBtn) ensureIntercomMissedCountSubscription(cid);
     };
 
     // 初始渲染 subnav
+    if (isCurrentCommunityRole()) {
+      const t = getResidentsSubnavCommunityTabs();
+      const allowed = [];
+      if (t.list) allowed.push("list");
+      if (t.points) allowed.push("points");
+      if (t.pending) allowed.push("pending");
+      if (!allowed.includes(currentPage)) currentPage = allowed[0] || "";
+    }
     renderSubnav();
 
     const openChatphoneModal90 = () => {
@@ -8488,6 +8753,7 @@
       const base = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}`;
       const url = new URL("chatphone.html", base);
       url.searchParams.set("c", communityId);
+      url.searchParams.set("v", "125");
       if (titleEl) titleEl.textContent = `通話${cname ? `｜${String(cname).trim()}` : ""}`;
       if (frame) frame.src = url.toString();
       modal.hidden = false;
@@ -8495,6 +8761,34 @@
 
     const renderPage = () => {
       renderSubnav();
+      if (isCurrentCommunityRole()) {
+        const t = getResidentsSubnavCommunityTabs();
+        const allowed = [];
+        if (t.list) allowed.push("list");
+        if (t.points) allowed.push("points");
+        if (t.pending) allowed.push("pending");
+        if (allowed.length && !allowed.includes(currentPage)) currentPage = allowed[0];
+        if (!allowed.length) {
+          contentEl.innerHTML = `
+            <section class="card residents-page">
+              <div class="card-hd">
+                <div class="left">
+                  <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
+                  <div style="min-width:0;">
+                    <h2>住戶造冊${cname ? `｜${escapeHtml(cname)}` : ""}</h2>
+                    <p>此帳號未開放任何子分頁</p>
+                  </div>
+                </div>
+              </div>
+              <div class="card-bd">
+                <div class="status">社區角色目前沒有可使用的子分頁（請由系統管理員至「子分頁設定」開啟）。</div>
+              </div>
+            </section>
+          `.trim();
+          updateFooterActiveNav();
+          return;
+        }
+      }
       if (currentPage === "list") {
         renderResidentsList();
       } else if (currentPage === "points") {
@@ -8516,6 +8810,13 @@
               </div>
             </div>
             <div style="display:flex; gap:8px; align-items:center;">
+              ${isCurrentSystemAdmin() ? `
+              <button class="icon-btn sm" type="button" id="btnResidentsSubnavSettings" aria-label="子分頁設定" title="子分頁設定">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 8.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2Z" stroke="currentColor" stroke-width="1.7"/>
+                  <path d="M19.2 13.1v-2.2l-1.9-.5a5.8 5.8 0 0 0-.5-1.2l1.1-1.7-1.6-1.6-1.7 1.1a5.8 5.8 0 0 0-1.2-.5l-.5-1.9h-2.2l-.5 1.9a5.8 5.8 0 0 0-1.2.5L7.4 5.9 5.8 7.5l1.1 1.7a5.8 5.8 0 0 0-.5 1.2l-1.9.5v2.2l1.9.5a5.8 5.8 0 0 0 .5 1.2l-1.1 1.7 1.6 1.6 1.7-1.1a5.8 5.8 0 0 0 1.2.5l.5 1.9h2.2l.5-1.9a5.8 5.8 0 0 0 1.2-.5l1.7 1.1 1.6-1.6-1.1-1.7a5.8 5.8 0 0 0 .5-1.2l1.9-.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                </svg>
+              </button>` : ""}
               <button class="icon-btn sm" type="button" id="btnUnits" aria-label="戶號列表" title="戶號列表">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M8 7h12M8 12h12M8 17h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
@@ -8546,6 +8847,7 @@
     const searchEl = document.getElementById("residentSearch");
     const addBtn = document.getElementById("btnAddResident");
     const unitsBtn = document.getElementById("btnUnits");
+    const residentsSubnavSettingsBtn = document.getElementById("btnResidentsSubnavSettings");
     const unitTotalEl = document.getElementById("unitTotal");
     const peopleTotalEl = document.getElementById("peopleTotal");
 
@@ -8742,6 +9044,7 @@
       const base = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}`;
       const url = new URL("chatphone.html", base);
       url.searchParams.set("c", communityId);
+      url.searchParams.set("v", "125");
       if (titleEl) titleEl.textContent = `通話${cname ? `｜${String(cname).trim()}` : ""}`;
       if (frame) frame.src = url.toString();
       modal.hidden = false;
@@ -8751,6 +9054,11 @@
     if (searchEl) searchEl.addEventListener("input", renderList);
     if (addBtn) addBtn.addEventListener("click", () => openResidentEditor("create"));
     if (unitsBtn) unitsBtn.addEventListener("click", openUnitsEditor);
+    if (residentsSubnavSettingsBtn) {
+      residentsSubnavSettingsBtn.addEventListener("click", () => {
+        openResidentsSubnavSettingsModal80({ communityId: cid, communityName: cname });
+      });
+    }
 
     if (listEl) {
       listEl.addEventListener("click", async (e) => {
@@ -11743,6 +12051,12 @@
   let sosGain = null;
   let sosBeepTimer = null;
   let sosStatusFilter = "all";
+  
+  // 報到功能相關
+  let checkinUnsub = null;
+  let checkinRecords = [];
+  let checkinTimer = null;
+  let checkinLastNotifiedMs = 0;
 
   function updateCareNavBadgeFromSos(activeCount) {
     const n = Number.isFinite(Number(activeCount)) ? Number(activeCount) : 0;
@@ -12898,6 +13212,11 @@
     const cfg = loadConfig(cid) || {};
     const currentMode = String(cfg.sosActionMode || "backend").trim() || "backend";
     const currentPhone = String(cfg.sosPhoneNumber || "").trim();
+    const currentHours = Number(cfg.sosHours || 72) || 72;
+    const currentCheckinEnabled = cfg.checkinEnabled !== false;
+    const currentCheckinMethods = cfg.checkinMethods || { nfc: true, qr: true, manual: true };
+    const currentCareTabs = getCareSubnavCommunityTabs();
+    const isSystemAdmin = isCurrentSystemAdmin();
 
     modal.innerHTML = `
       <div class="modal-backdrop" data-modal-close="1"></div>
@@ -12929,6 +13248,71 @@
               <input type="text" id="sosPhoneNumberInput" value="${escapeHtml(currentPhone)}" placeholder="例如：0912345678 或 02-1234-5678" style="width:100%; height:44px; border-radius:12px; border:1px solid rgba(17,24,39,.14); padding:0 14px; background:#fff;" />
               <div class="muted" style="margin-top:6px;">只有在选择「撥打電話」时会使用此号码。</div>
             </div>
+            <div>
+              <div style="font-weight:700; margin-bottom:8px;">時數設定（小時）</div>
+              <input type="number" id="sosHoursInput" value="${currentHours}" min="1" placeholder="72" style="width:100%; height:44px; border-radius:12px; border:1px solid rgba(17,24,39,.14); padding:0 14px; background:#fff;" />
+              <div class="muted" style="margin-top:6px;">設定時數，預設為 72 小時。</div>
+            </div>
+            <div style="padding:16px 18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#f9fafb;">
+              <div style="font-size:16px;font-weight:800;color:#111827;">報到功能設定</div>
+              <div style="margin-top:6px;color:#6b7280;line-height:1.65;">啟用後，住戶需在設定時數內報到，超過時間未報到將發出響鈴提醒。</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#fff;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 12px;border:1px solid rgba(17,24,39,0.08);border-radius:14px;background:#f9fafb;">
+                <div style="font-size:15px;font-weight:800;color:#111827;">啟用報到功能</div>
+                <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
+                  <span data-checkin-off style="font-weight:700;color:#9ca3af;">關閉</span>
+                  <label class="switch" aria-label="切換報到功能">
+                    <input type="checkbox" id="checkinEnabled" />
+                    <span class="slider"></span>
+                  </label>
+                  <span data-checkin-on style="font-weight:700;color:#15803d;">開啟</span>
+                </div>
+              </div>
+              <div id="checkinOptions" style="display:none;">
+                <div style="margin-bottom:8px;font-weight:700;">報到方式</div>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="checkinMethodNfc" value="nfc" checked />
+                    <span>NFC IC感應</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="checkinMethodQr" value="qr" checked />
+                    <span>住戶QR Code掃碼</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="checkinMethodManual" value="manual" checked />
+                    <span>人工手動報到</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            ${isSystemAdmin ? `
+            <div style="padding:16px 18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#f9fafb;">
+              <div style="font-size:16px;font-weight:800;color:#111827;">社區角色子分頁</div>
+              <div style="margin-top:6px;color:#6b7280;line-height:1.65;">控制社區角色是否顯示關懷救護模組上方子分頁列。每個子分頁可獨立開關；關閉的子分頁在社區角色下不顯示且不可操作。</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#fff;">
+              <div id="careSubnavSettingsHint" style="color:#6b7280;">請設定社區角色可見的子分頁</div>
+              ${[
+                { id: "sos", label: "住戶SOS" },
+                { id: "72h", label: `${currentHours}小時` },
+                { id: "reminder", label: "提醒" },
+              ].map((x) => `
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 12px;border:1px solid rgba(17,24,39,0.08);border-radius:14px;background:#f9fafb;">
+                  <div style="font-size:15px;font-weight:800;color:#111827;">${x.label}</div>
+                  <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
+                    <span data-care-subnav-off="${x.id}" style="font-weight:700;color:#9ca3af;">關閉</span>
+                    <label class="switch" aria-label="切換 ${x.label}">
+                      <input type="checkbox" data-care-subnav-toggle="${x.id}" />
+                      <span class="slider"></span>
+                    </label>
+                    <span data-care-subnav-on="${x.id}" style="font-weight:700;color:#15803d;">開啟</span>
+                  </div>
+                </div>
+              `.trim()).join("")}
+            </div>
+            ` : ""}
           </div>
         </div>
         <div class="modal-ft">
@@ -12940,6 +13324,7 @@
 
     const statusEl = modal.querySelector("#sosSettingsStatus");
     const inputEl = modal.querySelector("#sosPhoneNumberInput");
+    const hoursInputEl = modal.querySelector("#sosHoursInput");
     const saveBtn = modal.querySelector("#btnSaveSosSettings");
     const setStatus = (msg, isError) => {
       if (!statusEl) return;
@@ -12949,30 +13334,116 @@
       statusEl.classList.toggle("error", Boolean(isError));
     };
 
+    // 報到功能設定
+    const syncCheckinOptions = () => {
+      const checkinEnabled = modal.querySelector("#checkinEnabled");
+      const checkinOptions = modal.querySelector("#checkinOptions");
+      const checkinOff = modal.querySelector("[data-checkin-off]");
+      const checkinOn = modal.querySelector("[data-checkin-on]");
+      
+      if (checkinEnabled && checkinOptions) {
+        checkinOptions.style.display = checkinEnabled.checked ? "block" : "none";
+      }
+      
+      if (checkinOff) checkinOff.style.color = checkinEnabled.checked ? "#9ca3af" : "#b91c1c";
+      if (checkinOn) checkinOn.style.color = checkinEnabled.checked ? "#15803d" : "#9ca3af";
+    };
+
+    // 初始化報到功能設定
+    const checkinEnabledEl = modal.querySelector("#checkinEnabled");
+    const checkinMethodNfc = modal.querySelector("#checkinMethodNfc");
+    const checkinMethodQr = modal.querySelector("#checkinMethodQr");
+    const checkinMethodManual = modal.querySelector("#checkinMethodManual");
+    
+    if (checkinEnabledEl) {
+      checkinEnabledEl.checked = currentCheckinEnabled;
+      checkinEnabledEl.addEventListener("change", syncCheckinOptions);
+    }
+    
+    if (checkinMethodNfc) checkinMethodNfc.checked = currentCheckinMethods.nfc !== false;
+    if (checkinMethodQr) checkinMethodQr.checked = currentCheckinMethods.qr !== false;
+    if (checkinMethodManual) checkinMethodManual.checked = currentCheckinMethods.manual !== false;
+    
+    syncCheckinOptions();
+
+    let careToggleEls = [];
+    const syncCareToggleText = () => {
+      const next = {};
+      careToggleEls.forEach((el) => {
+        const key = String(el.getAttribute("data-care-subnav-toggle") || "").trim();
+        if (!key) return;
+        next[key] = !!el.checked;
+        const off = modal.querySelector(`[data-care-subnav-off="${CSS.escape(key)}"]`);
+        const on = modal.querySelector(`[data-care-subnav-on="${CSS.escape(key)}"]`);
+        if (off) off.style.color = el.checked ? "#9ca3af" : "#b91c1c";
+        if (on) on.style.color = el.checked ? "#15803d" : "#9ca3af";
+      });
+      const hint = modal.querySelector("#careSubnavSettingsHint");
+      if (hint) {
+        const any = !!(next.sos || next["72h"] || next.reminder);
+        hint.textContent = any ? "至少保留一個子分頁為開啟，社區角色才會顯示子分頁列。" : "目前全部關閉：社區角色不顯示子分頁列且不可使用。";
+      }
+    };
+
+    if (isSystemAdmin) {
+      careToggleEls = Array.from(modal.querySelectorAll("[data-care-subnav-toggle]"));
+      careToggleEls.forEach((el) => {
+        const key = String(el.getAttribute("data-care-subnav-toggle") || "").trim();
+        if (!key) return;
+        el.checked = !!currentCareTabs[key];
+        el.onchange = syncCareToggleText;
+      });
+      syncCareToggleText();
+    }
+
     if (saveBtn) {
       saveBtn.addEventListener("click", async () => {
         const checked = modal.querySelector('input[name="sosActionMode"]:checked');
         const nextMode = checked ? String(checked.value || "backend").trim() : "backend";
         const nextPhone = inputEl ? String(inputEl.value || "").trim() : "";
+        const nextHours = hoursInputEl ? Number(hoursInputEl.value || 72) || 72 : 72;
         if (nextMode === "phone" && !nextPhone) {
           setStatus("請先設定撥話號碼", true);
           return;
         }
         setStatus("儲存中...", false);
         try {
-          await configDocRef(cid).set(
-            {
-              sosActionMode: nextMode,
-              sosPhoneNumber: nextPhone,
-              updatedAt: FieldValue.serverTimestamp(),
+          const updateData = {
+            sosActionMode: nextMode,
+            sosPhoneNumber: nextPhone,
+            sosHours: nextHours,
+            checkinEnabled: !!checkinEnabledEl.checked,
+            checkinMethods: {
+              nfc: !!checkinMethodNfc.checked,
+              qr: !!checkinMethodQr.checked,
+              manual: !!checkinMethodManual.checked,
             },
-            { merge: true }
-          );
+            updatedAt: FieldValue.serverTimestamp(),
+          };
+          
+          if (isSystemAdmin) {
+            const nextCareTabs = {};
+            careToggleEls.forEach((el) => {
+              const key = String(el.getAttribute("data-care-subnav-toggle") || "").trim();
+              if (!key) return;
+              nextCareTabs[key] = !!el.checked;
+            });
+            updateData.careSubnav = {
+              communityTabs: nextCareTabs,
+            };
+          }
+          
+          await configDocRef(cid).set(updateData, { merge: true });
+          
           if (nextMode === "phone") closeSosAlertModal();
           setStatus("已儲存", false);
           setTimeout(() => {
             modal.hidden = true;
             detach();
+            // 重新渲染關懷救護頁面，讓按鈕文字更新
+            if (String(location.hash || "").includes("#community/care")) {
+              renderCareModule();
+            }
           }, 400);
         } catch (e) {
           setStatus("儲存失敗", true);
@@ -13086,6 +13557,496 @@
     `;
   }
 
+  // 獲取報到記錄
+  function getCheckinRecords() {
+    return Array.isArray(checkinRecords) ? checkinRecords.slice() : [];
+  }
+
+  // 儲存報到記錄
+  async function addCheckinRecord(communityId, residentData, method) {
+    try {
+      const now = new Date();
+      const data = {
+        communityId: String(communityId || resolveActiveCommunityId()),
+        houseNo: String(residentData.houseNo || ''),
+        subHouseNo: String(residentData.subHouseNo || residentData.subUnit || ''),
+        name: String(residentData.name || '住戶'),
+        method: String(method || 'manual'), // 'nfc', 'qr', 'manual'
+        createdAt: FieldValue.serverTimestamp(),
+        createdAtMs: Date.now(),
+        datetimeText: now.toLocaleString('zh-TW')
+      };
+      
+      await db.collection("checkin_records").add(data);
+      toast("報到成功");
+    } catch {
+      toast("報到失敗");
+    }
+  }
+
+  // 開始監聽報到記錄
+  function startCheckinListener(communityId) {
+    const cid = String(communityId || resolveActiveCommunityId());
+    if (!cid) return;
+    
+    // 停止現有的監聽和定時器
+    stopCheckinListener();
+    
+    checkinUnsub = db
+      .collection("checkin_records")
+      .where("communityId", "==", cid)
+      .orderBy("createdAtMs", "desc")
+      .limit(100)
+      .onSnapshot(
+        (snap) => {
+          checkinRecords = snap.docs.map((d) => {
+            const data = d.data() || {};
+            return {
+              id: d.id,
+              ...data
+            };
+          });
+          
+          if (String(location.hash || "").includes("#community/care")) {
+            renderCareModule();
+          }
+          
+          checkCheckinTimeout(cid);
+        },
+        () => {
+          toast("報到記錄監聽失敗");
+        }
+      );
+    
+    // 啟動定期檢查超時的定時器 (每分鐘檢查一次)
+    checkinTimer = setInterval(() => {
+      checkCheckinTimeout(cid);
+    }, 60000);
+  }
+
+  // 檢查是否有住戶超時未報到
+  function checkCheckinTimeout(communityId) {
+    const cid = String(communityId || resolveActiveCommunityId());
+    const cfg = loadConfig(cid);
+    const checkinEnabled = cfg && cfg.checkinEnabled !== false;
+    if (!checkinEnabled) return;
+    
+    const hours = Number(cfg.sosHours || 72) || 72;
+    const timeoutMs = hours * 60 * 60 * 1000;
+    const now = Date.now();
+    
+    let residents = Array.isArray(state.currentResidents) ? state.currentResidents : [];
+    const checkinResidents = cfg.checkinResidents || [];
+    
+    // 過濾出有選擇的住戶
+    if (checkinResidents.length > 0) {
+      residents = residents.filter(resident => {
+        const houseNo = String(resident.houseNo || resident.unit || '');
+        const subHouseNo = String(resident.subHouseNo || resident.subUnit || '');
+        const name = String(resident.name || resident.displayName || '住戶');
+        return checkinResidents.some(r => 
+          r.houseNo === houseNo && 
+          r.subHouseNo === subHouseNo && 
+          r.name === name
+        );
+      });
+    }
+    
+    if (residents.length === 0) return;
+    
+    const lastCheckinMap = getLastCheckinByResident(checkinRecords);
+    const overdueResidents = [];
+    
+    // 檢查每個住戶
+    residents.forEach(resident => {
+      const houseNo = String(resident.houseNo || resident.unit || '');
+      const subHouseNo = String(resident.subHouseNo || resident.subUnit || '');
+      const name = String(resident.name || resident.displayName || '住戶');
+      const key = `${houseNo}_${subHouseNo}_${name}`;
+      const lastCheckin = lastCheckinMap.get(key);
+      const lastCheckinMs = lastCheckin ? lastCheckin.createdAtMs : 0;
+      const timeSinceLastCheckin = now - lastCheckinMs;
+      
+      // 如果從未報到或已超過時數
+      if (lastCheckinMs === 0 || timeSinceLastCheckin > timeoutMs) {
+        overdueResidents.push({
+          houseNo,
+          subHouseNo,
+          name,
+          lastCheckin
+        });
+      }
+    });
+    
+    // 如果有超時的住戶，顯示提醒
+    if (overdueResidents.length > 0) {
+      if (now - checkinLastNotifiedMs > 60000) { // 每分鐘最多提醒一次
+        checkinLastNotifiedMs = now;
+        showCheckinTimeoutAlert(overdueResidents);
+      }
+    }
+  }
+  
+  // 打開新增住戶報到彈窗
+  function openAddCheckinResidentModal(communityId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const modal = ensureModal("addCheckinResidentModal", "modal-add-checkin-resident", "80%");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+    
+    const cfg = loadConfig(cid) || {};
+    const currentCheckinResidents = cfg.checkinResidents || [];
+    const allResidents = Array.isArray(state.currentResidents) ? state.currentResidents : [];
+    
+    // 過濾出尚未選擇的住戶
+    const availableResidents = allResidents.filter(resident => {
+      const houseNo = String(resident.houseNo || resident.unit || '');
+      const subHouseNo = String(resident.subHouseNo || resident.subUnit || '');
+      const name = String(resident.name || resident.displayName || '住戶');
+      return !currentCheckinResidents.some(r => 
+        r.houseNo === houseNo && 
+        r.subHouseNo === subHouseNo && 
+        r.name === name
+      );
+    });
+    
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="addCheckinResidentTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="addCheckinResidentTitle">選擇需要報到服務的住戶</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          ${allResidents.length === 0 ? `
+            <div class="status">請先至「住戶」頁面載入住戶資料</div>
+          ` : availableResidents.length === 0 ? `
+            <div class="status">所有住戶都已選擇</div>
+          ` : `
+            <div class="list">
+              ${availableResidents.map(resident => {
+                const houseNo = String(resident.houseNo || resident.unit || '');
+                const subHouseNo = String(resident.subHouseNo || resident.subUnit || '');
+                const name = String(resident.name || resident.displayName || '住戶');
+                return `
+                  <label class="list-item" style="cursor:pointer;display:flex;align-items:center;gap:12px;">
+                    <input type="checkbox" data-add-checkin-resident="${encodeURIComponent(JSON.stringify({ houseNo, subHouseNo, name }))}" />
+                    <div style="flex:1;">
+                      <strong>${escapeHtml(name)}</strong>
+                      <div class="muted">
+                        ${houseNo ? escapeHtml(houseNo) : ''}${subHouseNo ? '-' + escapeHtml(subHouseNo) : ''}
+                      </div>
+                    </div>
+                  </label>
+                `;
+              }).join('')}
+            </div>
+          `}
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+          ${availableResidents.length > 0 ? `
+            <button class="btn btn-primary" type="button" id="btnSaveAddCheckinResidents">確認新增</button>
+          ` : ''}
+        </div>
+      </div>
+    `.trim();
+    
+    // 儲存按鈕事件
+    const saveBtn = modal.querySelector("#btnSaveAddCheckinResidents");
+    if (saveBtn) {
+      saveBtn.addEventListener("click", async () => {
+        try {
+          const checkboxes = modal.querySelectorAll("[data-add-checkin-resident]:checked");
+          const residentsToAdd = Array.from(checkboxes).map(cb => {
+            const dataStr = decodeURIComponent(cb.getAttribute("data-add-checkin-resident") || "");
+            return JSON.parse(dataStr);
+          });
+          
+          if (residentsToAdd.length === 0) {
+            toast("請至少選擇一位住戶");
+            return;
+          }
+          
+          // 獲取當前設定
+          const currentConfig = loadConfig(cid) || {};
+          const currentCheckinResidents = currentConfig.checkinResidents || [];
+          
+          // 合併新舊住戶
+          const updatedCheckinResidents = [...currentCheckinResidents, ...residentsToAdd];
+          
+          // 儲存設定
+          const configDoc = configDocRef(cid);
+          await configDoc.set({
+            checkinResidents: updatedCheckinResidents,
+            updatedAt: FieldValue.serverTimestamp()
+          }, { merge: true });
+          
+          toast("新增成功");
+          modal.hidden = true;
+          renderCareModule();
+        } catch (e) {
+          toast("新增失敗");
+        }
+      });
+    }
+  }
+  
+  // 移除住戶報到
+  async function removeCheckinResident(communityId, residentData) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    try {
+      // 獲取當前設定
+      const currentConfig = loadConfig(cid) || {};
+      let currentCheckinResidents = currentConfig.checkinResidents || [];
+      
+      // 過濾掉要移除的住戶
+      currentCheckinResidents = currentCheckinResidents.filter(r => 
+        !(r.houseNo === residentData.houseNo && 
+          r.subHouseNo === residentData.subHouseNo && 
+          r.name === residentData.name)
+      );
+      
+      // 儲存設定
+      const configDoc = configDocRef(cid);
+      await configDoc.set({
+        checkinResidents: currentCheckinResidents,
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      
+      toast("移除成功");
+    } catch (e) {
+      toast("移除失敗");
+    }
+  }
+
+  // 顯示超時未報到提醒（與 SOS 相同響鈴）
+  function showCheckinTimeoutAlert(overdueResidents) {
+    // 使用 SOS 相同的響鈴功能
+    startSosAlarm();
+    
+    // 顯示彈窗
+    openCheckinTimeoutAlertModal(overdueResidents);
+  }
+
+  // 打開報到超時提醒彈窗
+  function openCheckinTimeoutAlertModal(overdueResidents) {
+    const modal = ensureModal("checkinTimeoutAlertModal", "modal-checkin-timeout-alert", "80%");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => {
+      stopSosAlarm();
+      detach();
+    });
+    
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinTimeoutAlertTitle">
+        <div class="modal-hd" style="background:#dc2626;color:white;">
+          <h3 class="modal-title" id="checkinTimeoutAlertTitle">⚠️ 住戶超時未報到提醒</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉" style="color:white;">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="list">
+            ${overdueResidents.map(resident => {
+              const houseNo = resident.houseNo;
+              const subHouseNo = resident.subHouseNo;
+              const name = resident.name;
+              const lastCheckin = resident.lastCheckin;
+              const isNeverCheckedIn = !lastCheckin;
+              return `
+                <div class="list-item">
+                  <strong>${escapeHtml(name)}</strong>
+                  <div class="muted">
+                    ${houseNo ? escapeHtml(houseNo) : ''}${subHouseNo ? '-' + escapeHtml(subHouseNo) : ''}
+                    ${isNeverCheckedIn ? ' - 從未報到' : ` - 最後報到：${lastCheckin.datetimeText || ''}`}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1" onclick="stopSosAlarm()">關閉</button>
+        </div>
+      </div>
+    `.trim();
+  }
+
+  // 停止報到監聽
+  function stopCheckinListener() {
+    if (checkinUnsub) {
+      checkinUnsub();
+      checkinUnsub = null;
+    }
+    if (checkinTimer) {
+      clearInterval(checkinTimer);
+      checkinTimer = null;
+    }
+  }
+
+  // 取得每個住戶的最後報到記錄
+  function getLastCheckinByResident(records) {
+    const lastCheckinMap = new Map();
+    records.forEach(record => {
+      const key = `${record.houseNo || ''}_${record.subHouseNo || ''}_${record.name || ''}`;
+      if (!lastCheckinMap.has(key) || record.createdAtMs > lastCheckinMap.get(key).createdAtMs) {
+        lastCheckinMap.set(key, record);
+      }
+    });
+    return lastCheckinMap;
+  }
+
+  // 渲染72小時頁面內容
+  function render72hPageContent(cid, cfg) {
+    const checkinEnabled = cfg.checkinEnabled !== false;
+    const hours = Number(cfg.sosHours || 72) || 72;
+    const methods = cfg.checkinMethods || { nfc: true, qr: true, manual: true };
+    const checkinResidents = cfg.checkinResidents || [];
+    
+    if (!checkinEnabled) {
+      return `
+        <div class="row"><div class="muted">報到功能尚未啟用，請至SOS設定中開啟。</div></div>
+        <div class="list" style="margin-top:12px;">
+          <div class="list-item"><strong>物資清單</strong><div class="muted">飲水、照明、急救包、通訊設備</div></div>
+          <div class="list-item"><strong>避難資訊</strong><div class="muted">集合點、樓層疏散路線、聯絡方式</div></div>
+          <div class="list-item"><strong>應變任務</strong><div class="muted">巡查、廣播、支援、回報</div></div>
+        </div>
+      `;
+    }
+    
+    const records = getCheckinRecords();
+    const lastCheckinMap = getLastCheckinByResident(records);
+    const allResidents = Array.isArray(state.currentResidents) ? state.currentResidents : [];
+    const now = Date.now();
+    const timeoutMs = hours * 60 * 60 * 1000;
+    
+    // 過濾出有選擇的住戶
+    let residents = allResidents;
+    if (checkinResidents.length > 0) {
+      residents = allResidents.filter(resident => {
+        const houseNo = String(resident.houseNo || resident.unit || '');
+        const subHouseNo = String(resident.subHouseNo || resident.subUnit || '');
+        const name = String(resident.name || resident.displayName || '住戶');
+        return checkinResidents.some(r => 
+          r.houseNo === houseNo && 
+          r.subHouseNo === subHouseNo && 
+          r.name === name
+        );
+      });
+    }
+    
+    return `
+      <div class="row">
+        <div style="font-size:16px;font-weight:800;color:#111827;margin-bottom:8px;">住戶報到</div>
+        <div class="muted">住戶需在 ${hours} 小時內完成報到，超過時間未報到將發出響鈴提醒。</div>
+      </div>
+      
+      <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;">
+        ${methods.nfc ? `
+          <button class="btn btn-primary" type="button" id="btnCheckinNfc">
+            <span style="margin-right:8px;">📡</span>
+            NFC IC感應
+          </button>
+        ` : ''}
+        ${methods.qr ? `
+          <button class="btn btn-primary" type="button" id="btnCheckinQr">
+            <span style="margin-right:8px;">📱</span>
+            QR Code掃碼
+          </button>
+        ` : ''}
+        ${methods.manual ? `
+          <button class="btn btn-primary" type="button" id="btnCheckinManual">
+            <span style="margin-right:8px;">👆</span>
+            手動報到
+          </button>
+        ` : ''}
+        <button class="btn" type="button" id="btnAddCheckinResident">
+          <span style="margin-right:8px;">➕</span>
+          新增
+        </button>
+      </div>
+      
+      <div style="margin-top:24px;">
+        <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:12px;">住戶報到狀態</div>
+        ${allResidents.length === 0 ? `
+          <div style="text-align:center;padding:24px;color:#9ca3af;">請先至「住戶」頁面載入住戶資料</div>
+        ` : residents.length === 0 ? `
+          <div style="text-align:center;padding:24px;color:#9ca3af;">請點擊「新增」按鈕選擇需要報到服務的住戶</div>
+        ` : `
+          <div class="list">
+            ${residents.map(resident => {
+              const houseNo = String(resident.houseNo || resident.unit || '');
+              const subHouseNo = String(resident.subHouseNo || resident.subUnit || '');
+              const name = String(resident.name || resident.displayName || '住戶');
+              const key = `${houseNo}_${subHouseNo}_${name}`;
+              const lastCheckin = lastCheckinMap.get(key);
+              const lastCheckinMs = lastCheckin ? lastCheckin.createdAtMs : 0;
+              const timeSinceLastCheckin = now - lastCheckinMs;
+              const isOverdue = lastCheckinMs > 0 && timeSinceLastCheckin > timeoutMs;
+              const isNeverCheckedIn = lastCheckinMs === 0;
+              
+              let statusText = '';
+              let statusColor = '';
+              if (isNeverCheckedIn) {
+                statusText = '尚未報到';
+                statusColor = '#f59e0b';
+              } else if (isOverdue) {
+                statusText = '已超時';
+                statusColor = '#dc2626';
+              } else {
+                statusText = '已報到';
+                statusColor = '#16a34a';
+              }
+              
+              const lastCheckinText = lastCheckin ? lastCheckin.datetimeText || '' : '';
+              const methodText = lastCheckin ? lastCheckin.method || '' : '';
+              
+              return `
+                <div class="list-item" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                  <div style="flex:1;min-width:0;">
+                    <strong>${escapeHtml(name)}</strong>
+                    <div class="muted" style="font-size:13px;">
+                      ${houseNo ? escapeHtml(houseNo) : ''}${subHouseNo ? '-' + escapeHtml(subHouseNo) : ''}
+                      ${lastCheckinText ? ' | 最後報到：' + escapeHtml(lastCheckinText) : ''}
+                      ${methodText ? ' (' + escapeHtml(methodText) + ')' : ''}
+                    </div>
+                  </div>
+                  <div style="flex-shrink:0;display:flex;align-items:center;gap:8px;">
+                    <span style="font-weight:700;color:${statusColor};">${statusText}</span>
+                    ${methods.manual ? `
+                      <button class="btn btn-sm" type="button" data-manual-checkin="${encodeURIComponent(JSON.stringify({ houseNo, subHouseNo, name }))}" style="padding:6px 12px;">
+                        報到
+                      </button>
+                    ` : ''}
+                    <button class="btn btn-sm btn-danger" type="button" data-remove-checkin-resident="${encodeURIComponent(JSON.stringify({ houseNo, subHouseNo, name }))}" style="padding:6px 12px;">
+                      移除
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `}
+      </div>
+      
+      <div style="margin-top:24px;">
+        <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:12px;">報到記錄</div>
+        ${records.length === 0 ? `
+          <div style="text-align:center;padding:24px;color:#9ca3af;">暫無報到記錄</div>
+        ` : `
+          <div class="list">
+            ${records.map(r => `
+              <div class="list-item">
+                <strong>${r.name || '住戶'}</strong>
+                <div class="muted">${r.houseNo || ''} ${r.datetimeText || ''} - ${r.method || ''}</div>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+    `;
+  }
+
   function renderCareModule() {
     const cid = resolveActiveCommunityId();
     const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
@@ -13097,6 +14058,9 @@
       if (["sos", "72h", "reminder"].includes(pageParam)) currentPage = pageParam;
     }
 
+    const cfg = loadConfig(cid) || {};
+    const hoursValue = Number(cfg.sosHours || 72) || 72;
+
     const pageMap = {
       sos: {
         label: "住戶SOS",
@@ -13106,18 +14070,11 @@
         body: ""
       },
       "72h": {
-        label: "72小時",
-        title: "72小時",
+        label: `${hoursValue}小時`,
+        title: `${hoursValue}小時`,
         desc: "災防物資、緊急清單與應變資訊彙整。",
         tag: "防災",
-        body: `
-          <div class="row"><div class="muted">可放入防災物資清單、避難資訊、備援設備與聯繫窗口。</div></div>
-          <div class="list" style="margin-top:12px;">
-            <div class="list-item"><strong>物資清單</strong><div class="muted">飲水、照明、急救包、通訊設備</div></div>
-            <div class="list-item"><strong>避難資訊</strong><div class="muted">集合點、樓層疏散路線、聯絡方式</div></div>
-            <div class="list-item"><strong>應變任務</strong><div class="muted">巡查、廣播、支援、回報</div></div>
-          </div>
-        `
+        body: ""
       },
       reminder: {
         label: "提醒",
@@ -13136,15 +14093,43 @@
 
     const renderSubnav = () => {
       if (!subnavEl) return;
+      const isAdmin = isCurrentSystemAdmin();
+      const careTabs = getCareSubnavCommunityTabs();
+      const showSubnav = isAdmin || isCareSubnavEnabledForCommunity();
+      
+      if (!showSubnav) {
+        subnavEl.innerHTML = "";
+        return;
+      }
+      
       const activeSosCount = getSosRecords().filter((record) => String(record.status || "").trim() !== "已完成").length;
-      subnavEl.innerHTML = `
-        <button class="btn btn-sm ${currentPage === "sos" ? "btn-primary" : ""}" type="button" data-care-page="sos">
-          <span class="badge-inline" ${activeSosCount === 0 ? "hidden" : ""}>${activeSosCount}</span>
-          住戶SOS
-        </button>
-        <button class="btn btn-sm ${currentPage === "72h" ? "btn-primary" : ""}" type="button" data-care-page="72h">72小時</button>
-        <button class="btn btn-sm ${currentPage === "reminder" ? "btn-primary" : ""}" type="button" data-care-page="reminder">提醒</button>
-      `.trim();
+      let buttonsHtml = "";
+      
+      // 住戶SOS
+      if (isAdmin || careTabs.sos) {
+        buttonsHtml += `
+          <button class="btn btn-sm ${currentPage === "sos" ? "btn-primary" : ""}" type="button" data-care-page="sos">
+            <span class="badge-inline" ${activeSosCount === 0 ? "hidden" : ""}>${activeSosCount}</span>
+            住戶SOS
+          </button>
+        `;
+      }
+      
+      // 72小時
+      if (isAdmin || careTabs["72h"]) {
+        buttonsHtml += `
+          <button class="btn btn-sm ${currentPage === "72h" ? "btn-primary" : ""}" type="button" data-care-page="72h">${hoursValue}小時</button>
+        `;
+      }
+      
+      // 提醒
+      if (isAdmin || careTabs.reminder) {
+        buttonsHtml += `
+          <button class="btn btn-sm ${currentPage === "reminder" ? "btn-primary" : ""}" type="button" data-care-page="reminder">提醒</button>
+        `;
+      }
+      
+      subnavEl.innerHTML = buttonsHtml.trim();
       subnavEl.querySelectorAll("[data-care-page]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const nextPage = String(btn.getAttribute("data-care-page") || "sos");
@@ -13156,11 +14141,56 @@
 
     const renderPage = () => {
       renderSubnav();
-      const page = pageMap[currentPage] || pageMap.sos;
+      
+      const isAdmin = isCurrentSystemAdmin();
+      const careTabs = getCareSubnavCommunityTabs();
+      
+      // 檢查是否有任何子分頁可用
+      const hasAnySubnav = isAdmin || isCareSubnavEnabledForCommunity();
+      
+      if (!hasAnySubnav) {
+        contentEl.innerHTML = `
+          <section class="card">
+            <div class="card-hd">
+              <div class="left">
+                <div class="chip" aria-hidden="true">${iconSvg("care")}</div>
+                <div style="min-width:0;">
+                  <h2>關懷救護${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                  <p>緊急求助、即時通報與聯絡資訊整合。</p>
+                </div>
+              </div>
+            </div>
+            <div class="card-bd">
+              <div class="status">社區角色目前沒有可使用的子分頁（請由系統管理員至「子分頁設定」開啟）。</div>
+            </div>
+          </section>
+        `.trim();
+        updateFooterActiveNav();
+        return;
+      }
+      
+      // 檢查是否有權限訪問當前頁面
+      const hasPermission = isAdmin || (
+        (currentPage === "sos" && careTabs.sos) ||
+        (currentPage === "72h" && careTabs["72h"]) ||
+        (currentPage === "reminder" && careTabs.reminder)
+      );
+      
+      // 如果沒有權限，預設顯示第一個可用的子分頁
+      let targetPage = currentPage;
+      if (!hasPermission && !isAdmin) {
+        if (careTabs.sos) targetPage = "sos";
+        else if (careTabs["72h"]) targetPage = "72h";
+        else if (careTabs.reminder) targetPage = "reminder";
+      }
+      
+      const page = pageMap[targetPage] || pageMap.sos;
       
       let bodyContent = page.body;
-      if (currentPage === "sos") {
+      if (targetPage === "sos") {
         bodyContent = `${renderSosFilterBar()}${renderSosRecordsTable(sosStatusFilter)}`;
+      } else if (targetPage === "72h") {
+        bodyContent = render72hPageContent(cid, cfg);
       }
       
       contentEl.innerHTML = `
@@ -13173,18 +14203,20 @@
                 <p>${page.desc}</p>
               </div>
             </div>
-            <button class="icon-btn sm" type="button" id="btnSosSettings" aria-label="SOS設定" title="SOS設定">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.7"></path>
-                <path d="M19.2 12a7.2 7.2 0 0 0-.12-1.3l2.05-1.6-2-3.46-2.47 1a7.3 7.3 0 0 0-2.25-1.3L13 2h-4l-.43 3.34a7.3 7.3 0 0 0-2.25 1.3l-2.47-1-2 3.46 2.05 1.6A7.2 7.2 0 0 0 4.8 12c0 .44.04.88.12 1.3l-2.05 1.6 2 3.46 2.47-1a7.3 7.3 0 0 0 2.25 1.3L9 22h4l.43-3.34a7.3 7.3 0 0 0 2.25-1.3l2.47 1 2-3.46-2.05-1.6c.08-.42.12-.86.12-1.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
-              </svg>
-            </button>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button class="icon-btn sm" type="button" id="btnSosSettings" aria-label="SOS設定" title="SOS設定">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.7"/>
+                  <path d="M19.2 12a7.2 7.2 0 0 0-.12-1.3l2.05-1.6-2-3.46-2.47 1a7.3 7.3 0 0 0-2.25-1.3L13 2h-4l-.43 3.34a7.3 7.3 0 0 0-2.25 1.3l-2.47-1-2 3.46 2.05 1.6A7.2 7.2 0 0 0 4.8 12c0 .44.04.88.12 1.3l-2.05 1.6 2 3.46 2.47-1a7.3 7.3 0 0 0 2.25 1.3L9 22h4l.43-3.34a7.3 7.3 0 0 0 2.25-1.3l2.47 1 2-3.46-2.05-1.6c.08-.42.12-.86.12-1.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
           </div>
           <div class="card-bd">
             <div class="row">
               <div>
                 <div style="font-size:18px; font-weight:800; color:#111827;">${page.title}</div>
-                ${currentPage !== "sos" ? `<div class="muted" style="margin-top:4px;">此子分頁目前為示意版，可再接實際資料與功能。</div>` : ''}
+                ${!["sos", "72h"].includes(targetPage) ? `<div class="muted" style="margin-top:4px;">此子分頁目前為示意版，可再接實際資料與功能。</div>` : ''}
               </div>
             </div>
             ${bodyContent}
@@ -13193,7 +14225,7 @@
       `.trim();
       
       // 如果是 SOS 页面，添加表格按钮事件监听
-      if (currentPage === "sos") {
+      if (targetPage === "sos") {
         contentEl.querySelectorAll("[data-sos-filter]").forEach((btn) => {
           btn.addEventListener("click", () => {
             sosStatusFilter = String(btn.getAttribute("data-sos-filter") || "all").trim() || "all";
@@ -13223,10 +14255,134 @@
         });
       }
       
+      // 72h 頁面報到功能的事件監聽
+      if (targetPage === "72h") {
+        const btnCheckinManual = document.getElementById("btnCheckinManual");
+        if (btnCheckinManual) {
+          btnCheckinManual.addEventListener("click", () => {
+            openSelectResidentForCheckinModal(cid);
+          });
+        }
+        
+        const btnCheckinNfc = document.getElementById("btnCheckinNfc");
+        if (btnCheckinNfc) {
+          btnCheckinNfc.addEventListener("click", () => {
+            toast("NFC 感應功能（開發中）");
+          });
+        }
+        
+        const btnCheckinQr = document.getElementById("btnCheckinQr");
+        if (btnCheckinQr) {
+          btnCheckinQr.addEventListener("click", () => {
+            toast("QR Code 掃碼功能（開發中）");
+          });
+        }
+        
+        // 新增按鈕
+        const btnAddCheckinResident = document.getElementById("btnAddCheckinResident");
+        if (btnAddCheckinResident) {
+          btnAddCheckinResident.addEventListener("click", () => {
+            openAddCheckinResidentModal(cid);
+          });
+        }
+        
+        // 個別住戶的手動報到按鈕
+        const manualCheckinButtons = contentEl.querySelectorAll("[data-manual-checkin]");
+        manualCheckinButtons.forEach(btn => {
+          btn.addEventListener("click", () => {
+            try {
+              const dataStr = decodeURIComponent(btn.getAttribute("data-manual-checkin") || "");
+              const residentData = JSON.parse(dataStr);
+              addCheckinRecord(cid, residentData, "manual");
+            } catch (e) {
+              toast("報到失敗");
+            }
+          });
+        });
+        
+        // 移除住戶按鈕
+        const removeCheckinResidentButtons = contentEl.querySelectorAll("[data-remove-checkin-resident]");
+        removeCheckinResidentButtons.forEach(btn => {
+          btn.addEventListener("click", () => {
+            try {
+              const dataStr = decodeURIComponent(btn.getAttribute("data-remove-checkin-resident") || "");
+              const residentData = JSON.parse(dataStr);
+              removeCheckinResident(cid, residentData);
+            } catch (e) {
+              toast("移除失敗");
+            }
+          });
+        });
+      }
+      
       updateFooterActiveNav();
     };
 
+    // 啟動報到監聽
+    startCheckinListener(cid);
+    
     renderPage();
+  }
+
+  // 打開選擇住戶進行報到的彈窗
+  function openSelectResidentForCheckinModal(communityId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const modal = ensureModal("selectResidentForCheckinModal", "modal-select-resident-checkin", "80%");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+    
+    const residents = Array.isArray(state.currentResidents) ? state.currentResidents : [];
+    
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="selectResidentCheckinTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="selectResidentCheckinTitle">選擇住戶進行報到</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          ${residents.length === 0 ? `
+            <div class="status">請先至「住戶」頁面載入住戶資料</div>
+          ` : `
+            <div class="list">
+              ${residents.map(resident => {
+                const houseNo = String(resident.houseNo || resident.unit || '');
+                const subHouseNo = String(resident.subHouseNo || resident.subUnit || '');
+                const name = String(resident.name || resident.displayName || '住戶');
+                return `
+                  <div class="list-item" style="cursor:pointer;" data-select-resident-checkin="${encodeURIComponent(JSON.stringify({ houseNo, subHouseNo, name }))}">
+                    <strong>${escapeHtml(name)}</strong>
+                    <div class="muted">
+                      ${houseNo ? escapeHtml(houseNo) : ''}${subHouseNo ? '-' + escapeHtml(subHouseNo) : ''}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `}
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    
+    // 添加選擇住戶的事件
+    const residentItems = modal.querySelectorAll("[data-select-resident-checkin]");
+    residentItems.forEach(item => {
+      item.addEventListener("click", () => {
+        try {
+          const dataStr = decodeURIComponent(item.getAttribute("data-select-resident-checkin") || "");
+          const residentData = JSON.parse(dataStr);
+          // 關閉彈窗
+          modal.hidden = true;
+          // 添加報到記錄
+          addCheckinRecord(cid, residentData, "manual");
+        } catch (e) {
+          toast("報到失敗");
+        }
+      });
+    });
   }
 
   function renderModule(moduleId) {
@@ -13235,6 +14391,7 @@
     if (moduleId !== "visitor") stopVisitorsSubscription();
     if (moduleId !== "residents") stopResidentsSubscription();
     if (moduleId !== "parcel") stopParcelsSubscription();
+    if (moduleId !== "care") stopCheckinListener();
     const gate = getButtonConfig(moduleId);
     if (gate && gate.enabled === false) {
       toast("此功能未開放（示意）");
@@ -13548,22 +14705,24 @@
     };
 
     if (!user) {
+      state.currentUserUid = "";
+      state.currentUserRole = "";
       redirectToIndex();
       return;
     }
 
     let role = String(sessionStorage.getItem("csp_role") || "").trim().toLowerCase();
-    if (!role) {
-      try {
-        const udoc = await db.collection("users").doc(String(user.uid)).get();
-        const udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
-        const r = String(udata.role || "").trim();
-        if (r === "admin" || r === "系統管理員" || r === "系統管理者" || r === "系統") role = "admin";
-        else if (r === "community" || r === "社區") role = "community";
-        else if (r) role = "resident";
-        if (role) sessionStorage.setItem("csp_role", role);
-      } catch {}
-    }
+    try {
+      const udoc = await db.collection("users").doc(String(user.uid)).get();
+      const udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
+      const r = String(udata.role || "").trim();
+      const inferred =
+        (r === "admin" || r === "系統管理員" || r === "系統管理者" || r === "系統") ? "admin" :
+        (r === "community" || r === "社區") ? "community" :
+        (r ? "resident" : "");
+      if (inferred) role = inferred;
+      if (role) sessionStorage.setItem("csp_role", role);
+    } catch {}
 
     if (role && role !== "community" && role !== "admin") {
       if (role === "resident") {
@@ -13578,6 +14737,9 @@
       redirectToIndex();
       return;
     }
+
+    state.currentUserUid = String(user.uid || "");
+    state.currentUserRole = role || "";
 
     refreshLoginInfo(user);
     ensureUrlCommunityKey(user).then(() => refreshLoginInfo(user)).catch(() => {});
