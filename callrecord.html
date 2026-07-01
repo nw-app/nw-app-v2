@@ -28,56 +28,154 @@
         min-height: 0;
         padding: 0;
       }
-      .callrecord-summary {
+      .callrecord-head {
         position: sticky;
         top: 0;
         z-index: 15;
         display: flex;
+        flex-direction: column;
         gap: 10px;
-        align-items: center;
-        justify-content: flex-start;
-        padding: 10px 14px;
+        padding: 12px 14px;
         background: rgba(255, 255, 255, 0.96);
         backdrop-filter: blur(10px);
         border-bottom: 1px solid rgba(17, 24, 39, 0.08);
       }
-      .callrecord-summary-item {
-        display: inline-flex;
-        align-items: baseline;
-        gap: 6px;
-        padding: 6px 10px;
-        border-radius: 999px;
+      .callrecord-tabs {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        width: 100%;
+        position: relative;
+        z-index: 2;
+      }
+      .cr-tab {
+        appearance: none;
         border: 1px solid rgba(17, 24, 39, 0.1);
         background: #fff;
         color: #111827;
+        padding: 12px 12px;
+        border-radius: 999px;
+        font-size: 15px;
+        font-weight: 800;
+        line-height: 1;
+        cursor: pointer;
+        user-select: none;
+        flex: 1 1 0;
+        min-width: 0;
+        text-align: center;
+        pointer-events: auto;
+      }
+      .cr-tab.active {
+        border-color: rgba(211, 47, 47, 0.28);
+        background: rgba(211, 47, 47, 0.08);
+        color: #b71c1c;
+      }
+      .callrecord-filters {
+        --filter-columns: 5;
+        display: grid;
+        grid-template-columns: repeat(var(--filter-columns), minmax(0, 1fr));
+        gap: 8px;
+        align-items: stretch;
+        min-height: 40px;
+        position: relative;
+        z-index: 1;
+      }
+      .callrecord-filters-empty {
+        grid-column: 1 / -1;
+        width: 100%;
+        font-size: 13px;
+        color: var(--muted);
+        padding: 2px 2px 0;
+      }
+      .selection-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding-top: 2px;
+      }
+      .selection-toolbar[hidden] {
+        display: none !important;
+      }
+      .selection-summary {
+        display: inline-flex;
+        align-items: center;
+        min-height: 36px;
+        padding: 0 12px;
+        border-radius: 999px;
+        background: rgba(17, 24, 39, 0.06);
+        color: #111827;
+        font-size: 13px;
+        font-weight: 800;
+      }
+      .selection-action {
+        appearance: none;
+        border: 1px solid rgba(17, 24, 39, 0.12);
+        background: #fff;
+        color: #111827;
+        min-height: 36px;
+        padding: 0 14px;
+        border-radius: 999px;
         font-size: 13px;
         font-weight: 800;
         line-height: 1;
+        cursor: pointer;
       }
-      .callrecord-summary-item .num {
-        font-weight: 900;
-        color: #d32f2f;
+      .selection-action.danger {
+        border-color: rgba(220, 38, 38, 0.22);
+        background: rgba(220, 38, 38, 0.08);
+        color: #b91c1c;
       }
-      .callrecord-toolbar {
-        position: sticky;
-        top: 0;
-        z-index: 20;
-        display: none;
+      .selection-action:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .cr-filter {
+        appearance: none;
+        border: 1px solid rgba(17, 24, 39, 0.1);
+        background: #fff;
+        color: #111827;
+        padding: 7px 6px;
+        border-radius: 14px;
+        display: inline-flex;
         align-items: center;
-        gap: 8px;
-        padding: 10px 14px;
-        background: rgba(255, 255, 255, 0.96);
-        backdrop-filter: blur(10px);
-        border-bottom: 1px solid rgba(17, 24, 39, 0.08);
-      }
-      .callrecord-toolbar.active {
-        display: flex;
-      }
-      .callrecord-toolbar-count {
-        margin-right: auto;
-        font-size: 13px;
+        justify-content: center;
+        gap: 4px;
+        width: 100%;
+        min-width: 0;
+        font-size: 12px;
         font-weight: 800;
+        line-height: 1;
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+        overflow: hidden;
       }
+      .cr-filter .mini {
+        width: 14px;
+        height: 14px;
+        display: inline-grid;
+        place-items: center;
+        flex: 0 0 auto;
+      }
+      .cr-filter .mini svg { width: 14px; height: 14px; }
+      .cr-filter .label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .cr-filter .num {
+        font-weight: 900;
+        flex: 0 0 auto;
+      }
+      .cr-filter.active {
+        border-color: rgba(17, 24, 39, 0.18);
+        box-shadow: 0 6px 16px rgba(17, 24, 39, 0.08);
+      }
+      .cr-filter[data-cat="incoming_answered"] { border-color: rgba(16, 185, 129, 0.38); background: rgba(16, 185, 129, 0.08); color: #047857; }
+      .cr-filter[data-cat="incoming_missed"] { border-color: rgba(220, 38, 38, 0.38); background: rgba(220, 38, 38, 0.08); color: #b91c1c; }
+      .cr-filter[data-cat="outgoing_answered"] { border-color: rgba(16, 185, 129, 0.38); background: rgba(16, 185, 129, 0.08); color: #047857; }
+      .cr-filter[data-cat="outgoing_missed"] { border-color: rgba(220, 38, 38, 0.38); background: rgba(220, 38, 38, 0.08); color: #b91c1c; }
       .callrecord-card {
         height: 100%;
         border-radius: 0;
@@ -102,33 +200,41 @@
         border: 1px solid rgba(17, 24, 39, 0.1);
         user-select: none;
         -webkit-tap-highlight-color: transparent;
+        transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, transform 0.18s ease;
+      }
+      .callrecord-item.selecting {
+        padding-right: 44px;
       }
       .callrecord-item.selected {
-        border-color: rgba(211, 47, 47, 0.28);
-        box-shadow: 0 10px 24px rgba(211, 47, 47, 0.1);
+        border-color: rgba(211, 47, 47, 0.35);
+        background: rgba(211, 47, 47, 0.06);
+        box-shadow: 0 8px 20px rgba(211, 47, 47, 0.12);
       }
-      .callrecord-check {
+      .callrecord-item-select {
         position: absolute;
         top: 10px;
         right: 10px;
         width: 22px;
         height: 22px;
         border-radius: 999px;
-        border: 1px solid rgba(17, 24, 39, 0.16);
+        border: 2px solid rgba(17, 24, 39, 0.18);
         background: #fff;
-        color: #fff;
+        color: transparent;
         display: none;
         align-items: center;
         justify-content: center;
-        font-size: 13px;
+        font-size: 14px;
         font-weight: 900;
+        line-height: 1;
+        box-sizing: border-box;
       }
-      .selection-mode .callrecord-check {
+      .callrecord-item.selecting .callrecord-item-select {
         display: inline-flex;
       }
-      .callrecord-item.selected .callrecord-check {
-        background: #d32f2f;
+      .callrecord-item.selected .callrecord-item-select {
         border-color: #d32f2f;
+        background: #d32f2f;
+        color: #fff;
       }
       .callrecord-icon {
         width: 44px;
@@ -136,16 +242,17 @@
         border-radius: 999px;
         display: grid;
         place-items: center;
-        background: rgba(211, 47, 47, 0.08);
-        color: #b71c1c;
+        background: rgba(17, 24, 39, 0.06);
+        color: #111827;
       }
-      .callrecord-icon.incoming {
-        background: rgba(37, 99, 235, 0.1);
-        color: #1d4ed8;
-      }
+      .callrecord-icon.cat-incoming-answered { background: rgba(16, 185, 129, 0.12); color: #047857; }
+      .callrecord-icon.cat-incoming-missed { background: rgba(220, 38, 38, 0.12); color: #b91c1c; }
+      .callrecord-icon.cat-outgoing-answered { background: rgba(16, 185, 129, 0.12); color: #047857; }
+      .callrecord-icon.cat-outgoing-missed { background: rgba(220, 38, 38, 0.12); color: #b91c1c; }
       .callrecord-icon svg {
-        width: 20px;
-        height: 20px;
+        width: 22px;
+        height: 22px;
+        overflow: visible;
       }
       .callrecord-main {
         min-width: 0;
@@ -176,17 +283,22 @@
       <main class="callrecord-bd">
         <section class="content callrecord-content" aria-live="polite">
           <div class="card callrecord-card">
-            <div class="callrecord-toolbar" id="selectionToolbar">
-              <div class="callrecord-toolbar-count" id="selectionCount">已選取 0 筆</div>
-              <button class="btn" type="button" id="btnSelectAll">全選</button>
-              <button class="btn" type="button" id="btnCancelSelection">取消</button>
-              <button class="btn btn-primary" type="button" id="btnDeleteSelected">刪除</button>
-            </div>
             <div class="card-bd callrecord-list">
-              <div class="callrecord-summary" id="historySummary">
-                <div class="callrecord-summary-item">已撥：<span class="num" id="summaryOutgoing">0</span></div>
-                <div class="callrecord-summary-item">已接：<span class="num" id="summaryAnswered">0</span></div>
-                <div class="callrecord-summary-item">未接：<span class="num" id="summaryMissed">0</span></div>
+              <div class="callrecord-head" id="historyHead">
+                <div class="callrecord-tabs" role="tablist" aria-label="通話紀錄分頁">
+                  <button class="cr-tab active" type="button" data-tab="all" aria-selected="true">全部</button>
+                  <button class="cr-tab" type="button" data-tab="incoming" aria-selected="false">來電</button>
+                  <button class="cr-tab" type="button" data-tab="outgoing" aria-selected="false">撥出</button>
+                </div>
+                <div class="callrecord-filters" id="categoryFilters" aria-label="通話分類">
+                  <div class="callrecord-filters-empty">載入中...</div>
+                </div>
+                <div class="selection-toolbar" id="selectionToolbar" hidden>
+                  <div class="selection-summary" id="selectionSummary">已選取 0 筆</div>
+                  <button class="selection-action" id="btnSelectAllCalls" type="button">全選</button>
+                  <button class="selection-action" id="btnCancelSelection" type="button">取消</button>
+                  <button class="selection-action danger" id="btnDeleteSelectedCalls" type="button">刪除</button>
+                </div>
               </div>
               <div class="list" id="historyList"></div>
             </div>
@@ -221,14 +333,13 @@
         } catch {}
 
         const historyListEl = document.getElementById("historyList");
-        const summaryOutgoingEl = document.getElementById("summaryOutgoing");
-        const summaryAnsweredEl = document.getElementById("summaryAnswered");
-        const summaryMissedEl = document.getElementById("summaryMissed");
+        const categoryFiltersEl = document.getElementById("categoryFilters");
+        const tabButtons = Array.from(document.querySelectorAll(".cr-tab"));
         const selectionToolbarEl = document.getElementById("selectionToolbar");
-        const selectionCountEl = document.getElementById("selectionCount");
-        const btnSelectAll = document.getElementById("btnSelectAll");
-        const btnCancelSelection = document.getElementById("btnCancelSelection");
-        const btnDeleteSelected = document.getElementById("btnDeleteSelected");
+        const selectionSummaryEl = document.getElementById("selectionSummary");
+        const btnSelectAllCallsEl = document.getElementById("btnSelectAllCalls");
+        const btnCancelSelectionEl = document.getElementById("btnCancelSelection");
+        const btnDeleteSelectedCallsEl = document.getElementById("btnDeleteSelectedCalls");
 
         const params = new URLSearchParams(location.search || "");
         const community = String(params.get("c") || "").trim();
@@ -236,12 +347,22 @@
         const toRoleHint = String(params.get("toRole") || "").trim();
         let currentUserId = "";
         let currentItems = [];
+        let currentAllItems = [];
         let hiddenCallIdSet = new Set();
-        let selectionMode = false;
-        let selectedIds = new Set();
-        let longPressTimer = null;
-        let longPressMeta = null;
         let _unsubHistory = null;
+        let viewTab = "all";
+        let viewFilter = "all";
+        let selectionMode = false;
+        let deletingSelection = false;
+        let selectedCallIdSet = new Set();
+        let pressTimer = 0;
+        let pressPointerId = null;
+        let pressTargetId = "";
+        let pressStartX = 0;
+        let pressStartY = 0;
+        let suppressNextClick = false;
+        const LONG_PRESS_MS = 420;
+        const LONG_PRESS_MOVE_PX = 10;
 
         function esc(s) {
           return String(s ?? "").replace(/[&<>"']/g, (ch) => ({
@@ -316,65 +437,42 @@
           };
         }
 
-        function renderDirectionIcon(direction) {
-          if (String(direction || "") === "incoming") {
-            return `
-              <div class="callrecord-icon incoming" aria-label="接入" title="接入">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path d="M7 7h10v10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M17 7 7 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </div>
-            `;
-          }
+        function classifyCategory(data, currentUid) {
+          const d = data && typeof data === "object" ? data : {};
+          const uid = String(currentUid || "").trim();
+          const peer = pickPeerInfo(d, uid);
+          const direction = peer && peer.direction === "incoming" ? "incoming" : "outgoing";
+          const answered = isAnsweredCall(d);
+          const key = `${direction}_${answered ? "answered" : "missed"}`;
+          const label = direction === "incoming"
+            ? (answered ? "來電已接" : "來電未接")
+            : (answered ? "撥出已接" : "撥出未接");
+          const cls = `cat-${direction}-${answered ? "answered" : "missed"}`;
+          return { key, label, cls, direction, answered };
+        }
+
+        function renderHandsetSvg() {
+          return `<path d="M7.5 4.7c.47-.44 1.18-.53 1.75-.21l2.35 1.31c.68.38.99 1.18.75 1.91l-.62 1.85a12.65 12.65 0 0 0 2.69 2.69l1.85-.62c.73-.24 1.53.07 1.91.75l1.31 2.35c.32.57.23 1.28-.21 1.75l-1.08 1.13c-.83.87-2.09 1.18-3.23.82-2.48-.78-4.79-2.36-6.82-4.39S5.55 9.67 4.77 7.19c-.36-1.14-.05-2.4.82-3.23l1.13-1.08Z" fill="currentColor"/>`;
+        }
+
+        function renderCategoryIconSvg(categoryKey) {
+          const key = String(categoryKey || "").trim();
+          if (key === "incoming_answered") return `${renderHandsetSvg()}<path d="M18.2 7.4h-4.9v4.9" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M18.2 7.4 10.6 15" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/><path d="m10 16 1.4 1.4 2.5-2.5" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>`;
+          if (key === "incoming_missed") return `${renderHandsetSvg()}<path d="M18.2 7.4h-4.9v4.9" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M18.2 7.4 10.6 15" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/><path d="m10.4 10.4 4.6 4.6" stroke="#ffffff" stroke-width="2.05" stroke-linecap="round"/><path d="m15 10.4-4.6 4.6" stroke="#ffffff" stroke-width="2.05" stroke-linecap="round"/>`;
+          if (key === "outgoing_answered") return `${renderHandsetSvg()}<path d="M7 16.6h4.9v-4.9" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 16.6 14.6 9" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/><path d="m10 16 1.4 1.4 2.5-2.5" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>`;
+          return `${renderHandsetSvg()}<path d="M7 16.6h4.9v-4.9" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 16.6 14.6 9" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/><path d="m10.4 10.4 4.6 4.6" stroke="#ffffff" stroke-width="2.05" stroke-linecap="round"/><path d="m15 10.4-4.6 4.6" stroke="#ffffff" stroke-width="2.05" stroke-linecap="round"/>`;
+        }
+
+        function renderCategoryIcon(categoryKey, label) {
+          const key = String(categoryKey || "").trim();
+          const cls = key ? `cat-${key.replace("_", "-")}` : "";
           return `
-            <div class="callrecord-icon" aria-label="撥出" title="撥出">
+            <div class="callrecord-icon ${cls}" aria-label="${esc(label || "")}" title="${esc(label || "")}">
               <svg viewBox="0 0 24 24" fill="none">
-                <path d="M17 17H7V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M7 17 17 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                ${renderCategoryIconSvg(key)}
               </svg>
             </div>
           `;
-        }
-
-        function updateSelectionToolbar() {
-          if (!selectionToolbarEl || !selectionCountEl) return;
-          selectionToolbarEl.classList.toggle("active", selectionMode);
-          selectionCountEl.textContent = `已選取 ${selectedIds.size} 筆`;
-        }
-
-        function exitSelectionMode() {
-          selectionMode = false;
-          selectedIds = new Set();
-          updateSelectionToolbar();
-          historyListEl.classList.remove("selection-mode");
-          Array.from(historyListEl.querySelectorAll(".callrecord-item")).forEach((el) => {
-            el.classList.remove("selected");
-          });
-        }
-
-        function enterSelectionMode(id) {
-          selectionMode = true;
-          historyListEl.classList.add("selection-mode");
-          if (id) selectedIds.add(String(id));
-          updateSelectionToolbar();
-        }
-
-        function toggleSelected(id) {
-          const key = String(id || "").trim();
-          if (!key) return;
-          if (!selectionMode) enterSelectionMode(key);
-          else if (selectedIds.has(key)) selectedIds.delete(key);
-          else selectedIds.add(key);
-          if (selectionMode && selectedIds.size === 0) {
-            exitSelectionMode();
-            return;
-          }
-          updateSelectionToolbar();
-          Array.from(historyListEl.querySelectorAll(".callrecord-item")).forEach((el) => {
-            const itemId = String(el.getAttribute("data-id") || "").trim();
-            el.classList.toggle("selected", selectedIds.has(itemId));
-          });
         }
 
         function isAnsweredCall(data) {
@@ -406,47 +504,216 @@
           return isMissedCall(data) ? "red" : "";
         }
 
-        function updateHistorySummary(items, currentUid) {
-          const list = Array.isArray(items) ? items : [];
-          let outgoing = 0;
-          let answered = 0;
-          let missed = 0;
-          for (const it of list) {
-            const d = it && typeof it === "object" ? it : {};
-            const peer = pickPeerInfo(d, currentUid);
-            if (peer && peer.direction === "outgoing") outgoing += 1;
-            if (isMissedCall(d)) missed += 1;
-            if (isAnsweredCall(d)) answered += 1;
+        function computeCategoryCounts(items, currentUid) {
+          const uid = String(currentUid || "").trim();
+          const counts = {
+            total: 0,
+            incoming_total: 0,
+            outgoing_total: 0,
+            incoming_answered: 0,
+            incoming_missed: 0,
+            outgoing_answered: 0,
+            outgoing_missed: 0,
+          };
+          (Array.isArray(items) ? items : []).forEach((it) => {
+            const cat = classifyCategory(it, uid);
+            counts.total += 1;
+            if (cat.direction === "incoming") counts.incoming_total += 1;
+            if (cat.direction === "outgoing") counts.outgoing_total += 1;
+            if (counts[cat.key] != null) counts[cat.key] += 1;
+          });
+          return counts;
+        }
+
+        function sortCallItems(items) {
+          return (Array.isArray(items) ? items : []).slice().sort((a, b) => {
+            const am = Number(a && a.createdAtMs || 0);
+            const bm = Number(b && b.createdAtMs || 0);
+            if (bm !== am) return bm - am;
+            return String(b && b.id || "").localeCompare(String(a && a.id || ""), "en");
+          });
+        }
+
+        function getVisibleCallIds() {
+          return currentItems
+            .map((it) => String(it && it.id || "").trim())
+            .filter(Boolean);
+        }
+
+        function clearLongPressTimer() {
+          if (pressTimer) {
+            try { window.clearTimeout(pressTimer); } catch {}
           }
-          if (summaryOutgoingEl) summaryOutgoingEl.textContent = String(outgoing);
-          if (summaryAnsweredEl) summaryAnsweredEl.textContent = String(answered);
-          if (summaryMissedEl) summaryMissedEl.textContent = String(missed);
+          pressTimer = 0;
+          pressPointerId = null;
+          pressTargetId = "";
+        }
+
+        function setSelectionMode(nextMode, { clearSelection = false } = {}) {
+          selectionMode = !!nextMode;
+          if (!selectionMode || clearSelection) {
+            selectedCallIdSet = new Set();
+          }
+          updateSelectionUi();
+        }
+
+        function toggleSelectCallId(id, forceSelected) {
+          const callId = String(id || "").trim();
+          if (!callId) return;
+          if (!selectionMode) selectionMode = true;
+          const shouldSelect = forceSelected == null ? !selectedCallIdSet.has(callId) : !!forceSelected;
+          if (shouldSelect) selectedCallIdSet.add(callId);
+          else selectedCallIdSet.delete(callId);
+          if (!selectedCallIdSet.size) {
+            selectionMode = false;
+          }
+          updateSelectionUi();
+        }
+
+        function updateSelectionUi() {
+          const visibleIdSet = new Set(getVisibleCallIds());
+          selectedCallIdSet = new Set(Array.from(selectedCallIdSet).filter((id) => visibleIdSet.has(id)));
+          if (!selectedCallIdSet.size && selectionMode && !visibleIdSet.size) {
+            selectionMode = false;
+          }
+          if (!selectedCallIdSet.size && selectionMode && !deletingSelection && visibleIdSet.size === 0) {
+            selectionMode = false;
+          }
+          if (!selectedCallIdSet.size && selectionMode && visibleIdSet.size > 0 && !deletingSelection) {
+            // Keep selection mode active after long press until the user cancels.
+          }
+          if (selectionToolbarEl) selectionToolbarEl.hidden = !selectionMode;
+          if (selectionSummaryEl) selectionSummaryEl.textContent = `已選取 ${selectedCallIdSet.size} 筆`;
+          if (btnSelectAllCallsEl) {
+            btnSelectAllCallsEl.disabled = deletingSelection || !visibleIdSet.size || selectedCallIdSet.size === visibleIdSet.size;
+          }
+          if (btnCancelSelectionEl) btnCancelSelectionEl.disabled = deletingSelection;
+          if (btnDeleteSelectedCallsEl) btnDeleteSelectedCallsEl.disabled = deletingSelection || !selectedCallIdSet.size;
+          if (!historyListEl) return;
+          Array.from(historyListEl.querySelectorAll(".callrecord-item")).forEach((itemEl) => {
+            const id = String(itemEl.getAttribute("data-id") || "").trim();
+            const isSelected = !!id && selectedCallIdSet.has(id);
+            itemEl.classList.toggle("selecting", selectionMode);
+            itemEl.classList.toggle("selected", isSelected);
+            itemEl.setAttribute("aria-selected", isSelected ? "true" : "false");
+          });
+        }
+
+        async function hideSelectedCalls() {
+          const ids = Array.from(selectedCallIdSet).filter(Boolean);
+          if (!currentUserId || !ids.length || deletingSelection) return;
+          const ok = window.confirm(`確定要刪除 ${ids.length} 筆通話紀錄嗎？\n此操作只會隱藏你自己的紀錄顯示。`);
+          if (!ok) return;
+          deletingSelection = true;
+          updateSelectionUi();
+          try {
+            await db.collection("users").doc(currentUserId).set({
+              hiddenCallIds: FieldValue.arrayUnion(...ids),
+            }, { merge: true });
+            ids.forEach((id) => hiddenCallIdSet.add(String(id || "").trim()));
+            setSelectionMode(false, { clearSelection: true });
+            renderHistory(currentAllItems, currentUserId);
+          } catch (err) {
+            console.error(err);
+            window.alert("刪除失敗，請稍後再試。");
+          } finally {
+            deletingSelection = false;
+            updateSelectionUi();
+          }
+        }
+
+        function setActiveTab(nextTab) {
+          const t = String(nextTab || "").trim();
+          if (!t) return;
+          viewTab = t;
+          viewFilter = t === "incoming" ? "incoming_all" : (t === "outgoing" ? "outgoing_all" : "all");
+          tabButtons.forEach((b) => {
+            const isActive = String(b.getAttribute("data-tab") || "") === viewTab;
+            b.classList.toggle("active", isActive);
+            b.setAttribute("aria-selected", isActive ? "true" : "false");
+          });
+        }
+
+        function renderCategoryFilters(items, currentUid) {
+          if (!categoryFiltersEl) return;
+          const c = computeCategoryCounts(items, currentUid);
+          let buttonCount = 0;
+          const makeBtn = (key, label, count, iconKey) => {
+            buttonCount += 1;
+            const active = viewFilter === key;
+            const catAttr = iconKey ? ` data-cat="${esc(iconKey)}"` : "";
+            return `<button class="cr-filter${active ? " active" : ""}" type="button" data-filter="${esc(key)}"${catAttr}>
+              <span class="mini"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true">${renderCategoryIconSvg(iconKey || "outgoing_missed")}</svg></span>
+              <span class="label">${esc(label)}</span>
+              <span class="num">${esc(String(count))}</span>
+            </button>`;
+          };
+
+          let html = "";
+          if (viewTab === "incoming") {
+            html += makeBtn("incoming_all", "全部來電", c.incoming_total, "incoming_answered");
+            html += makeBtn("incoming_answered", "來電已接", c.incoming_answered, "incoming_answered");
+            html += makeBtn("incoming_missed", "來電未接", c.incoming_missed, "incoming_missed");
+          } else if (viewTab === "outgoing") {
+            html += makeBtn("outgoing_all", "全部撥出", c.outgoing_total, "outgoing_answered");
+            html += makeBtn("outgoing_answered", "撥出已接", c.outgoing_answered, "outgoing_answered");
+            html += makeBtn("outgoing_missed", "撥出未接", c.outgoing_missed, "outgoing_missed");
+          } else {
+            html += makeBtn("all", "全部", c.total, "outgoing_answered");
+            html += makeBtn("incoming_answered", "來電已接", c.incoming_answered, "incoming_answered");
+            html += makeBtn("incoming_missed", "來電未接", c.incoming_missed, "incoming_missed");
+            html += makeBtn("outgoing_answered", "撥出已接", c.outgoing_answered, "outgoing_answered");
+            html += makeBtn("outgoing_missed", "撥出未接", c.outgoing_missed, "outgoing_missed");
+          }
+          if (!c.total) {
+            html += `<div class="callrecord-filters-empty">${esc("目前沒有可分類的通話紀錄")}</div>`;
+          }
+          categoryFiltersEl.style.setProperty("--filter-columns", String(Math.max(buttonCount, 1)));
+          categoryFiltersEl.innerHTML = html;
+        }
+
+        function applyViewFilter(items, currentUid) {
+          const uid = String(currentUid || "").trim();
+          const filter = String(viewFilter || "").trim();
+          if (filter === "all") return items;
+          if (filter === "incoming_all") return items.filter((d) => classifyCategory(d, uid).direction === "incoming");
+          if (filter === "outgoing_all") return items.filter((d) => classifyCategory(d, uid).direction === "outgoing");
+          return items.filter((d) => classifyCategory(d, uid).key === filter);
         }
 
         function renderHistory(items, currentUid) {
           const arr = Array.isArray(items)
             ? items.filter((d) => !hiddenCallIdSet.has(String(d && d.id || "").trim()))
             : [];
-          currentItems = arr.slice();
-          updateHistorySummary(arr, currentUid);
-          // #region debug-point H:callrecord-render-history
-          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"pre-fix",point:"callrecord-render-history",location:"callrecord.html:renderHistory",data:{currentUid:String(currentUid||""),peerUid:String(peerUid||""),toRoleHint:String(toRoleHint||""),itemsCount:Number((Array.isArray(items)?items.length:0)||0),visibleCount:Number(arr.length||0),hiddenCount:Number(hiddenCallIdSet.size||0),summary:{outgoing:Number((summaryOutgoingEl&&summaryOutgoingEl.textContent)||0),answered:Number((summaryAnsweredEl&&summaryAnsweredEl.textContent)||0),missed:Number((summaryMissedEl&&summaryMissedEl.textContent)||0)},sample:arr.slice(0,5).map((d)=>({id:String((d&&d.id)||""),status:String((d&&d.status)||""),fromUid:String((d&&d.fromUid)||""),toUid:String((d&&d.toUid)||""),fromRole:String((d&&d.fromRole)||""),toRole:String((d&&d.toRole)||""),fromName:String((d&&d.fromName)||""),toName:String((d&&d.toName)||"")}))},ts:Date.now()})}).catch(()=>{});
-          // #endregion
-          if (!arr.length) {
-            exitSelectionMode();
+          const uid = String(currentUid || "").trim();
+          const sorted = sortCallItems(arr);
+          currentAllItems = sorted.slice();
+          renderCategoryFilters(currentAllItems, uid);
+          const viewItems = applyViewFilter(currentAllItems, uid);
+          currentItems = viewItems.slice();
+          selectedCallIdSet = new Set(Array.from(selectedCallIdSet).filter((id) => getVisibleCallIds().includes(id)));
+          if (selectionMode && !currentItems.length) {
+            selectionMode = false;
+            selectedCallIdSet = new Set();
+          }
+          if (!currentItems.length) {
             historyListEl.innerHTML = `<p class="callrecord-empty">${esc(peerUid ? "目前沒有此對象的通話紀錄" : "目前沒有通話紀錄")}</p>`;
+            updateSelectionUi();
             return;
           }
-          historyListEl.innerHTML = arr.map((it) => {
+          historyListEl.innerHTML = currentItems.map((it) => {
             const d = it && typeof it === "object" ? it : {};
-            const peer = pickPeerInfo(d, currentUid);
+            const peer = pickPeerInfo(d, uid);
+            const cat = classifyCategory(d, uid);
             const t = fmtTime(Number(d.createdAtMs || 0)) || "";
             const title = [peer.name, peer.unit].filter(Boolean).join("｜") || "通話對象";
-            const statusText = displayStatusText(d);
+            const statusText = cat.label;
+            const callId = String(d.id || "").trim();
+            const isSelected = selectionMode && selectedCallIdSet.has(callId);
             return `
-              <div class="callrecord-item${selectedIds.has(String(d.id || "").trim()) ? " selected" : ""}" data-id="${esc(d.id || "")}">
-                <div class="callrecord-check">✓</div>
-                ${renderDirectionIcon(peer.direction)}
+              <div class="callrecord-item${selectionMode ? " selecting" : ""}${isSelected ? " selected" : ""}" data-id="${esc(callId)}" aria-selected="${isSelected ? "true" : "false"}">
+                <div class="callrecord-item-select" aria-hidden="true">✓</div>
+                ${renderCategoryIcon(cat.key, cat.label)}
                 <div class="callrecord-main">
                   <div class="callrecord-name">${esc(title)}</div>
                   <div class="callrecord-meta">
@@ -457,8 +724,7 @@
               </div>
             `;
           }).join("");
-          historyListEl.classList.toggle("selection-mode", selectionMode);
-          updateSelectionToolbar();
+          updateSelectionUi();
         }
 
         async function loadHiddenCallIds(user) {
@@ -475,78 +741,61 @@
           }
         }
 
-        async function deleteSelectedForCurrentUser() {
-          if (!currentUserId || !selectedIds.size) return;
-          const ids = Array.from(selectedIds).map((x) => String(x || "").trim()).filter(Boolean);
-          if (!ids.length) return;
-          try {
-            btnDeleteSelected.disabled = true;
-            await db.collection("users").doc(currentUserId).set(
-              {
-                hiddenCallIds: FieldValue.arrayUnion(...ids),
-                hiddenCallIdsUpdatedAtMs: Date.now(),
-              },
-              { merge: true }
-            );
-            ids.forEach((id) => hiddenCallIdSet.add(id));
-            currentItems = currentItems.filter((item) => !hiddenCallIdSet.has(String(item && item.id || "").trim()));
-            exitSelectionMode();
-            renderHistory(currentItems, currentUserId);
-          } catch {
-            historyListEl.insertAdjacentHTML("afterbegin", `<p class="callrecord-err">${esc("刪除失敗，請稍後再試")}</p>`);
-          } finally {
-            btnDeleteSelected.disabled = false;
-          }
-        }
-
         async function loadHistory(user) {
           const u = user && user.uid ? String(user.uid).trim() : "";
           currentUserId = u;
+          setSelectionMode(false, { clearSelection: true });
           if (_unsubHistory) {
             try { _unsubHistory(); } catch {}
             _unsubHistory = null;
           }
           if (!u) {
-            exitSelectionMode();
+            if (categoryFiltersEl) categoryFiltersEl.innerHTML = `<div class="callrecord-filters-empty">${esc("請先登入後查看分類")}</div>`;
             historyListEl.innerHTML = `<p class="callrecord-empty">${esc("請先登入後查看通話紀錄")}</p>`;
             return;
           }
           await loadHiddenCallIds(user);
+          if (categoryFiltersEl) categoryFiltersEl.innerHTML = `<div class="callrecord-filters-empty">${esc("載入分類中...")}</div>`;
           historyListEl.innerHTML = `<p class="callrecord-empty">${esc("載入中...")}</p>`;
 
           try {
             const isAdminHint = toRoleHint === "admin";
             if (isAdminHint && community) {
               if (peerUid) {
-                _unsubHistory = db.collection("calls").where("fromUid", "==", u).limit(500).onSnapshot((snap) => {
-                  const list = (snap && snap.docs ? snap.docs : [])
-                    .map((doc) => ({ id: doc.id, ...(doc.data() || {}) }))
-                    .filter((d) => String(d && d.community || "").trim() === community)
-                    .filter((d) => String(d && d.toUid || "").trim() === peerUid);
-
-                  const out = list.sort((a, b) => {
-                    const am = Number(a && a.createdAtMs || 0);
-                    const bm = Number(b && b.createdAtMs || 0);
-                    if (bm !== am) return bm - am;
-                    return String(b && b.id || "").localeCompare(String(a && a.id || ""), "en");
-                  });
-
+                const byId = new Map();
+                const emit = () => {
+                  const out = sortCallItems(Array.from(byId.values()));
                   renderHistory(out, u);
-                }, () => {
-                  exitSelectionMode();
+                };
+                const onError = () => {
+                  if (categoryFiltersEl) categoryFiltersEl.innerHTML = `<div class="callrecord-filters-empty">${esc("分類載入失敗")}</div>`;
                   historyListEl.innerHTML = `<p class="callrecord-err">${esc("載入通話紀錄失敗（權限不足或網路異常）")}</p>`;
-                });
+                };
+                const unsub1 = db.collection("calls").where("fromUid", "==", u).limit(500).onSnapshot((snap) => {
+                  (snap && snap.docs ? snap.docs : []).forEach((doc) => {
+                    const d = { id: doc.id, ...(doc.data() || {}) };
+                    if (String(d && d.community || "").trim() !== community) return;
+                    if (String(d && d.toUid || "").trim() !== peerUid) return;
+                    byId.set(doc.id, d);
+                  });
+                  emit();
+                }, onError);
+                const unsub2 = db.collection("calls").where("toUid", "==", u).limit(500).onSnapshot((snap) => {
+                  (snap && snap.docs ? snap.docs : []).forEach((doc) => {
+                    const d = { id: doc.id, ...(doc.data() || {}) };
+                    if (String(d && d.community || "").trim() !== community) return;
+                    if (String(d && d.fromUid || "").trim() !== peerUid) return;
+                    byId.set(doc.id, d);
+                  });
+                  emit();
+                }, onError);
+                _unsubHistory = () => { try { unsub1(); } catch {} try { unsub2(); } catch {} };
                 return;
               }
 
               const byId = new Map();
               const emit = () => {
-                const out = Array.from(byId.values()).sort((a, b) => {
-                  const am = Number(a && a.createdAtMs || 0);
-                  const bm = Number(b && b.createdAtMs || 0);
-                  if (bm !== am) return bm - am;
-                  return String(b && b.id || "").localeCompare(String(a && a.id || ""), "en");
-                });
+                const out = sortCallItems(Array.from(byId.values()));
                 renderHistory(out, u);
               };
 
@@ -572,9 +821,6 @@
               const map = new Map();
               const q1 = await db.collection("calls").where("toUid", "==", u).limit(80).get();
               const q2 = await db.collection("calls").where("fromUid", "==", u).limit(80).get();
-              // #region debug-point H:callrecord-query-user
-              fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"pre-fix",point:"callrecord-query-user",location:"callrecord.html:loadHistory:user-query",data:{currentUid:u,community,peerUid:String(peerUid||""),toRoleHint:String(toRoleHint||""),toUidDocs:Number((q1&&q1.docs&&q1.docs.length)||0),fromUidDocs:Number((q2&&q2.docs&&q2.docs.length)||0)},ts:Date.now()})}).catch(()=>{});
-              // #endregion
               (q1 && q1.docs ? q1.docs : []).forEach((doc) => map.set(doc.id, { id: doc.id, ...(doc.data() || {}) }));
               (q2 && q2.docs ? q2.docs : []).forEach((doc) => map.set(doc.id, { id: doc.id, ...(doc.data() || {}) }));
 
@@ -586,80 +832,110 @@
                   })
                 : Array.from(map.values());
 
-              const out = filtered.sort((a, b) => {
-                const am = Number(a && a.createdAtMs || 0);
-                const bm = Number(b && b.createdAtMs || 0);
-                if (bm !== am) return bm - am;
-                return String(b && b.id || "").localeCompare(String(a && a.id || ""), "en");
-              });
+              const out = sortCallItems(filtered);
 
               renderHistory(out, u);
               return;
             }
 
           } catch {
-            exitSelectionMode();
+            if (categoryFiltersEl) categoryFiltersEl.innerHTML = `<div class="callrecord-filters-empty">${esc("分類載入失敗")}</div>`;
             historyListEl.innerHTML = `<p class="callrecord-err">${esc("載入通話紀錄失敗（權限不足或網路異常）")}</p>`;
           }
         }
 
-        if (btnSelectAll) {
-          btnSelectAll.onclick = () => {
-            selectionMode = true;
-            selectedIds = new Set(currentItems.map((item) => String(item && item.id || "").trim()).filter(Boolean));
-            renderHistory(currentItems, currentUserId);
-          };
-        }
-
-        if (btnCancelSelection) btnCancelSelection.onclick = exitSelectionMode;
-        if (btnDeleteSelected) btnDeleteSelected.onclick = () => { deleteSelectedForCurrentUser().catch(() => {}); };
-
-        historyListEl.addEventListener("click", (ev) => {
-          const item = ev.target && ev.target.closest ? ev.target.closest(".callrecord-item") : null;
-          if (!item) return;
-          const id = String(item.getAttribute("data-id") || "").trim();
-          if (!id) return;
-          if (!selectionMode) return;
-          toggleSelected(id);
+        tabButtons.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const next = String(btn.getAttribute("data-tab") || "").trim();
+            setActiveTab(next);
+            renderHistory(currentAllItems, currentUserId);
+          });
         });
 
-        historyListEl.addEventListener("pointerdown", (ev) => {
-          const item = ev.target && ev.target.closest ? ev.target.closest(".callrecord-item") : null;
-          if (!item || selectionMode) return;
-          longPressMeta = {
-            id: String(item.getAttribute("data-id") || "").trim(),
-            x: Number(ev.clientX || 0),
-            y: Number(ev.clientY || 0),
-          };
-          longPressTimer = window.setTimeout(() => {
-            const id = longPressMeta && longPressMeta.id ? String(longPressMeta.id) : "";
-            longPressTimer = null;
-            longPressMeta = null;
-            if (!id) return;
-            enterSelectionMode(id);
-            renderHistory(currentItems, currentUserId);
-          }, 520);
-        }, { passive: true });
+        if (categoryFiltersEl) {
+          categoryFiltersEl.addEventListener("click", (ev) => {
+            const btn = ev.target && ev.target.closest ? ev.target.closest(".cr-filter") : null;
+            if (!btn) return;
+            const next = String(btn.getAttribute("data-filter") || "").trim();
+            if (!next) return;
+            viewFilter = next;
+            renderHistory(currentAllItems, currentUserId);
+          });
+        }
 
-        historyListEl.addEventListener("pointermove", (ev) => {
-          if (!longPressTimer || !longPressMeta) return;
-          const dx = Math.abs(Number(ev.clientX || 0) - longPressMeta.x);
-          const dy = Math.abs(Number(ev.clientY || 0) - longPressMeta.y);
-          if (dx > 10 || dy > 10) {
-            window.clearTimeout(longPressTimer);
-            longPressTimer = null;
-            longPressMeta = null;
-          }
-        }, { passive: true });
+        if (btnSelectAllCallsEl) {
+          btnSelectAllCallsEl.addEventListener("click", () => {
+            if (!selectionMode) selectionMode = true;
+            selectedCallIdSet = new Set(getVisibleCallIds());
+            updateSelectionUi();
+          });
+        }
 
-        const clearLongPress = () => {
-          if (longPressTimer) window.clearTimeout(longPressTimer);
-          longPressTimer = null;
-          longPressMeta = null;
-        };
-        historyListEl.addEventListener("pointerup", clearLongPress, { passive: true });
-        historyListEl.addEventListener("pointercancel", clearLongPress, { passive: true });
-        historyListEl.addEventListener("pointerleave", clearLongPress, { passive: true });
+        if (btnCancelSelectionEl) {
+          btnCancelSelectionEl.addEventListener("click", () => {
+            setSelectionMode(false, { clearSelection: true });
+          });
+        }
+
+        if (btnDeleteSelectedCallsEl) {
+          btnDeleteSelectedCallsEl.addEventListener("click", () => {
+            hideSelectedCalls().catch(() => {});
+          });
+        }
+
+        if (historyListEl) {
+          historyListEl.addEventListener("pointerdown", (ev) => {
+            const itemEl = ev.target && ev.target.closest ? ev.target.closest(".callrecord-item") : null;
+            if (!itemEl) return;
+            clearLongPressTimer();
+            pressPointerId = ev.pointerId;
+            pressTargetId = String(itemEl.getAttribute("data-id") || "").trim();
+            pressStartX = Number(ev.clientX || 0);
+            pressStartY = Number(ev.clientY || 0);
+            pressTimer = window.setTimeout(() => {
+              const id = String(pressTargetId || "").trim();
+              if (!id) return;
+              selectionMode = true;
+              selectedCallIdSet = new Set([id]);
+              suppressNextClick = true;
+              updateSelectionUi();
+              clearLongPressTimer();
+            }, LONG_PRESS_MS);
+          });
+
+          historyListEl.addEventListener("pointermove", (ev) => {
+            if (!pressTimer || pressPointerId !== ev.pointerId) return;
+            const dx = Math.abs(Number(ev.clientX || 0) - pressStartX);
+            const dy = Math.abs(Number(ev.clientY || 0) - pressStartY);
+            if (dx > LONG_PRESS_MOVE_PX || dy > LONG_PRESS_MOVE_PX) clearLongPressTimer();
+          });
+
+          ["pointerup", "pointercancel", "pointerleave"].forEach((eventName) => {
+            historyListEl.addEventListener(eventName, (ev) => {
+              if (pressPointerId != null && ev.pointerId != null && pressPointerId !== ev.pointerId) return;
+              clearLongPressTimer();
+            });
+          });
+
+          historyListEl.addEventListener("contextmenu", (ev) => {
+            const itemEl = ev.target && ev.target.closest ? ev.target.closest(".callrecord-item") : null;
+            if (!itemEl) return;
+            ev.preventDefault();
+          });
+
+          historyListEl.addEventListener("click", (ev) => {
+            const itemEl = ev.target && ev.target.closest ? ev.target.closest(".callrecord-item") : null;
+            if (!itemEl) return;
+            if (suppressNextClick) {
+              suppressNextClick = false;
+              ev.preventDefault();
+              return;
+            }
+            if (!selectionMode) return;
+            ev.preventDefault();
+            toggleSelectCallId(itemEl.getAttribute("data-id"));
+          });
+        }
 
         auth.onAuthStateChanged((user) => {
           loadHistory(user).catch(() => {});
