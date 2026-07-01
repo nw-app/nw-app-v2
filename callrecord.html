@@ -404,11 +404,34 @@
           return String(name || "").trim() || "通話對象";
         }
 
+        function isAdminPeerScopedView() {
+          return toRoleHint === "admin" && !!peerUid;
+        }
+
         function pickPeerInfo(data, currentUid) {
           const d = data && typeof data === "object" ? data : {};
           const uid = String(currentUid || "").trim();
           const fromUid = String(d.fromUid || "").trim();
           const toUid = String(d.toUid || "").trim();
+          if (isAdminPeerScopedView()) {
+            const peerId = String(peerUid || "").trim();
+            if (peerId) {
+              if (fromUid === peerId) {
+                return {
+                  direction: "incoming",
+                  name: formatPeerName(d.fromName, d.fromRole),
+                  unit: [String(d.fromHouseNo || "").trim(), String(d.fromSubUnit || "").trim()].filter(Boolean).join("-"),
+                };
+              }
+              if (toUid === peerId) {
+                return {
+                  direction: "outgoing",
+                  name: formatPeerName(d.toName, d.toRole),
+                  unit: [String(d.toHouseNo || "").trim(), String(d.toSubUnit || "").trim()].filter(Boolean).join("-"),
+                };
+              }
+            }
+          }
           const outgoing = !!uid && fromUid === uid && toUid !== uid;
           const incoming = !!uid && toUid === uid && fromUid !== uid;
           if (outgoing) {
