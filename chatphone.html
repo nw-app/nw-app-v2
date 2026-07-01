@@ -378,6 +378,7 @@
         const callModalEl = document.getElementById("chatCallModal");
         const historyModalEl = document.getElementById("chatHistoryModal");
         const historyIframeEl = document.getElementById("chatHistoryIframe");
+        const historyTitleEl = document.getElementById("chatHistoryTitle");
         const historyCloseBtn = document.getElementById("btnChatHistoryClose");
         const historyBackdropEl = document.getElementById("chatHistoryBackdrop");
         const callAvatarImgEl = document.getElementById("chatCallAvatarImg");
@@ -914,7 +915,10 @@
               ev.stopPropagation();
               const card = btn.closest ? btn.closest(".account-card") : null;
               if (!card) return;
-              openHistoryModal(card.getAttribute("data-uid"));
+              const h = String(card.getAttribute("data-house") || "").trim();
+              const s = String(card.getAttribute("data-sub") || "").trim();
+              const unit = [h, s].filter((x) => x && x !== "—").join("-");
+              openHistoryModal(card.getAttribute("data-uid"), unit);
             });
           });
 
@@ -1190,12 +1194,14 @@
           if (chatCallState) chatCallState.localStream = localStream;
 
           const fromRole = normalizeRoleText(currentUserData && currentUserData.role);
-          const fromName = String(
-            (currentUserData && (currentUserData.displayName || currentUserData.name || currentUserData.email)) ||
-            user.displayName ||
-            user.email ||
-            "住戶"
-          ).trim();
+          const fromName = fromRole === "admin"
+            ? "社區後台"
+            : String(
+                (currentUserData && (currentUserData.displayName || currentUserData.name || currentUserData.email)) ||
+                user.displayName ||
+                user.email ||
+                "住戶"
+              ).trim();
           const fromHouseNo = normalizeUnit(currentUserData && (currentUserData.houseNo || currentUserData.unit));
           const offer = await pc.createOffer({ offerToReceiveAudio: true });
           await pc.setLocalDescription(offer);
@@ -1205,7 +1211,7 @@
             fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"C",location:"chatphone.html:startOutgoingResidentCall:before-set",msg:"[DEBUG] before call doc set",data:{callId:String((callDocRef&&callDocRef.id)||""),community:String((currentUserData&&currentUserData.community)||currentCommunityKey||"").trim(),toUid:uid,toRole:"resident",status:"ringing"},ts:Date.now()})}).catch(()=>{});
             // #endregion
             await callDocRef.set({
-              community: String((currentUserData && currentUserData.community) || currentCommunityKey || "").trim(),
+              community: String(currentCommunityKey || (currentUserData && currentUserData.community) || "").trim(),
               fromUid: String(user.uid),
               fromRole,
               fromName,
@@ -1312,9 +1318,13 @@
           });
         }
 
-        function openHistoryModal(uid) {
+        function openHistoryModal(uid, unitLabel) {
           const id = String(uid || "").trim();
           if (!id || !historyModalEl || !historyIframeEl) return;
+          if (historyTitleEl) {
+            const u = String(unitLabel || "").trim();
+            historyTitleEl.textContent = u ? `與 ${u} 的通話紀錄` : "通話紀錄";
+          }
           const q = new URLSearchParams();
           if (currentCommunityKey) q.set("c", String(currentCommunityKey));
           q.set("peer", id);
@@ -1327,6 +1337,7 @@
         function closeHistoryModal() {
           if (historyModalEl) historyModalEl.hidden = true;
           if (historyIframeEl) historyIframeEl.src = "";
+          if (historyTitleEl) historyTitleEl.textContent = "通話紀錄";
         }
 
         if (historyCloseBtn) historyCloseBtn.onclick = closeHistoryModal;

@@ -241,6 +241,7 @@
         let selectedIds = new Set();
         let longPressTimer = null;
         let longPressMeta = null;
+        let _unsubHistory = null;
 
         function esc(s) {
           return String(s ?? "").replace(/[&<>"']/g, (ch) => ({
@@ -269,23 +270,17 @@
           }
         }
 
-        function statusText(st) {
-          const s = String(st || "").trim();
-          if (s === "ringing") return "響鈴中";
-          if (s === "accepted") return "已接通";
-          if (s === "rejected") return "已拒接";
-          if (s === "busy") return "忙線中";
-          if (s === "missed") return "未接";
-          if (s === "ended") return "已結束";
-          return s || "未知";
+        function normalizeCallRole(raw) {
+          const v = String(raw || "").trim().toLowerCase();
+          if (v === "resident" || v === "住戶") return "resident";
+          if (v === "admin" || v === "community" || v === "system" || v === "系統管理員" || v === "系統管理者" || v === "社區") return "admin";
+          return "";
         }
 
-        function statusTagClass(st) {
-          const s = String(st || "").trim();
-          if (s === "ringing") return "";
-          if (s === "accepted") return "";
-          if (s === "rejected" || s === "busy" || s === "missed") return "red";
-          return "";
+        function formatPeerName(name, role) {
+          const normalizedRole = normalizeCallRole(role);
+          if (normalizedRole === "admin") return "社區後台";
+          return String(name || "").trim() || "通話對象";
         }
 
         function pickPeerInfo(data, currentUid) {
@@ -298,23 +293,23 @@
           if (outgoing) {
             return {
               direction: "outgoing",
-              name: String(d.toName || "").trim() || "通話對象",
+              name: formatPeerName(d.toName, d.toRole),
               unit: [String(d.toHouseNo || "").trim(), String(d.toSubUnit || "").trim()].filter(Boolean).join("-"),
             };
           }
           if (incoming) {
             return {
               direction: "incoming",
-              name: String(d.fromName || "").trim() || "通話對象",
+              name: formatPeerName(d.fromName, d.fromRole),
               unit: String(d.fromHouseNo || "").trim(),
             };
           }
-          const fallbackIsOutgoing = String(d.fromRole || "").trim() === "resident";
+          const fallbackIsOutgoing = normalizeCallRole(d.fromRole) === "resident";
           return {
             direction: fallbackIsOutgoing ? "outgoing" : "incoming",
             name: fallbackIsOutgoing
-              ? (String(d.toName || "").trim() || "通話對象")
-              : (String(d.fromName || "").trim() || "通話對象"),
+              ? formatPeerName(d.toName, d.toRole)
+              : formatPeerName(d.fromName, d.fromRole),
             unit: fallbackIsOutgoing
               ? [String(d.toHouseNo || "").trim(), String(d.toSubUnit || "").trim()].filter(Boolean).join("-")
               : String(d.fromHouseNo || "").trim(),
@@ -391,6 +386,26 @@
           return false;
         }
 
+        function isMissedCall(data) {
+          const d = data && typeof data === "object" ? data : {};
+          if (isAnsweredCall(d)) return false;
+          const st = String(d.status || "").trim();
+          if (st === "missed" || st === "rejected" || st === "busy") return true;
+          if (st === "ended") return true;
+          return false;
+        }
+
+        function displayStatusText(data) {
+          const d = data && typeof data === "object" ? data : {};
+          if (isAnsweredCall(d)) return "已接";
+          if (isMissedCall(d)) return "未接";
+          return "已撥";
+        }
+
+        function displayStatusTagClass(data) {
+          return isMissedCall(data) ? "red" : "";
+        }
+
         function updateHistorySummary(items, currentUid) {
           const list = Array.isArray(items) ? items : [];
           let outgoing = 0;
@@ -398,10 +413,9 @@
           let missed = 0;
           for (const it of list) {
             const d = it && typeof it === "object" ? it : {};
-            const st = String(d.status || "").trim();
             const peer = pickPeerInfo(d, currentUid);
             if (peer && peer.direction === "outgoing") outgoing += 1;
-            if (st === "missed") missed += 1;
+            if (isMissedCall(d)) missed += 1;
             if (isAnsweredCall(d)) answered += 1;
           }
           if (summaryOutgoingEl) summaryOutgoingEl.textContent = String(outgoing);
@@ -410,9 +424,14 @@
         }
 
         function renderHistory(items, currentUid) {
-          const arr = Array.isArray(items) ? items.filter((d) => !hiddenCallIdSet.has(String(d && d.id || "").trim())) : [];
+          const arr = Array.isArray(items)
+            ? items.filter((d) => !hiddenCallIdSet.has(String(d && d.id || "").trim()))
+            : [];
           currentItems = arr.slice();
           updateHistorySummary(arr, currentUid);
+          // #region debug-point H:callrecord-render-history
+          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"pre-fix",point:"callrecord-render-history",location:"callrecord.html:renderHistory",data:{currentUid:String(currentUid||""),peerUid:String(peerUid||""),toRoleHint:String(toRoleHint||""),itemsCount:Number((Array.isArray(items)?items.length:0)||0),visibleCount:Number(arr.length||0),hiddenCount:Number(hiddenCallIdSet.size||0),summary:{outgoing:Number((summaryOutgoingEl&&summaryOutgoingEl.textContent)||0),answered:Number((summaryAnsweredEl&&summaryAnsweredEl.textContent)||0),missed:Number((summaryMissedEl&&summaryMissedEl.textContent)||0)},sample:arr.slice(0,5).map((d)=>({id:String((d&&d.id)||""),status:String((d&&d.status)||""),fromUid:String((d&&d.fromUid)||""),toUid:String((d&&d.toUid)||""),fromRole:String((d&&d.fromRole)||""),toRole:String((d&&d.toRole)||""),fromName:String((d&&d.fromName)||""),toName:String((d&&d.toName)||"")}))},ts:Date.now()})}).catch(()=>{});
+          // #endregion
           if (!arr.length) {
             exitSelectionMode();
             historyListEl.innerHTML = `<p class="callrecord-empty">${esc(peerUid ? "目前沒有此對象的通話紀錄" : "目前沒有通話紀錄")}</p>`;
@@ -420,10 +439,10 @@
           }
           historyListEl.innerHTML = arr.map((it) => {
             const d = it && typeof it === "object" ? it : {};
-            const st = String(d.status || "").trim();
             const peer = pickPeerInfo(d, currentUid);
             const t = fmtTime(Number(d.createdAtMs || 0)) || "";
             const title = [peer.name, peer.unit].filter(Boolean).join("｜") || "通話對象";
+            const statusText = displayStatusText(d);
             return `
               <div class="callrecord-item${selectedIds.has(String(d.id || "").trim()) ? " selected" : ""}" data-id="${esc(d.id || "")}">
                 <div class="callrecord-check">✓</div>
@@ -431,7 +450,7 @@
                 <div class="callrecord-main">
                   <div class="callrecord-name">${esc(title)}</div>
                   <div class="callrecord-meta">
-                    <span class="tag ${esc(statusTagClass(st))}">${esc(statusText(st))}</span>
+                    <span class="tag ${esc(displayStatusTagClass(d))}">${esc(statusText)}</span>
                     <div class="callrecord-time">${esc(t || "—")}</div>
                   </div>
                 </div>
@@ -483,6 +502,10 @@
         async function loadHistory(user) {
           const u = user && user.uid ? String(user.uid).trim() : "";
           currentUserId = u;
+          if (_unsubHistory) {
+            try { _unsubHistory(); } catch {}
+            _unsubHistory = null;
+          }
           if (!u) {
             exitSelectionMode();
             historyListEl.innerHTML = `<p class="callrecord-empty">${esc("請先登入後查看通話紀錄")}</p>`;
@@ -492,33 +515,88 @@
           historyListEl.innerHTML = `<p class="callrecord-empty">${esc("載入中...")}</p>`;
 
           try {
-            const map = new Map();
             const isAdminHint = toRoleHint === "admin";
             if (isAdminHint && community) {
-              const q = await db.collection("calls").where("community", "==", community).limit(150).get();
-              (q && q.docs ? q.docs : []).forEach((doc) => map.set(doc.id, { id: doc.id, ...(doc.data() || {}) }));
+              if (peerUid) {
+                _unsubHistory = db.collection("calls").where("fromUid", "==", u).limit(500).onSnapshot((snap) => {
+                  const list = (snap && snap.docs ? snap.docs : [])
+                    .map((doc) => ({ id: doc.id, ...(doc.data() || {}) }))
+                    .filter((d) => String(d && d.community || "").trim() === community)
+                    .filter((d) => String(d && d.toUid || "").trim() === peerUid);
+
+                  const out = list.sort((a, b) => {
+                    const am = Number(a && a.createdAtMs || 0);
+                    const bm = Number(b && b.createdAtMs || 0);
+                    if (bm !== am) return bm - am;
+                    return String(b && b.id || "").localeCompare(String(a && a.id || ""), "en");
+                  });
+
+                  renderHistory(out, u);
+                }, () => {
+                  exitSelectionMode();
+                  historyListEl.innerHTML = `<p class="callrecord-err">${esc("載入通話紀錄失敗（權限不足或網路異常）")}</p>`;
+                });
+                return;
+              }
+
+              const byId = new Map();
+              const emit = () => {
+                const out = Array.from(byId.values()).sort((a, b) => {
+                  const am = Number(a && a.createdAtMs || 0);
+                  const bm = Number(b && b.createdAtMs || 0);
+                  if (bm !== am) return bm - am;
+                  return String(b && b.id || "").localeCompare(String(a && a.id || ""), "en");
+                });
+                renderHistory(out, u);
+              };
+
+              const unsub1 = db.collection("calls").where("fromUid", "==", u).limit(500).onSnapshot((snap) => {
+                (snap && snap.docs ? snap.docs : []).forEach((doc) => {
+                  const d = { id: doc.id, ...(doc.data() || {}) };
+                  if (String(d.community || "").trim() !== community) return;
+                  byId.set(doc.id, d);
+                });
+                emit();
+              });
+              const unsub2 = db.collection("calls").where("toUid", "==", u).limit(500).onSnapshot((snap) => {
+                (snap && snap.docs ? snap.docs : []).forEach((doc) => {
+                  const d = { id: doc.id, ...(doc.data() || {}) };
+                  if (String(d.community || "").trim() !== community) return;
+                  byId.set(doc.id, d);
+                });
+                emit();
+              });
+              _unsubHistory = () => { try { unsub1(); } catch {} try { unsub2(); } catch {} };
+              return;
             } else {
+              const map = new Map();
               const q1 = await db.collection("calls").where("toUid", "==", u).limit(80).get();
               const q2 = await db.collection("calls").where("fromUid", "==", u).limit(80).get();
+              // #region debug-point H:callrecord-query-user
+              fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"pre-fix",point:"callrecord-query-user",location:"callrecord.html:loadHistory:user-query",data:{currentUid:u,community,peerUid:String(peerUid||""),toRoleHint:String(toRoleHint||""),toUidDocs:Number((q1&&q1.docs&&q1.docs.length)||0),fromUidDocs:Number((q2&&q2.docs&&q2.docs.length)||0)},ts:Date.now()})}).catch(()=>{});
+              // #endregion
               (q1 && q1.docs ? q1.docs : []).forEach((doc) => map.set(doc.id, { id: doc.id, ...(doc.data() || {}) }));
               (q2 && q2.docs ? q2.docs : []).forEach((doc) => map.set(doc.id, { id: doc.id, ...(doc.data() || {}) }));
+
+              const filtered = peerUid
+                ? Array.from(map.values()).filter((d) => {
+                    const fromUid = String(d && d.fromUid || "").trim();
+                    const toUid = String(d && d.toUid || "").trim();
+                    return fromUid === peerUid || toUid === peerUid;
+                  })
+                : Array.from(map.values());
+
+              const out = filtered.sort((a, b) => {
+                const am = Number(a && a.createdAtMs || 0);
+                const bm = Number(b && b.createdAtMs || 0);
+                if (bm !== am) return bm - am;
+                return String(b && b.id || "").localeCompare(String(a && a.id || ""), "en");
+              });
+
+              renderHistory(out, u);
+              return;
             }
 
-            const filtered = peerUid
-              ? Array.from(map.values()).filter((d) => {
-                  const fromUid = String(d && d.fromUid || "").trim();
-                  const toUid = String(d && d.toUid || "").trim();
-                  return fromUid === peerUid || toUid === peerUid;
-                })
-              : Array.from(map.values());
-
-            const out = filtered.sort((a, b) => {
-              const am = Number(a && a.createdAtMs || 0);
-              const bm = Number(b && b.createdAtMs || 0);
-              if (bm !== am) return bm - am;
-              return String(b && b.id || "").localeCompare(String(a && a.id || ""), "en");
-            });
-            renderHistory(out, u);
           } catch {
             exitSelectionMode();
             historyListEl.innerHTML = `<p class="callrecord-err">${esc("載入通話紀錄失敗（權限不足或網路異常）")}</p>`;

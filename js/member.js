@@ -2056,21 +2056,55 @@
           .filter((x) => x && String(x.status || "") === "ringing")
           .sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
         const latest = list[0] || null;
+        // #region debug-point R:member-incoming-snapshot
+        fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"pre-fix",point:"member-incoming-snapshot",location:"member.js:startMemberIntercomIncomingListener:onSnapshot",data:{uid:String(user.uid||""),community:cid,docCount:Number(docs.length||0),listCount:Number(list.length||0),latestId:String((latest&&latest.id)||""),latestStatus:String((latest&&latest.status)||""),latestCommunity:String((latest&&latest.community)||""),latestFromRole:String((latest&&latest.fromRole)||""),latestToRole:String((latest&&latest.toRole)||""),latestToUid:String((latest&&latest.toUid)||""),latestCreatedAtMs:Number((latest&&latest.createdAtMs)||0)},ts:Date.now()})}).catch(()=>{});
+        // #endregion
         if (!latest) {
+          // #region debug-point R:member-incoming-empty
+          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"pre-fix",point:"member-incoming-empty",location:"member.js:startMemberIntercomIncomingListener:empty",data:{uid:String(user.uid||""),community:cid},ts:Date.now()})}).catch(()=>{});
+          // #endregion
           closeIntercomIncomingPrompt({ delayMs: 0 });
           return;
         }
-        if (cid && String(latest.community || "").trim() && String(latest.community || "").trim() !== cid) return;
+        if (cid && String(latest.community || "").trim() && String(latest.community || "").trim() !== cid) {
+          // #region debug-point R:member-incoming-community-mismatch
+          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"pre-fix",point:"member-incoming-community-mismatch",location:"member.js:startMemberIntercomIncomingListener:community-check",data:{uid:String(user.uid||""),community:cid,latestCommunity:String(latest.community||""),callId:String(latest.id||"")},ts:Date.now()})}).catch(()=>{});
+          // #endregion
+          return;
+        }
         const createdAtMs = Number(latest.createdAtMs || 0);
         const callId = String(latest.id || "").trim();
-        if (!callId) return;
-        if (callId === intercomIncomingPromptCallId) return;
-        if (callId === intercomLastIncomingId) return;
-        if (createdAtMs && createdAtMs < minMs) return;
+        if (!callId) {
+          // #region debug-point R:member-incoming-missing-callid
+          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"pre-fix",point:"member-incoming-missing-callid",location:"member.js:startMemberIntercomIncomingListener:callid-check",data:{uid:String(user.uid||"")},ts:Date.now()})}).catch(()=>{});
+          // #endregion
+          return;
+        }
+        if (callId === intercomIncomingPromptCallId) {
+          // #region debug-point R:member-incoming-same-prompt
+          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"pre-fix",point:"member-incoming-same-prompt",location:"member.js:startMemberIntercomIncomingListener:prompt-check",data:{uid:String(user.uid||""),callId},ts:Date.now()})}).catch(()=>{});
+          // #endregion
+          return;
+        }
+        if (callId === intercomLastIncomingId) {
+          // #region debug-point R:member-incoming-duplicate
+          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"pre-fix",point:"member-incoming-duplicate",location:"member.js:startMemberIntercomIncomingListener:duplicate-check",data:{uid:String(user.uid||""),callId},ts:Date.now()})}).catch(()=>{});
+          // #endregion
+          return;
+        }
+        if (createdAtMs && createdAtMs < minMs) {
+          // #region debug-point R:member-incoming-too-old
+          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"pre-fix",point:"member-incoming-too-old",location:"member.js:startMemberIntercomIncomingListener:age-check",data:{uid:String(user.uid||""),callId,createdAtMs,minMs},ts:Date.now()})}).catch(()=>{});
+          // #endregion
+          return;
+        }
         intercomLastIncomingMs = createdAtMs;
         intercomLastIncomingId = callId;
 
         if (intercomActive) {
+          // #region debug-point R:member-incoming-busy
+          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"pre-fix",point:"member-incoming-busy",location:"member.js:startMemberIntercomIncomingListener:busy",data:{uid:String(user.uid||""),callId},ts:Date.now()})}).catch(()=>{});
+          // #endregion
           try {
             await db.collection("calls").doc(callId).set({ status: "busy", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true });
           } catch {}
@@ -2082,6 +2116,9 @@
         prepareIntercomModal(prompt);
         intercomIncomingPromptEl = prompt;
         intercomIncomingPromptCallId = callId;
+        // #region debug-point R:member-incoming-prompt-open
+        fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"pre-fix",point:"member-incoming-prompt-open",location:"member.js:startMemberIntercomIncomingListener:prompt-open",data:{uid:String(user.uid||""),callId,fromName:String(latest.fromName||""),fromRole:String(latest.fromRole||""),toRole:String(latest.toRole||"")},ts:Date.now()})}).catch(()=>{});
+        // #endregion
         const callDocRef = db.collection("calls").doc(callId);
         if (intercomIncomingPromptUnsubDoc) {
           try { intercomIncomingPromptUnsubDoc(); } catch {}
