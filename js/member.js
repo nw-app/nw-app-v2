@@ -602,7 +602,10 @@
   }
 
   let memberIntercomMissedUnsub = null;
+  let memberIntercomMissedHiddenUnsub = null;
   let memberIntercomMissedCount = 0;
+  let memberIntercomMissedCallIdSet = new Set();
+  let memberIntercomHiddenCallIdSet = new Set();
 
   function formatHeaderBadgeNumber(value) {
     const n = Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -632,6 +635,15 @@
     badge.hidden = !enabled || n <= 0;
   }
 
+  function recomputeMemberIntercomMissedCount() {
+    let count = 0;
+    memberIntercomMissedCallIdSet.forEach((id) => {
+      if (!memberIntercomHiddenCallIdSet.has(id)) count += 1;
+    });
+    memberIntercomMissedCount = count;
+    updateMemberIntercomMissedBadgeUI();
+  }
+
   function applyChatphoneHeaderVisibility() {
     const btn = document.getElementById("btnNotification");
     if (!btn) return;
@@ -644,9 +656,16 @@
   }
 
   function stopMemberIntercomMissedSubscription() {
-    if (!memberIntercomMissedUnsub) return;
-    try { memberIntercomMissedUnsub(); } catch {}
+    if (memberIntercomMissedUnsub) {
+      try { memberIntercomMissedUnsub(); } catch {}
+    }
+    if (memberIntercomMissedHiddenUnsub) {
+      try { memberIntercomMissedHiddenUnsub(); } catch {}
+    }
     memberIntercomMissedUnsub = null;
+    memberIntercomMissedHiddenUnsub = null;
+    memberIntercomMissedCallIdSet = new Set();
+    memberIntercomHiddenCallIdSet = new Set();
     memberIntercomMissedCount = 0;
     updateMemberIntercomMissedBadgeUI();
   }
@@ -658,6 +677,15 @@
     const uid = me && me.uid ? String(me.uid) : "";
     if (!uid || !cid || cid === "default") return;
     try {
+      memberIntercomMissedHiddenUnsub = db.collection("users").doc(uid).onSnapshot((doc) => {
+        const data = doc && doc.exists ? (doc.data() || {}) : {};
+        const raw = Array.isArray(data.hiddenCallIds) ? data.hiddenCallIds : [];
+        memberIntercomHiddenCallIdSet = new Set(raw.map((id) => String(id || "").trim()).filter(Boolean));
+        recomputeMemberIntercomMissedCount();
+      }, () => {
+        memberIntercomHiddenCallIdSet = new Set();
+        recomputeMemberIntercomMissedCount();
+      });
       memberIntercomMissedUnsub = db
         .collection("calls")
         .where("community", "==", cid)
@@ -665,14 +693,18 @@
         .where("toUid", "==", uid)
         .where("status", "==", "missed")
         .onSnapshot((snap) => {
-          memberIntercomMissedCount = snap && typeof snap.size === "number" ? snap.size : 0;
-          updateMemberIntercomMissedBadgeUI();
+          memberIntercomMissedCallIdSet = new Set(
+            (snap && snap.docs ? snap.docs : []).map((doc) => String(doc && doc.id || "").trim()).filter(Boolean)
+          );
+          recomputeMemberIntercomMissedCount();
         }, () => {
+          memberIntercomMissedCallIdSet = new Set();
           memberIntercomMissedCount = 0;
           updateMemberIntercomMissedBadgeUI();
         });
     } catch {
       memberIntercomMissedUnsub = null;
+      memberIntercomMissedHiddenUnsub = null;
     }
   }
 
