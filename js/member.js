@@ -601,6 +601,92 @@
     });
   }
 
+  let memberIntercomMissedUnsub = null;
+  let memberIntercomMissedCount = 0;
+
+  function formatHeaderBadgeNumber(value) {
+    const n = Number.isFinite(Number(value)) ? Number(value) : 0;
+    if (n <= 0) return "0";
+    if (n > 99) return "99+";
+    return String(n);
+  }
+
+  function isChatphoneEnabledForResident() {
+    try {
+      const cfg = state.config && typeof state.config === "object" ? state.config : {};
+      const rs = cfg.residentsSubnav && typeof cfg.residentsSubnav === "object" ? cfg.residentsSubnav : null;
+      const tabs = rs && rs.communityTabs && typeof rs.communityTabs === "object" ? rs.communityTabs : null;
+      if (tabs && typeof tabs.chatphone === "boolean") return !!tabs.chatphone;
+      return true;
+    } catch {
+      return true;
+    }
+  }
+
+  function updateMemberIntercomMissedBadgeUI() {
+    const badge = document.getElementById("btnNotificationBadge");
+    if (!badge) return;
+    const enabled = isChatphoneEnabledForResident();
+    const n = Number.isFinite(Number(memberIntercomMissedCount)) ? Number(memberIntercomMissedCount) : 0;
+    badge.textContent = formatHeaderBadgeNumber(n);
+    badge.hidden = !enabled || n <= 0;
+  }
+
+  function applyChatphoneHeaderVisibility() {
+    const btn = document.getElementById("btnNotification");
+    if (!btn) return;
+    const enabled = isChatphoneEnabledForResident();
+    btn.hidden = !enabled;
+    if (!enabled) {
+      const badge = document.getElementById("btnNotificationBadge");
+      if (badge) badge.hidden = true;
+    }
+  }
+
+  function stopMemberIntercomMissedSubscription() {
+    if (!memberIntercomMissedUnsub) return;
+    try { memberIntercomMissedUnsub(); } catch {}
+    memberIntercomMissedUnsub = null;
+    memberIntercomMissedCount = 0;
+    updateMemberIntercomMissedBadgeUI();
+  }
+
+  function startMemberIntercomMissedCountListener(communityId) {
+    stopMemberIntercomMissedSubscription();
+    const cid = String(communityId || "").trim() || "default";
+    const me = auth && auth.currentUser ? auth.currentUser : null;
+    const uid = me && me.uid ? String(me.uid) : "";
+    if (!uid || !cid || cid === "default") return;
+    try {
+      memberIntercomMissedUnsub = db
+        .collection("calls")
+        .where("community", "==", cid)
+        .where("toRole", "==", "resident")
+        .where("toUid", "==", uid)
+        .where("status", "==", "missed")
+        .onSnapshot((snap) => {
+          memberIntercomMissedCount = snap && typeof snap.size === "number" ? snap.size : 0;
+          updateMemberIntercomMissedBadgeUI();
+        }, () => {
+          memberIntercomMissedCount = 0;
+          updateMemberIntercomMissedBadgeUI();
+        });
+    } catch {
+      memberIntercomMissedUnsub = null;
+    }
+  }
+
+  function ensureChatphoneRuntimeState() {
+    const enabled = isChatphoneEnabledForResident();
+    if (!enabled) {
+      stopMemberIntercomMissedSubscription();
+      return;
+    }
+    if (!memberIntercomMissedUnsub) {
+      try { startMemberIntercomMissedCountListener(resolveActiveCommunityId()); } catch {}
+    }
+  }
+
   function ensureCommunitiesSubscription(user) {
     db.collection("communities").get().then((snap) => {
       state.communities = snap.docs.map((d) => {
@@ -610,12 +696,14 @@
       refreshLoginInfo(user);
       ensureConfigSubscription();
       try { startMemberIntercomIncomingListener(resolveActiveCommunityId()); } catch {}
+      try { startMemberIntercomMissedCountListener(resolveActiveCommunityId()); } catch {}
       render();
     }).catch(() => {
       state.communities = [];
       refreshLoginInfo(user);
       ensureConfigSubscription();
       try { startMemberIntercomIncomingListener(resolveActiveCommunityId()); } catch {}
+      try { startMemberIntercomMissedCountListener(resolveActiveCommunityId()); } catch {}
       render();
     });
   }
@@ -1119,6 +1207,9 @@
     const route = parseRoute();
     buildNav();
     setActive(route.moduleId);
+    ensureChatphoneRuntimeState();
+    applyChatphoneHeaderVisibility();
+    updateMemberIntercomMissedBadgeUI();
   }
 
   const btnGoCommunity = document.getElementById("btnGoCommunity");
