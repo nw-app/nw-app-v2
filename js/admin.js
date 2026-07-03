@@ -6743,6 +6743,22 @@
     reader.readAsDataURL(file);
   });
 
+  if (!window.__nw_pdf_open_delegate_admin) {
+    window.__nw_pdf_open_delegate_admin = true;
+    document.addEventListener("click", (e) => {
+      const a = e.target && e.target.closest ? e.target.closest('[data-open-pdf="1"]') : null;
+      if (!a) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const raw = a._pdfDataUrl || a.getAttribute("data-pdf-url") || a.getAttribute("href");
+      if (typeof window.openPdfViewer === "function") {
+        window.openPdfViewer(raw, a.getAttribute("data-pdf-name"));
+      } else {
+        window.alert("PDF 檢視器尚未載入，請重新整理後再試。");
+      }
+    }, true);
+  }
+
   function renderBulletinModule() {
     const cid = resolveActiveCommunityId();
     const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
@@ -6819,6 +6835,7 @@
         return;
       }
       
+      const pdfMap = new Map();
       listEl.innerHTML = bulletinData.map((item) => {
         const tagColor = item.isPinned ? "red" : (item.isImportant ? "yellow" : "green");
         const tagText = item.isPinned ? "置頂" : (item.isImportant ? "重要" : "最新");
@@ -6829,9 +6846,12 @@
             </div>`
           : "";
         const attachment = item.attachment && typeof item.attachment === "object" ? item.attachment : null;
+        if (attachment && attachment.dataUrl) {
+          try { pdfMap.set(String(item.id || ""), String(attachment.dataUrl || "")); } catch {}
+        }
         const attachmentHtml = attachment && attachment.dataUrl
           ? `<div style="margin-top:12px;">
-              <a href="${escapeHtml(String(attachment.dataUrl || ""))}" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #d1d5db; border-radius:10px; background:#f9fafb; color:#111827; text-decoration:none; font-weight:700;">
+              <a href="#" data-open-pdf="1" data-pdf-id="${escapeHtml(String(item.id || ""))}" data-pdf-name="${escapeHtml(String(attachment.name || "附件.pdf"))}" style="display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #d1d5db; border-radius:10px; background:#f9fafb; color:#111827; text-decoration:none; font-weight:700;">
                 <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:999px; background:#fee2e2; color:#b91c1c;">PDF</span>
                 <span>${escapeHtml(String(attachment.name || "附件.pdf"))}</span>
               </a>
@@ -6902,6 +6922,11 @@
             toast(`刪除失敗：${err.message}`);
           }
         });
+      });
+
+      listEl.querySelectorAll("[data-open-pdf]").forEach((a) => {
+        const id = String(a.getAttribute("data-pdf-id") || "").trim();
+        if (id && pdfMap.has(id)) a._pdfDataUrl = pdfMap.get(id);
       });
     };
 
@@ -7386,11 +7411,29 @@
           setStatus("僅支援 PDF 檔案。", true);
           return;
         }
+        const maxBytes = 650 * 1024;
+        const bytes = Number(file.size || 0);
+        if (bytes > maxBytes) {
+          const kb = Math.round(bytes / 1024);
+          setStatus(`PDF 檔案過大（${kb}KB），目前此功能儲存於 Firestore 有 1MB 限制，請改用較小檔案（建議 < 650KB）。`, true);
+          return;
+        }
         const dataUrl = await fileToPdfDataUrlForBulletin(file);
         if (!dataUrl) {
           setStatus("PDF 讀取失敗，請重新選擇。", true);
           return;
         }
+        try {
+          const raw = String(dataUrl || "");
+          const comma = raw.indexOf(",");
+          if (comma > 0 && raw.slice(0, comma).toLowerCase().includes(";base64")) {
+            const head = atob(raw.slice(comma + 1, comma + 1 + 24));
+            if (!head.startsWith("%PDF")) {
+              setStatus("PDF 解析失敗（檔案格式不正確或被截斷），請改用其他 PDF。", true);
+              return;
+            }
+          }
+        } catch {}
         selectedAttachment = {
           name: String(file.name || "附件.pdf").trim() || "附件.pdf",
           mimeType: "application/pdf",

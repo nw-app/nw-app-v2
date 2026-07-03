@@ -36,6 +36,7 @@
   let currentUserId = null;
   let currentUserName = "";
   let currentUserHouseNo = "";
+  let bulletinPdfMap = new Map();
 
   function nameFromEmail(email) {
     const e = String(email || '').trim();
@@ -155,12 +156,16 @@
       return;
     }
     
+    const pdfMap = new Map();
     bulletinList.innerHTML = filteredData.map((item) => {
       const tagColor = item.isPinned ? 'red' : (item.isImportant ? 'yellow' : 'green');
       const tagText = item.isPinned ? '置頂' : (item.isImportant ? '重要' : '最新');
       const hasImages = item.images && item.images.length > 0;
       const attachment = item.attachment && typeof item.attachment === 'object' ? item.attachment : null;
       const hasPdf = !!(attachment && attachment.dataUrl);
+      if (hasPdf) {
+        try { pdfMap.set(String(item.id || ''), String(attachment.dataUrl || '')); } catch {}
+      }
       const readKey = `bulletin_read_${BULLETIN_TYPE}_${item.id}`;
       const isRead = localStorage.getItem(readKey) === 'true';
       
@@ -208,7 +213,7 @@
                   </button>
                 ` : ''}
                 ${hasPdf ? `
-                  <a href="${escapeHtml(String(attachment.dataUrl || ''))}" target="_blank" rel="noopener noreferrer" style="width:40px; height:40px; border-radius:50%; background:#fef2f2; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s; flex-shrink:0; color:#b91c1c; text-decoration:none;" aria-label="開啟 PDF" title="${escapeHtml(String(attachment.name || '附件.pdf'))}">
+                  <a href="#" target="_blank" rel="noopener noreferrer" data-open-pdf="1" data-pdf-id="${escapeHtml(String(item.id || ''))}" data-pdf-name="${escapeHtml(String(attachment.name || '附件.pdf'))}" style="width:40px; height:40px; border-radius:50%; background:#fef2f2; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s; flex-shrink:0; color:#b91c1c; text-decoration:none;" aria-label="開啟 PDF" title="${escapeHtml(String(attachment.name || '附件.pdf'))}">
                     <span style="font-size:11px; font-weight:800;">PDF</span>
                   </a>
                 ` : ''}
@@ -230,6 +235,22 @@
         openImageModal(images, title);
       });
     });
+
+    const pdfLinks = bulletinList.querySelectorAll('[data-open-pdf]');
+    pdfLinks.forEach((a) => {
+      const id = String(a.getAttribute('data-pdf-id') || '').trim();
+      if (id && pdfMap.has(id)) a._pdfDataUrl = pdfMap.get(id);
+      a.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (typeof window.openPdfViewer === 'function') {
+          window.openPdfViewer(a._pdfDataUrl || a.getAttribute('data-pdf-url') || a.getAttribute('href'), a.getAttribute('data-pdf-name'));
+        } else {
+          window.alert('PDF 檢視器尚未載入，請重新整理後再試。');
+        }
+      });
+    });
+    bulletinPdfMap = pdfMap;
 
     // 绑定折叠/展开事件
     const toggleButtons = bulletinList.querySelectorAll('.toggle-btn');
