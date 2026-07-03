@@ -6732,6 +6732,17 @@
     reader.readAsDataURL(file);
   });
 
+  const fileToPdfDataUrlForBulletin = (file) => new Promise((resolve, reject) => {
+    if (!file) {
+      resolve("");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("read-failed"));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
+
   function renderBulletinModule() {
     const cid = resolveActiveCommunityId();
     const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
@@ -6817,6 +6828,15 @@
               ${item.images.map(img => `<img src="${escapeHtml(img)}" style="max-width:200px; max-height:150px; border-radius:8px;" />`).join("")}
             </div>`
           : "";
+        const attachment = item.attachment && typeof item.attachment === "object" ? item.attachment : null;
+        const attachmentHtml = attachment && attachment.dataUrl
+          ? `<div style="margin-top:12px;">
+              <a href="${escapeHtml(String(attachment.dataUrl || ""))}" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #d1d5db; border-radius:10px; background:#f9fafb; color:#111827; text-decoration:none; font-weight:700;">
+                <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:999px; background:#fee2e2; color:#b91c1c;">PDF</span>
+                <span>${escapeHtml(String(attachment.name || "附件.pdf"))}</span>
+              </a>
+            </div>`
+          : "";
         
         return `
           <div class="card" style="margin:0;" data-bulletin-id="${escapeHtml(item.id)}">
@@ -6846,6 +6866,7 @@
             <div class="card-bd">
               <p>${escapeHtml(item.content || "")}</p>
               ${imagesHtml}
+              ${attachmentHtml}
               <div class="muted" style="margin-top:8px;">建立時間：${formatDate(item.createdAt)}</div>
             </div>
           </div>
@@ -7085,6 +7106,14 @@
       const modal = ensureModal("newBulletinModal", "modal-new-bulletin", "80%");
       const isEditMode = !!(existingItem && existingItem.id);
       let selectedImages = Array.isArray(existingItem?.images) ? existingItem.images.slice(0, 5) : [];
+      let selectedAttachment = existingItem?.attachment && typeof existingItem.attachment === "object"
+        ? {
+            name: String(existingItem.attachment.name || "附件.pdf").trim() || "附件.pdf",
+            mimeType: String(existingItem.attachment.mimeType || "application/pdf").trim() || "application/pdf",
+            dataUrl: String(existingItem.attachment.dataUrl || "").trim(),
+          }
+        : null;
+      let uploadMode = selectedAttachment && selectedAttachment.dataUrl ? "pdf" : "image";
       const modalTitleMap = {
         community: "新增社區園地",
         finance: "新增財務報表",
@@ -7127,12 +7156,22 @@
                 <textarea id="bulletinContent" placeholder="請輸入公告內容" required></textarea>
               </div>
               <div class="field">
-                <label>圖片（最多5張）</label>
+                <label>附件類型（二選一）</label>
+                <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+                  <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <input id="bulletinUploadTypeImage" type="radio" name="bulletinUploadType" value="image" ${uploadMode === "image" ? "checked" : ""} />
+                    圖片（jpg、png，最多5張）
+                  </label>
+                  <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <input id="bulletinUploadTypePdf" type="radio" name="bulletinUploadType" value="pdf" ${uploadMode === "pdf" ? "checked" : ""} />
+                    檔案（pdf，限1個）
+                  </label>
+                </div>
                 <div id="imageUploadArea" style="border:2px dashed #ccc; border-radius:8px; padding:16px; text-align:center; cursor:pointer; min-height:80px; display:flex; align-items:center; justify-content:center;">
-                  <div id="imagePlaceholder">點擊選擇圖片或拖曳圖片到此處（最多5張）</div>
+                  <div id="imagePlaceholder"></div>
                   <div id="imagePreviewContainer" style="display:flex; gap:8px; flex-wrap:wrap; display:none;"></div>
                 </div>
-                <input id="imageInput" type="file" accept="image/*" multiple hidden />
+                <input id="imageInput" type="file" hidden />
               </div>
               <div class="field">
                 <label>
@@ -7167,6 +7206,8 @@
       const imageUploadArea = document.getElementById("imageUploadArea");
       const imagePlaceholder = document.getElementById("imagePlaceholder");
       const imagePreviewContainer = document.getElementById("imagePreviewContainer");
+      const uploadTypeImage = document.getElementById("bulletinUploadTypeImage");
+      const uploadTypePdf = document.getElementById("bulletinUploadTypePdf");
 
       if (titleInput) titleInput.value = String(existingItem?.title || "").trim();
       if (subtitleInput) subtitleInput.value = String(existingItem?.subtitle || "").trim();
@@ -7182,28 +7223,91 @@
         statusEl.style.color = isError ? "var(--color-danger)" : "var(--color-success)";
       };
       
+      const updateUploadInputMode = () => {
+        if (!imageInput) return;
+        if (uploadMode === "pdf") {
+          imageInput.accept = ".pdf,application/pdf";
+          imageInput.multiple = false;
+          return;
+        }
+        imageInput.accept = ".jpg,.jpeg,.png,image/jpeg,image/png";
+        imageInput.multiple = true;
+      };
+
       const updateImagePreview = () => {
+        if (!imagePlaceholder || !imagePreviewContainer) return;
+        const placeholderText = uploadMode === "pdf"
+          ? "點擊選擇 PDF 檔案或拖曳 PDF 到此處（限1個）"
+          : "點擊選擇圖片、從裝置上傳或拍照，也可拖曳圖片到此處（jpg、png，最多5張）";
+        imagePlaceholder.textContent = placeholderText;
+        if (uploadMode === "pdf") {
+          if (!selectedAttachment || !selectedAttachment.dataUrl) {
+            imagePlaceholder.style.display = "block";
+            imagePreviewContainer.style.display = "none";
+            imagePreviewContainer.innerHTML = "";
+            return;
+          }
+          imagePlaceholder.style.display = "none";
+          imagePreviewContainer.style.display = "flex";
+          imagePreviewContainer.innerHTML = `
+            <div style="position:relative; min-width:220px; max-width:100%; padding:14px 44px 14px 14px; border:1px solid #d1d5db; border-radius:10px; background:#f9fafb; text-align:left;">
+              <div style="font-size:13px; color:#6b7280;">PDF 檔案</div>
+              <div style="font-size:14px; font-weight:700; color:#111827; word-break:break-all;">${escapeHtml(selectedAttachment.name || "附件.pdf")}</div>
+              <button type="button" style="position:absolute; top:10px; right:10px; width:24px; height:24px; border-radius:50%; background:red; color:white; border:none; cursor:pointer; font-size:14px;" data-remove-pdf="1">×</button>
+            </div>
+          `;
+          const removePdfBtn = imagePreviewContainer.querySelector("[data-remove-pdf]");
+          if (removePdfBtn) {
+            removePdfBtn.addEventListener("click", () => {
+              selectedAttachment = null;
+              if (imageInput) imageInput.value = "";
+              updateImagePreview();
+            });
+          }
+          return;
+        }
         if (selectedImages.length === 0) {
           imagePlaceholder.style.display = "block";
           imagePreviewContainer.style.display = "none";
-        } else {
-          imagePlaceholder.style.display = "none";
-          imagePreviewContainer.style.display = "flex";
-          imagePreviewContainer.innerHTML = selectedImages.map((img, idx) => `
-            <div style="position:relative;">
-              <img src="${escapeHtml(img)}" style="width:100px; height:100px; object-fit:cover; border-radius:8px;" />
-              <button type="button" style="position:absolute; top:4px; right:4px; width:24px; height:24px; border-radius:50%; background:red; color:white; border:none; cursor:pointer; font-size:14px;" data-remove-image="${idx}">×</button>
-            </div>
-          `).join("");
-          
-          imagePreviewContainer.querySelectorAll("[data-remove-image]").forEach(btn => {
-            btn.addEventListener("click", () => {
-              const idx = parseInt(btn.getAttribute("data-remove-image"), 10);
-              selectedImages.splice(idx, 1);
-              updateImagePreview();
-            });
-          });
+          imagePreviewContainer.innerHTML = "";
+          return;
         }
+        imagePlaceholder.style.display = "none";
+        imagePreviewContainer.style.display = "flex";
+        imagePreviewContainer.innerHTML = selectedImages.map((img, idx) => `
+          <div style="position:relative;">
+            <img src="${escapeHtml(img)}" style="width:100px; height:100px; object-fit:cover; border-radius:8px;" />
+            <button type="button" style="position:absolute; top:4px; right:4px; width:24px; height:24px; border-radius:50%; background:red; color:white; border:none; cursor:pointer; font-size:14px;" data-remove-image="${idx}">×</button>
+          </div>
+        `).join("");
+        imagePreviewContainer.querySelectorAll("[data-remove-image]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const idx = parseInt(btn.getAttribute("data-remove-image"), 10);
+            selectedImages.splice(idx, 1);
+            updateImagePreview();
+          });
+        });
+      };
+
+      const switchUploadMode = (nextMode) => {
+        const normalized = String(nextMode || "").trim() === "pdf" ? "pdf" : "image";
+        if (uploadMode === normalized) {
+          updateUploadInputMode();
+          updateImagePreview();
+          return;
+        }
+        uploadMode = normalized;
+        if (uploadMode === "pdf") {
+          selectedImages = [];
+          if (uploadTypePdf) uploadTypePdf.checked = true;
+        } else {
+          selectedAttachment = null;
+          if (uploadTypeImage) uploadTypeImage.checked = true;
+        }
+        if (imageInput) imageInput.value = "";
+        setStatus("", false);
+        updateUploadInputMode();
+        updateImagePreview();
       };
       
       if (imageUploadArea) {
@@ -7221,44 +7325,91 @@
         imageUploadArea.addEventListener("drop", (e) => {
           e.preventDefault();
           imageUploadArea.style.borderColor = "#ccc";
-          const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
-          handleImageFiles(files);
+          handleSelectedFiles(Array.from(e.dataTransfer.files || []));
         });
       }
       
       if (imageInput) {
         imageInput.addEventListener("change", () => {
-          handleImageFiles(Array.from(imageInput.files || []));
+          handleSelectedFiles(Array.from(imageInput.files || []));
         });
       }
       
+      if (uploadTypeImage) {
+        uploadTypeImage.addEventListener("change", () => {
+          if (uploadTypeImage.checked) switchUploadMode("image");
+        });
+      }
+      if (uploadTypePdf) {
+        uploadTypePdf.addEventListener("change", () => {
+          if (uploadTypePdf.checked) switchUploadMode("pdf");
+        });
+      }
+
       const handleImageFiles = async (files) => {
-        // 檢查是否已達到圖片數量上限
+        const normalized = (Array.isArray(files) ? files : []).filter((file) => {
+          const type = String(file?.type || "").toLowerCase();
+          const name = String(file?.name || "").toLowerCase();
+          return type === "image/jpeg" || type === "image/png" || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png");
+        });
         const remainingSlots = 5 - selectedImages.length;
         if (remainingSlots <= 0) {
           setStatus("最多只能上傳5張圖片。", true);
           return;
         }
-        
-        // 只處理剩下的額度
-        const filesToProcess = files.slice(0, remainingSlots);
-        
+        if (!normalized.length) {
+          setStatus("僅支援 jpg、png 圖片。", true);
+          return;
+        }
+        const filesToProcess = normalized.slice(0, remainingSlots);
         for (const file of filesToProcess) {
           const dataUrl = await fileToImageDataUrlForBulletin(file);
           if (dataUrl) {
             selectedImages.push(dataUrl);
           }
         }
-        
-        // 如果有超出的檔案，顯示提示
-        if (files.length > remainingSlots) {
+        if (normalized.length > remainingSlots) {
           setStatus(`已上傳${selectedImages.length}張圖片，達到上限。`, true);
         } else {
           setStatus("", false);
         }
-        
         updateImagePreview();
       };
+
+      const handlePdfFiles = async (files) => {
+        const file = (Array.isArray(files) ? files : []).find((entry) => {
+          const type = String(entry?.type || "").toLowerCase();
+          const name = String(entry?.name || "").toLowerCase();
+          return type === "application/pdf" || name.endsWith(".pdf");
+        });
+        if (!file) {
+          setStatus("僅支援 PDF 檔案。", true);
+          return;
+        }
+        const dataUrl = await fileToPdfDataUrlForBulletin(file);
+        if (!dataUrl) {
+          setStatus("PDF 讀取失敗，請重新選擇。", true);
+          return;
+        }
+        selectedAttachment = {
+          name: String(file.name || "附件.pdf").trim() || "附件.pdf",
+          mimeType: "application/pdf",
+          dataUrl,
+        };
+        setStatus("", false);
+        updateImagePreview();
+      };
+
+      const handleSelectedFiles = async (files) => {
+        if (uploadMode === "pdf") {
+          await handlePdfFiles(files);
+          return;
+        }
+        await handleImageFiles(files);
+      };
+
+      updateUploadInputMode();
+      updateImagePreview();
       
       const onSubmit = async (e) => {
         e.preventDefault();
@@ -7286,7 +7437,8 @@
             title: title,
             subtitle: String(subtitleInput?.value || "").trim(),
             content: content,
-            images: selectedImages,
+            images: uploadMode === "image" ? selectedImages : [],
+            attachment: uploadMode === "pdf" ? (selectedAttachment && selectedAttachment.dataUrl ? selectedAttachment : null) : null,
             isImportant: !!importantCheck?.checked,
             isPinned: !!pinnedCheck?.checked,
             updatedAt: FieldValue.serverTimestamp(),

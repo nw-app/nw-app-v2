@@ -159,6 +159,8 @@
       const tagColor = item.isPinned ? 'red' : (item.isImportant ? 'yellow' : 'green');
       const tagText = item.isPinned ? '置頂' : (item.isImportant ? '重要' : '最新');
       const hasImages = item.images && item.images.length > 0;
+      const attachment = item.attachment && typeof item.attachment === 'object' ? item.attachment : null;
+      const hasPdf = !!(attachment && attachment.dataUrl);
       const readKey = `bulletin_read_${BULLETIN_TYPE}_${item.id}`;
       const isRead = localStorage.getItem(readKey) === 'true';
       
@@ -204,6 +206,11 @@
                       <path d="M4 4h16v16H4V4zm1 2v12h14V6H5zm2 2h10l-2 4-3-4-2 4-3-4z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                   </button>
+                ` : ''}
+                ${hasPdf ? `
+                  <a href="${escapeHtml(String(attachment.dataUrl || ''))}" target="_blank" rel="noopener noreferrer" style="width:40px; height:40px; border-radius:50%; background:#fef2f2; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s; flex-shrink:0; color:#b91c1c; text-decoration:none;" aria-label="開啟 PDF" title="${escapeHtml(String(attachment.name || '附件.pdf'))}">
+                    <span style="font-size:11px; font-weight:800;">PDF</span>
+                  </a>
                 ` : ''}
               </div>
             </div>
