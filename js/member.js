@@ -849,10 +849,8 @@
     if (kind === "committee") {
       return `
             <svg viewBox="0 0 24 24" fill="none">
-              <path d="M12 4.2 19 7.5 12 10.8 5 7.5 12 4.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-              <path d="M7.5 10.5V16.2c0 .6.3 1.1.8 1.4 1 .7 2.4 1.2 3.7 1.2s2.7-.5 3.7-1.2c.5-.3.8-.9.8-1.4v-5.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M19 8v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-              <path d="M19 17.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" fill="currentColor"/>
+              <path d="M4.25 9.25 8.5 13.5 12 8.75 15.5 13.5 19.75 9.25 18 18H6l-1.75-8.75Z" fill="currentColor"/>
+              <path d="M6 18h12l-.6 3H6.6L6 18Z" fill="currentColor"/>
             </svg>
           `;
     }
