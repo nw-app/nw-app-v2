@@ -1,4 +1,4 @@
-const CACHE_VERSION = "nwapp-v161";
+const CACHE_VERSION = "nwapp-v162";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -24,12 +24,12 @@ const PRECACHE = [
   "./js/pwa.js",
   "./css/pwa.css",
   "./js/firebase-config.js",
-  "./js/pdf-viewer-launcher.js?v=2",
+  "./js/pdf-viewer-launcher.js?v=3",
   "./js/pdf-viewer.js?v=2",
-  "./js/bulletin-community.js?v=3",
-  "./js/bulletin-finance.js?v=3",
-  "./js/bulletin-meeting.js?v=3",
-  "./js/bulletin-repair.js?v=3",
+  "./js/bulletin-community.js?v=4",
+  "./js/bulletin-finance.js?v=4",
+  "./js/bulletin-meeting.js?v=4",
+  "./js/bulletin-repair.js?v=4",
   "./logo.svg?v=4",
   "./icon-192.png?v=2",
   "./icon-512.png?v=2",

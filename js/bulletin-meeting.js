@@ -213,7 +213,7 @@
                   </button>
                 ` : ''}
                 ${hasPdf ? `
-                  <a href="#" target="_blank" rel="noopener noreferrer" data-open-pdf="1" data-pdf-id="${escapeHtml(String(item.id || ''))}" data-pdf-name="${escapeHtml(String(attachment.name || '附件.pdf'))}" style="width:40px; height:40px; border-radius:50%; background:#fef2f2; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s; flex-shrink:0; color:#b91c1c; text-decoration:none;" aria-label="開啟 PDF" title="${escapeHtml(String(attachment.name || '附件.pdf'))}">
+                  <a href="#" rel="noopener noreferrer" data-open-pdf="1" data-pdf-id="${escapeHtml(String(item.id || ''))}" data-pdf-name="${escapeHtml(String(attachment.name || '附件.pdf'))}" style="width:40px; height:40px; border-radius:50%; background:#fef2f2; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s; flex-shrink:0; color:#b91c1c; text-decoration:none;" aria-label="開啟 PDF" title="${escapeHtml(String(attachment.name || '附件.pdf'))}">
                     <span style="font-size:11px; font-weight:800;">PDF</span>
                   </a>
                 ` : ''}

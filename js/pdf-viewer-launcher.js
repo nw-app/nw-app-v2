@@ -21,10 +21,7 @@
       return;
     }
     const url = `./pdf-viewer.html?key=${encodeURIComponent(key)}`;
-    const w = window.open(url, '_blank', 'noopener,noreferrer');
-    if (!w) {
-      location.href = url;
-    }
+    location.href = url;
   }
 
   window.openPdfViewer = openPdfViewer;
