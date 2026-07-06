@@ -467,6 +467,10 @@ service cloud.firestore {
       return callExists(callId) && isCallParticipantByDoc(callData(callId));
     }
 
+    match /calls {
+      allow list: if request.auth != null;
+    }
+    
     match /calls/{callId} {
       allow create: if request.auth != null && (
         (
@@ -479,7 +483,13 @@ service cloud.firestore {
         isAdmin()
       );
 
-      allow read: if request.auth != null && isCallParticipantByDoc(resource.data);
+      allow read, list: if request.auth != null && (
+        isCallParticipantByDoc(resource.data) ||
+        (resource.data.toUid == request.auth.uid) ||
+        (resource.data.fromUid == request.auth.uid) ||
+        (isCommunityStaff() && resource.data.community == getUserData().community) ||
+        isAdmin()
+      );
 
       allow update: if request.auth != null && isCallParticipantByDoc(resource.data);
 

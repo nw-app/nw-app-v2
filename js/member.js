@@ -28,11 +28,22 @@
   function getWeatherIcon(condition) {
     const iconMap = {
       '晴': '☀️',
+      '晴時多雲': '🌤️',
       '多雲': '⛅',
       '陰': '☁️',
+      '小雨': '🌦️',
       '雨': '🌧️',
+      '大雨': '🌧️',
+      '陣雨': '🌦️',
+      '暴雨': '⛈️',
       '雷陣雨': '⛈️',
+      '雷陣雨伴冰雹': '⛈️',
+      '小雪': '🌨️',
       '雪': '❄️',
+      '大雪': '❄️',
+      '陣雪': '🌨️',
+      '雪粒': '🌨️',
+      '凍雨': '🌧️',
       '霧': '🌫️'
     };
     for (let key in iconMap) {
@@ -76,16 +87,17 @@
   // 反向地理編碼（將座標轉換為地址）
   async function reverseGeocode(lat, lon) {
     try {
-      // 使用 OpenStreetMap 的 Nominatim API
+      // 使用 OpenStreetMap 的 Nominatim API，提高定位精確度
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&accept-language=zh-TW`
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&accept-language=zh-TW`
       );
       const data = await response.json();
       const locationDisplay = document.getElementById('locationDisplay');
       if (locationDisplay && data.address) {
         const city = data.address.city || data.address.town || data.address.county || '';
-        const district = data.address.district || '';
-        locationDisplay.textContent = city + (district ? ' ' + district : '');
+        const district = data.address.district || data.address.suburb || data.address.village || '';
+        const road = data.address.road || '';
+        locationDisplay.textContent = city + (district ? ' ' + district : '') + (road ? ' ' + road : '');
       }
     } catch (error) {
       console.log('反向地理編碼失敗');
@@ -96,12 +108,16 @@
   async function fetchWeather(lat, lon) {
     try {
       const response = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto&forecast_days=1`
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m&timezone=auto&forecast_days=1`
       );
       const data = await response.json();
       
       if (data.current) {
         const temperature = Math.round(data.current.temperature_2m);
+        const apparentTemperature = Math.round(data.current.apparent_temperature);
+        const humidity = data.current.relative_humidity_2m;
+        const windSpeed = Math.round(data.current.wind_speed_10m);
+        const precipitation = data.current.precipitation;
         const weatherCode = data.current.weather_code;
         
         // 天氣代碼解釋
@@ -114,13 +130,17 @@
         const weatherDescEl = document.getElementById('weatherDesc');
         
         if (temperatureEl) {
-          temperatureEl.textContent = `${temperature}°C`;
+          temperatureEl.textContent = `${temperature}°C / 體感 ${apparentTemperature}°C`;
         }
         if (weatherIconEl) {
           weatherIconEl.textContent = weatherIcon;
         }
         if (weatherDescEl) {
-          weatherDescEl.textContent = weatherDesc;
+          let desc = weatherDesc;
+          if (humidity !== undefined) desc += ` / 濕度 ${humidity}%`;
+          if (windSpeed !== undefined) desc += ` / 風速 ${windSpeed}km/h`;
+          if (precipitation > 0) desc += ` / 降水 ${precipitation}mm`;
+          weatherDescEl.textContent = desc;
         }
       }
     } catch (error) {
@@ -411,12 +431,16 @@
     { name: "電子書", icon: "photo/b15.png", url: "https://www.pubu.com.tw/", openExternal: true },
     { name: "遊戲網", icon: "photo/b16.png", url: "https://www.pubu.com.tw/", openExternal: false },
   ];
-  const defaultCommitteeButtons = Array.from({ length: 8 }, (_, i) => ({
-    name: `委員功能${i + 1}`,
-    icon: "",
-    url: "#",
-    openExternal: false,
-  }));
+  const defaultCommitteeButtons = [
+    { name: "社區班表", icon: "photo/k01.png", url: "#", openExternal: false },
+    { name: "監視畫面", icon: "photo/k02.png", url: "#", openExternal: false },
+    { name: "待辦事項", icon: "photo/k03.png", url: "#", openExternal: false },
+    { name: "例行會議", icon: "photo/k04.png", url: "#", openExternal: false },
+    { name: "每日日誌", icon: "photo/k05.png", url: "#", openExternal: false },
+    { name: "每日督巡", icon: "photo/k06.png", url: "#", openExternal: false },
+    { name: "每日巡邏", icon: "photo/k07.png", url: "#", openExternal: false },
+    { name: "每日清潔", icon: "photo/k08.png", url: "#", openExternal: false },
+  ];
 
   const state = {
     communities: [],
@@ -873,8 +897,8 @@
     navEl.querySelectorAll("a").forEach((a) => a.setAttribute("aria-current", a.dataset.id === moduleId ? "page" : "false"));
 
     if (moduleId === "resident-committee") {
-      pageTitleEl.textContent = "管委會";
-      pageSubtitleEl.textContent = "管委會專區";
+      pageTitleEl.textContent = "";
+      pageSubtitleEl.textContent = "";
       contentEl.innerHTML = committeeView();
       return;
     }
@@ -1138,7 +1162,7 @@
     const cfg = loadConfig();
     return `
       <div class="home-grid">
-        <section class="row-c">管委會</section>
+        <section class="row-c">管委會專區</section>
         <section class="row-d">
           ${renderButtonGrid(cfg.committeeButtons)}
         </section>

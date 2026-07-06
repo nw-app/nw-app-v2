@@ -142,12 +142,16 @@
     { name: "電子書", icon: "photo/b15.png", url: "https://www.pubu.com.tw/", openExternal: true },
     { name: "遊戲網", icon: "photo/b16.png", url: "https://www.pubu.com.tw/", openExternal: false },
   ];
-  const defaultCommitteeButtons = Array.from({ length: 8 }, (_, i) => ({
-    name: `委員功能${i + 1}`,
-    icon: "",
-    url: "#",
-    openExternal: false,
-  }));
+  const defaultCommitteeButtons = [
+    { name: "社區班表", icon: "photo/k01.png", url: "#", openExternal: false },
+    { name: "監視畫面", icon: "photo/k02.png", url: "#", openExternal: false },
+    { name: "待辦事項", icon: "photo/k03.png", url: "#", openExternal: false },
+    { name: "例行會議", icon: "photo/k04.png", url: "#", openExternal: false },
+    { name: "每日日誌", icon: "photo/k05.png", url: "#", openExternal: false },
+    { name: "每日督巡", icon: "photo/k06.png", url: "#", openExternal: false },
+    { name: "每日巡邏", icon: "photo/k07.png", url: "#", openExternal: false },
+    { name: "每日清潔", icon: "photo/k08.png", url: "#", openExternal: false },
+  ];
 
   function defaultConfig() {
     const toButton = (x) => ({ enabled: true, url: x.defaultUrl });
