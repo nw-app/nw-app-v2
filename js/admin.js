@@ -241,6 +241,8 @@
     { id: "facility", name: "設施預約", desc: "時段控管、名額與審核流程", badge: "熱門", page: "#community/facility" },
     { id: "bulletin", name: "公告系統", desc: "分類公告、置頂、閱讀回覆", badge: "通知", page: "#community/bulletin" },
     { id: "parking", name: "綠色停車", desc: "電動車/節能車位管理與登記", badge: "綠能", page: "#community/parking" },
+    { id: "live-meeting", name: "區大直播", desc: "直播室預約、時段管理與會議記錄", badge: "直播", page: "live-metting.html" },
+    { id: "digital-signage", name: "電子看版", desc: "社區公告、活動訊息與即時資訊顯示", badge: "看版", page: "#community/digital-signage" },
     { id: "company-support", name: "公司支援", desc: "回報需求、聯絡紀錄與處理進度（示意）", badge: "支援", page: "#community/company-support" },
     { id: "meter-reading", name: "抄表紀錄", desc: "水電瓦斯抄表、拍照與歷史紀錄（示意）", badge: "抄表", page: "#community/meter-reading" },
     { id: "finance", name: "收支報表", desc: "收入/支出彙總、分類與月份查詢（示意）", badge: "財務", page: "#community/finance" },
@@ -592,6 +594,8 @@
     if (id === "residents") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 11.2a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7"/><path d="M16.5 11a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z" stroke="currentColor" stroke-width="1.7"/><path d="M3.8 20a6.2 6.2 0 0 1 10.4 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M14.4 20a5.2 5.2 0 0 1 6.2 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "facility") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 4v2M17 4v2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M5 7.5h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6 6.5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 11.2h.01M12 11.2h.01M15 11.2h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>`;
     if (id === "bulletin") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.5 11.2V8.8A2.3 2.3 0 0 1 6.8 6.5h2.9l7.2-2.7a.9.9 0 0 1 1.2.8v14.8a.9.9 0 0 1-1.2.8l-7.2-2.7H6.8A2.3 2.3 0 0 1 4.5 15v-2.4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M20.2 9.2a4.2 4.2 0 0 1 0 5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6.8 17.5v2.2a1.8 1.8 0 0 0 3.6 0v-1.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
+    if (id === "live-meeting") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 10l4.553-2.276A1 1 0 0 1 21 8.618v6.764a1 1 0 0 1-1.447.894L15 14M5 18h8a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    if (id === "digital-signage") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 21h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 17v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "company-support") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 3.5V8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 16v4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M3.5 12H8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M16 12h4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "meter-reading") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 20h10a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 10l1.6-1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8.5 16.5h7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "finance") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 19.5h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M7.2 18.8V11.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 18.8V8.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M16.8 18.8V13.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M7.2 10.3 10 7.8l2.6 2.4L16.8 6.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -622,6 +626,8 @@
           m.id === "residents" ? "住戶" :
           m.id === "facility" ? "預約" :
           m.id === "bulletin" ? "公告" :
+          m.id === "live-meeting" ? "直播" :
+          m.id === "digital-signage" ? "看板" :
           m.id === "parking" ? "停車" :
           m.id === "company-support" ? "支援" :
           m.id === "meter-reading" ? "抄表" :
@@ -12958,6 +12964,7 @@
           fromRole: "admin",
           fromName: String(fromProfile.name || user.email || "後台").trim(),
           fromHouseNo: String(fromProfile.houseNo || "").trim(),
+          fromSubHouseNo: String(fromProfile.subUnit || "").trim(),
           fromAvatarDataUrl: String(fromProfile.avatarDataUrl || "").trim(),
           toUid,
           toRole: "resident",

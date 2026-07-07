@@ -127,7 +127,7 @@
     { name: "監視系統", icon: "photo/b03.png", url: "#" },
     { name: "財務報表", icon: "photo/b04.png", url: "#" },
     { name: "社區園地", icon: "photo/b05.png", url: "#" },
-    { name: "區大直播", icon: "photo/b06.png", url: "#" },
+    { name: "區大直播", icon: "photo/b06.png", url: "live-metting.html" },
     { name: "設施預約", icon: "photo/b07.png", url: "#" },
     { name: "會議記錄", icon: "photo/b08.png", url: "#" },
   ];
@@ -145,12 +145,12 @@
   const defaultCommitteeButtons = [
     { name: "社區班表", icon: "photo/k01.png", url: "#", openExternal: false },
     { name: "監視畫面", icon: "photo/k02.png", url: "#", openExternal: false },
-    { name: "待辦事項", icon: "photo/k03.png", url: "#", openExternal: false },
+    { name: "代辦事項", icon: "photo/k03.png", url: "#", openExternal: false },
     { name: "例行會議", icon: "photo/k04.png", url: "#", openExternal: false },
-    { name: "每日日誌", icon: "photo/k05.png", url: "#", openExternal: false },
-    { name: "每日督巡", icon: "photo/k06.png", url: "#", openExternal: false },
-    { name: "每日巡邏", icon: "photo/k07.png", url: "#", openExternal: false },
-    { name: "每日清潔", icon: "photo/k08.png", url: "#", openExternal: false },
+    { name: "工作日誌", icon: "photo/k05.png", url: "#", openExternal: false },
+    { name: "督勤記錄", icon: "photo/k06.png", url: "#", openExternal: false },
+    { name: "巡邏記錄", icon: "photo/k07.png", url: "#", openExternal: false },
+    { name: "清潔記錄", icon: "photo/k08.png", url: "#", openExternal: false },
   ];
 
   function defaultConfig() {
@@ -1368,6 +1368,8 @@
       { id: "residents", name: "住戶造冊" },
       { id: "facility", name: "設施預約" },
       { id: "bulletin", name: "公告系統" },
+      { id: "live-meeting", name: "區大直播" },
+      { id: "digital-signage", name: "電子看版" },
       { id: "parking", name: "綠色停車" },
       { id: "company-support", name: "公司支援" },
       { id: "meter-reading", name: "抄表紀錄" },
@@ -1968,9 +1970,12 @@
         const saved = savedButtons[i];
         const def = defaultButtons[i] || { name: "", icon: "", url: "#", openExternal: false };
         
-        // 如果保存的是舊的預設值（url 是 #），則使用新的預設值
-        const useDefault = !saved || (saved.url === "#" && def.url !== "#");
-        const b = useDefault ? { ...def } : { ...saved };
+        // 使用保存的數據，但確保 name 和 icon 總是有值
+        const b = saved ? { 
+          ...saved,
+          name: saved.name || def.name,
+          icon: saved.icon || def.icon
+        } : { ...def };
         
         const displayName = b.name || def.name || "";
         

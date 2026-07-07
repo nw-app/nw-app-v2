@@ -1969,6 +1969,7 @@
         fromRole: "resident",
         fromName: String(fromProfile.name || user.email || "住戶").trim(),
         fromHouseNo: String(fromProfile.houseNo || "").trim(),
+        fromSubHouseNo: String(fromProfile.subUnit || "").trim(),
         fromAvatarDataUrl: String(fromProfile.avatarDataUrl || "").trim(),
         toRole: "admin",
         status: "ringing",
@@ -2006,6 +2007,168 @@
       }
       if (st === "rejected" || st === "ended" || st === "busy" || st === "missed") {
         setIntercomCallStatus(st === "busy" ? "後台忙線中" : (st === "rejected" ? "後台已掛斷" : "通話已結束"), false);
+        await cleanupIntercomActive({ closeDelayMs: 1000 });
+      }
+    });
+
+    const unsubAnswerCandidates = callDocRef.collection("answerCandidates").onSnapshot((snap) => {
+      (snap.docChanges ? snap.docChanges() : []).forEach((ch) => {
+        if (!ch || ch.type !== "added") return;
+        const v = ch.doc && ch.doc.data ? (ch.doc.data() || {}) : {};
+        if (!v || !v.candidate) return;
+        try { pc.addIceCandidate(new RTCIceCandidate(v)); } catch {}
+      });
+    });
+
+    intercomActive = {
+      callDocRef,
+      pc,
+      localStream,
+      remoteStream,
+      audioOutputMode: "earpiece",
+      unsubDoc,
+      unsubCandidates: unsubAnswerCandidates,
+      detachModal: detach,
+      modalEl: modal,
+    };
+  }
+
+  async function intercomStartOutgoingByUid({ communityId, uid, name, houseNo, subUnit, avatar, targetRole }) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const toUid = String(uid || "").trim();
+    if (!toUid) {
+      toast("無法找到通話對象");
+      return;
+    }
+    const user = auth.currentUser;
+    if (!user) return;
+
+    await cleanupIntercomActive();
+    const modal = ensureIntercomCallModal();
+    prepareIntercomModal(modal);
+    bindIntercomSpeakerButton(modal);
+    bindIntercomHistoryButton(modal, { communityId: cid, toRole: "resident" });
+    if (intercomActive) intercomActive.audioOutputMode = "earpiece";
+    let detach = () => {};
+    detach = bindModalClose(modal, () => {
+      detach();
+      cleanupIntercomActive({ updateStatus: "ended" });
+    });
+
+    const hangupBtn = modal.querySelector("#btnIntercomHangup");
+    const callBtn = modal.querySelector("#btnIntercomCallAdmin");
+    if (callBtn) callBtn.disabled = true;
+    if (callBtn) callBtn.hidden = true;
+    setIntercomSpeakerButtonEnabled(modal, false);
+    setIntercomCallStatus("正在呼叫…", false);
+    const timerEl = modal.querySelector("#intercomTimer");
+    if (timerEl) timerEl.textContent = "00:00";
+    setIntercomPermissionHelp("", false);
+    startIntercomRingtone("waiting");
+
+    const toName = String(name || "通話對象").trim() || "通話對象";
+    const toHouseNo = String(houseNo || "").trim();
+    const toSubUnit = String(subUnit || "").trim();
+    const toAvatar = String(avatar || "").trim();
+    const toDisplayUnit = toSubUnit ? `${toHouseNo}-${toSubUnit}` : toHouseNo;
+    setIntercomPeerVisual(modal, {
+      avatarSelector: "#intercomPeerInitialMember",
+      imageSelector: "#intercomPeerAvatarMember",
+      nameSelector: "#intercomPeerName",
+      subSelector: "#intercomPeerSub",
+      name: toName,
+      sub: toDisplayUnit || "語音通話",
+      avatarDataUrl: toAvatar,
+      fallbackInitial: toName,
+    });
+
+    const callDocRef = db.collection("calls").doc();
+    const pc = createIntercomPeerConnection();
+    const remoteStream = new MediaStream();
+    attachIntercomRemoteAudio("intercomRemoteAudioMember", remoteStream);
+    let localStream = null;
+
+    pc.ontrack = (ev) => {
+      const list = ev && ev.streams && ev.streams[0] ? ev.streams[0].getTracks() : [];
+      list.forEach((t) => remoteStream.addTrack(t));
+      attachIntercomRemoteAudio("intercomRemoteAudioMember", remoteStream);
+    };
+
+    const offerCandidatesRef = callDocRef.collection("offerCandidates");
+    pc.onicecandidate = (ev) => {
+      if (!ev || !ev.candidate) return;
+      const c = ev.candidate;
+      const json = typeof c.toJSON === "function" ? c.toJSON() : { candidate: c.candidate, sdpMid: c.sdpMid, sdpMLineIndex: c.sdpMLineIndex };
+      offerCandidatesRef.add({ ...json, createdAtMs: Date.now() }).catch(() => {});
+    };
+
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch (err) {
+      stopIntercomRingtone();
+      setIntercomCallStatus("無法開啟麥克風，請確認瀏覽器權限。", true);
+      setIntercomPermissionHelp(buildMicrophonePermissionMessage(err), true);
+      try { pc.close(); } catch {}
+      if (callBtn) callBtn.disabled = false;
+      if (callBtn) callBtn.hidden = false;
+      return;
+    }
+    localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+
+    const fromProfile = await readUserProfileForCall(user.uid);
+    const offer = await pc.createOffer({ offerToReceiveAudio: true });
+    await pc.setLocalDescription(offer);
+
+    await callDocRef.set(
+      {
+        community: cid,
+        fromUid: String(user.uid),
+        fromRole: "resident",
+        fromName: String(fromProfile.name || user.email || "住戶").trim(),
+        fromHouseNo: String(fromProfile.houseNo || "").trim(),
+        fromSubHouseNo: String(fromProfile.subUnit || "").trim(),
+        fromAvatarDataUrl: String(fromProfile.avatarDataUrl || "").trim(),
+        toUid,
+        toRole: String(targetRole || "admin").trim(),
+        toName,
+        toHouseNo,
+        toSubUnit,
+        toAvatarDataUrl: toAvatar,
+        status: "ringing",
+        createdAt: FieldValue.serverTimestamp(),
+        createdAtMs: Date.now(),
+        offer: { type: offer.type, sdp: offer.sdp },
+      },
+      { merge: true }
+    );
+
+    if (hangupBtn) hangupBtn.onclick = () => {
+      setIntercomCallStatus("通話已結束", false);
+      cleanupIntercomActive({ updateStatus: "ended", closeDelayMs: 1000 });
+    };
+
+    const unsubDoc = callDocRef.onSnapshot(async (snap) => {
+      const data = snap && snap.exists ? (snap.data() || {}) : null;
+      if (!data) return;
+      const st = String(data.status || "").trim();
+      if (st === "accepted") {
+        if (!pc.currentRemoteDescription && data.answer && data.answer.type && data.answer.sdp) {
+          try { await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); } catch {}
+        }
+        setIntercomCallStatus("已接通", false);
+        stopIntercomRingtone();
+        setIntercomPermissionHelp("", false);
+        if (callBtn) callBtn.hidden = true;
+        setIntercomSpeakerButtonEnabled(modal, true);
+        {
+          const audio = document.getElementById("intercomRemoteAudioMember");
+          if (audio && typeof audio.setSinkId === "function") await setIntercomAudioOutputMode("earpiece");
+        }
+        if (intercomActive && !intercomActive.timerId) startIntercomTimer(Date.now());
+        return;
+      }
+      if (st === "rejected" || st === "ended" || st === "busy" || st === "missed") {
+        setIntercomCallStatus(st === "busy" ? "對方忙線中" : (st === "rejected" ? "對方已掛斷" : "通話已結束"), false);
         await cleanupIntercomActive({ closeDelayMs: 1000 });
       }
     });
@@ -2470,6 +2633,41 @@
   });
 
   window.addEventListener("hashchange", () => render());
+  
+  // 監聽來自 callrecord.html 的回撥請求
+  window.addEventListener("message", (ev) => {
+    const data = ev.data;
+    if (!data || typeof data !== "object") return;
+    if (data.type === "nw:callrecord:callback" && data.uid) {
+      const uid = String(data.uid || "").trim();
+      const name = String(data.name || "通話對象").trim();
+      const houseNo = String(data.houseNo || "").trim();
+      const subUnit = String(data.subUnit || "").trim();
+      const avatar = String(data.avatar || "").trim();
+      if (!uid) return;
+      // 關閉歷史記錄彈窗
+      const historyModal = document.getElementById("intercomHistoryModal90");
+      if (historyModal) {
+        historyModal.hidden = true;
+        const iframe = historyModal.querySelector("#intercomHistoryIframe");
+        if (iframe) try { iframe.src = ""; } catch {}
+      }
+      // 延遲一小段時間再開始撥號
+      setTimeout(() => {
+        // 嘗試確定目標角色，預設為 admin
+        const targetRole = houseNo ? "admin" : "resident";
+        intercomStartOutgoingByUid({
+          communityId: resolveActiveCommunityId(),
+          uid,
+          name,
+          houseNo,
+          subUnit,
+          avatar,
+          targetRole: houseNo ? "admin" : "resident"
+        }).catch(() => {});
+      }, 150);
+    }
+  });
   
   // 暴露 SOS 功能到全局
   window.sendSOS = sendSOS;

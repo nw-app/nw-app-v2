@@ -1207,6 +1207,7 @@
                 "住戶"
               ).trim();
           const fromHouseNo = normalizeUnit(currentUserData && (currentUserData.houseNo || currentUserData.unit));
+          const fromSubHouseNo = normalizeUnit(currentUserData && (currentUserData.subHouseNo || currentUserData.subUnit));
           const offer = await pc.createOffer({ offerToReceiveAudio: true });
           await pc.setLocalDescription(offer);
 
@@ -1220,6 +1221,7 @@
               fromRole,
               fromName,
               fromHouseNo,
+              fromSubHouseNo,
               fromAvatarDataUrl: String((currentUserData && currentUserData.avatarDataUrl) || user.photoURL || "").trim(),
               toUid: uid,
               toRole: "resident",
@@ -1353,6 +1355,22 @@
           if (target.nodeType === 1) return target;
           return target.parentElement || null;
         }
+
+        // 監聽來自 callrecord.html 的回撥請求
+        window.addEventListener("message", (ev) => {
+          const data = ev.data;
+          if (!data || typeof data !== "object") return;
+          if (data.type === "nw:callrecord:callback" && data.uid) {
+            const uid = String(data.uid || "").trim();
+            if (!uid) return;
+            // 關閉歷史記錄彈窗
+            closeHistoryModal();
+            // 延遲一小段時間再開始撥號
+            setTimeout(() => {
+              triggerDialByUid(uid);
+            }, 150);
+          }
+        });
 
         auth.onAuthStateChanged((user) => {
           if (!user) {
