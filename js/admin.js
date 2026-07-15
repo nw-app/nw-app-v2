@@ -241,7 +241,7 @@
     { id: "facility", name: "設施預約", desc: "時段控管、名額與審核流程", badge: "熱門", page: "#community/facility" },
     { id: "bulletin", name: "公告系統", desc: "分類公告、置頂、閱讀回覆", badge: "通知", page: "#community/bulletin" },
     { id: "parking", name: "綠色停車", desc: "電動車/節能車位管理與登記", badge: "綠能", page: "#community/parking" },
-    { id: "live-meeting", name: "區大直播", desc: "直播室預約、時段管理與會議記錄", badge: "直播", page: "live-metting.html" },
+    { id: "live-meeting", name: "區大直播", desc: "直播室預約、時段管理與會議記錄", badge: "直播", page: "live-meeting.html" },
     { id: "digital-signage", name: "電子看版", desc: "社區公告、活動訊息與即時資訊顯示", badge: "看版", page: "#community/digital-signage" },
     { id: "company-support", name: "公司支援", desc: "回報需求、聯絡紀錄與處理進度（示意）", badge: "支援", page: "#community/company-support" },
     { id: "meter-reading", name: "抄表紀錄", desc: "水電瓦斯抄表、拍照與歷史紀錄（示意）", badge: "抄表", page: "#community/meter-reading" },
@@ -13415,6 +13415,7 @@
     const currentMode = String(cfg.sosActionMode || "backend").trim() || "backend";
     const currentPhone = String(cfg.sosPhoneNumber || "").trim();
     const currentHours = Number(cfg.sosHours || 72) || 72;
+    const currentSosButtonText = String(cfg.sosButtonText || "").trim() || "SOS";
     const currentCheckinEnabled = cfg.checkinEnabled !== false;
     const currentCheckinMethods = cfg.checkinMethods || { nfc: true, qr: true, manual: true };
     const currentCareTabs = getCareSubnavCommunityTabs();
@@ -13445,6 +13446,11 @@
                 <div class="muted" style="margin-top:4px;">住戶按下 SOS 後直接以瀏覽器/手機撥打指定電話號碼。</div>
               </span>
             </label>
+            <div>
+              <div style="font-weight:700; margin-bottom:8px;">SOS 按鈕文字</div>
+              <input type="text" id="sosButtonTextInput" value="${escapeHtml(currentSosButtonText)}" placeholder="SOS" style="width:100%; height:44px; border-radius:12px; border:1px solid rgba(17,24,39,.14); padding:0 14px; background:#fff;" />
+              <div class="muted" style="margin-top:6px;">住戶端首頁 SOS 按鈕顯示文字，預設為 SOS。</div>
+            </div>
             <div>
               <div style="font-weight:700; margin-bottom:8px;">撥話號碼</div>
               <input type="text" id="sosPhoneNumberInput" value="${escapeHtml(currentPhone)}" placeholder="例如：0912345678 或 02-1234-5678" style="width:100%; height:44px; border-radius:12px; border:1px solid rgba(17,24,39,.14); padding:0 14px; background:#fff;" />
@@ -13525,6 +13531,7 @@
     `.trim();
 
     const statusEl = modal.querySelector("#sosSettingsStatus");
+    const buttonTextInputEl = modal.querySelector("#sosButtonTextInput");
     const inputEl = modal.querySelector("#sosPhoneNumberInput");
     const hoursInputEl = modal.querySelector("#sosHoursInput");
     const saveBtn = modal.querySelector("#btnSaveSosSettings");
@@ -13602,6 +13609,7 @@
       saveBtn.addEventListener("click", async () => {
         const checked = modal.querySelector('input[name="sosActionMode"]:checked');
         const nextMode = checked ? String(checked.value || "backend").trim() : "backend";
+        const nextButtonText = buttonTextInputEl ? String(buttonTextInputEl.value || "").trim() : "";
         const nextPhone = inputEl ? String(inputEl.value || "").trim() : "";
         const nextHours = hoursInputEl ? Number(hoursInputEl.value || 72) || 72 : 72;
         if (nextMode === "phone" && !nextPhone) {
@@ -13612,6 +13620,7 @@
         try {
           const updateData = {
             sosActionMode: nextMode,
+            sosButtonText: nextButtonText || "SOS",
             sosPhoneNumber: nextPhone,
             sosHours: nextHours,
             checkinEnabled: !!checkinEnabledEl.checked,
@@ -14587,6 +14596,219 @@
     });
   }
 
+  function ensureLiveMeetingSettingsModal80() {
+    const modal = ensureModal("liveMeetingSettingsModal80", "modal-live-meeting-settings", "80%");
+    if (modal.dataset.initialized === "1") return modal;
+    modal.dataset.initialized = "1";
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="liveMeetingSettingsTitle80" style="width:min(900px,80vw);max-width:80vw;max-height:80vh;display:flex;flex-direction:column;">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="liveMeetingSettingsTitle80">設定</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body" style="display:flex;flex-direction:column;gap:16px;">
+          <div style="padding:16px 18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#f9fafb;">
+            <div style="font-size:16px;font-weight:800;color:#111827;">YouTube 直播串流連結</div>
+            <div style="margin-top:6px;color:#6b7280;line-height:1.65;">請輸入 YouTube 直播或影片的連結</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <label style="font-size:14px;font-weight:700;color:#111827;">串流連結</label>
+            <input type="url" id="liveMeetingYoutubeUrlInput" placeholder="例如：https://www.youtube.com/watch?v=..." style="padding:12px 16px;border:1px solid rgba(17,24,39,0.2);border-radius:12px;font-size:16px;">
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+          <button class="btn btn-primary" type="button" id="saveLiveMeetingSettingsBtn">儲存</button>
+        </div>
+      </div>
+    `.trim();
+    
+    // 绑定事件
+    const handleSave = async () => {
+      try {
+        const input = document.getElementById("liveMeetingYoutubeUrlInput");
+        const youtubeUrl = input ? String(input.value || "").trim() : "";
+        
+        const cid = resolveActiveCommunityId();
+        const cfg = loadConfig(cid) || {};
+        cfg.liveMeetingYoutubeUrl = youtubeUrl;
+        saveConfig(cid, cfg);
+        
+        toast("已儲存");
+        if (modal && modal.hidden !== undefined) modal.hidden = true;
+      } catch (e) {
+        toast("儲存失敗");
+      }
+    };
+    
+    const saveBtn = modal.querySelector("#saveLiveMeetingSettingsBtn");
+    if (saveBtn) {
+      saveBtn.addEventListener("click", handleSave);
+    }
+    
+    return modal;
+  }
+  
+  function openLiveMeetingSettingsModal80() {
+    const modal = ensureLiveMeetingSettingsModal80();
+    const cid = resolveActiveCommunityId();
+    const cfg = loadConfig(cid) || {};
+    const currentUrl = String(cfg.liveMeetingYoutubeUrl || "").trim();
+    
+    // 设置输入框的值
+    const input = modal.querySelector("#liveMeetingYoutubeUrlInput");
+    if (input) {
+      input.value = currentUrl;
+    }
+    
+    // 显示模态框
+    modal.hidden = false;
+  }
+
+  function renderLiveMeetingModule() {
+    const cid = resolveActiveCommunityId();
+    const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
+    
+    // 从哈希路由中获取当前页面
+    const raw = String(location.hash || "").replace(/^#/, "").trim();
+    const parts = raw.split("/");
+    let currentPage = "live"; // "live", "history"
+    if (parts.length >= 3 && parts[0] === "community" && parts[1] === "live-meeting") {
+      const pageParam = parts[2];
+      if (["live", "history"].includes(pageParam)) {
+        currentPage = pageParam;
+      }
+    }
+
+    // 渲染 subnav 按钮的函数
+    const renderSubnav = () => {
+      if (!subnavEl) return;
+      
+      subnavEl.innerHTML = `
+        <button class="btn btn-sm ${currentPage === "live" ? "btn-primary" : ""}" type="button" data-live-page="live">直播</button>
+        <button class="btn btn-sm ${currentPage === "history" ? "btn-primary" : ""}" type="button" data-live-page="history">歷史影片</button>
+      `.trim();
+      
+      // 绑定按钮点击事件
+      subnavEl.querySelectorAll("[data-live-page]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          currentPage = btn.getAttribute("data-live-page");
+          location.hash = `#community/live-meeting/${currentPage}`;
+          renderPage();
+        });
+      });
+    };
+
+    // 渲染页面内容
+    const renderPage = () => {
+      renderSubnav();
+      
+      const m = moduleCatalog.find((x) => x && x.id === "live-meeting") || null;
+      if (currentPage === "live") {
+        contentEl.innerHTML = `
+          <section class="card">
+            <div class="card-hd">
+              <div class="left">
+                <div class="chip" aria-hidden="true">${iconSvg("live-meeting")}</div>
+                <div style="min-width:0;">
+                  <h2>直播${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                  <p>直播室預約、時段管理</p>
+                </div>
+              </div>
+              <button class="btn btn-sm btn-ghost" type="button" data-open-live-settings aria-label="設定">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px;height:20px;">
+                  <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M19.4 15a7.3 7.3 0 0 0 .1-1l2-1.3a.8.8 0 0 0 .1-1l-1.9-3.3a.8.8 0 0 0-.6-.4l-2.4-.4a7.8 7.8 0 0 0-.2-1.8l-.4-2.4a.8.8 0 0 0-.7-.6h-3.8a.8.8 0 0 0-.7.6l-.4 2.4c-.1.6-.2 1.2-.2 1.8l-2.4.4a.8.8 0 0 0-.6.4L2.4 11.7a.8.8 0 0 0 .1 1l2 1.3c0 .3 0 .7.1 1l-.4 2.4a.8.8 0 0 0 .7.9h3.8c.6 0 1.2.1 1.8.2l1.9 3.3a.8.8 0 0 0 .6.4.8.8 0 0 0 .7-.1l2-1.3c.3 0 .7 0 1-.1l.4 2.4a.8.8 0 0 0 .7.6h3.8a.8.8 0 0 0 .7-.6l.4-2.4Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
+            <div class="card-bd">
+              <div class="row">
+                <div class="muted">此功能頁面尚未建置（示意）。</div>
+              </div>
+              <button class="btn" type="button" data-back>返回總覽</button>
+            </div>
+          </section>
+        `;
+      } else if (currentPage === "history") {
+        contentEl.innerHTML = `
+          <section class="card">
+            <div class="card-hd">
+              <div class="left">
+                <div class="chip" aria-hidden="true">${iconSvg("live-meeting")}</div>
+                <div style="min-width:0;">
+                  <h2>歷史影片${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                  <p>過往直播錄影檔案</p>
+                </div>
+              </div>
+            </div>
+            <div class="card-bd">
+              <div class="row">
+                <div class="muted">此功能頁面尚未建置（示意）。</div>
+              </div>
+              <button class="btn" type="button" data-back>返回總覽</button>
+            </div>
+          </section>
+        `;
+      }
+      
+      const backBtn = contentEl.querySelector("[data-back]");
+      if (backBtn) {
+        backBtn.addEventListener("click", () => {
+          location.hash = "#community/community-dashboard";
+        });
+      }
+      
+      const settingsBtn = contentEl.querySelector("[data-open-live-settings]");
+      if (settingsBtn) {
+        settingsBtn.addEventListener("click", () => {
+          openLiveMeetingSettingsModal80();
+        });
+      }
+      
+      updateFooterActiveNav();
+    };
+
+    renderPage();
+  }
+
+  function renderDigitalSignageModule() {
+    const cid = resolveActiveCommunityId();
+    const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
+    
+    if (subnavEl) subnavEl.innerHTML = "";
+    const m = moduleCatalog.find((x) => x && x.id === "digital-signage") || null;
+    contentEl.innerHTML = `
+      <section class="card">
+        <div class="card-hd">
+          <div class="left">
+            <div class="chip" aria-hidden="true">${iconSvg("digital-signage")}</div>
+            <div style="min-width:0;">
+              <h2>電子看版${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+              <p>社區公告、活動訊息與即時資訊顯示</p>
+            </div>
+          </div>
+          <span class="tag red">${m?.badge || "看版"}</span>
+        </div>
+        <div class="card-bd">
+          <div class="row">
+            <div class="muted">此功能頁面尚未建置（示意）。</div>
+          </div>
+          <button class="btn" type="button" data-back>返回總覽</button>
+        </div>
+      </section>
+    `;
+    
+    const backBtn = contentEl.querySelector("[data-back]");
+    if (backBtn) {
+      backBtn.addEventListener("click", () => {
+        location.hash = "#community/community-dashboard";
+      });
+    }
+    updateFooterActiveNav();
+  }
+
   function renderModule(moduleId) {
     const layoutEl = document.querySelector(".layout");
     if (layoutEl) layoutEl.classList.toggle("visitor-main-lock", moduleId === "visitor");
@@ -14622,6 +14844,14 @@
     }
     if (moduleId === "care") {
       renderCareModule();
+      return;
+    }
+    if (moduleId === "live-meeting") {
+      renderLiveMeetingModule();
+      return;
+    }
+    if (moduleId === "digital-signage") {
+      renderDigitalSignageModule();
       return;
     }
     if (subnavEl) subnavEl.innerHTML = "";
@@ -14677,6 +14907,17 @@
       if (isAlreadyInBulletin) {
         // 重新渲染公告模块以应用新的子页面参数
         renderBulletinModule();
+        return true;
+      }
+    }
+    
+    // 同样处理 live-meeting 的子页面
+    if (moduleId === "live-meeting") {
+      const contentEl = document.getElementById("content");
+      const isAlreadyInLiveMeeting = contentEl && contentEl.querySelector("[data-live-page]");
+      if (isAlreadyInLiveMeeting) {
+        // 重新渲染直播模块以应用新的子页面参数
+        renderLiveMeetingModule();
         return true;
       }
     }

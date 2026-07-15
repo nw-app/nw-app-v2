@@ -469,7 +469,8 @@
       committeeButtons: defaultCommitteeButtons.map(b => ({ ...b })),
       serviceUrl: "",
       sosActionMode: "backend",
-      sosPhoneNumber: ""
+      sosPhoneNumber: "",
+      sosButtonText: "SOS"
     };
   }
 
@@ -595,7 +596,8 @@
         committeeButtons: mergeButtons(parsed.committeeButtons, defaultCommitteeButtons),
         serviceUrl: parsed.serviceUrl || "",
         sosActionMode: String(parsed.sosActionMode || d.sosActionMode || "backend").trim() || "backend",
-        sosPhoneNumber: String(parsed.sosPhoneNumber || d.sosPhoneNumber || "").trim()
+        sosPhoneNumber: String(parsed.sosPhoneNumber || d.sosPhoneNumber || "").trim(),
+        sosButtonText: String(parsed.sosButtonText || d.sosButtonText || "SOS").trim() || "SOS"
       };
     } catch {
       return defaultConfig();
@@ -1135,6 +1137,7 @@
 
   function homeView() {
     const cfg = loadConfig();
+    const sosButtonText = String(cfg.sosButtonText || "").trim() || "SOS";
     return `
       <div class="home-grid">
         <section class="row-a" id="rowACarousel">
@@ -1144,7 +1147,7 @@
           </div>
         </section>
         <section class="row-b">
-          <button class="btn-sos" type="button" id="btnSOS">SOS</button>
+          <button class="btn-sos" type="button" id="btnSOS">${escapeHtml(sosButtonText)}</button>
         </section>
         <section class="row-c">社區服務</section>
         <section class="row-d">

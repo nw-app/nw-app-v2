@@ -127,7 +127,7 @@
     { name: "監視系統", icon: "photo/b03.png", url: "#" },
     { name: "財務報表", icon: "photo/b04.png", url: "#" },
     { name: "社區園地", icon: "photo/b05.png", url: "#" },
-    { name: "區大直播", icon: "photo/b06.png", url: "live-metting.html" },
+    { name: "區大直播", icon: "photo/b06.png", url: "live-meeting.html" },
     { name: "設施預約", icon: "photo/b07.png", url: "#" },
     { name: "會議記錄", icon: "photo/b08.png", url: "#" },
   ];
@@ -216,6 +216,7 @@
         rowDButtons: cfg && cfg.rowDButtons ? cfg.rowDButtons : [],
         rowFButtons: cfg && cfg.rowFButtons ? cfg.rowFButtons : [],
         committeeButtons: cfg && cfg.committeeButtons ? cfg.committeeButtons : [],
+        liveMeetingYoutubeUrl: cfg && cfg.liveMeetingYoutubeUrl ? cfg.liveMeetingYoutubeUrl : "",
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
