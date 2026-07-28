@@ -108,6 +108,13 @@
     }
   }
 
+  function shouldInterceptInstallPrompt() {
+    if (isStandalone()) return false;
+    if (isIOSSafari()) return false;
+    if (!isPhoneLike()) return false;
+    return shouldShow();
+  }
+
   function dismiss() {
     try {
       localStorage.setItem(DISMISS_KEY, String(Date.now()));
@@ -1432,6 +1439,7 @@
 
   let deferredPrompt = null;
   window.addEventListener("beforeinstallprompt", (e) => {
+    if (!shouldInterceptInstallPrompt()) return;
     e.preventDefault();
     deferredPrompt = e;
     showBanner(async () => {

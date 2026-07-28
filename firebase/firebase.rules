@@ -31,6 +31,61 @@ service cloud.firestore {
       return v is string ? v : "";
     }
 
+    function userCommunityIds() {
+      let ud = getUserData();
+      let ids = ud.get('communityIds', []);
+      return ids is list ? ids : [];
+    }
+
+    function userCanAccessUserCommunity(communityId) {
+      let key = asString(communityId);
+      let ud = getUserData();
+      let primary = asString(ud.get('community', ''));
+      let ids = userCommunityIds();
+      return key != ""
+        && (
+          key == primary
+          || key in ids
+          || (
+            primary != ""
+            && exists(/databases/$(database)/documents/communities/$(primary))
+            && (
+              get(/databases/$(database)/documents/communities/$(primary)).data.get('username', '') == key
+              || get(/databases/$(database)/documents/communities/$(primary)).data.get('id', '') == key
+            )
+          )
+          || (
+            exists(/databases/$(database)/documents/communities/$(key))
+            && (
+              get(/databases/$(database)/documents/communities/$(key)).data.get('username', '') == primary
+              || get(/databases/$(database)/documents/communities/$(key)).data.get('id', '') == primary
+              || get(/databases/$(database)/documents/communities/$(key)).data.get('username', '') in ids
+              || get(/databases/$(database)/documents/communities/$(key)).data.get('id', '') in ids
+            )
+          )
+        );
+    }
+
+    function userCanAccessCommunitySlug(slug) {
+      let key = asString(slug);
+      let primary = asString(getUserData().get('community', ''));
+      let ids = userCommunityIds();
+      return key != ""
+        && (
+          key == primary
+          || key in ids
+          || (
+            exists(/databases/$(database)/documents/communities/$(slug))
+            && (
+              get(/databases/$(database)/documents/communities/$(slug)).data.get('username', '') == primary
+              || get(/databases/$(database)/documents/communities/$(slug)).data.get('id', '') == primary
+              || get(/databases/$(database)/documents/communities/$(slug)).data.get('username', '') in ids
+              || get(/databases/$(database)/documents/communities/$(slug)).data.get('id', '') in ids
+            )
+          )
+        );
+    }
+
     function userUnitKeys() {
       let ud = getUserData();
       let unitBase = asString(ud.get('houseNo', ''));
@@ -180,14 +235,14 @@ service cloud.firestore {
       allow read: if (request.auth != null && (
         request.auth.uid == uid || 
         isAdmin() || 
-        (isCommunityStaff() && resource.data.community == getUserData().community)
+        (isCommunityStaff() && userCanAccessUserCommunity(resource.data.community))
       )) || (
         resource.data.status == "pending" && resource.data.role == "resident"
       );
       
       allow create: if (request.auth != null && (
         isAdmin() || 
-        (isCommunityStaff() && request.resource.data.community == getUserData().community)
+        (isCommunityStaff() && userCanAccessUserCommunity(request.resource.data.community))
       )) || (
         request.resource.data.role == "resident" &&
         request.resource.data.status == "pending" &&
@@ -204,12 +259,12 @@ service cloud.firestore {
       allow update: if request.auth != null && (
         request.auth.uid == uid || 
         isAdmin() || 
-        (isCommunityStaff() && resource.data.community == getUserData().community)
+        (isCommunityStaff() && userCanAccessUserCommunity(resource.data.community))
       );
       
       allow delete: if request.auth != null && (
         isAdmin() || 
-        (isCommunityStaff() && resource.data.community == getUserData().community)
+        (isCommunityStaff() && userCanAccessUserCommunity(resource.data.community))
       );
 
       match /wallet/{walletId} {
@@ -229,62 +284,58 @@ service cloud.firestore {
       allow read: if true;
       allow update: if request.auth != null && (
         isAdmin() || (
-          isCommunityStaff() && (
-            slug == getUserData().community
-            || resource.data.get('username', '') == getUserData().community
-            || resource.data.get('id', '') == getUserData().community
-          )
+          isCommunityStaff() && userCanAccessCommunitySlug(slug)
         )
       );
       allow create, delete: if isAdmin();
       
       match /app_modules/{module} {
         allow read: if request.auth != null;
-        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
 
       match /announcements/{announceId} {
         allow read: if true;
-        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
 
       match /bulletins/{bulletinId} {
         allow read: if true;
-        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
 
       match /settings/{settingId} {
         allow read: if true;
-        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
 
       match /parking_spots/{spotId} {
-        allow read: if request.auth != null && (isAdmin() || slug == getUserData().community);
+        allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
         allow write: if request.auth != null && (
           isAdmin() || 
-          (isCommunityStaff() && slug == getUserData().community) || 
-          (slug == getUserData().community)
+          (isCommunityStaff() && userCanAccessCommunitySlug(slug)) ||
+          userCanAccessCommunitySlug(slug)
         );
       }
 
       match /parking_residents/{docId} {
-        allow read, list: if request.auth != null && (isAdmin() || slug == getUserData().community || docId == request.auth.uid || resource.data.uid == request.auth.uid);
-        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community) || docId == request.auth.uid || resource.data.uid == request.auth.uid);
+        allow read, list: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug) || docId == request.auth.uid || resource.data.uid == request.auth.uid);
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)) || docId == request.auth.uid || resource.data.uid == request.auth.uid);
       }
 
       match /parking_income_daily/{dayId} {
-        allow read: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
-        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+        allow read: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
 
       match /parking_notifications/{nid} {
-        allow read, list: if request.auth != null && (isAdmin() || slug == getUserData().community);
-        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+        allow read, list: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
 
       match /facility_configs/{configId} {
         allow read: if true;
-        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
 
       match /reservations/{resId} {
@@ -292,7 +343,7 @@ service cloud.firestore {
         allow create: if request.auth != null;
         allow update, delete: if request.auth != null && (
           isAdmin() || 
-          (isCommunityStaff() && slug == getUserData().community) ||
+          (isCommunityStaff() && userCanAccessCommunitySlug(slug)) ||
           resource.data.createdBy == request.auth.uid
         );
       }
@@ -300,19 +351,19 @@ service cloud.firestore {
       match /mails/{mailId} {
         allow read: if request.auth != null && (
           isAdmin() || 
-          (isCommunityStaff() && slug == getUserData().community) ||
+          (isCommunityStaff() && userCanAccessCommunitySlug(slug)) ||
           (getUserData().houseNo == resource.data.houseNo)
         );
         allow write: if request.auth != null && (
           isAdmin() || 
-          (isCommunityStaff() && slug == getUserData().community)
+          (isCommunityStaff() && userCanAccessCommunitySlug(slug))
         );
       }
 
       match /parcels/{parcelId} {
         allow read, write: if request.auth != null && (
           isAdmin() || 
-          (isCommunityStaff() && slug == getUserData().community) ||
+          (isCommunityStaff() && userCanAccessCommunitySlug(slug)) ||
           (resource.data.unit in userUnitKeys()) ||
           (resource.data.houseNo in userUnitKeys())
         );
@@ -326,14 +377,7 @@ service cloud.firestore {
       match /visitors/{visitorId} {
         allow get: if (request.auth != null && (
             isAdmin()
-            || (
-              isCommunityStaff()
-              && (
-                slug == getUserData().community
-                || get(/databases/$(database)/documents/communities/$(slug)).data.get('username', '') == getUserData().community
-                || get(/databases/$(database)/documents/communities/$(slug)).data.get('id', '') == getUserData().community
-              )
-            )
+            || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
             || isVisitorSelfGet()
           )) || (
             request.auth == null
@@ -342,44 +386,23 @@ service cloud.firestore {
           );
         allow list: if request.auth != null && (
           isAdmin()
-          || (
-            isCommunityStaff()
-            && (
-              slug == getUserData().community
-              || get(/databases/$(database)/documents/communities/$(slug)).data.get('username', '') == getUserData().community
-              || get(/databases/$(database)/documents/communities/$(slug)).data.get('id', '') == getUserData().community
-            )
-          )
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
         );
         allow create: if (request.auth != null && (
             isAdmin()
-            || (
-              isCommunityStaff()
-              && (
-                slug == getUserData().community
-                || get(/databases/$(database)/documents/communities/$(slug)).data.get('username', '') == getUserData().community
-                || get(/databases/$(database)/documents/communities/$(slug)).data.get('id', '') == getUserData().community
-              )
-            )
+            || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
             || isVisitorSelfCreate(visitorId)
           )) || isVisitorPublicCreate(visitorId, slug);
         allow update, delete: if request.auth != null && (
           isAdmin()
-          || (
-            isCommunityStaff()
-            && (
-              slug == getUserData().community
-              || get(/databases/$(database)/documents/communities/$(slug)).data.get('username', '') == getUserData().community
-              || get(/databases/$(database)/documents/communities/$(slug)).data.get('id', '') == getUserData().community
-            )
-          )
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
         );
       }
 
       match /points_logs/{logId} {
         allow read: if request.auth != null && (
           isAdmin() || 
-          (isCommunityStaff() && slug == getUserData().community) ||
+          (isCommunityStaff() && userCanAccessCommunitySlug(slug)) ||
           resource.data.houseNo == getUserData().houseNo
         );
         allow create: if request.auth != null;
@@ -400,27 +423,27 @@ service cloud.firestore {
           && request.resource.data.password.matches('^[A-Za-z0-9]{6,}$');
 
         allow read, list, update, delete: if request.auth != null && (
-          isAdmin() || (isCommunityStaff() && slug == getUserData().community)
+          isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
         );
       }
 
       match /house_nos/{houseNoId} {
         allow read, list: if request.auth != null && (
-          isAdmin() || (isCommunityStaff() && slug == getUserData().community)
+          isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
         );
         allow create, update, delete: if request.auth != null && (
-          isAdmin() || (isCommunityStaff() && slug == getUserData().community)
+          isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
         );
       }
 
       match /parking_schedules/{sid} {
-        allow read: if request.auth != null && (isAdmin() || slug == getUserData().community || resource.data.uid == request.auth.uid);
-        allow write: if request.auth != null && (isAdmin() || (slug == getUserData().community && (request.resource.data.uid == request.auth.uid || resource.data.uid == request.auth.uid)));
+        allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug) || resource.data.uid == request.auth.uid);
+        allow write: if request.auth != null && (isAdmin() || (userCanAccessCommunitySlug(slug) && (request.resource.data.uid == request.auth.uid || resource.data.uid == request.auth.uid)));
       }
 
       match /parking_bookings/{bid} {
-        allow read, list: if request.auth != null && (isAdmin() || slug == getUserData().community);
-        allow write: if request.auth != null && (isAdmin() || slug == getUserData().community);
+        allow read, list: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
+        allow write: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
       }
     }
 
@@ -428,7 +451,7 @@ service cloud.firestore {
       allow create: if request.auth != null;
       allow read, update, delete: if request.auth != null && (
         isAdmin() || 
-        (isCommunityStaff() && resource.data.community == getUserData().community)
+        (isCommunityStaff() && userCanAccessUserCommunity(resource.data.community))
       );
     }
 
@@ -441,7 +464,7 @@ service cloud.firestore {
     match /pointsHistory/{historyId} {
       allow read, write: if request.auth != null && (
         isAdmin() || 
-        (isCommunityStaff() && resource.data.communityId == getUserData().community) ||
+        (isCommunityStaff() && userCanAccessUserCommunity(resource.data.communityId)) ||
         resource.data.userId == request.auth.uid
       );
     }
@@ -459,7 +482,7 @@ service cloud.firestore {
         doc.fromUid == request.auth.uid ||
         doc.toUid == request.auth.uid ||
         isAdmin() ||
-        (isCommunityStaff() && doc.community == getUserData().community)
+        (isCommunityStaff() && userCanAccessUserCommunity(doc.community))
       );
     }
 
@@ -474,7 +497,7 @@ service cloud.firestore {
     match /calls/{callId} {
       allow create: if request.auth != null && (
         (
-          request.resource.data.community == getUserData().community &&
+          userCanAccessUserCommunity(request.resource.data.community) &&
           request.resource.data.fromUid == request.auth.uid &&
           request.resource.data.fromRole in ["resident", "admin"] &&
           request.resource.data.status == "ringing"
@@ -487,7 +510,7 @@ service cloud.firestore {
         isCallParticipantByDoc(resource.data) ||
         (resource.data.toUid == request.auth.uid) ||
         (resource.data.fromUid == request.auth.uid) ||
-        (isCommunityStaff() && resource.data.community == getUserData().community) ||
+        (isCommunityStaff() && userCanAccessUserCommunity(resource.data.community)) ||
         isAdmin()
       );
 
@@ -495,7 +518,7 @@ service cloud.firestore {
 
       allow delete: if request.auth != null && (
         isAdmin() ||
-        (isCommunityStaff() && resource.data.community == getUserData().community)
+        (isCommunityStaff() && userCanAccessUserCommunity(resource.data.community))
       );
 
       match /offerCandidates/{candidateId} {

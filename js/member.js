@@ -552,6 +552,25 @@
     return "default";
   }
 
+  function findCommunityRecordByKey(communityKey) {
+    const key = String(communityKey || "").trim().toLowerCase();
+    if (!key) return null;
+    const accounts = loadAccounts();
+    const list = Array.isArray(accounts.communities) ? accounts.communities : [];
+    return list.find((x) => x && (
+      String(x.id || "").trim().toLowerCase() === key ||
+      String(x.username || "").trim().toLowerCase() === key
+    )) || null;
+  }
+
+  function resolveCanonicalCommunityId(communityKey) {
+    const raw = String(communityKey || "").trim();
+    const matched = findCommunityRecordByKey(raw);
+    if (matched && matched.id) return String(matched.id).trim();
+    const active = String(resolveActiveCommunityId() || "").trim();
+    return active || raw || "default";
+  }
+
   function configDocRef(communityId) {
     return db.collection("communities").doc(String(communityId || "default")).collection("settings").doc("app_config");
   }
@@ -1085,7 +1104,10 @@
       udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
     } catch {}
 
-    const community = String(udata.community || resolveActiveCommunityId() || "").trim() || "default";
+    const community = resolveCanonicalCommunityId(udata.community || resolveActiveCommunityId());
+    // #region debug-point A:member-send-sos-payload
+    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"A",location:"member.js:sendSOS:payload",msg:"[DEBUG] member prepared sos payload",data:{uid:String(user.uid||""),email:String(user.email||""),udataCommunity:String(udata.community||""),activeCommunity:String(resolveActiveCommunityId()||""),canonicalCommunity:String(community||""),actionMode:String(sosActionMode||""),createdAtMs:Number(createdAtMs||0)},ts:Date.now()})}).catch(()=>{});
+    // #endregion
     const houseNo = String(udata.houseNo || udata.unit || "").trim() || "—";
     const subHouseNo = String(udata.subHouseNo || udata.subUnit || "").trim();
     const displayName = String(udata.displayName || udata.name || "").trim();
@@ -1107,9 +1129,15 @@
     };
 
     try {
-      await db.collection("sos_alerts").add(payload);
+      const ref = await db.collection("sos_alerts").add(payload);
+      // #region debug-point A:member-send-sos-success
+      fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"A",location:"member.js:sendSOS:success",msg:"[DEBUG] member sos add success",data:{docId:String((ref&&ref.id)||""),community:String(payload.community||""),createdAtMs:Number(payload.createdAtMs||0)},ts:Date.now()})}).catch(()=>{});
+      // #endregion
       alert("SOS 通報已送出");
     } catch (e) {
+      // #region debug-point A:member-send-sos-fail
+      fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"A",location:"member.js:sendSOS:error",msg:"[DEBUG] member sos add failed",data:{message:String((e&&e.message)||""),code:String((e&&e.code)||"")},ts:Date.now()})}).catch(()=>{});
+      // #endregion
       alert("SOS 通報送出失敗，請稍後再試");
     }
   }

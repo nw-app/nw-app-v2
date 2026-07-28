@@ -230,6 +230,8 @@
     reloadResidents: null,
     currentUserUid: "",
     currentUserRole: "",
+    currentUserCommunity: "",
+    currentUserCommunityIds: [],
   };
 
   const pad2 = (n) => String(n).padStart(2, "0");
@@ -410,6 +412,54 @@
       return first;
     }
     return "default";
+  }
+
+  function findCommunityRecordByKey(communityKey) {
+    const key = String(communityKey || "").trim().toLowerCase();
+    if (!key) return null;
+    const accounts = loadAccounts();
+    const list = accounts && Array.isArray(accounts.communities) ? accounts.communities : [];
+    return list.find((x) => x && (
+      String(x.id || "").trim().toLowerCase() === key ||
+      String(x.username || "").trim().toLowerCase() === key
+    )) || null;
+  }
+
+  function getCommunityAliasKeys(communityKey) {
+    const raw = String(communityKey || "").trim();
+    const resolved = findCommunityRecordByKey(raw);
+    const keys = [raw];
+    if (resolved) {
+      keys.push(String(resolved.id || "").trim());
+      keys.push(String(resolved.username || "").trim());
+    }
+    return Array.from(new Set(keys.filter(Boolean).map((x) => String(x).trim().toLowerCase())));
+  }
+
+  function getCommunityAliasKeysForQuery(communityKey) {
+    const raw = String(communityKey || "").trim();
+    const resolved = findCommunityRecordByKey(raw);
+    const keys = [];
+    const pushKey = (value) => {
+      const v = String(value || "").trim();
+      if (!v) return;
+      keys.push(v);
+      const lower = v.toLowerCase();
+      if (lower !== v) keys.push(lower);
+    };
+    pushKey(raw);
+    if (resolved) {
+      pushKey(resolved.id);
+      pushKey(resolved.username);
+      pushKey(resolved.name);
+    }
+    return Array.from(new Set(keys.filter(Boolean)));
+  }
+
+  function isSameCommunityKey(inputKey, communityKey) {
+    const value = String(inputKey || "").trim().toLowerCase();
+    if (!value) return false;
+    return getCommunityAliasKeys(communityKey).includes(value);
   }
 
   function configDocRef(communityId) {
@@ -988,7 +1038,13 @@
 
   function stopResidentsSubscription() {
      if (state.unsubResidents) {
-       try { state.unsubResidents(); } catch {}
+       try {
+         if (Array.isArray(state.unsubResidents)) {
+           state.unsubResidents.forEach((fn) => { try { if (typeof fn === "function") fn(); } catch {} });
+         } else if (typeof state.unsubResidents === "function") {
+           state.unsubResidents();
+         }
+       } catch {}
        state.unsubResidents = null;
      }
      state.currentResidents = [];
@@ -996,6 +1052,55 @@
      state.currentResidentsCommunityId = "";
      state.reloadResidents = null;
    }
+
+  function subscribeUsersByCommunityMembership(communityId, onData, onError) {
+    const cid = String(communityId || "default").trim() || "default";
+    const docsByQuery = {
+      community: [],
+      communityIds: [],
+    };
+    let hasDeliveredData = false;
+    const errors = new Map();
+
+    const emit = () => {
+      const merged = new Map();
+      [...docsByQuery.community, ...docsByQuery.communityIds].forEach((doc) => {
+        if (doc && doc.id) merged.set(String(doc.id), doc);
+      });
+      hasDeliveredData = true;
+      if (typeof onData === "function") onData(Array.from(merged.values()));
+    };
+
+    const handleError = (key, err) => {
+      errors.set(String(key || ""), err);
+      if (!hasDeliveredData && errors.size >= 2 && typeof onError === "function") {
+        onError(err);
+      }
+    };
+
+    const unsubs = [
+      db.collection("users").where("community", "==", cid).onSnapshot(
+        (snap) => {
+          docsByQuery.community = snap && Array.isArray(snap.docs) ? snap.docs : [];
+          emit();
+        },
+        (err) => handleError("community", err)
+      ),
+      db.collection("users").where("communityIds", "array-contains", cid).onSnapshot(
+        (snap) => {
+          docsByQuery.communityIds = snap && Array.isArray(snap.docs) ? snap.docs : [];
+          emit();
+        },
+        (err) => handleError("communityIds", err)
+      ),
+    ];
+
+    return () => {
+      unsubs.forEach((fn) => {
+        try { if (typeof fn === "function") fn(); } catch {}
+      });
+    };
+  }
 
   function stopParcelsSubscription() {
     if (_unsubParcels) {
@@ -9169,12 +9274,10 @@
     const loadResidents = async () => {
       setStatus("讀取中...", false);
       try {
-        state.unsubResidents = db.collection("users")
-          .where("community", "==", String(cid || "default"))
-          .onSnapshot((snap) => {
-            const list = snap.docs
+        state.unsubResidents = subscribeUsersByCommunityMembership(String(cid || "default"), (docs) => {
+            const list = docs
               .map((d) => {
-                const v = d.data() || {};
+                const v = d && typeof d.data === "function" ? (d.data() || {}) : {};
                 return {
                   id: d.id,
                   role: String(v.role || ""),
@@ -9999,12 +10102,10 @@
       const loadPointsResidents = async () => {
         setPointsStatus("讀取中...", false);
         try {
-          state.unsubResidents = db.collection("users")
-            .where("community", "==", String(cid || "default"))
-            .onSnapshot((snap) => {
-              const list = snap.docs
+          state.unsubResidents = subscribeUsersByCommunityMembership(String(cid || "default"), (docs) => {
+              const list = docs
                 .map((d) => {
-                  const v = d.data() || {};
+                  const v = d && typeof d.data === "function" ? (d.data() || {}) : {};
                   return {
                     id: d.id,
                     role: String(v.role || ""),
@@ -12287,7 +12388,14 @@
         on = !on;
         if (sosGain) sosGain.gain.value = on ? 0.25 : 0;
       }, 420);
-    } catch {}
+      // #region debug-point C:admin-sos-alarm-started
+      fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"C",location:"admin.js:startSosAlarm:ok",msg:"[DEBUG] sos alarm started",data:{ctxState:String((sosAudioCtx&&sosAudioCtx.state)||""),hasOsc:Boolean(!!sosOsc),hasGain:Boolean(!!sosGain)},ts:Date.now()})}).catch(()=>{});
+      // #endregion
+    } catch (e) {
+      // #region debug-point C:admin-sos-alarm-error
+      fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"C",location:"admin.js:startSosAlarm:error",msg:"[DEBUG] sos alarm failed",data:{message:String((e&&e.message)||""),name:String((e&&e.name)||""),ctxState:String((sosAudioCtx&&sosAudioCtx.state)||"")},ts:Date.now()})}).catch(()=>{});
+      // #endregion
+    }
   }
 
   function stopSosAlarm() {
@@ -12316,6 +12424,9 @@
     if (houseNoEl) houseNoEl.textContent = String(r.houseNo || "").trim();
     if (nameEl) nameEl.textContent = String(r.name || "").trim();
     modal.hidden = false;
+    // #region debug-point B:admin-show-sos-modal
+    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"B",location:"admin.js:showSosAlertModal",msg:"[DEBUG] show sos modal",data:{id:String(r.id||""),community:String(r.community||""),status:String(r.status||""),createdAtMs:Number(r.createdAtMs||0)},ts:Date.now()})}).catch(()=>{});
+    // #endregion
     startSosAlarm();
   }
 
@@ -13338,6 +13449,34 @@
     });
   }
 
+  function getSosQueryCommunityKeys(communityId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "").trim();
+    if (!cid) return [];
+    const record = findCommunityRecordByKey(cid);
+    const keys = new Set();
+    const pushKey = (value) => {
+      const v = String(value || "").trim();
+      if (!v) return;
+      keys.add(v);
+      keys.add(v.toLowerCase());
+    };
+    if (record) {
+      pushKey(record.id);
+      pushKey(record.username);
+      pushKey(record.name);
+    } else {
+      pushKey(cid);
+    }
+    const urlKey = String(readUrlCommunityKey() || "").trim();
+    if (urlKey) {
+      const urlRecord = findCommunityRecordByKey(urlKey);
+      if (!record || (urlRecord && record && String(urlRecord.id || "") === String(record.id || ""))) {
+        pushKey(urlKey);
+      }
+    }
+    return Array.from(keys);
+  }
+
   async function updateSosRecordStatus(recordId, newStatus) {
     try {
       const operatorName = inferUserName(auth.currentUser);
@@ -13363,47 +13502,79 @@
   function startSosAlertsListener(communityId) {
     const cid = String(communityId || "").trim();
     if (!cid) return;
+    const queryCommunityKeys = getSosQueryCommunityKeys(cid);
+    if (!queryCommunityKeys.length) return;
+    // #region debug-point A:admin-sos-listener-start
+    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"A",location:"admin.js:startSosAlertsListener:start",msg:"[DEBUG] admin sos listener start",data:{cid,queryCommunityKeys,role:String(state.currentUserRole||""),userCommunity:String(state.currentUserCommunity||""),urlC:String(readUrlCommunityKey()||""),hash:String(location.hash||"")},ts:Date.now()})}).catch(()=>{});
+    // #endregion
     if (sosUnsub) sosUnsub();
     sosLastNotifiedMs = Date.now();
-    sosUnsub = db
+    const snapshotMap = new Map();
+    const applyMergedSnapshots = async () => {
+      const mergedMap = new Map();
+      snapshotMap.forEach((docs) => {
+        (Array.isArray(docs) ? docs : []).forEach((d) => {
+          if (!d) return;
+          const data = d.data ? (d.data() || {}) : {};
+          mergedMap.set(d.id, {
+            id: d.id,
+            ...data,
+            subHouseNo: String(data.subHouseNo || data.subUnit || "").trim(),
+          });
+        });
+      });
+
+      let list = Array.from(mergedMap.values())
+        .sort((a, b) => (Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0)));
+      const latest = list[0] || null;
+      const latestMs = Number((latest && latest.createdAtMs) || 0);
+      const latestStatus = String((latest && latest.status) || "").trim();
+      const willNotify = Boolean(latest && latestMs > sosLastNotifiedMs && latestStatus === "待處理");
+      // #region debug-point B:admin-sos-snapshot
+      fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"B",location:"admin.js:startSosAlertsListener:onSnapshot",msg:"[DEBUG] admin sos snapshot",data:{queryCommunityKeys,role:String(state.currentUserRole||""),rawCount:Number(mergedMap.size||0),listCount:Number(list.length||0),sosLastNotifiedMs:Number(sosLastNotifiedMs||0),latestMs,latestStatus,latestCommunity:String((latest&&latest.community)||""),willNotify},ts:Date.now()})}).catch(()=>{});
+      // #endregion
+      list = await enrichSosRecordsWithSubUnit(list);
+      sosRecords = list;
+      updateCareNavBadgeFromSos(list.filter((record) => String(record.status || "").trim() !== "已完成").length);
+
+      if (latest && Number(latest.createdAtMs || 0) > sosLastNotifiedMs && String(latest.status || "").trim() === "待處理") {
+        sosLastNotifiedMs = Number(latest.createdAtMs || 0);
+        const cfg = loadConfig(cid) || {};
+        const actionMode = String(cfg.sosActionMode || "backend").trim() || "backend";
+        if (actionMode === "backend") {
+          showSosAlertModal(latest);
+        } else {
+          closeSosAlertModal();
+        }
+      }
+
+      if (String(location.hash || "").includes("#community/care")) {
+        renderCareModule();
+      }
+    };
+
+    const unsubs = queryCommunityKeys.map((communityKey) => db
       .collection("sos_alerts")
-      .orderBy("createdAtMs", "desc")
+      .where("community", "==", communityKey)
       .limit(100)
       .onSnapshot(
         async (snap) => {
-          let list = snap.docs
-            .map((d) => {
-              const data = d.data() || {};
-              return {
-                id: d.id,
-                ...data,
-                subHouseNo: String(data.subHouseNo || data.subUnit || "").trim(),
-              };
-            })
-            .filter((x) => String(x.community || "").trim() === cid)
-            .sort((a, b) => (Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0)));
-          list = await enrichSosRecordsWithSubUnit(list);
-          sosRecords = list;
-          updateCareNavBadgeFromSos(list.filter((record) => String(record.status || "").trim() !== "已完成").length);
-
-          const latest = list[0] || null;
-          if (latest && Number(latest.createdAtMs || 0) > sosLastNotifiedMs && String(latest.status || "").trim() === "待處理") {
-            sosLastNotifiedMs = Number(latest.createdAtMs || 0);
-            const cfg = loadConfig(cid) || {};
-            const actionMode = String(cfg.sosActionMode || "backend").trim() || "backend";
-            if (actionMode === "backend") {
-              showSosAlertModal(latest);
-            } else {
-              closeSosAlertModal();
-            }
-          }
-
-          if (String(location.hash || "").includes("#community/care")) {
-            renderCareModule();
-          }
+          snapshotMap.set(communityKey, snap && snap.docs ? snap.docs : []);
+          await applyMergedSnapshots();
         },
-        () => {}
-      );
+        async (err) => {
+          snapshotMap.set(communityKey, []);
+          await applyMergedSnapshots();
+          // #region debug-point A:admin-sos-listener-error
+          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"A",location:"admin.js:startSosAlertsListener:error",msg:"[DEBUG] admin sos listener error",data:{communityKey,queryCommunityKeys,role:String(state.currentUserRole||""),code:String((err&&err.code)||""),message:String((err&&err.message)||"")},ts:Date.now()})}).catch(()=>{});
+          // #endregion
+        }
+      ));
+    sosUnsub = () => {
+      unsubs.forEach((unsub) => {
+        try { if (typeof unsub === "function") unsub(); } catch {}
+      });
+    };
   }
 
   async function openSosSettingsModal({ communityId }) {
@@ -14529,8 +14700,8 @@
       updateFooterActiveNav();
     };
 
-    // 啟動報到監聽
-    startCheckinListener(cid);
+    if (currentPage === "72h" && cfg.checkinEnabled !== false) startCheckinListener(cid);
+    else stopCheckinListener();
     
     renderPage();
   }
@@ -15150,14 +15321,22 @@
     if (!user) {
       state.currentUserUid = "";
       state.currentUserRole = "";
+      state.currentUserCommunity = "";
+      state.currentUserCommunityIds = [];
       redirectToIndex();
       return;
     }
 
     let role = String(sessionStorage.getItem("csp_role") || "").trim().toLowerCase();
+    let userCommunity = "";
+    let userCommunityIds = [];
     try {
       const udoc = await db.collection("users").doc(String(user.uid)).get();
       const udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
+      userCommunity = String(udata.community || "").trim();
+      userCommunityIds = Array.isArray(udata.communityIds)
+        ? udata.communityIds.map((x) => String(x || "").trim()).filter(Boolean)
+        : [];
       const r = String(udata.role || "").trim();
       const inferred =
         (r === "admin" || r === "系統管理員" || r === "系統管理者" || r === "系統") ? "admin" :
@@ -15183,6 +15362,8 @@
 
     state.currentUserUid = String(user.uid || "");
     state.currentUserRole = role || "";
+    state.currentUserCommunity = userCommunity;
+    state.currentUserCommunityIds = userCommunityIds;
 
     refreshLoginInfo(user);
     ensureUrlCommunityKey(user).then(() => refreshLoginInfo(user)).catch(() => {});
