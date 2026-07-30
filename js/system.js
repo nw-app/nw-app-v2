@@ -672,8 +672,10 @@
       
       // 建立社区ID到名称的映射
       const communityMap = new Map();
+      const communityCodeMap = new Map();
       (state.communities || []).forEach(c => {
         communityMap.set(String(c.id), String(c.name || c.id));
+        communityCodeMap.set(String(c.id), String(c.username || ""));
       });
       
       rList.innerHTML = list.map((r) => {
@@ -684,8 +686,15 @@
         const firstName = firstId ? (communityMap.get(firstId) || "") : "";
         const extraCount = cids.length > 1 ? (cids.length - 1) : 0;
         const communityDisplay = firstName ? `<span class="tag" style="margin-left:8px;">${firstName}${extraCount ? ` +${extraCount}` : ""}</span>` : "";
+        const emailText = String(r.email || "").trim() || "—";
+        const phoneText = String(r.phone || "").trim() || "—";
+        const pwPlain = String(r.passwordPlain || "").trim();
+        const codes = Array.isArray(r.communityCodes) ? r.communityCodes : [];
+        const primaryCode = String(codes[0] || "").trim() || String(communityCodeMap.get(firstId) || "").trim();
+        const passwordDisplay = pwPlain ? pwPlain : "------";
+        const passwordHint = "";
         return `
-            <div class="item account-item">
+            <div class="item account-item" data-account-id="${r.id}" aria-expanded="false">
               <div class="account-left">
                 <div class="avatar-sm">${avatarHtml(r)}</div>
                 <div class="account-text">
@@ -718,6 +727,20 @@
                   </svg>
                 </button>
               </div>
+              <div class="account-detail-block" hidden>
+                <div class="account-detail-row">
+                  <div class="account-detail-key">電子郵件</div>
+                  <div class="account-detail-val">${emailText}</div>
+                </div>
+                <div class="account-detail-row">
+                  <div class="account-detail-key">手機號碼</div>
+                  <div class="account-detail-val">${phoneText}</div>
+                </div>
+                <div class="account-detail-row">
+                  <div class="account-detail-key">目前密碼</div>
+                  <div class="account-detail-val">${passwordDisplay}<span class="account-detail-hint">${passwordHint}</span></div>
+                </div>
+              </div>
             </div>
           `.trim();
       }).join("") || `
@@ -729,6 +752,14 @@
               <span class="tag">—</span>
             </div>
           `;
+
+      rList.querySelectorAll(".account-detail-block").forEach((d) => {
+        d.hidden = true;
+      });
+      rList.querySelectorAll(".account-item").forEach((it) => {
+        it.classList.remove("expanded");
+        it.setAttribute("aria-expanded", "false");
+      });
 
       rList.querySelectorAll("[data-toggle-user]").forEach((input) => {
         input.addEventListener("change", async () => {
@@ -779,16 +810,26 @@
           const cidFromDoc = String(v.community || cid);
           const cidsFromDoc = Array.isArray(v.communityIds) ? v.communityIds : [];
           const communityIds = cidsFromDoc.map((x) => String(x || "").trim()).filter(Boolean);
+          const codesFromDoc = Array.isArray(v.communityCodes) ? v.communityCodes : [];
+          const communityCodesFromDoc = codesFromDoc.map((x) => String(x || "").trim()).filter(Boolean);
+          const communityCodesFromState = (communityIds.length ? communityIds : (cidFromDoc ? [cidFromDoc] : [])).map((id) => {
+            const c = (state.communities || []).find((x) => String(x && x.id ? x.id : "") === String(id || ""));
+            return c ? String(c.username || "") : "";
+          }).filter(Boolean);
+          const communityCodes = communityCodesFromDoc.length ? communityCodesFromDoc : communityCodesFromState;
           return {
             id: d.id,
             communityId: cidFromDoc,
             communityIds: communityIds.length ? communityIds : (cidFromDoc ? [cidFromDoc] : []),
+            communityCodes,
             unit: String(v.houseNo || v.unit || ""),
             name: String(v.displayName || v.name || ""),
             username: String(v.username || v.email || v.phone || ""),
             role: String(v.role || ""),
             email: String(v.email || ""),
             phone: String(v.phone || ""),
+            passwordPlain: String(v.passwordPlain || ""),
+            hasPasswordHash: Boolean(v.passwordHash),
             address: String(v.address || ""),
             residentRoles: Array.isArray(v.residentRoles) ? v.residentRoles : [],
             residentRoleOther: String(v.residentRoleOther || ""),
@@ -1054,6 +1095,11 @@
         const requiredCommunity = isResident || isCommunityLike;
         const selectedCommunityIds = isCommunityLike ? getSelectedCommunityIds() : (communityId ? [communityId] : []);
         const primaryCommunityId = selectedCommunityIds.length ? String(selectedCommunityIds[0] || "").trim() : "";
+        const primaryCommunityCode = (() => {
+          if (!primaryCommunityId) return "";
+          const c = (state.communities || []).find((x) => String(x && x.id ? x.id : "") === String(primaryCommunityId));
+          return c ? String(c.username || "") : "";
+        })();
         if (!name) {
           showModalError("請填寫姓名。");
           return;
@@ -1076,9 +1122,9 @@
           return;
         }
         const loginAccount = email;
-        const password = editUserId ? passwordRaw : (passwordRaw || phone);
+        const password = editUserId ? passwordRaw : (passwordRaw || (isCommunityLike ? primaryCommunityCode : phone));
         if (!password && !editUserId) {
-          showModalError("未設定預設密碼時，預設會使用手機號碼；請填寫手機號碼或預設密碼。");
+          showModalError(isCommunityLike ? "未設定預設密碼時，預設會使用社區代號；請填寫預設密碼或確認社區代號已設定。" : "未設定預設密碼時，預設會使用手機號碼；請填寫手機號碼或預設密碼。");
           return;
         }
         const { roles, extra } = readResidentRoles();
@@ -1145,6 +1191,10 @@
             payload.passwordHashAlg = "SHA-256";
             payload.passwordUpdatedAt = FieldValue.serverTimestamp();
           }
+          if (!isEdit || passwordRaw) {
+            payload.passwordPlain = String(password || "");
+            payload.passwordPlainUpdatedAt = FieldValue.serverTimestamp();
+          }
           if (!isEdit) payload.createdAt = FieldValue.serverTimestamp();
           await db.collection("users").doc(id).set(payload, { merge: true });
           const c = (state.communities || []).find((x) => String(x && x.id ? x.id : "") === String(payload.community || ""));
@@ -1154,16 +1204,21 @@
           const existingIdx = (currentUsers || []).findIndex((x) => String(x && x.id ? x.id : "") === String(id));
           const existing = existingIdx >= 0 ? (currentUsers[existingIdx] || null) : null;
           const resolvedAvatarDataUrl = avatarDataUrl ? avatarDataUrl : String(existing && existing.avatarDataUrl ? existing.avatarDataUrl : "");
+          const hasPasswordHashNext = Boolean(passwordHash) || Boolean(existing && existing.hasPasswordHash);
+          const passwordPlainNext = isEdit ? (passwordRaw ? String(passwordRaw || "") : String(existing && existing.passwordPlain ? existing.passwordPlain : "")) : String(password || "");
           const nextItem = {
             id: String(id),
             communityId: String(payload.community || "default"),
             communityIds: Array.isArray(payload.communityIds) ? payload.communityIds : [],
+            communityCodes: Array.isArray(payload.communityCodes) ? payload.communityCodes : [],
             unit: String(payload.houseNo || ""),
             name: String(payload.displayName || ""),
             username: String(payload.username || payload.email || payload.phone || ""),
             role: String(payload.role || ""),
             email: String(payload.email || ""),
             phone: String(payload.phone || ""),
+            passwordPlain: passwordPlainNext,
+            hasPasswordHash: hasPasswordHashNext,
             address: String(payload.address || ""),
             residentRoles: Array.isArray(payload.residentRoles) ? payload.residentRoles : [],
             residentRoleOther: String(payload.residentRoleOther || ""),
@@ -1286,7 +1341,21 @@
           } finally {
             setBusy(false);
           }
+          return;
         }
+
+        const inSwitch = e.target && e.target.closest ? e.target.closest(".switch") : null;
+        if (inSwitch) return;
+        const accountLeft = e.target && e.target.closest ? e.target.closest(".account-left") : null;
+        if (!accountLeft) return;
+        const accountItem = accountLeft.closest(".account-item");
+        if (!accountItem) return;
+        const detail = accountItem.querySelector(".account-detail-block");
+        if (!detail) return;
+        const willExpand = Boolean(detail.hidden);
+        detail.hidden = !willExpand;
+        accountItem.classList.toggle("expanded", willExpand);
+        accountItem.setAttribute("aria-expanded", willExpand ? "true" : "false");
       });
     }
   }
