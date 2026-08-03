@@ -2197,16 +2197,30 @@
       ];
 
       const buttonCount = Array.isArray(defaultButtons) ? defaultButtons.length : 0;
+      const defaultByIcon = new Map(
+        defaultButtons.map((b) => [String((b && b.icon) || "").trim(), b]).filter(([k]) => Boolean(k))
+      );
+      const defaultByName = new Map(
+        defaultButtons.map((b) => [String((b && b.name) || "").trim(), b]).filter(([k]) => Boolean(k))
+      );
+      const resolveDefaultButton = (b, idx) => {
+        const nameKey = String((b && b.name) || "").trim();
+        const iconKey = String((b && b.icon) || "").trim();
+        return defaultByIcon.get(iconKey) || defaultByName.get(nameKey) || defaultButtons[idx] || { name: "", icon: "", url: "#", openExternal: false };
+      };
+
       let html = "";
       for (let i = 0; i < buttonCount; i++) {
         const saved = savedButtons[i];
-        const def = defaultButtons[i] || { name: "", icon: "", url: "#", openExternal: false };
+        const def = resolveDefaultButton(saved || defaultButtons[i], i);
         
         // 使用保存的數據，但確保 name 和 icon 總是有值
-        const b = saved ? { 
+        const b = saved ? {
           ...saved,
           name: saved.name || def.name,
-          icon: saved.icon || def.icon
+          icon: saved.icon || def.icon,
+          url: saved.url || def.url,
+          openExternal: typeof saved.openExternal === "boolean" ? saved.openExternal : Boolean(def.openExternal),
         } : { ...def };
         
         const displayName = b.name || def.name || "";
@@ -2216,7 +2230,7 @@
         const selectedInternalValue = isInternalLink ? b.url : "";
         
         html += `
-          <div class="button-slot" data-slot-index="${i}">
+          <div class="button-slot" data-slot-index="${i}" draggable="true">
             <div class="btn-slot-preview" id="${containerId}_preview_${i}" ${b.data ? `data-slot-data="${b.data}"` : ""}>
               ${b.data || b.icon ? `<img src="${b.data || b.icon}" />` : "<span>圖</span>"}
             </div>
@@ -2296,7 +2310,12 @@
         btn.addEventListener("click", () => {
           const idx = btn.getAttribute("data-btn-clear");
           const preview = document.getElementById(`${containerId}_preview_${idx}`);
-          const def = defaultButtons[idx] || { icon: "" };
+          const current = (() => {
+            const name = container.querySelector(`[data-btn-name="${idx}"]`)?.value || "";
+            const imgSrc = preview && preview.querySelector ? (preview.querySelector("img")?.getAttribute("src") || "") : "";
+            return { name, icon: imgSrc };
+          })();
+          const def = resolveDefaultButton(current, parseInt(idx, 10));
           preview.innerHTML = def.icon ? `<img src="${def.icon}" />` : "<span>圖</span>";
           preview.removeAttribute("data-slot-data");
           container.querySelector(`[data-btn-icon="${idx}"]`).value = "";
@@ -2326,11 +2345,83 @@
           } else if (slotData) {
             preview.innerHTML = `<img src="${slotData}" />`;
           } else {
-            const def = defaultButtons[idx] || { icon: "" };
+            const current = (() => {
+              const name = container.querySelector(`[data-btn-name="${idx}"]`)?.value || "";
+              const imgSrc = preview && preview.querySelector ? (preview.querySelector("img")?.getAttribute("src") || "") : "";
+              return { name, icon: imgSrc };
+            })();
+            const def = resolveDefaultButton(current, parseInt(idx, 10));
             preview.innerHTML = def.icon ? `<img src="${def.icon}" />` : "<span>圖</span>";
           }
         });
       });
+
+      const readButtonsFromSettingsDom = () => {
+        const buttons = [];
+        for (let i = 0; i < buttonCount; i++) {
+          const name = container.querySelector(`[data-btn-name="${i}"]`)?.value || "";
+          const internalSelect = container.querySelector(`[data-btn-internal="${i}"]`);
+          const urlInput = container.querySelector(`[data-btn-url="${i}"]`);
+          const url = internalSelect && internalSelect.value ? internalSelect.value : (urlInput ? (urlInput.value || "") : "");
+          const openExternal = container.querySelector(`[data-btn-external="${i}"]`)?.checked || false;
+          const iconUrl = container.querySelector(`[data-btn-icon="${i}"]`)?.value || "";
+          const preview = document.getElementById(`${containerId}_preview_${i}`);
+          const data = preview?.getAttribute("data-slot-data") || "";
+          const previewIcon = !data ? (preview && preview.querySelector ? (preview.querySelector("img")?.getAttribute("src") || "") : "") : "";
+          buttons.push({
+            name,
+            url,
+            openExternal,
+            icon: iconUrl || (data ? "" : previewIcon),
+            data: data,
+          });
+        }
+        return buttons;
+      };
+
+      const bindReorder = () => {
+        const slots = Array.from(container.querySelectorAll(".button-slot"));
+        slots.forEach((slot) => {
+          slot.addEventListener("dragstart", (e) => {
+            const t = e && e.target && e.target.closest ? e.target.closest("input,select,button,textarea") : null;
+            if (t) {
+              e.preventDefault();
+              return;
+            }
+            const idx = slot.getAttribute("data-slot-index");
+            try {
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", String(idx || ""));
+            } catch {}
+          });
+          slot.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            slot.classList.add("drag-over");
+          });
+          slot.addEventListener("dragleave", () => {
+            slot.classList.remove("drag-over");
+          });
+          slot.addEventListener("drop", (e) => {
+            e.preventDefault();
+            slot.classList.remove("drag-over");
+            let fromIdx = -1;
+            try {
+              fromIdx = parseInt(String(e.dataTransfer.getData("text/plain") || ""), 10);
+            } catch {}
+            const toIdx = parseInt(String(slot.getAttribute("data-slot-index") || ""), 10);
+            if (!Number.isFinite(fromIdx) || !Number.isFinite(toIdx) || fromIdx < 0 || toIdx < 0) return;
+            if (fromIdx === toIdx) return;
+            const buttons = readButtonsFromSettingsDom();
+            if (fromIdx >= buttons.length || toIdx >= buttons.length) return;
+            const moved = buttons.splice(fromIdx, 1)[0];
+            buttons.splice(toIdx, 0, moved);
+            unitConfigCache = unitConfigCache && typeof unitConfigCache === "object" ? unitConfigCache : {};
+            unitConfigCache[storeKey] = buttons;
+            renderRowButtonSettings(containerId, storeKey, defaultButtons);
+          });
+        });
+      };
+      bindReorder();
     };
 
     const renderServiceSettings = (cfg) => {
@@ -2842,13 +2933,14 @@
               }
               const openExternal = container.querySelector(`[data-btn-external="${i}"]`)?.checked || false;
               const iconUrl = container.querySelector(`[data-btn-icon="${i}"]`)?.value || "";
-              const data = document.getElementById(`${containerId}_preview_${i}`)?.getAttribute("data-slot-data") || "";
-              const def = defaultButtons[i] || { icon: "" };
+              const preview = document.getElementById(`${containerId}_preview_${i}`);
+              const data = preview?.getAttribute("data-slot-data") || "";
+              const previewIcon = !data ? (preview && preview.querySelector ? (preview.querySelector("img")?.getAttribute("src") || "") : "") : "";
               buttons.push({
                 name,
                 url,
                 openExternal,
-                icon: iconUrl || (data ? "" : def.icon),
+                icon: iconUrl || (data ? "" : previewIcon),
                 data: data
               });
             }

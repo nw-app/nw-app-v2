@@ -611,19 +611,38 @@
       const d = defaultConfig();
       
       const mergeButtons = (saved, defaults) => {
-        const result = defaults.map(b => ({ ...b }));
-        if (Array.isArray(saved)) {
-          saved.forEach((b, i) => {
-            if (i < result.length && b) {
-              if (b.name) result[i].name = b.name;
-              if (b.url) result[i].url = b.url;
-              if (b.data) result[i].data = b.data;
-              if (b.icon) result[i].icon = b.icon;
-              result[i].openExternal = b.openExternal || false;
-            }
-          });
-        }
-        return result;
+        const baseDefaults = defaults.map((b) => ({ ...b }));
+        if (!Array.isArray(saved) || saved.length === 0) return baseDefaults;
+
+        const norm = (v) => String(v || "").trim();
+        const defaultByIcon = new Map(baseDefaults.map((b) => [norm(b.icon), b]).filter(([k]) => Boolean(k)));
+        const defaultByName = new Map(baseDefaults.map((b) => [norm(b.name), b]).filter(([k]) => Boolean(k)));
+        const used = new Set();
+        const out = [];
+
+        const pickDefault = (b) => {
+          const iconKey = norm(b && b.icon);
+          const nameKey = norm(b && b.name);
+          return defaultByIcon.get(iconKey) || defaultByName.get(nameKey) || null;
+        };
+
+        saved.forEach((b) => {
+          if (!b || typeof b !== "object") return;
+          const def = pickDefault(b) || {};
+          const merged = { ...def, ...b };
+          merged.openExternal = Boolean(b.openExternal);
+          out.push(merged);
+          const k = norm(def.icon) || norm(def.name);
+          if (k) used.add(k);
+        });
+
+        baseDefaults.forEach((def) => {
+          const k = norm(def.icon) || norm(def.name);
+          if (!k || used.has(k)) return;
+          out.push({ ...def });
+        });
+
+        return out.slice(0, baseDefaults.length);
       };
 
       const rowAImages = (() => {

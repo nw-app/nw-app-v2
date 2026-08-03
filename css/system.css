@@ -438,6 +438,11 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--panel-2);
+  cursor: grab;
+}
+.button-slot.drag-over {
+  outline: 2px dashed rgba(211, 47, 47, 0.45);
+  outline-offset: 2px;
 }
 .btn-slot-preview {
   width: 60px;
