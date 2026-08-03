@@ -22,6 +22,7 @@
   const STORAGE_ACTIVE_COMMUNITY = "csp_active_community_v1";
   const STORAGE_LAST_PAGE = "csp_system_page_v1";
   const STORAGE_AREA_FILTER = "csp_community_area_filter_v1";
+  const STORAGE_ROW_D_RULES_MIGRATION = "csp_rowd_rules_migration_v1";
   const PAGES = ["accounts", "community", "board", "table", "shop", "links"];
   const ACCOUNT_ROLE_META = Object.freeze({
     resident: { label: "住戶", roleValue: "住戶", sessionRole: "resident", page: "member.html" },
@@ -121,7 +122,7 @@
     { id: "resident-bulletin", name: "通知", defaultUrl: "#resident/resident-bulletin" },
   ];
 
-  const defaultRowDButtons = [
+  const legacyRowDButtons = [
     { name: "AI對話", icon: "photo/b01.png", url: "#" },
     { name: "郵件包裹", icon: "photo/b02.png", url: "#" },
     { name: "監視系統", icon: "photo/b03.png", url: "#" },
@@ -131,6 +132,137 @@
     { name: "設施預約", icon: "photo/b07.png", url: "#" },
     { name: "會議記錄", icon: "photo/b08.png", url: "#" },
   ];
+
+  const isLegacyRowDButtons = (buttons) => {
+    if (!Array.isArray(buttons) || buttons.length !== legacyRowDButtons.length) return false;
+    return buttons.every((b, i) => {
+      const legacy = legacyRowDButtons[i];
+      if (!b || String(b.name || "") !== legacy.name) return false;
+      if (b.openExternal) return false;
+      if (b.data) return false;
+      const icon = String(b.icon || "");
+      if (icon && icon !== legacy.icon) return false;
+      const url = String(b.url || "").trim();
+      if (legacy.url === "live-meeting.html") return !url || url === "#" || url === "live-meeting.html";
+      return !url || url === "#";
+    });
+  };
+
+  const defaultRowDButtons = [
+    { name: "包裹郵件", icon: "photo/a01.png", url: "parcel.html" },
+    { name: "訪客登記", icon: "photo/a02.png", url: "#" },
+    { name: "社區園地", icon: "photo/a03.png", url: "bulletin-community.html" },
+    { name: "公設預約", icon: "photo/a04.png", url: "facility.html" },
+    { name: "綠色停車", icon: "photo/a05.png", url: "#" },
+    { name: "抄表紀錄", icon: "photo/a06.png", url: "#" },
+    { name: "財務報表", icon: "photo/a07.png", url: "bulletin-finance.html" },
+    { name: "區大直播", icon: "photo/a08.png", url: "live-meeting.html" },
+    { name: "會議記錄", icon: "photo/a09.png", url: "bulletin-meeting.html" },
+    { name: "清潔通報", icon: "photo/a10.png", url: "#" },
+    { name: "社區活動", icon: "photo/a11.png", url: "#" },
+    { name: "AI對話", icon: "photo/a12.png", url: "https://gemini.google.com/?hl=zh-TW", openExternal: true },
+  ];
+
+  const migrateRowDButtonsIfNeeded = async (communityId) => {
+    const cid = String(communityId || "").trim();
+    if (!cid) return { changed: false };
+    const doc = await configDocRef(cid).get();
+    const cfg = doc && doc.exists ? (doc.data() || {}) : {};
+    const saved = cfg && Array.isArray(cfg.rowDButtons) ? cfg.rowDButtons : null;
+
+    const defaults = defaultRowDButtons.map((b) => ({ ...b }));
+
+    const patchInternal = (arr, idx, expectedName, expectedIcon, targetUrl) => {
+      const b = arr[idx] && typeof arr[idx] === "object" ? arr[idx] : {};
+      const url = String(b.url || "").trim();
+      if (url && url !== "#") return false;
+      const name = String(b.name || "").trim();
+      const icon = String(b.icon || "").trim();
+      if (name && name !== expectedName && icon && icon !== expectedIcon) return false;
+      arr[idx] = { ...b, url: targetUrl };
+      return true;
+    };
+
+    const patchExternal = (arr, idx, expectedName, expectedIcon, targetUrl) => {
+      const b = arr[idx] && typeof arr[idx] === "object" ? arr[idx] : {};
+      const url = String(b.url || "").trim();
+      if (url && url !== "#") return false;
+      const name = String(b.name || "").trim();
+      const icon = String(b.icon || "").trim();
+      if (name && name !== expectedName && icon && icon !== expectedIcon) return false;
+      arr[idx] = { ...b, url: targetUrl, openExternal: true };
+      return true;
+    };
+
+    const applyRules = (buttons) => {
+      if (!Array.isArray(buttons) || buttons.length === 0) return { changed: true, next: defaults };
+      if (isLegacyRowDButtons(buttons)) return { changed: true, next: defaults };
+      if (buttons.length < defaults.length) {
+        const merged = defaults.map((b) => ({ ...b }));
+        buttons.forEach((b, i) => {
+          if (!b || typeof b !== "object" || i >= merged.length) return;
+          merged[i] = { ...merged[i], ...b };
+        });
+        return { changed: true, next: merged };
+      }
+      if (buttons.length !== defaults.length) return { changed: false, next: buttons };
+
+      const next = buttons.map((b) => (b && typeof b === "object" ? { ...b } : {}));
+      let changed = false;
+      changed = patchInternal(next, 0, "包裹郵件", "photo/a01.png", "parcel.html") || changed;
+      changed = patchInternal(next, 2, "社區園地", "photo/a03.png", "bulletin-community.html") || changed;
+      changed = patchInternal(next, 3, "公設預約", "photo/a04.png", "facility.html") || changed;
+      changed = patchInternal(next, 6, "財務報表", "photo/a07.png", "bulletin-finance.html") || changed;
+      changed = patchInternal(next, 8, "會議記錄", "photo/a09.png", "bulletin-meeting.html") || changed;
+      changed = patchExternal(next, 11, "AI對話", "photo/a12.png", "https://gemini.google.com/?hl=zh-TW") || changed;
+      return { changed, next };
+    };
+
+    const res = applyRules(saved);
+    if (!res.changed) return { changed: false };
+    await configDocRef(cid).set({ rowDButtons: res.next, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return { changed: true };
+  };
+
+  const migrateAllCommunitiesRowDButtons = async ({ force = false } = {}) => {
+    let doneFlag = "";
+    try {
+      doneFlag = String(localStorage.getItem(STORAGE_ROW_D_RULES_MIGRATION) || "");
+    } catch {}
+    if (!force && doneFlag === "done") return;
+
+    const list = Array.isArray(state.communities) ? state.communities : [];
+    if (!list.length) return;
+
+    const subEl = document.getElementById("pageSubtitle");
+    if (subEl) {
+      subEl.textContent = "正在更新所有社區的「社區服務」預設連結...";
+      subEl.hidden = false;
+      subEl.style.display = "";
+      subEl.setAttribute("aria-hidden", "false");
+    }
+
+    let updated = 0;
+    for (const c of list) {
+      const cid = String(c && c.id ? c.id : "").trim();
+      if (!cid) continue;
+      try {
+        const r = await migrateRowDButtonsIfNeeded(cid);
+        if (r.changed) updated += 1;
+      } catch {}
+    }
+
+    try {
+      localStorage.setItem(STORAGE_ROW_D_RULES_MIGRATION, "done");
+    } catch {}
+
+    if (subEl) {
+      subEl.textContent = updated ? `已更新「社區服務」預設連結：${updated} 個社區。` : "「社區服務」預設連結無需更新。";
+      subEl.hidden = false;
+      subEl.style.display = "";
+      subEl.setAttribute("aria-hidden", "false");
+    }
+  };
 
   const defaultRowFButtons = [
     { name: "福利通", icon: "photo/b09.png", url: "https://info.talk.tw/", openExternal: true },
@@ -1800,6 +1932,34 @@
       unitStatus.scrollIntoView({ block: "nearest" });
     };
 
+    const showUnitInfo = (msg) => {
+      if (!unitStatus) return;
+      unitStatus.hidden = false;
+      unitStatus.textContent = String(msg || "");
+      unitStatus.classList.remove("error");
+      unitStatus.scrollIntoView({ block: "nearest" });
+    };
+
+    const resetRowDBtn = document.getElementById("btnResetRowDButtons");
+    if (resetRowDBtn && !resetRowDBtn._bound) {
+      resetRowDBtn._bound = true;
+      resetRowDBtn.addEventListener("click", async () => {
+        if (!unitModal || unitModal.hidden) return;
+        const ok = await (window.nwConfirm ? window.nwConfirm({
+          title: "確認重置",
+          message: "確定要將「社區服務」12 個按鈕恢復為預設值？此操作會覆蓋目前畫面中的設定，需點擊「儲存」後才會寫入社區。",
+          okText: "重置",
+          cancelText: "取消",
+          danger: true,
+        }) : Promise.resolve(window.confirm("確定要重置「社區服務」按鈕設定？")));
+        if (!ok) return;
+        unitConfigCache = unitConfigCache && typeof unitConfigCache === "object" ? unitConfigCache : {};
+        unitConfigCache.rowDButtons = defaultRowDButtons.map((b) => ({ ...b }));
+        renderRowButtonSettings("rowDButtonList", "rowDButtons", defaultRowDButtons);
+        showUnitInfo("已重置「社區服務」按鈕設定（尚未儲存）。");
+      });
+    }
+
     const setActiveUnitTab = (tabId) => {
       const validTabs = ["units", "features", "row-a", "row-b", "row-d", "row-f", "service", "ads", "committee"];
       const next = validTabs.includes(tabId) ? tabId : "units";
@@ -2023,20 +2183,22 @@
       const container = document.getElementById(containerId);
       if (!container) return;
       const cfg = unitConfigCache || {};
-      const savedButtons = Array.isArray(cfg[storeKey]) ? cfg[storeKey] : [];
+      const savedButtonsRaw = Array.isArray(cfg[storeKey]) ? cfg[storeKey] : [];
+      const savedButtons = storeKey === "rowDButtons" && isLegacyRowDButtons(savedButtonsRaw) ? [] : savedButtonsRaw;
 
       // 內部連結選項
       const internalLinks = [
         { value: "parcel.html", label: "包裹郵件" },
-        { value: "facility.html", label: "設施預約" },
+        { value: "facility.html", label: "公設預約" },
         { value: "bulletin-community.html", label: "社區園地" },
         { value: "bulletin-finance.html", label: "財務報表" },
-        { value: "bulletin-meeting.html", label: "會議紀錄" },
+        { value: "bulletin-meeting.html", label: "會議記錄" },
         { value: "bulletin-repair.html", label: "修繕報告" }
       ];
 
+      const buttonCount = Array.isArray(defaultButtons) ? defaultButtons.length : 0;
       let html = "";
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < buttonCount; i++) {
         const saved = savedButtons[i];
         const def = defaultButtons[i] || { name: "", icon: "", url: "#", openExternal: false };
         
@@ -2070,7 +2232,7 @@
                     <option value="">自訂連結</option>
                     ${internalLinks.map(link => `<option value="${link.value}" ${selectedInternalValue === link.value ? "selected" : ""}>${link.label}</option>`).join("")}
                   </select>
-                  <input type="text" value="${isInternalLink ? "" : (b.url || "")}" placeholder="#" data-btn-url="${i}" ${isInternalLink ? "disabled" : ""} />
+                  <input type="text" value="${b.url || ""}" placeholder="#" data-btn-url="${i}" ${isInternalLink ? "disabled" : ""} />
                   <label class="check-inline">
                     <input type="checkbox" data-btn-external="${i}" ${b.openExternal ? "checked" : ""} />
                     <span>另開</span>
@@ -2139,11 +2301,17 @@
           preview.removeAttribute("data-slot-data");
           container.querySelector(`[data-btn-icon="${idx}"]`).value = "";
           container.querySelector(`[data-btn-name="${idx}"]`).value = def.name || "";
-          container.querySelector(`[data-btn-url="${idx}"]`).value = "#";
-          container.querySelector(`[data-btn-internal="${idx}"]`).value = "";
-          container.querySelector(`[data-btn-url="${idx}"]`).disabled = false;
+          const urlInput = container.querySelector(`[data-btn-url="${idx}"]`);
+          const internalSelect = container.querySelector(`[data-btn-internal="${idx}"]`);
+          const defUrl = def.url || "#";
+          const isDefInternal = internalLinks.some((link) => link.value === defUrl);
+          if (internalSelect) internalSelect.value = isDefInternal ? defUrl : "";
+          if (urlInput) {
+            urlInput.value = defUrl;
+            urlInput.disabled = isDefInternal;
+          }
           const externalCheck = container.querySelector(`[data-btn-external="${idx}"]`);
-          if (externalCheck) externalCheck.checked = false;
+          if (externalCheck) externalCheck.checked = Boolean(def.openExternal);
         });
       });
 
@@ -2660,7 +2828,8 @@
             const container = document.getElementById(containerId);
             if (!container) return null;
             const buttons = [];
-            for (let i = 0; i < 8; i++) {
+            const buttonCount = Array.isArray(defaultButtons) ? defaultButtons.length : 0;
+            for (let i = 0; i < buttonCount; i++) {
               const name = container.querySelector(`[data-btn-name="${i}"]`)?.value || "";
               // 優先從內部連結選擇框獲取，如果沒有再從 URL 輸入框獲取
               const internalSelect = container.querySelector(`[data-btn-internal="${i}"]`);
@@ -2858,7 +3027,7 @@
   }
 
   function ensureCommunitiesSubscription() {
-    db.collection("communities").get().then((snap) => {
+    db.collection("communities").get().then(async (snap) => {
       const list = snap.docs.map((d) => {
         const v = d.data() || {};
         const units = Array.isArray(v.units) ? v.units : [];
@@ -2886,6 +3055,15 @@
       console.log("[Debug] state.communities loaded:", state.communities.length);
       state.communities.forEach(c => console.log(`[Debug] Community: ${c.name}, Area: ${c.area}, ID: ${c.id}`));
       openPage(state.currentPage);
+      const params = (() => {
+        try {
+          return new URLSearchParams(String(location.search || ""));
+        } catch {
+          return null;
+        }
+      })();
+      const force = params ? String(params.get("migrateRowD") || "") === "1" : false;
+      migrateAllCommunitiesRowDButtons({ force }).catch(() => {});
     }).catch(() => {
       state.communities = [];
       openPage(state.currentPage);

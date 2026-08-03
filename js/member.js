@@ -410,15 +410,45 @@
   const STORAGE_ACCOUNTS = "csp_accounts_v1";
   const STORAGE_ACTIVE_COMMUNITY = "csp_active_community_v1";
 
-  const defaultRowDButtons = [
+  const legacyRowDButtons = [
     { name: "AI對話", icon: "photo/b01.png", url: "#" },
     { name: "郵件包裹", icon: "photo/b02.png", url: "#" },
     { name: "監視系統", icon: "photo/b03.png", url: "#" },
     { name: "財務報表", icon: "photo/b04.png", url: "#" },
     { name: "社區園地", icon: "photo/b05.png", url: "#" },
-    { name: "區大直播", icon: "photo/b06.png", url: "#" },
+    { name: "區大直播", icon: "photo/b06.png", url: "live-meeting.html" },
     { name: "設施預約", icon: "photo/b07.png", url: "#" },
     { name: "會議記錄", icon: "photo/b08.png", url: "#" },
+  ];
+
+  const isLegacyRowDButtons = (buttons) => {
+    if (!Array.isArray(buttons) || buttons.length !== legacyRowDButtons.length) return false;
+    return buttons.every((b, i) => {
+      const legacy = legacyRowDButtons[i];
+      if (!b || String(b.name || "") !== legacy.name) return false;
+      if (b.openExternal) return false;
+      if (b.data) return false;
+      const icon = String(b.icon || "");
+      if (icon && icon !== legacy.icon) return false;
+      const url = String(b.url || "").trim();
+      if (legacy.url === "live-meeting.html") return !url || url === "#" || url === "live-meeting.html";
+      return !url || url === "#";
+    });
+  };
+
+  const defaultRowDButtons = [
+    { name: "包裹郵件", icon: "photo/a01.png", url: "parcel.html" },
+    { name: "訪客登記", icon: "photo/a02.png", url: "#" },
+    { name: "社區園地", icon: "photo/a03.png", url: "bulletin-community.html" },
+    { name: "公設預約", icon: "photo/a04.png", url: "facility.html" },
+    { name: "綠色停車", icon: "photo/a05.png", url: "#" },
+    { name: "抄表紀錄", icon: "photo/a06.png", url: "#" },
+    { name: "財務報表", icon: "photo/a07.png", url: "bulletin-finance.html" },
+    { name: "區大直播", icon: "photo/a08.png", url: "live-meeting.html" },
+    { name: "會議記錄", icon: "photo/a09.png", url: "bulletin-meeting.html" },
+    { name: "清潔通報", icon: "photo/a10.png", url: "#" },
+    { name: "社區活動", icon: "photo/a11.png", url: "#" },
+    { name: "AI對話", icon: "photo/a12.png", url: "https://gemini.google.com/?hl=zh-TW", openExternal: true },
   ];
 
   const defaultRowFButtons = [
@@ -610,7 +640,7 @@
         residentButtons: { ...d.residentButtons, ...(parsed.residentButtons || {}) },
         rowAImages: rowAImages,
         rowAInterval: parsed.rowAInterval || 5,
-        rowDButtons: mergeButtons(parsed.rowDButtons, defaultRowDButtons),
+        rowDButtons: mergeButtons(isLegacyRowDButtons(parsed.rowDButtons) ? [] : parsed.rowDButtons, defaultRowDButtons),
         rowFButtons: mergeButtons(parsed.rowFButtons, defaultRowFButtons),
         committeeButtons: mergeButtons(parsed.committeeButtons, defaultCommitteeButtons),
         serviceUrl: parsed.serviceUrl || "",
