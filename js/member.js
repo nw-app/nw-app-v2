@@ -441,7 +441,7 @@
     { name: "訪客登記", icon: "photo/a02.png", url: "#" },
     { name: "社區園地", icon: "photo/a03.png", url: "bulletin-community.html" },
     { name: "公設預約", icon: "photo/a04.png", url: "facility.html" },
-    { name: "綠色停車", icon: "photo/a05.png", url: "#" },
+    { name: "車位管理", icon: "photo/a05.png", url: "parking.html" },
     { name: "抄表紀錄", icon: "photo/a06.png", url: "#" },
     { name: "財務報表", icon: "photo/a07.png", url: "bulletin-finance.html" },
     { name: "區大直播", icon: "photo/a08.png", url: "live-meeting.html" },
@@ -631,6 +631,9 @@
           const def = pickDefault(b) || {};
           const merged = { ...def, ...b };
           merged.openExternal = Boolean(b.openExternal);
+          const savedUrl = String(b.url || "").trim();
+          const defUrl = String(def.url || "").trim();
+          if ((!savedUrl || savedUrl === "#") && defUrl && defUrl !== "#") merged.url = defUrl;
           out.push(merged);
           const k = norm(def.icon) || norm(def.name);
           if (k) used.add(k);

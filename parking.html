@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>綠色停車｜社區系統</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg?v=4" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#d32f2f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="icon-192.png?v=2" />
+    <link rel="stylesheet" href="css/parcel.css?v=3" />
+    <link rel="stylesheet" href="css/pwa.css" />
+    <style>
+      .switch {
+        position: relative;
+        width: 46px;
+        height: 26px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        cursor: pointer;
+      }
+      .switch input {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        outline: 0;
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        pointer-events: auto;
+      }
+      .switch .slider {
+        position: absolute;
+        inset: 0;
+        background: rgba(17, 24, 39, 0.18);
+        border-radius: 999px;
+        transition: background 140ms ease, box-shadow 140ms ease;
+        box-shadow: inset 0 0 0 1px rgba(17, 24, 39, 0.06);
+      }
+      .switch .slider::before {
+        content: "";
+        position: absolute;
+        width: 22px;
+        height: 22px;
+        left: 2px;
+        top: 2px;
+        background: #fff;
+        border-radius: 999px;
+        box-shadow: 0 8px 18px rgba(17, 24, 39, 0.18);
+        transition: transform 140ms ease, background 140ms ease;
+      }
+      .switch input:checked + .slider {
+        background: rgba(46, 125, 50, 0.65);
+      }
+      .switch input:checked + .slider::before {
+        transform: translateX(20px);
+      }
+      .switch input:disabled + .slider {
+        opacity: 0.5;
+        filter: saturate(0.8);
+      }
+      .switch input:focus + .slider,
+      .switch input:focus-visible + .slider {
+        box-shadow: inset 0 0 0 1px rgba(46, 125, 50, 0.28), 0 0 0 3px rgba(46, 125, 50, 0.18);
+        outline: 0;
+      }
+      .switch input:focus:not(:focus-visible) + .slider {
+        box-shadow: inset 0 0 0 1px rgba(17, 24, 39, 0.06);
+      }
+
+      .icon-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 999px;
+        border: 0;
+        outline: 0;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        flex: 0 0 auto;
+        transition: background 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+        box-shadow: 0 6px 14px rgba(17, 24, 39, 0.08);
+      }
+      .icon-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 20px rgba(17, 24, 39, 0.12); }
+      .icon-btn:active { transform: translateY(0); }
+      .icon-btn svg { width: 18px; height: 18px; stroke-width: 2; fill: none; stroke: #fff; }
+      .icon-btn--edit { background: rgba(37, 99, 235, 0.9); }
+      .icon-btn--edit:hover { background: rgba(29, 78, 216, 0.95); }
+      .icon-btn--primary { background: rgba(46, 125, 50, 0.88); }
+      .icon-btn--primary:hover { background: rgba(39, 103, 42, 0.95); }
+      .icon-btn--danger { background: rgba(185, 28, 28, 0.9); }
+      .icon-btn--danger:hover { background: rgba(153, 27, 27, 0.95); }
+      .icon-btn:disabled { opacity: 0.55; filter: saturate(0.7); cursor: not-allowed; box-shadow: 0 2px 6px rgba(17, 24, 39, 0.10); }
+      .icon-btn:disabled:hover { transform: none; box-shadow: 0 2px 6px rgba(17, 24, 39, 0.10); }
+      .icon-btn:focus-visible { outline: 0; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.22), 0 8px 18px rgba(17, 24, 39, 0.12); }
+    </style>
+  </head>
+  <body>
+    <div class="parcel-layout">
+      <header class="parcel-hd" id="parkingHeader">
+        <div class="parcel-hd-content">
+          <div class="parcel-title" id="parkingTitle">綠色停車</div>
+        </div>
+      </header>
+
+      <div class="parcel-midtop">
+        <div class="parcel-tabs" id="parkingTabs">
+          <button class="tab-btn active" type="button" data-tab="browse">找車位</button>
+          <button class="tab-btn" type="button" data-tab="mine">我要上架</button>
+          <button class="tab-btn" type="button" data-tab="bookings">我的預約</button>
+        </div>
+      </div>
+
+      <main class="parcel-bd">
+        <div class="parcel-list" id="browseList">
+          <div class="parcel-filter-bar" style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+            <div style="font-weight:900;">找車位</div>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <select id="browseFilterPricing" aria-label="收費方式">
+                <option value="all">收費：全部</option>
+                <option value="free">免費</option>
+                <option value="hourly">計時</option>
+                <option value="monthly">計月</option>
+              </select>
+              <select id="browseFilterSpotType" aria-label="車位類型">
+                <option value="all">類型：全部</option>
+                <option value="general">一般車位</option>
+                <option value="ev">電動車位</option>
+                <option value="motorcycle">重機車位</option>
+                <option value="handicap">愛心車位</option>
+              </select>
+            </div>
+          </div>
+          <div id="browseContent">
+            <div class="status">載入中...</div>
+          </div>
+        </div>
+
+        <div class="parcel-list hidden" id="mineList">
+          <div class="parcel-filter-bar" style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+            <div style="font-weight:900;">我的車位</div>
+            <button class="icon-btn icon-btn--primary" type="button" id="btnNewSpotAndListing" title="新增車位並上架" aria-label="新增車位並上架">
+              <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+          </div>
+          <div id="mineContent">
+            <div class="status">載入中...</div>
+          </div>
+        </div>
+
+        <div class="parcel-list hidden" id="bookingsList">
+          <div class="parcel-filter-bar" style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+            <div style="font-weight:900;">我的預約</div>
+          </div>
+          <div id="myBookingsContent">
+            <div class="status">載入中...</div>
+          </div>
+        </div>
+
+      </main>
+
+      <footer class="parcel-ft"></footer>
+    </div>
+
+    <div class="modal" id="spotListingModal" hidden>
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="spotListingModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="spotListingModalTitle">新增車位並上架</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label for="spotLabel">車位標示</label>
+            <input id="spotLabel" type="text" autocomplete="off" placeholder="例如：B1-123" />
+          </div>
+          <div class="field">
+            <label for="spotType">車位類型</label>
+            <select id="spotType">
+              <option value="general">一般車位</option>
+              <option value="ev">電動車位</option>
+              <option value="motorcycle">重機車位</option>
+              <option value="handicap">愛心車位</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="spotNote">車位備註</label>
+            <input id="spotNote" type="text" autocomplete="off" placeholder="例如：限車高、需登記" />
+          </div>
+          <div class="field">
+            <label for="listingPricingMode">收費方式</label>
+            <select id="listingPricingMode">
+              <option value="free">免費</option>
+              <option value="hourly">計時（每小時）</option>
+              <option value="monthly">計月</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="listingPrice">金額（TWD）</label>
+            <input id="listingPrice" type="number" min="0" step="1" />
+          </div>
+          <div class="field">
+            <label for="listingScheduleType">開放期間類型</label>
+            <select id="listingScheduleType">
+              <option value="fixed">固定期間</option>
+              <option value="recurring">週期期間</option>
+            </select>
+          </div>
+          <div class="field" id="listingFixedRange">
+            <label>固定期間（起訖）</label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+              <input id="listingStartAt" type="datetime-local" />
+              <input id="listingEndAt" type="datetime-local" />
+            </div>
+          </div>
+          <div class="field" id="listingRecurringBlock" hidden>
+            <label>週期期間</label>
+            <div id="listingWeekdays" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+              <label style="display:inline-flex; align-items:center; gap:4px; padding:4px 8px; border:1px solid #e5e7eb; border-radius:9999px;"><input type="checkbox" value="1" /> 一</label>
+              <label style="display:inline-flex; align-items:center; gap:4px; padding:4px 8px; border:1px solid #e5e7eb; border-radius:9999px;"><input type="checkbox" value="2" /> 二</label>
+              <label style="display:inline-flex; align-items:center; gap:4px; padding:4px 8px; border:1px solid #e5e7eb; border-radius:9999px;"><input type="checkbox" value="3" /> 三</label>
+              <label style="display:inline-flex; align-items:center; gap:4px; padding:4px 8px; border:1px solid #e5e7eb; border-radius:9999px;"><input type="checkbox" value="4" /> 四</label>
+              <label style="display:inline-flex; align-items:center; gap:4px; padding:4px 8px; border:1px solid #e5e7eb; border-radius:9999px;"><input type="checkbox" value="5" /> 五</label>
+              <label style="display:inline-flex; align-items:center; gap:4px; padding:4px 8px; border:1px solid #e5e7eb; border-radius:9999px;"><input type="checkbox" value="6" /> 六</label>
+              <label style="display:inline-flex; align-items:center; gap:4px; padding:4px 8px; border:1px solid #e5e7eb; border-radius:9999px;"><input type="checkbox" value="0" /> 日</label>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+              <div style="display:flex; flex-direction:column; gap:4px;">
+                <label for="listingWeekdayStartTime">每日開始時間</label>
+                <input id="listingWeekdayStartTime" type="time" value="09:00" />
+              </div>
+              <div style="display:flex; flex-direction:column; gap:4px;">
+                <label for="listingWeekdayEndTime">每日結束時間</label>
+                <input id="listingWeekdayEndTime" type="time" value="18:00" />
+              </div>
+            </div>
+            <div style="margin-top:8px;">
+              <label>整體有效區間（可選）</label>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px;">
+                <input id="listingRangeStart" type="date" />
+                <input id="listingRangeEnd" type="date" />
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label for="listingNote">上架說明</label>
+            <input id="listingNote" type="text" autocomplete="off" placeholder="例如：請先電話聯繫、限電動車" />
+          </div>
+          <div class="status" id="spotListingStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+          <button class="btn btn-primary" type="button" id="btnSaveSpotListing">儲存並上架</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="bookingModal" hidden>
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="bookingModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="bookingModalTitle">預約車位</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label for="bookingUseType">使用者</label>
+            <select id="bookingUseType">
+              <option value="resident">住戶本人</option>
+              <option value="visitor">臨時訪客</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="bookingVisitorName">訪客姓名（可選）</label>
+            <input id="bookingVisitorName" type="text" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="bookingPlate">車牌</label>
+            <input id="bookingPlate" type="text" autocomplete="off" placeholder="例如：ABC-1234" />
+          </div>
+          <div class="field">
+            <label for="bookingStartAt">開始</label>
+            <input id="bookingStartAt" type="datetime-local" />
+          </div>
+          <div class="field">
+            <label for="bookingEndAt">結束</label>
+            <input id="bookingEndAt" type="datetime-local" />
+          </div>
+          <div class="status" id="bookingFeeHint" hidden></div>
+          <div class="status" id="bookingStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+          <button class="btn btn-primary" type="button" id="btnSubmitBooking">送出預約</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="deleteSpotConfirmModal" hidden>
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteSpotConfirmTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="deleteSpotConfirmTitle">刪除車位確認</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div id="deleteSpotSpotName" style="font-weight:800; margin-bottom:8px;">車位：—</div>
+          <div style="font-weight:900; color:#b91c1c; line-height:1.5;">
+            確定要刪除此車位？相關的上架也會一併結束，此操作無法復原。
+          </div>
+          <div class="status error" id="deleteSpotStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+          <button class="btn danger" type="button" id="btnConfirmDeleteSpot">確認刪除</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/parking.js?v=28"></script>
+    <script src="js/pwa.js?v=4"></script>
+  </body>
+</html>

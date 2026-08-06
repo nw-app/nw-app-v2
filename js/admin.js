@@ -14980,6 +14980,501 @@
     updateFooterActiveNav();
   }
 
+  function formatDateTime850(v) {
+    const d = v instanceof Date ? v : (v && typeof v.toDate === "function" ? v.toDate() : v ? new Date(v) : null);
+    if (!d || Number.isNaN(d.getTime())) return "";
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, "0");
+    const da = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${y}-${mo}-${da} ${hh}:${mm}`;
+  }
+  function parkingPricingText850(l) {
+    const mode = String(l && l.chargeMode || "free").trim();
+    if (mode === "free") return "免費";
+    const amt = Number(l && (l.chargeAmount || l.amount || 0)) || 0;
+    if (mode === "hourly") return `計時 ${amt} 元/小時`;
+    if (mode === "monthly") return `計月 ${amt} 元/月`;
+    return `${mode} ${amt}`;
+  }
+  function normalizeParkingSpot850(d) {
+    const v = d && typeof d === "object" ? d : {};
+    return {
+      id: String(d && d.id || ""),
+      label: String(v.label || v.spotLabel || v.spot_id || "").trim(),
+      type: String(v.type || v.spotType || "").trim(),
+      note: String(v.note || v.remark || "").trim(),
+      ownerUid: String(v.ownerUid || v.uid || "").trim(),
+      ownerHouseNo: String(v.ownerHouseNo || v.houseNo || "").trim(),
+      ownerName: String(v.ownerName || "").trim(),
+    };
+  }
+  function normalizeParkingSchedule850(d) {
+    const v = d && typeof d === "object" ? d : {};
+    return {
+      id: String(d && d.id || ""),
+      spotId: String(v.spotId || v.spot_id || "").trim(),
+      spotLabel: String(v.spotLabel || v.label || "").trim(),
+      uid: String(v.uid || v.ownerUid || "").trim(),
+      ownerUid: String(v.ownerUid || v.uid || "").trim(),
+      ownerHouseNo: String(v.ownerHouseNo || v.houseNo || "").trim(),
+      ownerName: String(v.ownerName || "").trim(),
+      status: String(v.status || "active").trim() || "active",
+      chargeMode: String(v.chargeMode || v.charge || v.mode || "free").trim() || "free",
+      chargeAmount: Number(v.chargeAmount || v.amount || 0) || 0,
+      requireApproval: Boolean(v.requireApproval === false ? false : true),
+      startAt: v.startAt || v.start_time || v.from || null,
+      endAt: v.endAt || v.end_time || v.to || null,
+      note: String(v.note || v.remark || "").trim(),
+      createdAt: v.createdAt || null,
+    };
+  }
+  function normalizeParkingBooking850(d) {
+    const v = d && typeof d === "object" ? d : {};
+    return {
+      id: String(d && d.id || ""),
+      scheduleId: String(v.scheduleId || v.listingId || "").trim(),
+      spotLabel: String(v.spotLabel || "").trim(),
+      requesterUid: String(v.requesterUid || v.uid || "").trim(),
+      requesterHouseNo: String(v.requesterHouseNo || v.houseNo || "").trim(),
+      requesterName: String(v.requesterName || v.name || "").trim(),
+      guestName: String(v.guestName || v.visitorName || "").trim(),
+      plate: String(v.plate || v.plateNo || "").trim(),
+      status: String(v.status || "pending").trim() || "pending",
+      startAt: v.startAt || v.from || null,
+      endAt: v.endAt || v.to || null,
+      fee: Number(v.fee || v.amount || 0) || 0,
+      rejectReason: String(v.rejectReason || "").trim(),
+      createdAt: v.createdAt || null,
+      handledAt: v.handledAt || null,
+      handledBy: String(v.handledBy || "").trim(),
+    };
+  }
+  function renderParkingModule() {
+    const cid = resolveActiveCommunityId();
+    const community = state.communities.find((c) => c && c.id === cid) || null;
+    const communityName = String((community && community.name) || "").trim();
+    const communityKey = String((community && (community.username || community.id)) || cid || "").trim();
+    if (subnavEl) {
+      subnavEl.innerHTML = `
+        <button class="btn btn-sm btn-primary" type="button" data-parking-tab="listings">車位管理</button>
+        <button class="btn btn-sm" type="button" data-parking-tab="manage">預約管理</button>
+      `.trim();
+    }
+    contentEl.innerHTML = `
+      <section class="card parcel-page">
+        <div class="card-hd">
+          <div class="left">
+            <div class="chip" aria-hidden="true">${iconSvg("parking")}</div>
+            <div style="min-width:0;">
+              <h2>車位管理${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+              <p>住戶開放上架車位一覽、預約審核與處理</p>
+            </div>
+          </div>
+          <span class="tag red">綠能</span>
+        </div>
+        <div class="card-bd">
+          <div class="parcel-filter-bar" id="parkingFilterBar">
+            <div class="field">
+              <label for="parkingFilterHouse">戶號/提供者</label>
+              <input id="parkingFilterHouse" type="text" autocomplete="off" placeholder="例如 5-2, A1-1" />
+            </div>
+            <div class="field">
+              <label for="parkingFilterSpot">車位</label>
+              <input id="parkingFilterSpot" type="text" autocomplete="off" placeholder="例如 B1-123" />
+            </div>
+            <div class="field">
+              <label for="parkingFilterStatus">狀態</label>
+              <select id="parkingFilterStatus">
+                <option value="all">全部</option>
+                <option value="active">上架中</option>
+                <option value="paused">已暫停</option>
+                <option value="ended">已結束</option>
+              </select>
+            </div>
+            <button class="btn btn-sm" type="button" id="parkingFilterClear">清除</button>
+            <a class="btn btn-sm" target="_blank" rel="noopener noreferrer" href="parking.html?c=${encodeURIComponent(communityKey)}&role=community&v=6">另開視窗</a>
+          </div>
+          <div class="parcel-list-container" id="parkingListContainer">
+            <div class="status">讀取中...</div>
+          </div>
+          <div class="parcel-list-container" id="parkingManageContainer" style="display:none; margin-top:18px;">
+            <div class="status">讀取中...</div>
+          </div>
+        </div>
+      </section>
+    `;
+    if (subnavEl) {
+      const buttons = Array.from(subnavEl.querySelectorAll("[data-parking-tab]"));
+      buttons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          buttons.forEach((b) => b.classList.remove("btn-primary"));
+          btn.classList.add("btn-primary");
+          const tab = String(btn.getAttribute("data-parking-tab") || "");
+          const listEl = document.getElementById("parkingListContainer");
+          const manageEl = document.getElementById("parkingManageContainer");
+          if (tab === "manage") {
+            if (listEl) listEl.style.display = "none";
+            if (manageEl) manageEl.style.display = "";
+            loadAndRenderAdminParkingBookings(cid);
+          } else {
+            if (listEl) listEl.style.display = "";
+            if (manageEl) manageEl.style.display = "none";
+            loadAndRenderAdminParkingListings(cid);
+          }
+        });
+      });
+    }
+    bindAdminParkingFilterBar(cid);
+    loadAndRenderAdminParkingListings(cid);
+    updateFooterActiveNav();
+  }
+  function bindAdminParkingFilterBar(cid) {
+    const houseEl = document.getElementById("parkingFilterHouse");
+    const spotEl = document.getElementById("parkingFilterSpot");
+    const statusEl = document.getElementById("parkingFilterStatus");
+    const clearBtn = document.getElementById("parkingFilterClear");
+    const apply = () => {
+      const activeTab = subnavEl ? subnavEl.querySelector("[data-parking-tab].btn-primary") : null;
+      const tab = activeTab ? String(activeTab.getAttribute("data-parking-tab") || "") : "";
+      if (tab === "manage") {
+        loadAndRenderAdminParkingBookings(cid);
+      } else {
+        loadAndRenderAdminParkingListings(cid);
+      }
+    };
+    const onEnter = (e) => {
+      if (!e || e.key !== "Enter") return;
+      try { e.preventDefault(); } catch {}
+      apply();
+    };
+    if (houseEl) { houseEl.addEventListener("input", apply); houseEl.addEventListener("keydown", onEnter); }
+    if (spotEl) { spotEl.addEventListener("input", apply); spotEl.addEventListener("keydown", onEnter); }
+    if (statusEl) { statusEl.addEventListener("change", apply); }
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        if (houseEl) houseEl.value = "";
+        if (spotEl) spotEl.value = "";
+        if (statusEl) statusEl.value = "all";
+        apply();
+      });
+    }
+  }
+  function readAdminParkingFilters() {
+    const houseEl = document.getElementById("parkingFilterHouse");
+    const spotEl = document.getElementById("parkingFilterSpot");
+    const statusEl = document.getElementById("parkingFilterStatus");
+    return {
+      house: houseEl ? String(houseEl.value || "").trim() : "",
+      spot: spotEl ? String(spotEl.value || "").trim() : "",
+      status: statusEl ? String(statusEl.value || "all").trim() : "all",
+    };
+  }
+  async function loadAndRenderAdminParkingListings(cid) {
+    const container = document.getElementById("parkingListContainer");
+    if (!container) return;
+    container.innerHTML = `<div class="status">讀取中...</div>`;
+    const spotMap = {};
+    let schedules = [];
+    try {
+      const spotsSnap = await db.collection("communities").doc(cid).collection("parking_spots").get();
+      (spotsSnap && spotsSnap.docs ? spotsSnap.docs : []).forEach((d) => {
+        const s = d.data() || {};
+        spotMap[String(d.id)] = { id: d.id, ...s };
+      });
+      const snap = await db.collection("communities").doc(cid).collection("parking_schedules").get();
+      schedules = (snap && snap.docs ? snap.docs : []).map((d) => normalizeParkingSchedule850(d));
+    } catch (e) {
+      container.innerHTML = `<div class="status error">讀取失敗：${escapeHtml(String(e && e.message || e))}</div>`;
+      return;
+    }
+    const listingsBySpot = {};
+    schedules.forEach((l) => {
+      const sid = String(l.spotId || "");
+      if (!sid) return;
+      if (!listingsBySpot[sid]) listingsBySpot[sid] = [];
+      listingsBySpot[sid].push(l);
+    });
+    Object.keys(listingsBySpot).forEach((sid) => {
+      listingsBySpot[sid].sort((a, b) => {
+        const at = a.createdAt && typeof a.createdAt.toMillis === "function" ? a.createdAt.toMillis() : 0;
+        const bt = b.createdAt && typeof b.createdAt.toMillis === "function" ? b.createdAt.toMillis() : 0;
+        return bt - at;
+      });
+    });
+    const f = readAdminParkingFilters();
+    const now = Date.now();
+    const spots = Object.values(spotMap)
+      .filter((s) => s && s.enabled !== false)
+      .filter((s) => {
+        if (!f.house && !f.spot && !f.status) return true;
+        if (f.house) {
+          const owner = `${String(s.ownerHouseNo || s.houseNo || "")} ${String(s.ownerName || s.name || "")}`.toLowerCase();
+          const lMatch = (listingsBySpot[String(s.id || "")] || []).some((l) => {
+            const t = `${String(l.ownerHouseNo || "")} ${String(l.ownerName || "")}`.toLowerCase();
+            return t.includes(f.house.toLowerCase());
+          });
+          if (!(owner.includes(f.house.toLowerCase()) || lMatch)) return false;
+        }
+        if (f.spot) {
+          const t = `${String(s.label || s.name || "")} ${String(s.id || "")}`.toLowerCase();
+          const lMatch = (listingsBySpot[String(s.id || "")] || []).some((l) => {
+            const tt = `${String(l.spotLabel || "")} ${String(l.spotId || "")}`.toLowerCase();
+            return tt.includes(f.spot.toLowerCase());
+          });
+          if (!(t.includes(f.spot.toLowerCase()) || lMatch)) return false;
+        }
+        if (f.status !== "all") {
+          const spotListings = listingsBySpot[String(s.id || "")] || [];
+          if (!spotListings.length) return false;
+          const matchSchedule = spotListings.some((l) => String(l.status || "active") === f.status);
+          if (!matchSchedule) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const labelA = String(a.label || a.id || "");
+        const labelB = String(b.label || b.id || "");
+        return labelA.localeCompare(labelB, "zh-Hant-TW");
+      });
+    if (!spots.length) {
+      container.innerHTML = `<div class="status">目前沒有住戶新增的停車位</div>`;
+      return;
+    }
+    const typeText = (t) => {
+      const k = String(t || "").trim() || "general";
+      if (k === "ev") return "電動車位";
+      if (k === "motorcycle") return "重機車位";
+      if (k === "handicap") return "愛心車位";
+      if (k === "eco") return "節能車";
+      return "一般車位";
+    };
+    const listingRangeText = (l) => {
+      const type = String(l.scheduleType || (l.startAt || l.endAt ? "fixed" : "fixed")).trim() || "fixed";
+      if (type === "recurring") {
+        const names = { "0": "日", "1": "一", "2": "二", "3": "三", "4": "四", "5": "五", "6": "六" };
+        const order = ["1", "2", "3", "4", "5", "6", "0"];
+        const wdSet = new Set((Array.isArray(l.weekdays) ? l.weekdays : []).map((x) => String(x)));
+        const wd = order.filter((k) => wdSet.has(k)).map((k) => names[k] || k);
+        const formatDateOnly = (v) => {
+          if (!v) return "";
+          const d = (typeof v.toDate === "function") ? v.toDate() : new Date(v);
+          if (isNaN(d.getTime())) return "";
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return `${y}-${m}-${day}`;
+        };
+        const rs = formatDateOnly(l.rangeStart);
+        const re = formatDateOnly(l.rangeEnd);
+        const rangeWrap = (rs || re) ? `${rs || "—"} ~ ${re || "—"}` : "";
+        const tms = String(l.weekdayStartTime || l.dailyStartTime || "").trim();
+        const tme = String(l.weekdayEndTime || l.dailyEndTime || "").trim();
+        const tm = (tms || tme) ? `${tms || "—"} ~ ${tme || "—"}` : "";
+        const dayText = wd.length ? `每週${wd.join("、")}` : "";
+        return [dayText, tm, rangeWrap].filter(Boolean).join(" · ");
+      }
+      const s = formatDateTime850(l.startAt);
+      const e = formatDateTime850(l.endAt);
+      return (s || e) ? `${s || "—"} ~ ${e || "—"}` : "";
+    };
+    const listingStatusText = (l) => {
+      const status = String(l.status || "active").trim();
+      const endTs = l.endAt && typeof l.endAt.toDate === "function" ? l.endAt.toDate().getTime() : (l.endAt ? new Date(l.endAt).getTime() : null);
+      const ended = endTs && endTs < now;
+      return ended ? "已結束" : (status === "paused" ? "已暫停" : status === "active" ? "上架中" : status);
+    };
+    const listingStatusCls = (l) => {
+      const status = String(l.status || "active").trim();
+      const endTs = l.endAt && typeof l.endAt.toDate === "function" ? l.endAt.toDate().getTime() : (l.endAt ? new Date(l.endAt).getTime() : null);
+      const ended = endTs && endTs < now;
+      return ended || status !== "active" ? "unclaimed" : "claimed";
+    };
+    container.innerHTML = spots.map((s) => {
+      const sid = String(s.id || "");
+      const label = String(s.label || s.name || s.id || "—");
+      const type = typeText(s.type);
+      const note = String(s.note || "").trim();
+      const owner = `${String(s.ownerHouseNo || s.houseNo || "—")}${s.ownerName ? `・${escapeHtml(s.ownerName)}` : ""}`;
+      const spotListings = listingsBySpot[sid] || [];
+      const listingsHtml = !spotListings.length
+        ? `<div class="parcel-desc" style="opacity:0.75;">（尚未上架開放）</div>`
+        : spotListings.map((l, idx) => {
+            const pricing = parkingPricingText850(l);
+            const range = listingRangeText(l);
+            const st = listingStatusText(l);
+            const sc = listingStatusCls(l);
+            const lNote = String(l.note || "").trim();
+            const desc = [pricing, range, lNote].filter(Boolean).join(" · ");
+            const sepStyle = idx > 0 ? "border-top:1px dashed rgba(0,0,0,0.08); margin-top:10px; padding-top:10px;" : "margin-top:4px;";
+            return `
+              <div class="listing-block" style="${sepStyle} border-radius:6px; padding:10px 12px; background:rgba(245,247,250,0.55);">
+                <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+                  <div style="min-width:0; flex:1;">
+                    <div class="parcel-desc">${desc ? escapeHtml(desc) : '<span style="opacity:0.75;">（無上架說明）</span>'}</div>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:8px; flex:0 0 auto;">
+                    <div class="parcel-status ${sc}">${escapeHtml(st)}</div>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join("");
+      const countText = spotListings.length ? `（${spotListings.length} 筆上架）` : "";
+      return `
+        <div class="parcel-item" style="display:block;">
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <div class="parcel-info" style="flex:1 1 260px; min-width:0;">
+              <div class="parcel-no">${escapeHtml(label)}${escapeHtml(countText)}</div>
+              <div class="parcel-desc">${escapeHtml([type, note].filter(Boolean).join(" · "))}</div>
+              <div class="parcel-type">車主：${escapeHtml(owner)}</div>
+            </div>
+          </div>
+          <div style="margin-top:8px;">${listingsHtml}</div>
+        </div>
+      `;
+    }).join("");
+  }
+  async function loadAndRenderAdminParkingBookings(cid) {
+    const container = document.getElementById("parkingManageContainer");
+    if (!container) return;
+    container.innerHTML = `<div class="status">讀取中...</div>`;
+    let bookings = [];
+    try {
+      const snap = await db.collection("communities").doc(cid).collection("parking_bookings").get();
+      bookings = (snap && snap.docs ? snap.docs : []).map((d) => normalizeParkingBooking850(d));
+    } catch (e) {
+      container.innerHTML = `<div class="status error">讀取失敗：${escapeHtml(String(e && e.message || e))}</div>`;
+      return;
+    }
+    const f = readAdminParkingFilters();
+    if (f.status !== "all") bookings = bookings.filter((x) => String(x.status || "") === f.status);
+    if (f.house) bookings = bookings.filter((x) => {
+      const t = `${String(x.requesterHouseNo || "")} ${String(x.requesterName || "")} ${String(x.guestName || "")}`;
+      return t.toLowerCase().includes(f.house.toLowerCase());
+    });
+    if (f.spot) bookings = bookings.filter((x) => {
+      const t = `${String(x.spotLabel || "")} ${String(x.plate || "")}`;
+      return t.toLowerCase().includes(f.spot.toLowerCase());
+    });
+    bookings.sort((a, b) => {
+      const at = a.createdAt && typeof a.createdAt.toMillis === "function" ? a.createdAt.toMillis() : 0;
+      const bt = b.createdAt && typeof b.createdAt.toMillis === "function" ? b.createdAt.toMillis() : 0;
+      return bt - at;
+    });
+    if (!bookings.length) {
+      container.innerHTML = `<div class="status">目前沒有預約單</div>`;
+      return;
+    }
+    const statusText = (s) => ({
+      pending: "待審核", approved: "已核准", rejected: "已拒絕", canceled: "已取消", completed: "已完成",
+    }[String(s || "").trim()] || String(s || ""));
+    const statusCls = (s) => {
+      const k = String(s || "").trim();
+      if (k === "pending") return "unclaimed";
+      if (k === "approved" || k === "completed") return "claimed";
+      return "returned";
+    };
+    container.innerHTML = bookings.map((b, idx) => {
+      const start = formatDateTime850(b.startAt);
+      const end = formatDateTime850(b.endAt);
+      const range = (start && end) ? `${start} ~ ${end}` : (start || end || "");
+      const user = `${String(b.requesterHouseNo || "—")}${b.requesterName ? `・${escapeHtml(b.requesterName)}` : ""}`;
+      const guest = b.guestName ? ` / 訪客：${escapeHtml(b.guestName)}` : "";
+      const plate = b.plate ? ` / 車牌：${escapeHtml(b.plate)}` : "";
+      const fee = b.fee ? `費用：${b.fee}` : "費用：免費";
+      const isPending = String(b.status || "") === "pending";
+      const isApproved = String(b.status || "") === "approved";
+      const blockSep = idx > 0 ? "margin-top:10px;" : "";
+      const cls = statusCls(b.status);
+      const st = statusText(b.status);
+      return `
+        <div class="parcel-item" style="${blockSep}">
+          <div class="parcel-info">
+            <div class="parcel-no">${escapeHtml(String(b.spotLabel || b.scheduleId || "—"))}</div>
+            <div class="listing-block" style="margin-top:4px; border-radius:6px; padding:10px 12px; background:rgba(245,247,250,0.55);">
+              <div class="parcel-desc" style="margin:0;">${escapeHtml(user)}${plate}${guest}</div>
+              <div class="parcel-type" style="margin-top:6px; margin-bottom:0;">${range ? `${escapeHtml(range)} · ` : ""}${escapeHtml(fee)}${b.rejectReason ? ` · 原因：${escapeHtml(b.rejectReason)}` : ""}</div>
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:8px;">
+                <div class="parcel-status ${cls}">${escapeHtml(st)}</div>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  ${isPending ? `
+                    <button class="icon-btn icon-btn--primary" type="button" title="核准預約" aria-label="核准預約" data-parking-approve="${escapeHtml(String(b.id || ""))}">
+                      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </button>
+                    <button class="icon-btn icon-btn--danger" type="button" title="拒絕預約" aria-label="拒絕預約" data-parking-reject="${escapeHtml(String(b.id || ""))}">
+                      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M18 6 6 18" />
+                        <path d="m6 6 12 12" />
+                      </svg>
+                    </button>
+                  ` : ""}
+                  ${isApproved ? `
+                    <button class="icon-btn" type="button" title="標記完成" aria-label="標記完成" data-parking-complete="${escapeHtml(String(b.id || ""))}" style="background:rgba(55,65,81,0.88);">
+                      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </button>
+                  ` : ""}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+    const handledBy = String((state.currentUserProfile && (state.currentUserProfile.name || state.currentUserProfile.email)) || (state.currentUserProfile && state.currentUserProfile.id) || "管理員").trim();
+    container.querySelectorAll("[data-parking-approve]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const id = String(btn.getAttribute("data-parking-approve") || "").trim();
+        if (!id) return;
+        try {
+          await db.collection("communities").doc(cid).collection("parking_bookings").doc(id).set({
+            status: "approved", handledAt: FieldValue.serverTimestamp(), handledBy,
+          }, { merge: true });
+          toast("已核准");
+          loadAndRenderAdminParkingBookings(cid);
+        } catch (e) {
+          toast(`操作失敗：${String(e && e.message || e)}`);
+        }
+      });
+    });
+    container.querySelectorAll("[data-parking-reject]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const id = String(btn.getAttribute("data-parking-reject") || "").trim();
+        if (!id) return;
+        const reason = String(prompt("請輸入拒絕原因（可留空）") || "").trim();
+        try {
+          const payload = { status: "rejected", handledAt: FieldValue.serverTimestamp(), handledBy };
+          if (reason) payload.rejectReason = reason;
+          await db.collection("communities").doc(cid).collection("parking_bookings").doc(id).set(payload, { merge: true });
+          toast("已拒絕");
+          loadAndRenderAdminParkingBookings(cid);
+        } catch (e) {
+          toast(`操作失敗：${String(e && e.message || e)}`);
+        }
+      });
+    });
+    container.querySelectorAll("[data-parking-complete]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const id = String(btn.getAttribute("data-parking-complete") || "").trim();
+        if (!id) return;
+        try {
+          await db.collection("communities").doc(cid).collection("parking_bookings").doc(id).set({
+            status: "completed", handledAt: FieldValue.serverTimestamp(), handledBy,
+          }, { merge: true });
+          toast("已標記完成");
+          loadAndRenderAdminParkingBookings(cid);
+        } catch (e) {
+          toast(`操作失敗：${String(e && e.message || e)}`);
+        }
+      });
+    });
+  }
+
   function renderModule(moduleId) {
     const layoutEl = document.querySelector(".layout");
     if (layoutEl) layoutEl.classList.toggle("visitor-main-lock", moduleId === "visitor");
@@ -15023,6 +15518,10 @@
     }
     if (moduleId === "digital-signage") {
       renderDigitalSignageModule();
+      return;
+    }
+    if (moduleId === "parking") {
+      renderParkingModule();
       return;
     }
     if (subnavEl) subnavEl.innerHTML = "";
