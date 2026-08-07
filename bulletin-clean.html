@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>設施預約｜社區系統</title>
+    <title>清潔通報｜社區系統</title>
     <link rel="icon" type="image/svg+xml" href="logo.svg?v=4" />
     <link rel="manifest" href="manifest.webmanifest" />
     <meta name="theme-color" content="#d32f2f" />
@@ -18,33 +18,21 @@
     <div class="parcel-layout">
       <header class="parcel-hd">
         <div class="parcel-hd-content">
-          <div class="parcel-title" id="communityFacilityTitle">&lt;戶號&gt; &lt;姓名&gt;</div>
+          <div class="parcel-title" id="communityBulletinTitle">清潔通報</div>
         </div>
       </header>
 
       <div class="parcel-midtop">
         <div class="parcel-tabs">
-          <button class="tab-btn active" type="button" data-tab="book">預約設施</button>
-          <button class="tab-btn" type="button" data-tab="mybookings">我的預約</button>
+          <button class="tab-btn active" type="button" data-filter="all">全部</button>
+          <button class="tab-btn" type="button" data-filter="unread">未讀</button>
+          <button class="tab-btn" type="button" data-filter="read">已讀</button>
         </div>
       </div>
 
       <main class="parcel-bd">
-        <div class="parcel-list" id="bookList">
+        <div class="parcel-list" id="bulletinList">
           <div class="status">載入中...</div>
-        </div>
-
-        <div class="parcel-list hidden" id="myBookingsList">
-          <div class="my-bookings-tabs" style="margin-bottom: 12px;">
-            <button class="my-bookings-tab-btn active" type="button" data-subtab="recent">近期預約</button>
-            <button class="my-bookings-tab-btn" type="button" data-subtab="history">歷史預約</button>
-          </div>
-          <div id="recentBookings" class="booking-list-container">
-            <div class="status">載入中...</div>
-          </div>
-          <div id="historyBookings" class="booking-list-container hidden">
-            <div class="status">載入中...</div>
-          </div>
         </div>
       </main>
 
@@ -70,7 +58,7 @@
               <button type="button" class="avatar-edit-btn" id="btnEditAvatar" aria-label="更換大頭照" title="更換大頭照">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M12 20h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" stroke="currentColor", stroke-width="1.7" stroke-linecap="round"/>
                 </svg>
               </button>
               <input type="file" id="profileAvatarFile" accept="image/*" hidden />
@@ -94,27 +82,15 @@
       </div>
     </div>
 
-    <div class="modal" id="bookingModal" hidden>
+    <div class="modal" id="imageModal" hidden>
       <div class="modal-backdrop" data-modal-close="1"></div>
-      <div class="modal-dialog booking-modal" role="dialog" aria-modal="true" aria-labelledby="bookingModalTitle">
-        <div class="booking-hd">
-          <div class="booking-header-left">
-            <span class="booking-community-name" id="bookingCommunityName">社區名稱</span>
-            <span class="booking-facility-name" id="bookingFacilityName">設施名稱</span>
-          </div>
-          <button class="modal-close" type="button" id="btnCloseBookingModal" aria-label="關閉">×</button>
+      <div class="modal-dialog" role="dialog" aria-modal="true" style="max-width:90vw; width:90vw; max-height:90vh;">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="imageModalTitle">圖片</h3>
+          <button class="modal-close" type="button" id="btnCloseImageModal" aria-label="關閉">×</button>
         </div>
-        <div class="booking-date">
-          <span id="bookingCurrentDate">2024年1月1日 星期一</span>
-          <button class="booking-date-btn" type="button" id="btnSelectDate" aria-label="選擇日期">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width: 20px; height: 20px;">
-              <path d="M7 3v2M17 3v2M4 7h16M7 11h.01M11 11h.01M15 11h.01M7 15h.01M11 15h.01M15 15h.01" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-              <rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.7"/>
-            </svg>
-          </button>
-        </div>
-        <div class="booking-times">
-          <div id="bookingTimesContainer"></div>
+        <div class="modal-body" style="padding:0; display:flex; justify-content:center; align-items:center; max-height:70vh; overflow:auto;">
+          <div id="imageModalContent" style="width:100%;"></div>
         </div>
       </div>
     </div>
@@ -123,8 +99,9 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="js/firebase-config.js"></script>
-    <script src="js/facility.js?v=7"></script>
-    <script src="js/ads-footer.js?v=4"></script>
+    <script src="js/pdf-viewer-launcher.js?v=3"></script>
+    <script src="js/bulletin-clean.js?v=1"></script>
+    <script src="js/ads-footer.js?v=5"></script>
     <script src="js/pwa.js?v=4"></script>
   </body>
 </html>

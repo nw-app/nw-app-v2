@@ -182,7 +182,7 @@
       if (direct) return direct;
       const allKey = pages["*"] || pages["all"] || null;
       if (allKey) return allKey;
-      const preferredOrder = ["facility.html", "parcel.html", "bulletin-community.html", "bulletin-finance.html", "bulletin-meeting.html", "bulletin-repair.html"];
+      const preferredOrder = ["parcel.html", "parking.html", "visitor-resident.html", "facility.html", "callrecord.html", "bulletin-clean.html", "bulletin-activity.html", "bulletin-repair.html", "bulletin-community.html", "bulletin-finance.html", "bulletin-meeting.html"];
       for (const k of preferredOrder) {
         if (pages[k]) return pages[k];
       }

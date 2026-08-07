@@ -1581,6 +1581,8 @@
       { id: "duty", name: "勤務管理" },
       { id: "care", name: "關懷救護" },
       { id: "life", name: "生活服務" },
+      { id: "clean", name: "清潔通報" },
+      { id: "activity", name: "社區活動" },
     ];
 
     const setImagePreview = (dataUrl) => {

@@ -1193,7 +1193,8 @@ async function loadFacilities(userData) {
     
     console.log('Setting title - houseNo:', houseNo, 'subHouseNo:', subHouseNo, 'displayName:', displayName);
     const buildingText = String(data.building || data.block || '').trim();
-    communityFacilityTitle.textContent = `${buildingText || '棟別'} ${displayName || '姓名'}`;
+    const headerFirst = fullHouseNo || buildingText || '戶號';
+    communityFacilityTitle.textContent = `${headerFirst} ${displayName || '姓名'}`;
 
     if (houseNoTextEl) {
       houseNoTextEl.textContent = fullHouseNo || '—';

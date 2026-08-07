@@ -243,6 +243,8 @@
     { id: "facility", name: "設施預約", desc: "時段控管、名額與審核流程", badge: "熱門", page: "#community/facility" },
     { id: "bulletin", name: "公告系統", desc: "分類公告、置頂、閱讀回覆", badge: "通知", page: "#community/bulletin" },
     { id: "parking", name: "綠色停車", desc: "電動車/節能車位管理與登記", badge: "綠能", page: "#community/parking" },
+    { id: "clean", name: "清潔通報", desc: "環境髒亂、垃圾清理、消毒時程通報", badge: "環境", page: "#community/clean" },
+    { id: "activity", name: "社區活動", desc: "活動行事曆、報名、照片與成果分享", badge: "活動", page: "#community/activity" },
     { id: "live-meeting", name: "區大直播", desc: "直播室預約、時段管理與會議記錄", badge: "直播", page: "live-meeting.html" },
     { id: "digital-signage", name: "電子看版", desc: "社區公告、活動訊息與即時資訊顯示", badge: "看版", page: "#community/digital-signage" },
     { id: "company-support", name: "公司支援", desc: "回報需求、聯絡紀錄與處理進度（示意）", badge: "支援", page: "#community/company-support" },
@@ -655,6 +657,8 @@
     if (id === "care") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21.2c4.8 0 8.7-3.9 8.7-8.7S16.8 3.8 12 3.8 3.3 7.7 3.3 12.5 7.2 21.2 12 21.2Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.6v9.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M7.1 12.5h9.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "life") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4.8a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4Z" stroke="currentColor" stroke-width="1.7"/><path d="M7 12.2a5 5 0 0 1 10 0v2.1l1.2 1.4H5.8L7 14.3v-2.1Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10.2 18.2a1.8 1.8 0 0 0 3.6 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M5 19.2h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "parking") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 16.5 7.4 11.8A2.5 2.5 0 0 1 9.8 10h4.4a2.5 2.5 0 0 1 2.4 1.8L18 16.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M6 16.5h12v2a1.5 1.5 0 0 1-1.5 1.5H7.5A1.5 1.5 0 0 1 6 18.5v-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8.2 10.4 9.2 7.8A2 2 0 0 1 11.1 6.5h1.8a2 2 0 0 1 1.9 1.3l1 2.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M9 18.2h.01M15 18.2h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>`;
+    if (id === "clean") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10 12h4l3 4H7l3-4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M7.5 16 6 21.5M9.5 16 8.5 21.5M11.5 16 11 21.5M13.5 16l.5 5.5M15.5 16l1 5.5M17.5 16l2 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+    if (id === "activity") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21.2a9.2 9.2 0 1 0 0-18.4 9.2 9.2 0 0 0 0 18.4Z" stroke="currentColor" stroke-width="1.7"/><path d="M10 8.5v7l6-3.5-6-3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`;
     return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21.5c5.247 0 9.5-4.253 9.5-9.5S17.247 2.5 12 2.5 2.5 6.753 2.5 12 6.753 21.5 12 21.5Z" stroke="currentColor" stroke-width="1.7" opacity="0.9"/></svg>`;
   }
 
@@ -689,6 +693,8 @@
           m.id === "life" ? "生活" :
           m.id === "visitor" ? "訪客" :
           m.id === "parcel" ? "包裹" :
+          m.id === "clean" ? "清潔" :
+          m.id === "activity" ? "活動" :
           String(m.name || "").trim().slice(0, 2) || String(m.id);
         return { id: String(m.id), label, url, icon: iconSvg(m.id) };
       }),
@@ -15941,6 +15947,10 @@
       renderParkingModule();
       return;
     }
+    if (moduleId === "activity") {
+      renderActivityModule();
+      return;
+    }
     if (subnavEl) subnavEl.innerHTML = "";
     const m = moduleCatalog.find((x) => x && x.id === moduleId) || null;
     if (!m) {
@@ -16008,7 +16018,17 @@
         return true;
       }
     }
-    
+
+    // 处理 activity 的子页面（影片/相片）
+    if (moduleId === "activity") {
+      const contentEl = document.getElementById("content");
+      const isAlreadyInActivity = contentEl && contentEl.querySelector("[data-activity-tab]");
+      if (isAlreadyInActivity) {
+        renderActivityModule();
+        return true;
+      }
+    }
+
     renderModule(moduleId);
     return true;
   }
@@ -16050,6 +16070,575 @@
     });
   };
   bindSignOut();
+
+  function renderActivityModule() {
+    try {
+    if (!contentEl) return;
+    const cid = resolveActiveCommunityId();
+    const community = state.communities.find((c) => c && c.id === cid) || null;
+    const communityName = String((community && community.name) || "").trim();
+    const communityKey = String((community && (community.username || community.id)) || cid || "").trim();
+
+    const raw = String(location.hash || "").replace(/^#/, "").trim();
+    const parts = raw.split("/");
+    let currentTab = "video";
+    if (parts.length >= 3 && parts[0] === "community" && parts[1] === "activity") {
+      const p = parts[2];
+      if (p === "video" || p === "photo") currentTab = p;
+    }
+
+    let unsubscribeItems = null;
+    let itemsData = [];
+
+    const formatDate = (date) => {
+      if (!date) return "";
+      const d = date instanceof Date ? date : date.toDate ? date.toDate() : new Date(date);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const da = String(d.getDate()).padStart(2, "0");
+      const h = String(d.getHours()).padStart(2, "0");
+      const mi = String(d.getMinutes()).padStart(2, "0");
+      return `${y}-${m}-${da} ${h}:${mi}`;
+    };
+
+    const formatActivityTime = (val) => {
+      if (!val) return "";
+      const s = String(val).trim();
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) {
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) {
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+        }
+      }
+      if (val && typeof val.toDate === "function") {
+        try { return formatDate(val.toDate()); } catch {}
+      }
+      if (val instanceof Date) return formatDate(val);
+      return s;
+    };
+
+    const toDatetimeLocalValue = (val) => {
+      if (!val) return "";
+      let d;
+      if (val instanceof Date) d = val;
+      else if (val && typeof val.toDate === "function") { try { d = val.toDate(); } catch {} }
+      else d = new Date(val);
+      if (!d || isNaN(d.getTime())) return "";
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
+    const renderSubnav = () => {
+      if (!subnavEl) return;
+      subnavEl.innerHTML = `
+        <button class="btn btn-sm ${currentTab === "video" ? "btn-primary" : ""}" type="button" data-activity-tab="video">影片</button>
+        <button class="btn btn-sm ${currentTab === "photo" ? "btn-primary" : ""}" type="button" data-activity-tab="photo">相片</button>
+      `.trim();
+      subnavEl.querySelectorAll("[data-activity-tab]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          currentTab = btn.getAttribute("data-activity-tab") || "video";
+          location.hash = `#community/activity/${currentTab}`;
+          renderPage();
+        });
+      });
+    };
+
+    const youtubeVideoId = (url) => {
+      const u = String(url || "").trim();
+      if (!u) return "";
+      const patterns = [
+        /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/|live\/))([A-Za-z0-9_-]{6,})/,
+      ];
+      for (const re of patterns) {
+        const m = u.match(re);
+        if (m && m[1]) return m[1];
+      }
+      try {
+        const uo = new URL(u);
+        if (uo.hostname.includes("youtube.com") || uo.hostname.includes("youtu.be")) {
+          const v = uo.searchParams.get("v");
+          if (v) return v;
+        }
+      } catch {}
+      return "";
+    };
+
+    const youtubeEmbedUrl = (url) => {
+      const id = youtubeVideoId(url);
+      if (!id) return "";
+      return `https://www.youtube.com/embed/${id}?rel=0`;
+    };
+
+    const googlePhotosDirectUrl = (url) => {
+      const u = String(url || "").trim();
+      if (!u) return "";
+      try {
+        const uo = new URL(u);
+        const host = uo.hostname.toLowerCase();
+        if (host.includes("photos.google.com") || host.includes("goo.gl") || host.includes("photos.app.goo.gl")) {
+          return u;
+        }
+      } catch {}
+      return u;
+    };
+
+    const googlePhotosAlbumId = (url) => {
+      const u = String(url || "").trim();
+      const m = u.match(/photos\.google\.com\/[^/]+\/[^/]+\/([A-Za-z0-9_-]{10,})/);
+      if (m && m[1]) return m[1];
+      const m2 = u.match(/\/([A-Za-z0-9_-]{20,})/);
+      if (m2 && m2[1]) return m2[1];
+      return "";
+    };
+
+    const normalizePhotoPreviewUrl = (url) => {
+      const u = String(url || "").trim();
+      if (!u) return "";
+      if (/^https?:\/\/.+\.(png|jpe?g|gif|webp)(\?|$)/i.test(u)) {
+        return u;
+      }
+      const id = googlePhotosAlbumId(u);
+      if (id) return `https://lh3.googleusercontent.com/${encodeURIComponent(id)}=w1200`;
+      try {
+        const uo = new URL(u);
+        if (uo.hostname.toLowerCase().includes("photos.google.com")) return "";
+      } catch {}
+      return "";
+    };
+
+    const openActivityPreview = (item) => {
+      try {
+      const category = String(item.category || "video");
+      const isVideo = category === "video";
+      const url = String(item.url || "").trim();
+      const previewUrl = isVideo ? youtubeEmbedUrl(url) : normalizePhotoPreviewUrl(url);
+      const modal = ensureModal("activityPreviewModal", "modal-activity-preview", "85%");
+      if (!modal) { toast("無法建立預覽彈窗"); return; }
+      const title = `${isVideo ? "影片預覽" : "相片預覽"}｜${String(item.title || "").trim() || "社區活動"}`;
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-modal-close="1"></div>
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="activityPreviewTitle">
+          <div class="modal-hd">
+            <h3 class="modal-title" id="activityPreviewTitle">${escapeHtml(title)}</h3>
+            <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          </div>
+          <div class="modal-body">
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              <div>
+                <div class="muted" style="font-size:13px;">時間</div>
+                <div style="font-weight:600;">${escapeHtml(formatActivityTime(item.activityTime || item.createdAt) || "—")}</div>
+              </div>
+              <div>
+                <div class="muted" style="font-size:13px;">連結位置</div>
+                <div style="word-break:break-all;"><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;">${escapeHtml(url || "—")}</a></div>
+              </div>
+              <div style="margin-top:8px; display:flex; justify-content:center; background:#f3f4f6; border-radius:12px; padding:12px; min-height:260px; align-items:center;">
+                ${previewUrl ? (isVideo
+                  ? `<iframe src="${escapeHtml(previewUrl)}" title="${escapeHtml(String(item.title || "影片"))}" style="width:100%; height:420px; border:none; border-radius:12px;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy"></iframe>`
+                  : `<img src="${escapeHtml(previewUrl)}" alt="${escapeHtml(String(item.title || "相片"))}" style="max-width:100%; max-height:420px; border-radius:12px;">`)
+                : `<div class="muted" style="color:#6b7280;">無法自動預覽此連結；請點擊下方「另開視窗」。</div>`}
+              </div>
+            </div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">關閉</button>
+            <button class="btn btn-primary" type="button" id="btnActivityPreviewExternal">另開視窗前往</button>
+          </div>
+        </div>
+      `.trim();
+      const detach = bindModalClose(modal, () => { try { detach(); } catch {} });
+      const btnExt = document.getElementById("btnActivityPreviewExternal");
+      if (btnExt) {
+        btnExt.addEventListener("click", () => {
+          if (url) window.open(url, "_blank", "noopener,noreferrer");
+        });
+      }
+      modal.hidden = false;
+      } catch (err) {
+        console.error("[openActivityPreview]", err);
+        toast("預覽失敗：" + String(err && err.message || err));
+      }
+    };
+
+    const openActivityModal = (category, existingItem) => {
+      try {
+      const modal = ensureModal("newActivityModal", "modal-new-activity", "78%");
+      if (!modal) { toast("無法建立活動編輯彈窗"); return; }
+      const isEditMode = !!(existingItem && existingItem.id);
+      const categoryType = String(category || existingItem?.category || "video");
+      const isVideoType = categoryType === "video";
+      const modalTitle = isEditMode
+        ? (isVideoType ? "編輯社區活動（影片）" : "編輯社區活動（相片）")
+        : (isVideoType ? "新增社區活動（影片）" : "新增社區活動（相片）");
+      const detach = bindModalClose(modal, () => { try { detach(); } catch {} });
+
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-modal-close="1"></div>
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="newActivityTitle">
+          <div class="modal-hd">
+            <h3 class="modal-title" id="newActivityTitle">${escapeHtml(modalTitle)}</h3>
+            <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          </div>
+          <form id="newActivityForm">
+            <div class="modal-body">
+              <div class="status" id="newActivityStatus" hidden></div>
+              <div class="field">
+                <label for="activityCategory">類型</label>
+                <select id="activityCategory">
+                  <option value="video" ${isVideoType ? "selected" : ""}>影片（YouTube 連結）</option>
+                  <option value="photo" ${!isVideoType ? "selected" : ""}>相片（Google 相簿 / 圖片連結）</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="activityTitle">標題</label>
+                <input id="activityTitle" type="text" placeholder="請輸入活動標題" required />
+              </div>
+              <div class="field">
+                <label for="activityTime">時間</label>
+                <input id="activityTime" type="datetime-local" />
+              </div>
+              <div class="field">
+                <label for="activityUrl">連結位置</label>
+                <input id="activityUrl" type="url" placeholder="${isVideoType ? "例如 https://www.youtube.com/watch?v=..." : "例如 https://photos.google.com/... 或 https://...jpg"}" required />
+              </div>
+              <div id="activityPreviewHint" style="font-size:13px; color:#6b7280; margin-top:-6px;">儲存前可先點擊下方「預覽連結」。</div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
+                <button class="btn btn-sm" type="button" id="btnActivityPreviewLink">預覽連結</button>
+                <button class="btn btn-sm" type="button" id="btnActivityOpenLink">另開視窗前往</button>
+              </div>
+            </div>
+            <div class="modal-ft">
+              <button class="btn" type="button" data-modal-close="1">取消</button>
+              <button class="btn btn-primary" type="submit" id="btnSaveActivity">${isEditMode ? "更新" : "儲存"}</button>
+            </div>
+          </form>
+        </div>
+      `.trim();
+
+      const form = document.getElementById("newActivityForm");
+      const statusEl = document.getElementById("newActivityStatus");
+      const titleEl = document.getElementById("activityTitle");
+      const timeEl = document.getElementById("activityTime");
+      const urlEl = document.getElementById("activityUrl");
+      const categoryEl = document.getElementById("activityCategory");
+      const btnSave = document.getElementById("btnSaveActivity");
+      const btnPreview = document.getElementById("btnActivityPreviewLink");
+      const btnOpen = document.getElementById("btnActivityOpenLink");
+      const hintEl = document.getElementById("activityPreviewHint");
+
+      if (titleEl) titleEl.value = String(existingItem?.title || "").trim();
+      if (timeEl) timeEl.value = toDatetimeLocalValue(existingItem?.activityTime || existingItem?.createdAt);
+      if (urlEl) urlEl.value = String(existingItem?.url || "").trim();
+      if (btnSave) btnSave.textContent = isEditMode ? "更新" : "儲存";
+
+      const setStatus = (msg, isError) => {
+        if (!statusEl) return;
+        statusEl.textContent = String(msg || "").trim();
+        statusEl.hidden = !msg;
+        statusEl.style.color = isError ? "var(--color-danger)" : "var(--color-success)";
+      };
+
+      const updateHint = () => {
+        if (!hintEl || !categoryEl || !urlEl) return;
+        const cat = categoryEl.value;
+        const u = String(urlEl.value || "").trim();
+        if (cat === "video") {
+          const id = youtubeVideoId(u);
+          hintEl.style.color = u ? (id ? "#16a34a" : "#b91c1c") : "#6b7280";
+          hintEl.textContent = u ? (id ? `已辨識 YouTube 影片：${id}` : "尚未偵測到 YouTube 影片 ID。請貼上 https://www.youtube.com/watch?v=... 或 youtu.be/... 連結") : "請輸入 YouTube 影片連結。";
+        } else {
+          const preview = normalizePhotoPreviewUrl(u);
+          const g = googlePhotosDirectUrl(u);
+          hintEl.style.color = u ? (preview || g ? "#16a34a" : "#d97706") : "#6b7280";
+          hintEl.textContent = u ? (preview ? "已偵測到可預覽圖片" : (g ? "Google 相簿連結（建議另開視窗觀看）" : "未偵測到圖片/相簿格式；仍可儲存，前台會另開該連結")) : "請輸入 Google 相簿分享連結或圖片 URL。";
+        }
+      };
+      if (categoryEl) categoryEl.addEventListener("change", updateHint);
+      if (urlEl) urlEl.addEventListener("input", updateHint);
+      updateHint();
+
+      const getActivityTimeFirestore = () => {
+        const raw = timeEl?.value;
+        if (!raw) {
+          return existingItem?.activityTime || firebase.firestore.FieldValue.serverTimestamp();
+        }
+        const d = new Date(raw);
+        if (isNaN(d.getTime())) {
+          return existingItem?.activityTime || firebase.firestore.FieldValue.serverTimestamp();
+        }
+        return firebase.firestore.Timestamp.fromDate(d);
+      };
+
+      if (btnPreview) {
+        btnPreview.addEventListener("click", (e) => {
+          e.preventDefault();
+          const category = categoryEl?.value || "video";
+          const fake = {
+            id: existingItem?.id || "preview",
+            title: titleEl?.value || "(尚未輸入標題)",
+            url: urlEl?.value || "",
+            category,
+            activityTime: timeEl?.value ? new Date(timeEl.value) : null,
+          };
+          openActivityPreview(fake);
+        });
+      }
+
+      if (btnOpen) {
+        btnOpen.addEventListener("click", (e) => {
+          e.preventDefault();
+          const u = String(urlEl?.value || "").trim();
+          if (!u) return;
+          window.open(u, "_blank", "noopener,noreferrer");
+        });
+      }
+
+      if (form) {
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          if (!cid) {
+            setStatus("尚未選擇社區", true);
+            return;
+          }
+          const title = String(titleEl?.value || "").trim();
+          const url = String(urlEl?.value || "").trim();
+          const category = String(categoryEl?.value || "video");
+          if (!title || !url) {
+            setStatus("請輸入標題與連結位置", true);
+            return;
+          }
+          try {
+            const payload = {
+              type: "activity",
+              category,
+              title,
+              url,
+              activityTime: getActivityTimeFirestore(),
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            };
+            if (isEditMode && existingItem?.id) {
+              await db.collection("communities").doc(cid).collection("bulletins").doc(String(existingItem.id)).update(payload);
+              toast("已更新");
+            } else {
+              await db.collection("communities").doc(cid).collection("bulletins").add({
+                ...payload,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+              });
+              toast("已儲存");
+            }
+            try { modal.setAttribute("hidden", ""); } catch {}
+          } catch (err) {
+            console.error(err);
+            setStatus(`儲存失敗：${err.message}`, true);
+          }
+        });
+      }
+      modal.hidden = false;
+      } catch (err) {
+        console.error("[openActivityModal]", err);
+        toast("開啟活動表單失敗：" + String(err && err.message || err));
+      }
+    };
+
+    const renderList = (listEl, category) => {
+      if (!listEl) return;
+      const list = (itemsData || []).filter((x) => String(x.category || "") === String(category || ""));
+      if (!list.length) {
+        listEl.innerHTML = `<div class="status">目前沒有${category === "video" ? "影片" : "相片"}</div>`;
+        return;
+      }
+      listEl.innerHTML = list.map((item) => {
+        const url = String(item.url || "").trim();
+        const time = formatActivityTime(item.activityTime || item.createdAt);
+        const isVideo = String(category) === "video";
+        const previewUrl = isVideo ? youtubeEmbedUrl(url) : normalizePhotoPreviewUrl(url);
+        return `
+          <div class="card" style="margin:0;" data-activity-id="${escapeHtml(String(item.id || ""))}">
+            <div class="card-hd">
+              <div class="left" style="min-width:0;">
+                <h3 style="font-size:16px; margin:0 0 6px 0;">${escapeHtml(String(item.title || ""))}</h3>
+                <div class="muted" style="font-size:13px;">時間：${escapeHtml(time || "—")}</div>
+                <div class="muted" style="font-size:13px; word-break:break-all; margin-top:4px;">連結：<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;">${escapeHtml(url)}</a></div>
+              </div>
+              <div class="bulletin-head-actions">
+                <span class="tag ${isVideo ? "yellow" : "green"}">${isVideo ? "影片" : "相片"}</span>
+                <button class="icon-btn sm" type="button" data-activity-preview="${escapeHtml(String(item.id || ""))}" aria-label="預覽" title="預覽">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
+                  </svg>
+                </button>
+                <button class="icon-btn sm" type="button" data-activity-edit="${escapeHtml(String(item.id || ""))}" aria-label="編輯" title="編輯">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-1.4L4 18.6V20Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M13.5 6.5l4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button class="icon-btn sm danger" type="button" data-activity-delete="${escapeHtml(String(item.id || ""))}" aria-label="刪除" title="刪除">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M5 7h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M9 7V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8V7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M7 7l.8 11.1A2 2 0 0 0 9.8 20h4.4a2 2 0 0 0 2-1.9L17 7" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M10 11v5M14 11v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="card-bd">
+              ${previewUrl ? `
+                <div style="display:flex; justify-content:center; margin-top:6px;">
+                  ${isVideo ? `<iframe src="${escapeHtml(previewUrl)}" title="${escapeHtml(String(item.title || "影片"))}" style="width:100%; max-width:720px; height:380px; border:none; border-radius:12px;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy"></iframe>` : `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(previewUrl)}" alt="${escapeHtml(String(item.title || "相片"))}" style="max-width:100%; max-height:380px; border-radius:12px; display:block;"></a>`}
+                </div>
+              ` : ""}
+              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+                <button class="btn btn-sm" type="button" data-activity-open-external="${escapeHtml(String(item.id || ""))}">另開視窗前往</button>
+                <button class="btn btn-sm btn-primary" type="button" data-activity-preview-inline="${escapeHtml(String(item.id || ""))}">預覽</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      listEl.querySelectorAll("[data-activity-edit]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = String(btn.getAttribute("data-activity-edit") || "").trim();
+          const item = itemsData.find((x) => String(x.id || "") === id);
+          if (!item) return;
+          openActivityModal(item.category || category || "video", item);
+        });
+      });
+
+      listEl.querySelectorAll("[data-activity-delete]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = String(btn.getAttribute("data-activity-delete") || "").trim();
+          const item = itemsData.find((x) => String(x.id || "") === id);
+          if (!id || !item) return;
+          const ok = await (window.nwConfirm ? window.nwConfirm({
+            title: "刪除社區活動",
+            message: `是否刪除「${String(item.title || "").trim() || "此筆活動"}」？`,
+            okText: "確認刪除",
+            cancelText: "取消",
+            danger: true
+          }) : Promise.resolve(confirm("是否刪除此筆活動？")));
+          if (!ok) return;
+          try {
+            await db.collection("communities").doc(cid).collection("bulletins").doc(id).delete();
+            toast("已刪除");
+          } catch (err) {
+            toast(`刪除失敗：${err.message}`);
+          }
+        });
+      });
+
+      listEl.querySelectorAll("[data-activity-preview], [data-activity-preview-inline]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = String(btn.getAttribute("data-activity-preview") || btn.getAttribute("data-activity-preview-inline") || "").trim();
+          const item = itemsData.find((x) => String(x.id || "") === id);
+          if (!item) return;
+          openActivityPreview(item);
+        });
+      });
+
+      listEl.querySelectorAll("[data-activity-open-external]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = String(btn.getAttribute("data-activity-open-external") || "").trim();
+          const item = itemsData.find((x) => String(x.id || "") === id);
+          if (!item || !String(item.url || "").trim()) return;
+          window.open(String(item.url || "").trim(), "_blank", "noopener,noreferrer");
+        });
+      });
+    };
+
+    const setupListener = (category, listEl) => {
+      if (unsubscribeItems) {
+        try { unsubscribeItems(); } catch {}
+      }
+      if (!cid) {
+        if (listEl) listEl.innerHTML = `<div class="status">尚未選擇社區</div>`;
+        return;
+      }
+      unsubscribeItems = db
+        .collection("communities")
+        .doc(cid)
+        .collection("bulletins")
+        .where("type", "==", "activity")
+        .onSnapshot(
+          (snap) => {
+            itemsData = [];
+            snap.forEach((doc) => {
+              itemsData.push({ id: doc.id, ...doc.data() });
+            });
+            itemsData.sort((a, b) => {
+              const getT = (x) => {
+                const t = x.activityTime || x.createdAt;
+                if (!t) return 0;
+                if (t.toMillis) return t.toMillis();
+                if (t instanceof Date) return t.getTime();
+                const d = new Date(t);
+                return isNaN(d.getTime()) ? 0 : d.getTime();
+              };
+              return getT(b) - getT(a);
+            });
+            renderList(listEl, category);
+          },
+          (err) => {
+            if (listEl) listEl.innerHTML = `<div class="status">讀取失敗：${err.message}</div>`;
+          }
+        );
+    };
+
+    const renderPage = () => {
+      renderSubnav();
+      const browseKey = (currentTab === "video" ? "btnActivityNewVideo" : "btnActivityNewPhoto");
+      contentEl.innerHTML = `
+        <section class="card parcel-page">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("activity")}</div>
+              <div style="min-width:0;">
+                <h2>社區活動${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <p>活動影片（YouTube）與活動相片（Google 相簿）管理與預覽</p>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <button class="icon-btn primary" type="button" id="${browseKey}" title="新增活動" aria-label="新增活動">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 5v14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
+                  <path d="M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
+                </svg>
+              </button>
+              <a class="btn btn-sm" target="_blank" rel="noopener noreferrer" href="bulletin-activity.html?c=${encodeURIComponent(communityKey)}&v=2">另開視窗（前台）</a>
+              <span class="tag red">活動</span>
+            </div>
+          </div>
+          <div class="card-bd">
+            <div id="activityList" style="display:flex; flex-direction:column; gap:12px; width:100%;">
+              <div class="status">讀取中...</div>
+            </div>
+          </div>
+        </section>
+      `.trim();
+      const listEl = document.getElementById("activityList");
+      const btnNew = document.getElementById(browseKey);
+      if (btnNew) {
+        btnNew.addEventListener("click", () => {
+          openActivityModal(currentTab);
+        });
+      }
+      setupListener(currentTab, listEl);
+    };
+
+    renderPage();
+    } catch (err) {
+      console.error("[renderActivityModule]", err);
+      if (contentEl) {
+        try {
+          contentEl.innerHTML = `<section class="card"><div class="card-hd"><h2>社區活動</h2></div><div class="card-bd"><div class="status" style="color:#b91c1c;">載入失敗：${escapeHtml(String(err && err.message || err))}</div></div></section>`;
+        } catch (_) {}
+      }
+      try { toast("載入活動頁面失敗：" + String(err && err.message || err)); } catch (_) {}
+    }
+  }
 
   function openAppDownloadModal80() {
     const cid = resolveActiveCommunityId();

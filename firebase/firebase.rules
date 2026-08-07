@@ -225,10 +225,90 @@ service cloud.firestore {
         && request.resource.data.updatedAt is timestamp;
     }
 
-    function isVisitorSelfGet() {
+    function isVisitorResidentCreate(visitorId, slug) {
+      let unitKeys = userUnitKeys();
       return request.auth != null
-        && resource.data.get('source', '') == "self"
-        && resource.data.get('createdBy', '') == request.auth.uid;
+        && userCanAccessCommunitySlug(slug)
+        && request.resource.data.keys().hasOnly([
+          "qrToken",
+          "name",
+          "email",
+          "phone",
+          "unit",
+          "partySize",
+          "plate",
+          "purpose",
+          "purposeType",
+          "purposeOther",
+          "note",
+          "inAt",
+          "outAt",
+          "keep",
+          "source",
+          "status",
+          "passAuthorized",
+          "passAuthorizedAt",
+          "createdAt",
+          "updatedAt",
+          "createdBy",
+          "createdByName"
+        ])
+        && request.resource.data.source == "resident"
+        && request.resource.data.status == "pending"
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.qrToken == visitorId
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 1
+        && request.resource.data.name.size() <= 60
+        && request.resource.data.unit is string
+        && request.resource.data.unit.size() >= 1
+        && request.resource.data.unit.size() <= 20
+        && request.resource.data.unit in unitKeys
+        && request.resource.data.phone is string
+        && request.resource.data.phone.size() <= 20
+        && request.resource.data.plate is string
+        && request.resource.data.plate.size() <= 20
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 80
+        && request.resource.data.partySize is int
+        && request.resource.data.partySize >= 1
+        && request.resource.data.partySize <= 20
+        && request.resource.data.purposeType is string
+        && request.resource.data.purposeType.size() <= 20
+        && request.resource.data.purposeOther is string
+        && request.resource.data.purposeOther.size() <= 40
+        && request.resource.data.purpose is string
+        && request.resource.data.purpose.size() <= 60
+        && request.resource.data.note is string
+        && request.resource.data.note.size() <= 200
+        && request.resource.data.keep == null
+        && request.resource.data.inAt == null
+        && request.resource.data.outAt == null
+        && request.resource.data.passAuthorized == false
+        && request.resource.data.passAuthorizedAt == null
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function isVisitorResidentCancel(slug) {
+      let unitKeys = userUnitKeys();
+      let currentStatus = resource.data.get('status', '');
+      let allowedStatuses = ["pending", "approved"];
+      return request.auth != null
+        && userCanAccessCommunitySlug(slug)
+        && request.resource.data.keys().hasOnly(["status", "updatedAt"])
+        && request.resource.data.status == "cancelled"
+        && currentStatus in allowedStatuses
+        && resource.data.get('unit', '') in unitKeys
+        && resource.data.get('inAt', null) == null
+        && resource.data.get('outAt', null) == null
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function isVisitorHouseholdGet(slug) {
+      return request.auth != null
+        && userCanAccessCommunitySlug(slug)
+        && resource.data.get('unit', '') in userUnitKeys();
     }
 
     match /users/{uid} {
@@ -379,6 +459,7 @@ service cloud.firestore {
             isAdmin()
             || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
             || isVisitorSelfGet()
+            || isVisitorHouseholdGet(slug)
           )) || (
             request.auth == null
             && resource.data.get('source', '') == "self"
@@ -387,13 +468,20 @@ service cloud.firestore {
         allow list: if request.auth != null && (
           isAdmin()
           || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || (userCanAccessCommunitySlug(slug) && resource.data.get('unit', '') in userUnitKeys())
         );
         allow create: if (request.auth != null && (
             isAdmin()
             || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
             || isVisitorSelfCreate(visitorId)
+            || isVisitorResidentCreate(visitorId, slug)
           )) || isVisitorPublicCreate(visitorId, slug);
-        allow update, delete: if request.auth != null && (
+        allow update: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || isVisitorResidentCancel(slug)
+        );
+        allow delete: if request.auth != null && (
           isAdmin()
           || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
         );

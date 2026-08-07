@@ -472,21 +472,18 @@
     const params = new URLSearchParams(location.search || "");
     state.embed = String(params.get("embed") || "").trim() === "1";
     state.hideTabs = state.embed && String(params.get("nav") || "").trim() === "0";
-    if (state.embed && headerEl) headerEl.style.display = "none";
     if (state.hideTabs && tabsEl) tabsEl.style.display = "none";
     if (!state.embed) return;
 
     const layoutEl = document.querySelector(".parcel-layout");
     const midtopEl = document.querySelector(".parcel-midtop");
-    const footerEl = document.querySelector(".parcel-ft");
 
-    if (footerEl) footerEl.style.display = "none";
     if (state.hideTabs && midtopEl) midtopEl.style.display = "none";
     if (layoutEl) {
       if (state.hideTabs) {
-        layoutEl.style.gridTemplateRows = "minmax(0, 1fr)";
+        layoutEl.style.gridTemplateRows = "minmax(56px, 8vh) minmax(0, 68vh) minmax(56px, 16vh)";
       } else {
-        layoutEl.style.gridTemplateRows = "minmax(56px, 8vh) minmax(0, 1fr)";
+        layoutEl.style.gridTemplateRows = "minmax(56px, 8vh) minmax(56px, 8vh) minmax(0, 60vh) minmax(56px, 16vh)";
       }
     }
   }
@@ -1355,7 +1352,7 @@
     if (state.currentUserHouseNo) titleParts.push(state.currentUserHouseNo);
     if (state.currentUserName) titleParts.push(state.currentUserName);
     const prefix = titleParts.length ? titleParts.join(" ") : "綠色停車";
-    const suffix = state.currentCommunityName ? `｜${state.currentCommunityName}` : "";
+    const suffix = state.embed ? "" : (state.currentCommunityName ? `｜${state.currentCommunityName}` : "");
     if (titleEl) titleEl.textContent = `${prefix}${suffix}`;
 
     await refresh();

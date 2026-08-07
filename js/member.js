@@ -438,7 +438,7 @@
 
   const defaultRowDButtons = [
     { name: "包裹郵件", icon: "photo/a01.png", url: "parcel.html" },
-    { name: "訪客登記", icon: "photo/a02.png", url: "#" },
+    { name: "訪客登記", icon: "photo/a02.png", url: "visitor-resident.html" },
     { name: "社區園地", icon: "photo/a03.png", url: "bulletin-community.html" },
     { name: "公設預約", icon: "photo/a04.png", url: "facility.html" },
     { name: "車位管理", icon: "photo/a05.png", url: "parking.html" },
@@ -446,8 +446,8 @@
     { name: "財務報表", icon: "photo/a07.png", url: "bulletin-finance.html" },
     { name: "區大直播", icon: "photo/a08.png", url: "live-meeting.html" },
     { name: "會議記錄", icon: "photo/a09.png", url: "bulletin-meeting.html" },
-    { name: "清潔通報", icon: "photo/a10.png", url: "#" },
-    { name: "社區活動", icon: "photo/a11.png", url: "#" },
+    { name: "清潔通報", icon: "photo/a10.png", url: "bulletin-clean.html" },
+    { name: "社區活動", icon: "photo/a11.png", url: "bulletin-activity.html" },
     { name: "AI對話", icon: "photo/a12.png", url: "https://gemini.google.com/?hl=zh-TW", openExternal: true },
   ];
 
