@@ -2,7 +2,6 @@
   'use strict';
 
   const BULLETIN_TYPE = 'clean';
-  const MAX_IMAGES = 5;
 
   const firebaseConfig = window.FIREBASE_CONFIG;
   if (!firebaseConfig) {
@@ -31,24 +30,23 @@
   let unsubscribeListener = null;
   let currentImages = [];
   let allBulletinsData = [];
+  let currentFilter = 'all';
   let currentUserData = null;
   let currentUserId = null;
   let currentUserName = "";
   let currentUserHouseNo = "";
-  let currentCleanImages = [];
-  const state = {
-    embed: false,
-    hideTabs: false,
-    currentCommunityId: "",
-    currentCommunityName: "",
-    currentTab: "submit"
-  };
+  let bulletinPdfMap = new Map();
 
   function nameFromEmail(email) {
     const e = String(email || '').trim();
     if (!e) return '';
     const part = e.split('@')[0] || '';
     return String(part || '').trim();
+  }
+
+  function pickInitial(displayName, email) {
+    const s = String(displayName || '').trim() || String(email || '').trim();
+    return s ? s.slice(0, 1).toUpperCase() : 'U';
   }
 
   function escapeHtml(str) {
@@ -64,7 +62,6 @@
   function formatDate(date) {
     if (!date) return "";
     const d = date instanceof Date ? date : date.toDate ? date.toDate() : new Date(date);
-    if (isNaN(d.getTime())) return "";
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const da = String(d.getDate()).padStart(2, "0");
@@ -73,30 +70,16 @@
     return `${y}-${m}-${da} ${h}:${mi}`;
   }
 
-  const CATEGORY_LABEL = {
-    trash: "垃圾未清",
-    mess: "環境髒亂",
-    disinfect: "消毒需求",
-    other: "其他"
-  };
-  const STATUS_LABEL = {
-    pending: "待處理",
-    processing: "處理中",
-    done: "已完成"
-  };
-  const STATUS_BADGE = {
-    pending: { bg: "#fef2f2", text: "#b91c1c" },
-    processing: { bg: "#fef3c7", text: "#b45309" },
-    done: { bg: "#dcfce7", text: "#15803d" }
-  };
-
   function openImageModal(images, title) {
     currentImages = images || [];
     const imageModal = document.getElementById('imageModal');
     const imageModalTitle = document.getElementById('imageModalTitle');
     const imageModalContent = document.getElementById('imageModalContent');
+    
     if (!imageModal || !imageModalContent) return;
+    
     imageModalTitle.textContent = title || '圖片';
+    
     if (currentImages.length === 0) {
       imageModalContent.innerHTML = '<div style="padding:40px; text-align:center; color:#888;">沒有圖片</div>';
     } else {
@@ -106,113 +89,213 @@
         </div>
       `).join('');
     }
+    
     imageModal.removeAttribute('hidden');
   }
 
   function closeImageModal() {
     const imageModal = document.getElementById('imageModal');
-    if (imageModal) imageModal.setAttribute('hidden', '');
+    if (imageModal) {
+      imageModal.setAttribute('hidden', '');
+    }
   }
 
-  function switchTab(tabId) {
-    const tab = String(tabId || "submit").trim() || "submit";
-    state.currentTab = tab;
-    const tabs = document.querySelectorAll('#cleanTabs [data-clean-tab]');
-    const submitSection = document.getElementById('cleanSubmitSection');
-    const listSection = document.getElementById('cleanListSection');
-    tabs.forEach((b) => b.classList.toggle('active', String(b.getAttribute('data-clean-tab') || "") === tab));
-    if (submitSection) submitSection.style.display = tab === 'submit' ? '' : 'none';
-    if (listSection) listSection.style.display = tab === 'list' ? '' : 'none';
+  function applyFilter(data) {
+    if (!data) return [];
+    
+    if (currentFilter === 'all') {
+      return data;
+    }
+    
+    return data.filter(item => {
+      const readKey = `bulletin_read_${BULLETIN_TYPE}_${item.id}`;
+      const isRead = localStorage.getItem(readKey) === 'true';
+      
+      if (currentFilter === 'unread') {
+        return !isRead;
+      } else if (currentFilter === 'read') {
+        return isRead;
+      }
+      return true;
+    });
   }
 
-  function setupTabs() {
-    const tabs = document.querySelectorAll('#cleanTabs [data-clean-tab]');
-    tabs.forEach((btn) => {
+  function setupFilterButtons() {
+    const filterButtons = document.querySelectorAll('.tab-btn');
+    
+    filterButtons.forEach(btn => {
       btn.addEventListener('click', () => {
-        const tab = btn.getAttribute('data-clean-tab') || 'submit';
-        switchTab(tab);
+        currentFilter = btn.getAttribute('data-filter');
+        
+        filterButtons.forEach(b => {
+          b.classList.remove('active');
+        });
+        btn.classList.add('active');
+        
+        renderBulletinList(allBulletinsData);
       });
     });
   }
 
-  function ensureEmbedLayout() {
-    const params = new URLSearchParams(location.search || "");
-    state.embed = String(params.get("embed") || "").trim() === "1";
-    state.hideTabs = state.embed && String(params.get("nav") || "").trim() === "0";
-    const tabsEl = document.getElementById('cleanTabs');
-    if (state.hideTabs && tabsEl) tabsEl.style.display = "none";
-    if (!state.embed) return;
-
-    const layoutEl = document.querySelector(".parcel-layout");
-    const midtopEl = document.querySelector(".parcel-midtop");
-
-    if (state.hideTabs && midtopEl) midtopEl.style.display = "none";
-    if (layoutEl) {
-      if (state.hideTabs) {
-        layoutEl.style.gridTemplateRows = "minmax(56px, 8vh) minmax(0, 68vh) minmax(56px, 16vh)";
-      } else {
-        layoutEl.style.gridTemplateRows = "minmax(56px, 8vh) minmax(56px, 8vh) minmax(0, 60vh) minmax(56px, 16vh)";
-      }
-    }
-  }
-
-  function bindHostMessaging() {
-    window.addEventListener("message", (ev) => {
-      const data = ev && ev.data ? ev.data : null;
-      if (!data || typeof data !== "object") return;
-      const origin = String(ev.origin || "").trim();
-      if (origin && origin !== String(location.origin || "")) return;
-      if (data.type === "CLEAN_NAV") {
-        const tab = String(data.tab || "").trim();
-        if (!tab) return;
-        switchTab(tab);
-      }
-    });
-  }
-
-  function renderCleanImagesPreview() {
-    const wrap = document.getElementById('cleanImagesPreview');
-    if (!wrap) return;
-    if (!currentCleanImages || !currentCleanImages.length) {
-      wrap.innerHTML = '<div class="muted" style="font-size:12px;">尚未選擇相片</div>';
+  function renderBulletinList(data) {
+    console.log("[Bulletin] renderBulletinList called with data:", data);
+    if (!bulletinList) return;
+    
+    allBulletinsData = data || [];
+    
+    const filteredData = applyFilter(allBulletinsData);
+    
+    if (!filteredData || filteredData.length === 0) {
+      bulletinList.innerHTML = '<div class="status">目前沒有公告</div>';
       return;
     }
-    wrap.innerHTML = currentCleanImages.map((src, idx) => `
-      <div style="position:relative;">
-        <img src="${escapeHtml(src)}" alt="相片${idx + 1}" style="width:96px; height:96px; object-fit:cover; border-radius:10px; display:block;" />
-        <button type="button" data-clean-remove-image="${idx}" aria-label="移除" style="position:absolute; top:-6px; right:-6px; width:26px; height:26px; border:none; border-radius:9999px; background:#111827; color:#fff; font-weight:700; cursor:pointer; font-size:14px;">×</button>
-      </div>
-    `).join('');
-    wrap.querySelectorAll('[data-clean-remove-image]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const idx = Number(btn.getAttribute('data-clean-remove-image'));
-        if (!isNaN(idx) && currentCleanImages[idx] != null) {
-          currentCleanImages.splice(idx, 1);
-          renderCleanImagesPreview();
+    
+    const pdfMap = new Map();
+    bulletinList.innerHTML = filteredData.map((item) => {
+      const tagColor = item.isPinned ? 'red' : (item.isImportant ? 'yellow' : 'green');
+      const tagText = item.isPinned ? '置頂' : (item.isImportant ? '重要' : '最新');
+      const hasImages = item.images && item.images.length > 0;
+      const attachment = item.attachment && typeof item.attachment === 'object' ? item.attachment : null;
+      const hasPdf = !!(attachment && attachment.dataUrl);
+      if (hasPdf) {
+        try { pdfMap.set(String(item.id || ''), String(attachment.dataUrl || '')); } catch {}
+      }
+      const readKey = `bulletin_read_${BULLETIN_TYPE}_${item.id}`;
+      const isRead = localStorage.getItem(readKey) === 'true';
+      
+      let tagBgColor, tagTextColor;
+      if (tagColor === 'red') {
+        tagBgColor = '#fee2e2';
+        tagTextColor = '#dc2626';
+      } else if (tagColor === 'yellow') {
+        tagBgColor = '#fef3c7';
+        tagTextColor = '#d97706';
+      } else {
+        tagBgColor = '#dcfce7';
+        tagTextColor = '#16a34a';
+      }
+      
+      return `
+        <div class="parcel-item" data-bulletin-id="${item.id}">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+            <div style="flex:1; min-width:0;">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; cursor:pointer;" class="bulletin-header">
+                <h3 style="font-size:16px; margin:0; font-weight:600; ${isRead ? 'opacity:0.6;' : ''}">${escapeHtml(item.title || '')}</h3>
+                ${!isRead ? '<span style="display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; font-weight:600; background:#dc2626; color:#fff;">未讀</span>' : '<span style="display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; font-weight:600; background:#6b7280; color:#fff;">已讀</span>'}
+              </div>
+              <div class="bulletin-content" style="display:none;">
+                <p style="font-size:14px; margin:8px 0 12px 0; color:#333; line-height:1.5;">${escapeHtml(item.content || '')}</p>
+                <div style="font-size:12px; color:#888;">建立時間：${formatDate(item.createdAt)}</div>
+              </div>
+            </div>
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:12px;">
+              <div style="display:flex; align-items:flex-start; gap:12px; cursor:pointer;" class="bulletin-header">
+                <span style="display:inline-block; padding:4px 10px; border-radius:9999px; font-size:12px; font-weight:500; background:${tagBgColor}; color:${tagTextColor};">${tagText}</span>
+                <button type="button" class="toggle-btn" style="width:40px; height:40px; border-radius:50%; background:#f3f4f6; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:transform 0.2s;">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:22px; height:22px; color:#4b5563;">
+                    <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+              <div class="bulletin-content" style="display:none;">
+                ${hasImages ? `
+                  <button type="button" style="width:40px; height:40px; border-radius:50%; background:#f3f4f6; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s; flex-shrink:0;" data-images='${JSON.stringify(item.images).replace(/'/g, "&#039;")}' data-title="${escapeHtml(item.title || '圖片')}" aria-label="查看圖片" title="查看圖片">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:22px; height:22px; color:#4b5563;">
+                      <path d="M4 4h16v16H4V4zm1 2v12h14V6H5zm2 2h10l-2 4-3-4-2 4-3-4z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                ` : ''}
+                ${hasPdf ? `
+                  <a href="#" rel="noopener noreferrer" data-open-pdf="1" data-pdf-id="${escapeHtml(String(item.id || ''))}" data-pdf-name="${escapeHtml(String(attachment.name || '附件.pdf'))}" style="width:40px; height:40px; border-radius:50%; background:#fef2f2; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s; flex-shrink:0; color:#b91c1c; text-decoration:none;" aria-label="開啟 PDF" title="${escapeHtml(String(attachment.name || '附件.pdf'))}">
+                    <span style="font-size:11px; font-weight:800;">PDF</span>
+                  </a>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    const imageButtons = bulletinList.querySelectorAll('[data-images]');
+    imageButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const images = JSON.parse(button.getAttribute('data-images') || '[]');
+        const title = button.getAttribute('data-title') || '圖片';
+        openImageModal(images, title);
+      });
+    });
+
+    const pdfLinks = bulletinList.querySelectorAll('[data-open-pdf]');
+    pdfLinks.forEach((a) => {
+      const id = String(a.getAttribute('data-pdf-id') || '').trim();
+      if (id && pdfMap.has(id)) a._pdfDataUrl = pdfMap.get(id);
+      a.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (typeof window.openPdfViewer === 'function') {
+          window.openPdfViewer(a._pdfDataUrl || a.getAttribute('data-pdf-url') || a.getAttribute('href'), a.getAttribute('data-pdf-name'));
+        } else {
+          window.alert('PDF 檢視器尚未載入，請重新整理後再試。');
         }
       });
     });
-  }
+    bulletinPdfMap = pdfMap;
 
-  function readFileAsDataUrl(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(reader.error);
-      reader.onload = () => resolve(String(reader.result || ''));
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function handleCleanImageFiles(fileList) {
-    if (!fileList || !fileList.length) return;
-    const files = Array.from(fileList).slice(0, Math.max(0, MAX_IMAGES - currentCleanImages.length));
-    for (const f of files) {
-      try {
-        const src = await readFileAsDataUrl(f);
-        if (src) currentCleanImages.push(src);
-      } catch (e) { console.error(e); }
+    const toggleButtons = bulletinList.querySelectorAll('.toggle-btn');
+    const bulletinHeaders = bulletinList.querySelectorAll('.bulletin-header');
+    
+    function toggleBulletin(bulletinItem) {
+      const contents = bulletinItem.querySelectorAll('.bulletin-content');
+      const toggleBtn = bulletinItem.querySelector('.toggle-btn');
+      const isExpanded = contents[0]?.style.display === 'block';
+      
+      contents.forEach(content => {
+        content.style.display = isExpanded ? 'none' : 'block';
+      });
+      
+      toggleBtn.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
     }
-    renderCleanImagesPreview();
+    
+    function markAsRead(bulletinItem) {
+      const bulletinId = bulletinItem.getAttribute('data-bulletin-id');
+      const readKey = `bulletin_read_${BULLETIN_TYPE}_${bulletinId}`;
+      localStorage.setItem(readKey, 'true');
+      
+      const titleEl = bulletinItem.querySelector('h3');
+      const readTag = bulletinItem.querySelector('h3 + span');
+      
+      if (titleEl) {
+        titleEl.style.opacity = '0.6';
+      }
+      if (readTag) {
+        readTag.textContent = '已讀';
+        readTag.style.background = '#6b7280';
+      }
+    }
+    
+    toggleButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const bulletinItem = btn.closest('.parcel-item');
+        if (bulletinItem) {
+          markAsRead(bulletinItem);
+          toggleBulletin(bulletinItem);
+        }
+      });
+    });
+    
+    bulletinHeaders.forEach(header => {
+      header.addEventListener('click', (e) => {
+        const bulletinItem = header.closest('.parcel-item');
+        if (bulletinItem) {
+          markAsRead(bulletinItem);
+          toggleBulletin(bulletinItem);
+        }
+      });
+    });
   }
 
   function getActiveCommunityId() {
@@ -224,15 +307,30 @@
 
   async function loadProfile(user) {
     if (!user) return;
+
+    const basicName = String(user.displayName || nameFromEmail(user.email) || '姓名').trim();
+    communityBulletinTitle.textContent = `戶號 ${basicName}`;
+
     let data = {};
     try {
+      console.log('Fetching user data for uid:', user.uid);
       const doc = await db.collection('users').doc(String(user.uid)).get();
-      if (doc.exists) data = doc.data() || {};
+      console.log('User doc exists:', doc.exists);
+      if (doc.exists) {
+        data = doc.data() || {};
+        console.log('User data from uid:', data);
+      }
+      
       if (!data || !Object.keys(data).length) {
         const email = String(user.email || '').trim();
         if (email) {
+          console.log('Trying to fetch by email:', email);
           const snap = await db.collection('users').where('email', '==', email).limit(1).get();
-          if (snap.size > 0) data = snap.docs[0].data() || {};
+          console.log('Email query result size:', snap.size);
+          if (snap.size > 0) {
+            data = snap.docs[0].data() || {};
+            console.log('User data from email:', data);
+          }
         }
       }
     } catch (e) {
@@ -240,9 +338,11 @@
       data = {};
     }
 
+    console.log('Final user data:', data);
+
     currentUserData = data;
     currentUserId = String(user.uid || '').trim();
-
+    
     const displayName = String(
       data.displayName ||
       data.name ||
@@ -251,251 +351,83 @@
       nameFromEmail(user.email) ||
       ''
     ).trim();
+    
     currentUserName = displayName;
-
+    
     const houseNo = String(data.houseNo || data.unit || '').trim();
     const subHouseNo = String(data.subHouseNo || data.subUnit || data.sub || '').trim();
     let fullHouseNo = houseNo;
-    if (subHouseNo) fullHouseNo = `${houseNo}-${subHouseNo}`;
+    if (subHouseNo) {
+      fullHouseNo = `${houseNo}-${subHouseNo}`;
+    }
+    
     currentUserHouseNo = fullHouseNo;
-
-    const communityId = getActiveCommunityId();
-    state.currentCommunityId = communityId || "";
-    let communityName = "";
-    if (communityId) {
-      try {
-        const cDoc = await db.collection('communities').doc(String(communityId)).get();
-        if (cDoc.exists) {
-          const cData = cDoc.data() || {};
-          communityName = String(cData.name || cData.communityName || '').trim();
-        }
-      } catch {}
-    }
-    state.currentCommunityName = communityName;
-
-    const titleParts = [];
-    if (fullHouseNo) titleParts.push(fullHouseNo);
-    if (displayName) titleParts.push(displayName);
-    const prefix = titleParts.length ? titleParts.join(" ") : "清潔通報";
-    const suffix = state.embed ? "" : (communityName ? `｜${communityName}` : "");
-    if (communityBulletinTitle) communityBulletinTitle.textContent = `${prefix}${suffix}`;
-
-    const locationEl = document.getElementById('cleanLocation');
-    if (locationEl && !locationEl.value) {
-      locationEl.value = fullHouseNo || '';
-    }
+    
+    console.log('Setting title - houseNo:', houseNo, 'subHouseNo:', subHouseNo, 'displayName:', displayName);
+    communityBulletinTitle.textContent = `${fullHouseNo || '戶號'} ${displayName || '姓名'}`;
   }
 
-  function setupSubmitForm() {
-    const form = document.getElementById('cleanSubmitForm');
-    const statusEl = document.getElementById('cleanSubmitStatus');
-    const fileEl = document.getElementById('cleanImagesFile');
-    if (fileEl) {
-      fileEl.addEventListener('change', (e) => {
-        handleCleanImageFiles(e.target.files);
-        try { fileEl.value = ''; } catch {}
-      });
-    }
-    renderCleanImagesPreview();
-    if (!form) return;
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      try {
-        const communityId = getActiveCommunityId();
-        if (!communityId) { setSubmitStatus("尚未選擇社區", true); return; }
-        if (!currentUserId) { setSubmitStatus("尚未登入", true); return; }
-        const category = String(document.getElementById('cleanCategory')?.value || '').trim() || 'other';
-        const location = String(document.getElementById('cleanLocation')?.value || '').trim();
-        const description = String(document.getElementById('cleanDescription')?.value || '').trim();
-        if (!location || !description) { setSubmitStatus("請填寫位置與說明", true); return; }
-        const categoryLabel = CATEGORY_LABEL[category] || category;
-        setSubmitStatus("送出中...", false);
-        const payload = {
-          type: BULLETIN_TYPE,
-          status: "pending",
-          category,
-          title: `${categoryLabel}｜${location}`,
-          description,
-          location,
-          images: currentCleanImages.slice(),
-          houseNo: currentUserHouseNo,
-          applicantName: currentUserName,
-          applicantUid: currentUserId,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        };
-        await db.collection('communities').doc(communityId).collection('bulletins').add(payload);
-        toastClean("已送出，社區後台將立即派員處理");
-        form.reset();
-        currentCleanImages = [];
-        renderCleanImagesPreview();
-        const locationEl = document.getElementById('cleanLocation');
-        if (locationEl) locationEl.value = currentUserHouseNo || '';
-        setSubmitStatus("", false);
-      } catch (err) {
-        console.error(err);
-        setSubmitStatus(`送出失敗：${err.message}`, true);
-      }
-    });
-  }
-
-  function setSubmitStatus(msg, isError) {
-    const statusEl = document.getElementById('cleanSubmitStatus');
-    if (!statusEl) return;
-    const text = String(msg || '').trim();
-    statusEl.textContent = text;
-    statusEl.hidden = !text;
-    statusEl.style.color = isError ? "#b91c1c" : "#15803d";
-  }
-
-  function toastClean(msg) {
-    const s = String(msg || "").trim();
-    if (!s) return;
-    try {
-      if (typeof window.nwToast === "function") { window.nwToast(s); return; }
-    } catch {}
-    let t = document.getElementById("toast");
-    if (!t) {
-      t = document.createElement("div");
-      t.id = "toast";
-      t.style.cssText = "position:fixed; left:50%; bottom:32px; transform:translateX(-50%); background:rgba(17,24,39,0.92); color:#fff; padding:10px 18px; border-radius:12px; font-size:14px; z-index:9999; max-width:88vw;";
-      document.body.appendChild(t);
-    }
-    t.textContent = s;
-    t.style.opacity = "1";
-    window.clearTimeout(toastClean._t);
-    toastClean._t = window.setTimeout(() => { try { t.style.opacity = "0"; t.style.transition = "opacity 300ms"; } catch {} }, 2200);
-  }
-
-  function renderCleanList(data) {
-    if (!bulletinList) return;
-    allBulletinsData = data || [];
-    const mine = allBulletinsData.filter((x) => String(x.applicantUid || "") === String(currentUserId || ""));
-    if (!mine.length) {
-      bulletinList.innerHTML = '<div class="status">尚無通報紀錄，切換至「提出通報」送出第一筆</div>';
-      return;
-    }
-    mine.sort((a, b) => {
-      const tA = (a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : Number(a.createdAt) || 0);
-      const tB = (b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : Number(b.createdAt) || 0);
-      return tB - tA;
-    });
-    bulletinList.innerHTML = mine.map((x) => {
-      const st = String(x.status || "pending");
-      const badge = STATUS_BADGE[st] || STATUS_BADGE.pending;
-      const hasDoneImages = Array.isArray(x.doneImages) && x.doneImages.length > 0;
-      const hasSubmitImages = Array.isArray(x.images) && x.images.length > 0;
-      return `
-        <div class="parcel-item" data-bulletin-id="${escapeHtml(String(x.id || ""))}" style="cursor:default;">
-          <div style="display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap;">
-            <div style="flex:1; min-width:0;">
-              <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:6px;">
-                <span style="display:inline-block; padding:3px 10px; border-radius:9999px; font-size:12px; font-weight:600; background:${badge.bg}; color:${badge.text};">${STATUS_LABEL[st] || st}</span>
-                <span class="tag ${st === "done" ? "green" : (st === "processing" ? "yellow" : "red")}">${CATEGORY_LABEL[x.category] || x.category || "其他"}</span>
-                <h3 style="font-size:15px; margin:0; font-weight:600; min-width:0; flex:1; min-width:0;">${escapeHtml(String(x.title || ""))}</h3>
-              </div>
-              <div class="muted" style="font-size:13px;">位置：${escapeHtml(String(x.location || "—"))}｜申請人：${escapeHtml(String(x.applicantName || x.houseNo || "—"))}</div>
-              <div class="muted" style="font-size:13px; margin-top:4px;">申請時間：${formatDate(x.createdAt) || "—"}</div>
-              <div style="margin-top:8px; font-size:14px; line-height:1.5; color:#374151; white-space:pre-wrap;">${escapeHtml(String(x.description || ""))}</div>
-
-              ${hasSubmitImages ? `
-                <div style="margin-top:10px;">
-                  <div class="muted" style="font-size:12px; margin-bottom:6px;">申請附圖</div>
-                  <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    ${x.images.slice(0, 6).map((img) => `
-                      <img src="${escapeHtml(img)}" alt="申請圖" data-clean-open-images='${JSON.stringify(x.images).replace(/'/g, "&#039;")}' data-clean-title="申請附圖" style="width:84px; height:84px; object-fit:cover; border-radius:10px; cursor:pointer;">
-                    `).join("")}
-                  </div>
-                </div>
-              ` : ""}
-
-              ${st === "processing" ? `
-                <div style="margin-top:12px; padding:10px 12px; background:#fefce8; border-radius:10px; font-size:13px;">
-                  <div style="font-weight:600; margin-bottom:4px;">處理中${x.handlerName ? `｜派員：${escapeHtml(String(x.handlerName))}` : ""}</div>
-                  <div class="muted">接單時間：${formatDate(x.acceptedAt) || "—"}${x.processNote ? `｜${escapeHtml(String(x.processNote))}` : ""}</div>
-                </div>
-              ` : ""}
-
-              ${st === "done" ? `
-                <div style="margin-top:12px; padding:10px 12px; background:#f0fdf4; border-radius:10px; font-size:13px;">
-                  <div style="font-weight:600; margin-bottom:4px;">處理完成${x.doneBy ? `｜人員：${escapeHtml(String(x.doneBy))}` : ""}</div>
-                  <div class="muted" style="margin-bottom:6px;">完成時間：${formatDate(x.doneAt) || "—"}</div>
-                  ${x.doneRemark ? `<div style="white-space:pre-wrap; line-height:1.5; color:#1f2937;">${escapeHtml(String(x.doneRemark))}</div>` : ""}
-                  ${hasDoneImages ? `
-                    <div style="margin-top:8px;">
-                      <div class="muted" style="font-size:12px; margin-bottom:6px;">完成相片</div>
-                      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        ${x.doneImages.slice(0, 6).map((img) => `
-                          <img src="${escapeHtml(img)}" alt="完成圖" data-clean-open-images='${JSON.stringify(x.doneImages).replace(/'/g, "&#039;")}' data-clean-title="完成相片" style="width:84px; height:84px; object-fit:cover; border-radius:10px; cursor:pointer;">
-                        `).join("")}
-                      </div>
-                    </div>
-                  ` : ""}
-                </div>
-              ` : ""}
-            </div>
-          </div>
-        </div>
-      `;
-    }).join("");
-
-    bulletinList.querySelectorAll('[data-clean-open-images]').forEach((img) => {
-      img.addEventListener('click', () => {
-        try {
-          const arr = JSON.parse(img.getAttribute('data-clean-open-images') || '[]');
-          const title = img.getAttribute('data-clean-title') || '圖片';
-          openImageModal(arr, title);
-        } catch {}
-      });
-    });
-  }
-
-  function setupCleanListener(communityId) {
+  function setupBulletinsListener(communityId, type) {
+    console.log("[Bulletin] setupBulletinsListener called with cid:", communityId, "type:", type);
     if (unsubscribeListener) {
       try { unsubscribeListener(); } catch {}
     }
+
     if (!communityId) {
-      if (bulletinList) bulletinList.innerHTML = '<div class="status">尚未選擇社區</div>';
+      console.warn("[Bulletin] No community ID available");
+      renderBulletinList([]);
       return;
     }
+
     unsubscribeListener = db
       .collection('communities')
       .doc(communityId)
       .collection('bulletins')
-      .where('type', '==', BULLETIN_TYPE)
+      .where('type', '==', type)
       .onSnapshot(
         (snap) => {
+          console.log("[Bulletin] Received snapshot with size:", snap.size);
           const data = [];
-          snap.forEach((doc) => data.push({ id: doc.id, ...doc.data() }));
-          renderCleanList(data);
+          snap.forEach((doc) => {
+            data.push({ id: doc.id, ...doc.data() });
+          });
+          
+          data.sort((a, b) => {
+            const tA = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : a.createdAt) : 0;
+            const tB = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : b.createdAt) : 0;
+            return tB - tA;
+          });
+          
+          renderBulletinList(data);
         },
         (err) => {
-          console.error("[Clean] Snapshot error:", err);
-          if (bulletinList) bulletinList.innerHTML = `<div class="status">讀取失敗：${err.message}</div>`;
+          console.error("[Bulletin] Snapshot error:", err);
+          renderBulletinList([]);
         }
       );
   }
 
-  function setupModalBasics() {
-    const closeImageModalBtn = document.getElementById('btnCloseImageModal');
-    if (closeImageModalBtn) closeImageModalBtn.addEventListener('click', closeImageModal);
-    const imageModalBackdrop = document.querySelector('#imageModal .modal-backdrop');
-    if (imageModalBackdrop) imageModalBackdrop.addEventListener('click', closeImageModal);
-  }
-
   function init() {
-    ensureEmbedLayout();
-    bindHostMessaging();
-    setupTabs();
-    setupModalBasics();
-    setupSubmitForm();
+    console.log("[Bulletin] Initializing bulletin page");
+    
+    setupFilterButtons();
+    
+    const closeImageModalBtn = document.getElementById('btnCloseImageModal');
+    if (closeImageModalBtn) {
+      closeImageModalBtn.addEventListener('click', closeImageModal);
+    }
+    
+    const imageModalBackdrop = document.querySelector('#imageModal .modal-backdrop');
+    if (imageModalBackdrop) {
+      imageModalBackdrop.addEventListener('click', closeImageModal);
+    }
+    
     auth.onAuthStateChanged(async (user) => {
       if (user) {
         await loadProfile(user);
         const communityId = getActiveCommunityId();
-        setupCleanListener(communityId);
-      } else {
-        if (bulletinList) bulletinList.innerHTML = '<div class="status">未登入</div>';
+        console.log("[Bulletin] Community ID:", communityId);
+        setupBulletinsListener(communityId, BULLETIN_TYPE);
       }
     });
   }

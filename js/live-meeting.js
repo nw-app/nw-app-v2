@@ -41,6 +41,8 @@
   let currentUserHouseNo = "";
   let pendingBookingsByRoom = {}; // 按直播室统计待审核预约
   let totalPendingBookings = 0;
+  let liveMeetingYoutubeUrl = "";
+  let __unsubLiveConfig = null;
 
   function switchTab(tab) {
     tabBtns.forEach(btn => {
@@ -386,6 +388,21 @@
       // 保存当前社区信息
       currentCommunityId = resolvedCommunityId;
       currentCommunityName = resolvedCommunityName;
+
+      try {
+        ensureLiveConfigSubscription(resolvedCommunityId);
+      } catch (e) {
+        console.warn("[LiveMeeting] 註冊設定監聽失敗", e);
+        (async () => {
+          try {
+            const v = await loadAppLiveUrl(resolvedCommunityId);
+            if (v && v !== liveMeetingYoutubeUrl) {
+              liveMeetingYoutubeUrl = v;
+              renderLiveStreamCard();
+            }
+          } catch {}
+        })();
+      }
       
       // 存储直播室数据
       roomsData = {};
@@ -400,10 +417,15 @@
       
       // 渲染直播室列表
       if (!liveList) return;
+      renderLiveStreamCard();
       if (!rooms.length) {
-        liveList.innerHTML = '<div class="status">目前沒有開放預約的直播室</div>';
+        const tip = document.createElement('div');
+        tip.className = 'status';
+        tip.textContent = '目前沒有開放預約的直播室';
+        liveList.appendChild(tip);
       } else {
-        liveList.innerHTML = rooms.map(renderRoomItem).join('');
+        const roomsHtml = rooms.map(renderRoomItem).join('');
+        liveList.insertAdjacentHTML('beforeend', roomsHtml);
       }
       
       // 加载我的预约
@@ -415,8 +437,17 @@
       
     } catch (e) {
       console.error('Error loading rooms:', e);
-      liveList.innerHTML = '<div class="status error">載入直播室失敗，請稍後再試</div>';
-      myRecordList.innerHTML = '';
+      if (liveList) {
+        const wrapper = document.getElementById("residentLiveStreamWrap");
+        const keepHtml = wrapper ? wrapper.outerHTML : "";
+        liveList.innerHTML = keepHtml;
+        renderLiveStreamCard();
+        const tip = document.createElement('div');
+        tip.className = 'status error';
+        tip.textContent = '載入直播室失敗，請稍後再試';
+        liveList.appendChild(tip);
+      }
+      if (myRecordList) myRecordList.innerHTML = '';
     }
   }
 
@@ -429,6 +460,200 @@
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  function youtubeVideoId98(url) {
+    const u = String(url || "").trim();
+    if (!u) return "";
+    const patterns = [
+      /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/|live\/))([A-Za-z0-9_-]{6,})/,
+    ];
+    for (const re of patterns) {
+      const m = u.match(re);
+      if (m && m[1]) return m[1];
+    }
+    try {
+      const uo = new URL(u);
+      if (uo.hostname.includes("youtube.com") || uo.hostname.includes("youtu.be")) {
+        const v = uo.searchParams.get("v");
+        if (v) return v;
+      }
+    } catch {}
+    return "";
+  }
+
+  async function loadAppLiveUrl(cid) {
+    const communityId = String(cid || "").trim() || "default";
+    try {
+      const doc = await db.collection("communities").doc(communityId).collection("settings").doc("app_config").get();
+      if (doc && doc.exists) {
+        const data = doc.data() || {};
+        return String(data.liveMeetingYoutubeUrl || "").trim();
+      }
+    } catch (e) {
+      console.warn("[LiveMeeting] 讀取 app_config.liveMeetingYoutubeUrl 失敗 (直接 get)", e);
+    }
+    return "";
+  }
+
+  function ensureLiveConfigSubscription(cid) {
+    const communityId = String(cid || "").trim() || "default";
+    try {
+      if (__unsubLiveConfig) {
+        try { __unsubLiveConfig(); } catch {}
+        __unsubLiveConfig = null;
+      }
+      __unsubLiveConfig = db.collection("communities").doc(communityId).collection("settings").doc("app_config")
+        .onSnapshot(
+          (doc) => {
+            try {
+              const data = doc && doc.exists ? (doc.data() || {}) : {};
+              const next = String(data.liveMeetingYoutubeUrl || "").trim();
+              if (next !== liveMeetingYoutubeUrl) {
+                liveMeetingYoutubeUrl = next;
+                renderLiveStreamCard();
+              }
+            } catch (e) {
+              console.warn("[LiveMeeting] onSnapshot 解析失敗", e);
+            }
+          },
+          (err) => {
+            console.warn("[LiveMeeting] onSnapshot 權限/連線錯誤，嘗試一次性讀取", err);
+            loadAppLiveUrl(communityId).then((v) => {
+              if (v && v !== liveMeetingYoutubeUrl) {
+                liveMeetingYoutubeUrl = v;
+                renderLiveStreamCard();
+              }
+            }).catch(() => {});
+          }
+        );
+    } catch (e) {
+      console.warn("[LiveMeeting] 註冊 onSnapshot 失敗", e);
+      loadAppLiveUrl(communityId).then((v) => {
+        if (v && v !== liveMeetingYoutubeUrl) {
+          liveMeetingYoutubeUrl = v;
+          renderLiveStreamCard();
+        }
+      }).catch(() => {});
+    }
+  }
+
+  function renderLiveStreamCard() {
+    const url = String(liveMeetingYoutubeUrl || "").trim();
+    const videoId = youtubeVideoId98(url);
+    const embedUrl = videoId ? `https://www.youtube.com/embed/${videoId}?rel=0&autoplay=1&mute=1` : "";
+    const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : "";
+
+    if (!liveList) return;
+    const existing = liveList.querySelector('[data-live-stream-card="1"]');
+    if (existing) existing.remove();
+
+    const wrapperId = "residentLiveStreamWrap";
+    const existingWrap = document.getElementById(wrapperId);
+    if (existingWrap) existingWrap.remove();
+
+    const wrapper = document.createElement("div");
+    wrapper.id = wrapperId;
+    wrapper.style.cssText = "display:flex;flex-direction:column;gap:18px;margin-bottom:16px;";
+
+    wrapper.innerHTML = `
+      <div data-live-stream-card="1" class="parcel-item" data-live-card="${url ? "1" : "0"}" style="cursor:${url ? "pointer" : "default"};position:relative;overflow:hidden;border-radius:20px;border:1px solid rgba(17,24,39,0.08);background:#fff;padding:0;">
+        ${url && thumbnailUrl
+          ? `<div style="position:relative;aspect-ratio:16/9;background:#000;background-image:url('${thumbnailUrl}');background-size:cover;background-position:center;">
+               <div style="position:absolute;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">
+                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:68px;height:68px;color:#fff;filter:drop-shadow(0 4px 16px rgba(0,0,0,0.35));">
+                   <path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l11.3-6.8a1 1 0 0 0 0-1.7l-11.3-6.8A1 1 0 0 0 8 5.2Z" fill="currentColor"/>
+                 </svg>
+               </div>
+               <div style="position:absolute;top:12px;left:12px;display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(220,38,38,0.95);color:#fff;font-size:12px;font-weight:800;">
+                 <span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:sosCardPulse 1.5s ease-in-out infinite;"></span>
+                 LIVE
+               </div>
+               <div style="position:absolute;top:12px;right:12px;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:999px;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:12px;font-weight:800;box-shadow:0 6px 18px rgba(239,68,68,0.35);">
+                 ↗ 另開
+               </div>
+             </div>`
+          : `<div style="aspect-ratio:16/9;background:linear-gradient(135deg,#f3f4f6,#e5e7eb);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#6b7280;">
+               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:56px;height:56px;">
+                 <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                 <path d="m10 9 5 3-5 3V9Z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+               </svg>
+               <div style="font-size:14px;font-weight:700;">尚未設定直播連結</div>
+               <div style="font-size:13px;">請聯繫管理員開啟 YouTube 直播串流</div>
+             </div>`
+        }
+        <div style="padding:16px 18px;display:flex;align-items:center;gap:14px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:16px;font-weight:800;color:#111827;line-height:1.5;">
+              ${url ? (videoId ? `YouTube 直播串流 (${videoId})` : "直播連結已設定") : "尚未設定直播"}
+            </div>
+            <div style="margin-top:4px;font-size:13px;color:#6b7280;word-break:break-all;">
+              ${url ? escapeHtml(url) : "管理員尚未設定直播 YouTube 連結"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-primary" type="button" data-resident-toggle-embed style="flex:1;min-width:160px;display:inline-flex;align-items:center;justify-content:center;gap:8px;" ${!embedUrl ? "disabled" : ""}>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:18px;height:18px;">
+            <path d="M4 5h16v10H8l-4 4V5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+          </svg>
+          <span id="residentEmbedToggleLabel">嵌入顯示直播畫面</span>
+        </button>
+        <a class="btn" target="_blank" rel="noopener noreferrer" href="${url ? escapeHtml(url) : "#"}" style="min-width:140px;display:inline-flex;align-items:center;justify-content:center;gap:6px;${!url ? "pointer-events:none;opacity:0.5;" : ""}">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:18px;height:18px;">
+            <path d="M14 4h6v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            <path d="M10 14 20 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            <path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+          另開新視窗
+        </a>
+      </div>
+
+      <div id="residentLiveEmbedContainer" style="display:none;border-radius:20px;overflow:hidden;border:1px solid rgba(17,24,39,0.08);background:#000;aspect-ratio:16/9;">
+        ${embedUrl
+          ? `<iframe src="${escapeHtml(embedUrl)}" title="YouTube Live" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen style="width:100%;height:100%;display:block;"></iframe>`
+          : ""
+        }
+      </div>
+    `;
+
+    liveList.insertBefore(wrapper, liveList.firstChild);
+
+    const liveCard = wrapper.querySelector('[data-live-stream-card="1"]');
+    if (liveCard && url) {
+      liveCard.style.transition = "transform .18s ease, box-shadow .18s ease";
+      liveCard.addEventListener("mouseenter", () => {
+        liveCard.style.transform = "translateY(-2px)";
+        liveCard.style.boxShadow = "0 16px 36px rgba(17,24,39,0.12)";
+      });
+      liveCard.addEventListener("mouseleave", () => {
+        liveCard.style.transform = "";
+        liveCard.style.boxShadow = "";
+      });
+      liveCard.addEventListener("click", (e) => {
+        if (e.target.closest("button, a")) return;
+        window.open(url, "_blank", "noopener,noreferrer");
+      });
+    }
+
+    const toggleBtn = wrapper.querySelector('[data-resident-toggle-embed]');
+    const embedContainer = document.getElementById("residentLiveEmbedContainer");
+    const embedLabel = document.getElementById("residentEmbedToggleLabel");
+    if (toggleBtn && embedContainer && embedLabel) {
+      toggleBtn.addEventListener("click", () => {
+        const isHidden = embedContainer.style.display === "none";
+        if (isHidden) {
+          embedContainer.style.display = "block";
+          embedLabel.textContent = "隱藏嵌入畫面";
+          setTimeout(() => embedContainer.scrollIntoView({ behavior: "smooth", block: "nearest" }), 60);
+        } else {
+          embedContainer.style.display = "none";
+          embedLabel.textContent = "嵌入顯示直播畫面";
+        }
+      });
+    }
   }
 
   function formatDateDisplay(date) {
@@ -1272,6 +1497,8 @@
   let authWaitTimer = null;
 
   function init() {
+    try { renderLiveStreamCard(); } catch {}
+
     tabBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         switchTab(btn.dataset.tab);

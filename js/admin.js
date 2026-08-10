@@ -14810,11 +14810,20 @@
         const cid = resolveActiveCommunityId();
         const cfg = loadConfig(cid) || {};
         cfg.liveMeetingYoutubeUrl = youtubeUrl;
-        saveConfig(cid, cfg);
+        
+        if (state.config && typeof state.config === "object") {
+          state.config.liveMeetingYoutubeUrl = youtubeUrl;
+        }
+        
+        await configDocRef(cid).set(
+          { liveMeetingYoutubeUrl: youtubeUrl, updatedAt: FieldValue.serverTimestamp() },
+          { merge: true }
+        );
         
         toast("已儲存");
         if (modal && modal.hidden !== undefined) modal.hidden = true;
       } catch (e) {
+        console.error("[LiveMeeting] 儲存失敗", e);
         toast("儲存失敗");
       }
     };
@@ -14847,6 +14856,32 @@
     const cid = resolveActiveCommunityId();
     const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
     
+    const youtubeVideoId98 = (url) => {
+      const u = String(url || "").trim();
+      if (!u) return "";
+      const patterns = [
+        /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/|live\/))([A-Za-z0-9_-]{6,})/,
+      ];
+      for (const re of patterns) {
+        const m = u.match(re);
+        if (m && m[1]) return m[1];
+      }
+      try {
+        const uo = new URL(u);
+        if (uo.hostname.includes("youtube.com") || uo.hostname.includes("youtu.be")) {
+          const v = uo.searchParams.get("v");
+          if (v) return v;
+        }
+      } catch {}
+      return "";
+    };
+
+    const youtubeEmbedUrl98 = (url) => {
+      const id = youtubeVideoId98(url);
+      if (!id) return "";
+      return `https://www.youtube.com/embed/${id}?rel=0&autoplay=1&mute=1`;
+    };
+    
     // 从哈希路由中获取当前页面
     const raw = String(location.hash || "").replace(/^#/, "").trim();
     const parts = raw.split("/");
@@ -14867,7 +14902,6 @@
         <button class="btn btn-sm ${currentPage === "history" ? "btn-primary" : ""}" type="button" data-live-page="history">歷史影片</button>
       `.trim();
       
-      // 绑定按钮点击事件
       subnavEl.querySelectorAll("[data-live-page]").forEach(btn => {
         btn.addEventListener("click", () => {
           currentPage = btn.getAttribute("data-live-page");
@@ -14877,37 +14911,155 @@
       });
     };
 
+    const renderLivePage = () => {
+      const cfg = loadConfig(cid) || {};
+      const youtubeUrl = String(cfg.liveMeetingYoutubeUrl || "").trim();
+      const videoId = youtubeVideoId98(youtubeUrl);
+      const embedUrl = youtubeEmbedUrl98(youtubeUrl);
+      const thumbnailUrl = videoId
+        ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+        : "";
+
+      contentEl.innerHTML = `
+        <section class="card">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("live-meeting")}</div>
+              <div style="min-width:0;">
+                <h2>直播${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <p>YouTube 直播串流管理</p>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-ghost" type="button" data-open-live-settings aria-label="設定">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px;height:20px;">
+                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M19.4 15a7.3 7.3 0 0 0 .1-1l2-1.3a.8.8 0 0 0 .1-1l-1.9-3.3a.8.8 0 0 0-.6-.4l-2.4-.4a7.8 7.8 0 0 0-.2-1.8l-.4-2.4a.8.8 0 0 0-.7-.6h-3.8a.8.8 0 0 0-.7.6l-.4 2.4c-.1.6-.2 1.2-.2 1.8l-2.4.4a.8.8 0 0 0-.6.4L2.4 11.7a.8.8 0 0 0 .1 1l2 1.3c0 .3 0 .7.1 1l-.4 2.4a.8.8 0 0 0 .7.9h3.8c.6 0 1.2.1 1.8.2l1.9 3.3a.8.8 0 0 0 .6.4.8.8 0 0 0 .7-.1l2-1.3c.3 0 .7 0 1-.1l.4 2.4a.8.8 0 0 0 .7.6h3.8a.8.8 0 0 0 .7-.6l.4-2.4Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="card-bd" style="display:flex;flex-direction:column;gap:18px;">
+            <div class="card" data-live-card="${youtubeUrl ? "1" : "0"}" style="cursor:${youtubeUrl ? "pointer" : "default"};position:relative;overflow:hidden;border-radius:20px;border:1px solid rgba(17,24,39,0.08);background:#fff;">
+              ${youtubeUrl && thumbnailUrl
+                ? `<div style="position:relative;aspect-ratio:16/9;background:#000;background-image:url('${thumbnailUrl}');background-size:cover;background-position:center;">
+                     <div style="position:absolute;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">
+                       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:68px;height:68px;color:#fff;filter:drop-shadow(0 4px 16px rgba(0,0,0,0.35));">
+                         <path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l11.3-6.8a1 1 0 0 0 0-1.7l-11.3-6.8A1 1 0 0 0 8 5.2Z" fill="currentColor"/>
+                       </svg>
+                     </div>
+                     <div style="position:absolute;top:12px;left:12px;display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(220,38,38,0.95);color:#fff;font-size:12px;font-weight:800;">
+                       <span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:sosCardPulse 1.5s ease-in-out infinite;"></span>
+                       LIVE
+                     </div>
+                     <div style="position:absolute;top:12px;right:12px;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:999px;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:12px;font-weight:800;box-shadow:0 6px 18px rgba(239,68,68,0.35);">
+                       ↗ 另開
+                     </div>
+                   </div>`
+                : `<div style="aspect-ratio:16/9;background:linear-gradient(135deg,#f3f4f6,#e5e7eb);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#6b7280;">
+                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:56px;height:56px;">
+                       <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                       <path d="m10 9 5 3-5 3V9Z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+                     </svg>
+                     <div style="font-size:14px;font-weight:700;">尚未設定直播連結</div>
+                     <div style="font-size:13px;">點擊右上角齒輪按鈕進行設定</div>
+                   </div>`
+              }
+              <div style="padding:16px 18px;display:flex;align-items:center;gap:14px;">
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:16px;font-weight:800;color:#111827;line-height:1.5;">
+                    ${youtubeUrl ? (videoId ? `YouTube 直播串流 (${videoId})` : "直播連結已設定") : "尚未設定直播"}
+                  </div>
+                  <div style="margin-top:4px;font-size:13px;color:#6b7280;word-break:break-all;">
+                    ${youtubeUrl ? escapeHtml(youtubeUrl) : "請先於設定中輸入 YouTube 直播或影片連結"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="btn btn-primary" type="button" data-toggle-embed style="flex:1;min-width:160px;display:inline-flex;align-items:center;justify-content:center;gap:8px;" ${!embedUrl ? "disabled" : ""}>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:18px;height:18px;">
+                  <path d="M4 5h16v10H8l-4 4V5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                </svg>
+                <span id="embedToggleLabel">嵌入顯示直播畫面</span>
+              </button>
+              <a class="btn" target="_blank" rel="noopener noreferrer" href="${youtubeUrl ? escapeHtml(youtubeUrl) : "#"}" style="min-width:140px;display:inline-flex;align-items:center;justify-content:center;gap:6px;${!youtubeUrl ? "pointer-events:none;opacity:0.5;" : ""}">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:18px;height:18px;">
+                  <path d="M14 4h6v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  <path d="M10 14 20 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  <path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                </svg>
+                另開新視窗
+              </a>
+              <button class="btn btn-sm btn-ghost" type="button" data-back style="min-width:110px;">
+                返回總覽
+              </button>
+            </div>
+
+            <div id="liveEmbedContainer" style="display:none;border-radius:20px;overflow:hidden;border:1px solid rgba(17,24,39,0.08);background:#000;aspect-ratio:16/9;">
+              ${embedUrl
+                ? `<iframe src="${escapeHtml(embedUrl)}" title="YouTube Live" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen style="width:100%;height:100%;display:block;"></iframe>`
+                : ""
+              }
+            </div>
+          </div>
+        </section>
+      `;
+
+      const backBtn = contentEl.querySelector("[data-back]");
+      if (backBtn) {
+        backBtn.addEventListener("click", () => {
+          location.hash = "#community/community-dashboard";
+        });
+      }
+      
+      const settingsBtn = contentEl.querySelector("[data-open-live-settings]");
+      if (settingsBtn) {
+        settingsBtn.addEventListener("click", () => {
+          openLiveMeetingSettingsModal80();
+        });
+      }
+
+      const liveCard = contentEl.querySelector("[data-live-card]");
+      if (liveCard && youtubeUrl) {
+        liveCard.style.transition = "transform .18s ease, box-shadow .18s ease";
+        liveCard.addEventListener("mouseenter", () => {
+          liveCard.style.transform = "translateY(-2px)";
+          liveCard.style.boxShadow = "0 16px 36px rgba(17,24,39,0.12)";
+        });
+        liveCard.addEventListener("mouseleave", () => {
+          liveCard.style.transform = "";
+          liveCard.style.boxShadow = "";
+        });
+        liveCard.addEventListener("click", (e) => {
+          if (e.target.closest("button, a")) return;
+          window.open(youtubeUrl, "_blank", "noopener,noreferrer");
+        });
+      }
+
+      const toggleBtn = contentEl.querySelector("[data-toggle-embed]");
+      const embedContainer = document.getElementById("liveEmbedContainer");
+      const embedLabel = document.getElementById("embedToggleLabel");
+      if (toggleBtn && embedContainer && embedLabel) {
+        toggleBtn.addEventListener("click", () => {
+          const isHidden = embedContainer.style.display === "none";
+          if (isHidden) {
+            embedContainer.style.display = "block";
+            embedLabel.textContent = "隱藏嵌入畫面";
+            setTimeout(() => embedContainer.scrollIntoView({ behavior: "smooth", block: "nearest" }), 60);
+          } else {
+            embedContainer.style.display = "none";
+            embedLabel.textContent = "嵌入顯示直播畫面";
+          }
+        });
+      }
+    };
+
     // 渲染页面内容
     const renderPage = () => {
       renderSubnav();
       
-      const m = moduleCatalog.find((x) => x && x.id === "live-meeting") || null;
       if (currentPage === "live") {
-        contentEl.innerHTML = `
-          <section class="card">
-            <div class="card-hd">
-              <div class="left">
-                <div class="chip" aria-hidden="true">${iconSvg("live-meeting")}</div>
-                <div style="min-width:0;">
-                  <h2>直播${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
-                  <p>直播室預約、時段管理</p>
-                </div>
-              </div>
-              <button class="btn btn-sm btn-ghost" type="button" data-open-live-settings aria-label="設定">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px;height:20px;">
-                  <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M19.4 15a7.3 7.3 0 0 0 .1-1l2-1.3a.8.8 0 0 0 .1-1l-1.9-3.3a.8.8 0 0 0-.6-.4l-2.4-.4a7.8 7.8 0 0 0-.2-1.8l-.4-2.4a.8.8 0 0 0-.7-.6h-3.8a.8.8 0 0 0-.7.6l-.4 2.4c-.1.6-.2 1.2-.2 1.8l-2.4.4a.8.8 0 0 0-.6.4L2.4 11.7a.8.8 0 0 0 .1 1l2 1.3c0 .3 0 .7.1 1l-.4 2.4a.8.8 0 0 0 .7.9h3.8c.6 0 1.2.1 1.8.2l1.9 3.3a.8.8 0 0 0 .6.4.8.8 0 0 0 .7-.1l2-1.3c.3 0 .7 0 1-.1l.4 2.4a.8.8 0 0 0 .7.6h3.8a.8.8 0 0 0 .7-.6l.4-2.4Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
-            </div>
-            <div class="card-bd">
-              <div class="row">
-                <div class="muted">此功能頁面尚未建置（示意）。</div>
-              </div>
-              <button class="btn" type="button" data-back>返回總覽</button>
-            </div>
-          </section>
-        `;
+        renderLivePage();
       } else if (currentPage === "history") {
         contentEl.innerHTML = `
           <section class="card">
@@ -14928,20 +15080,13 @@
             </div>
           </section>
         `;
-      }
-      
-      const backBtn = contentEl.querySelector("[data-back]");
-      if (backBtn) {
-        backBtn.addEventListener("click", () => {
-          location.hash = "#community/community-dashboard";
-        });
-      }
-      
-      const settingsBtn = contentEl.querySelector("[data-open-live-settings]");
-      if (settingsBtn) {
-        settingsBtn.addEventListener("click", () => {
-          openLiveMeetingSettingsModal80();
-        });
+
+        const backBtn = contentEl.querySelector("[data-back]");
+        if (backBtn) {
+          backBtn.addEventListener("click", () => {
+            location.hash = "#community/community-dashboard";
+          });
+        }
       }
       
       updateFooterActiveNav();
@@ -15951,10 +16096,6 @@
       renderActivityModule();
       return;
     }
-    if (moduleId === "clean") {
-      renderCleanModule();
-      return;
-    }
     if (subnavEl) subnavEl.innerHTML = "";
     const m = moduleCatalog.find((x) => x && x.id === moduleId) || null;
     if (!m) {
@@ -16029,16 +16170,6 @@
       const isAlreadyInActivity = contentEl && contentEl.querySelector("[data-activity-tab]");
       if (isAlreadyInActivity) {
         renderActivityModule();
-        return true;
-      }
-    }
-
-    // 处理 clean 的子页面（待處理/處理中/已完成）
-    if (moduleId === "clean") {
-      const contentEl = document.getElementById("content");
-      const isAlreadyInClean = contentEl && contentEl.querySelector("[data-clean-tab]");
-      if (isAlreadyInClean) {
-        renderCleanModule();
         return true;
       }
     }
@@ -16651,570 +16782,6 @@
         } catch (_) {}
       }
       try { toast("載入活動頁面失敗：" + String(err && err.message || err)); } catch (_) {}
-    }
-  }
-
-  function renderCleanModule() {
-    try {
-      if (!contentEl) return;
-      const cid = resolveActiveCommunityId();
-      const community = state.communities.find((c) => c && c.id === cid) || null;
-      const communityName = String((community && community.name) || "").trim();
-      const communityKey = String((community && (community.username || community.id)) || cid || "").trim();
-
-      const loginInfo = state.currentLogin || {};
-      const handlerNameBase = String(
-        (loginInfo && (loginInfo.name || loginInfo.displayName || loginInfo.fullName)) || ""
-      ).trim() || (state.currentUserEmail ? String(state.currentUserEmail).split("@")[0] : "管理員");
-
-      const raw = String(location.hash || "").replace(/^#/, "").trim();
-      const parts = raw.split("/");
-      let currentTab = "pending";
-      if (parts.length >= 3 && parts[0] === "community" && parts[1] === "clean") {
-        const p = parts[2];
-        if (p === "pending" || p === "processing" || p === "done") currentTab = p;
-      }
-
-      let unsubscribeClean = null;
-      let itemsData = [];
-
-      const CATEGORY_LABEL = { trash: "垃圾未清", mess: "環境髒亂", disinfect: "消毒需求", other: "其他" };
-      const STATUS_LABEL = { pending: "待處理", processing: "處理中", done: "已完成" };
-      const STATUS_BADGE = {
-        pending: { cls: "red", text: "待處理" },
-        processing: { cls: "yellow", text: "處理中" },
-        done: { cls: "green", text: "已完成" }
-      };
-
-      const formatTime = (val) => {
-        if (!val) return "—";
-        try {
-          if (val && typeof val.toDate === "function") {
-            const d = val.toDate();
-            if (!isNaN(d.getTime())) {
-              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-            }
-          }
-          const d = val instanceof Date ? val : new Date(val);
-          if (!isNaN(d.getTime())) {
-            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-          }
-        } catch {}
-        return String(val || "—");
-      };
-
-      const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(reader.error);
-        reader.onload = () => resolve(String(reader.result || ""));
-        reader.readAsDataURL(file);
-      });
-
-      const renderSubnav = () => {
-        if (!subnavEl) return;
-        subnavEl.innerHTML = `
-          <button class="btn btn-sm ${currentTab === "pending" ? "btn-primary" : ""}" type="button" data-clean-tab="pending">待處理</button>
-          <button class="btn btn-sm ${currentTab === "processing" ? "btn-primary" : ""}" type="button" data-clean-tab="processing">處理中</button>
-          <button class="btn btn-sm ${currentTab === "done" ? "btn-primary" : ""}" type="button" data-clean-tab="done">已完成</button>
-        `.trim();
-        subnavEl.querySelectorAll("[data-clean-tab]").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            currentTab = btn.getAttribute("data-clean-tab") || "pending";
-            location.hash = `#community/clean/${currentTab}`;
-            renderPage();
-          });
-        });
-      };
-
-      const openImageViewer = (images, title) => {
-        try {
-          const arr = Array.isArray(images) ? images.filter(Boolean) : [];
-          const modal = ensureModal("cleanImageViewer", "modal-clean-image-viewer", "min(960px,94vw)");
-          if (!modal) { toast("無法開啟圖片"); return; }
-          const detach = bindModalClose(modal, () => { try { detach(); } catch {} });
-          modal.innerHTML = `
-            <div class="modal-backdrop" data-modal-close="1"></div>
-            <div class="modal-dialog" role="dialog" aria-modal="true">
-              <div class="modal-hd">
-                <h3 class="modal-title">${escapeHtml(String(title || "圖片"))}</h3>
-                <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
-              </div>
-              <div class="modal-body" style="max-height:74vh; overflow:auto;">
-                ${arr.length ? arr.map((src) => `
-                  <div style="margin-bottom:14px; display:flex; justify-content:center;">
-                    <img src="${escapeHtml(src)}" alt="圖片" style="max-width:100%; max-height:68vh; border-radius:10px; display:block;">
-                  </div>
-                `).join("") : `<div class="status">沒有圖片</div>`}
-              </div>
-              <div class="modal-ft">
-                <button class="btn" type="button" data-modal-close="1">關閉</button>
-              </div>
-            </div>
-          `.trim();
-          modal.hidden = false;
-        } catch (err) {
-          console.error("[openCleanImageViewer]", err);
-          toast("開啟圖片失敗");
-        }
-      };
-
-      const openCleanAcceptModal = (item) => {
-        try {
-          if (!item || !item.id || !cid) return;
-          const modal = ensureModal("cleanAcceptModal", "modal-clean-accept", "min(560px,92vw)");
-          if (!modal) { toast("無法建立彈窗"); return; }
-          const detach = bindModalClose(modal, () => { try { detach(); } catch {} });
-          modal.innerHTML = `
-            <div class="modal-backdrop" data-modal-close="1"></div>
-            <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="cleanAcceptTitle">
-              <div class="modal-hd">
-                <h3 class="modal-title" id="cleanAcceptTitle">接單並派員處理</h3>
-                <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
-              </div>
-              <form id="cleanAcceptForm">
-                <div class="modal-body">
-                  <div class="status" id="cleanAcceptStatus" hidden></div>
-                  <div class="field">
-                    <label for="cleanAcceptHandler">派員（處理人員）</label>
-                    <input id="cleanAcceptHandler" type="text" placeholder="處理人員姓名" value="${escapeHtml(handlerNameBase)}" />
-                  </div>
-                  <div class="field">
-                    <label for="cleanAcceptNote">處理備註（選填）</label>
-                    <textarea id="cleanAcceptNote" rows="3" placeholder="例如：今日下午派駐員工清掃 3 樓電梯間"></textarea>
-                  </div>
-                </div>
-                <div class="modal-ft">
-                  <button class="btn" type="button" data-modal-close="1">取消</button>
-                  <button class="btn btn-primary" type="submit">標記為處理中</button>
-                </div>
-              </form>
-            </div>
-          `.trim();
-          const form = document.getElementById("cleanAcceptForm");
-          const statusEl = document.getElementById("cleanAcceptStatus");
-          const setStatus = (msg, isError) => {
-            if (!statusEl) return;
-            statusEl.textContent = String(msg || "").trim();
-            statusEl.hidden = !String(msg || "").trim();
-            statusEl.style.color = isError ? "#b91c1c" : "#15803d";
-          };
-          if (form) {
-            form.addEventListener("submit", async (e) => {
-              e.preventDefault();
-              try {
-                const handlerEl = document.getElementById("cleanAcceptHandler");
-                const noteEl = document.getElementById("cleanAcceptNote");
-                const handlerName = String(handlerEl?.value || "").trim() || "管理員";
-                const note = String(noteEl?.value || "").trim();
-                setStatus("處理中...", false);
-                await db.collection("communities").doc(cid).collection("bulletins").doc(String(item.id)).update({
-                  status: "processing",
-                  handlerName,
-                  processNote: note,
-                  acceptedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                  updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                toast("已接單，狀態改為處理中");
-                try { modal.hidden = true; } catch {}
-              } catch (err) {
-                console.error(err);
-                setStatus("儲存失敗：" + String(err && err.message || err), true);
-              }
-            });
-          }
-          modal.hidden = false;
-        } catch (err) {
-          console.error("[openCleanAcceptModal]", err);
-          toast("開啟失敗：" + String(err && err.message || err));
-        }
-      };
-
-      const openCleanDoneModal = (item) => {
-        try {
-          if (!item || !item.id || !cid) return;
-          let doneImages = Array.isArray(item.doneImages) ? item.doneImages.slice() : [];
-          const modal = ensureModal("cleanDoneModal", "modal-clean-done", "min(680px,94vw)");
-          if (!modal) { toast("無法建立彈窗"); return; }
-          const detach = bindModalClose(modal, () => { try { detach(); } catch {} });
-
-          const renderPreview = () => {
-            const box = document.getElementById("cleanDoneImagesPreview");
-            if (!box) return;
-            if (!doneImages.length) {
-              box.innerHTML = `<div class="muted" style="font-size:12px;">尚未上傳完成相片</div>`;
-              return;
-            }
-            box.innerHTML = doneImages.map((src, idx) => `
-              <div style="position:relative;">
-                <img src="${escapeHtml(src)}" alt="完成圖${idx + 1}" style="width:96px; height:96px; object-fit:cover; border-radius:10px; display:block; cursor:zoom-in;" data-clean-done-preview="${idx}" />
-                <button type="button" data-clean-done-remove="${idx}" aria-label="移除" style="position:absolute; top:-6px; right:-6px; width:26px; height:26px; border:none; border-radius:9999px; background:#111827; color:#fff; font-weight:700; cursor:pointer; font-size:14px;">×</button>
-              </div>
-            `).join("");
-            box.querySelectorAll("[data-clean-done-remove]").forEach((btn) => {
-              btn.addEventListener("click", () => {
-                const idx = Number(btn.getAttribute("data-clean-done-remove"));
-                if (!isNaN(idx) && doneImages[idx] != null) {
-                  doneImages.splice(idx, 1);
-                  renderPreview();
-                }
-              });
-            });
-            box.querySelectorAll("[data-clean-done-preview]").forEach((img) => {
-              img.addEventListener("click", () => {
-                const idx = Number(img.getAttribute("data-clean-done-preview"));
-                if (!isNaN(idx) && doneImages[idx]) openImageViewer([doneImages[idx]], `完成相片 ${idx + 1}`);
-              });
-            });
-          };
-
-          modal.innerHTML = `
-            <div class="modal-backdrop" data-modal-close="1"></div>
-            <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="cleanDoneTitle">
-              <div class="modal-hd">
-                <h3 class="modal-title" id="cleanDoneTitle">完成清潔處理</h3>
-                <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
-              </div>
-              <form id="cleanDoneForm">
-                <div class="modal-body">
-                  <div class="status" id="cleanDoneStatus" hidden></div>
-                  <div class="field">
-                    <label for="cleanDoneBy">完成人員</label>
-                    <input id="cleanDoneBy" type="text" placeholder="完成人員姓名" value="${escapeHtml(String(item.handlerName || handlerNameBase))}" />
-                  </div>
-                  <div class="field">
-                    <label for="cleanDoneRemark">處理結果說明</label>
-                    <textarea id="cleanDoneRemark" rows="4" placeholder="例如：已清空廚餘桶、擦拭電梯地毯並消毒完成" required></textarea>
-                  </div>
-                  <div class="field">
-                    <label>完成相片（最多 8 張）</label>
-                    <div id="cleanDoneImagesPreview" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;"></div>
-                    <label class="btn btn-sm" style="cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
-                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:18px; height:18px;">
-                        <path d="M4 4h16v16H4V4zm1 2v12h14V6H5zm2 2h10l-2 4-3-4-2 4-3-4z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                      </svg>
-                      選擇/拍照
-                      <input id="cleanDoneImagesFile" type="file" accept="image/*" multiple capture="environment" hidden />
-                    </label>
-                  </div>
-                </div>
-                <div class="modal-ft">
-                  <button class="btn" type="button" data-modal-close="1">取消</button>
-                  <button class="btn btn-primary" type="submit">標記完成並通知住戶</button>
-                </div>
-              </form>
-            </div>
-          `.trim();
-          const statusEl = document.getElementById("cleanDoneStatus");
-          const setStatus = (msg, isError) => {
-            if (!statusEl) return;
-            statusEl.textContent = String(msg || "").trim();
-            statusEl.hidden = !String(msg || "").trim();
-            statusEl.style.color = isError ? "#b91c1c" : "#15803d";
-          };
-          renderPreview();
-          const fileEl = document.getElementById("cleanDoneImagesFile");
-          if (fileEl) {
-            fileEl.addEventListener("change", async (e) => {
-              const files = Array.from(e.target?.files || []).slice(0, Math.max(0, 8 - doneImages.length));
-              for (const f of files) {
-                try {
-                  const src = await readFileAsDataUrl(f);
-                  if (src) doneImages.push(src);
-                } catch (err) { console.error(err); }
-              }
-              try { fileEl.value = ""; } catch {}
-              renderPreview();
-            });
-          }
-          const form = document.getElementById("cleanDoneForm");
-          if (form) {
-            form.addEventListener("submit", async (e) => {
-              e.preventDefault();
-              try {
-                const byEl = document.getElementById("cleanDoneBy");
-                const remarkEl = document.getElementById("cleanDoneRemark");
-                const doneBy = String(byEl?.value || "").trim() || handlerNameBase;
-                const doneRemark = String(remarkEl?.value || "").trim();
-                if (!doneRemark) { setStatus("請填寫處理結果說明", true); return; }
-                setStatus("儲存中...", false);
-                await db.collection("communities").doc(cid).collection("bulletins").doc(String(item.id)).update({
-                  status: "done",
-                  doneBy,
-                  doneRemark,
-                  doneImages: doneImages.slice(),
-                  doneAt: firebase.firestore.FieldValue.serverTimestamp(),
-                  updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                toast("已完成，住戶端將可看到處理結果");
-                try { modal.hidden = true; } catch {}
-              } catch (err) {
-                console.error(err);
-                setStatus("儲存失敗：" + String(err && err.message || err), true);
-              }
-            });
-          }
-          modal.hidden = false;
-        } catch (err) {
-          console.error("[openCleanDoneModal]", err);
-          toast("開啟失敗：" + String(err && err.message || err));
-        }
-      };
-
-      const openCleanDetail = (item) => {
-        try {
-          if (!item) return;
-          const st = String(item.status || "pending");
-          const badge = STATUS_BADGE[st] || STATUS_BADGE.pending;
-          const catLabel = CATEGORY_LABEL[item.category] || item.category || "其他";
-          const modal = ensureModal("cleanDetailModal", "modal-clean-detail", "min(760px,94vw)");
-          if (!modal) { toast("無法建立彈窗"); return; }
-          const detach = bindModalClose(modal, () => { try { detach(); } catch {} });
-          const submitImages = Array.isArray(item.images) ? item.images : [];
-          const doneImages = Array.isArray(item.doneImages) ? item.doneImages : [];
-          modal.innerHTML = `
-            <div class="modal-backdrop" data-modal-close="1"></div>
-            <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="cleanDetailTitle">
-              <div class="modal-hd">
-                <h3 class="modal-title" id="cleanDetailTitle">${escapeHtml(String(item.title || "清潔通報"))}</h3>
-                <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
-              </div>
-              <div class="modal-body" style="max-height:72vh; overflow:auto;">
-                <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px;">
-                  <span class="tag ${badge.cls}">${STATUS_LABEL[st] || st}</span>
-                  <span class="tag">${escapeHtml(catLabel)}</span>
-                  <span class="muted" style="font-size:13px;">申請時間：${formatTime(item.createdAt)}</span>
-                </div>
-                <div style="display:flex; flex-wrap:wrap; gap:10px 16px; margin-bottom:10px;">
-                  <div><div class="muted" style="font-size:12px;">位置</div><div style="font-weight:600;">${escapeHtml(String(item.location || "—"))}</div></div>
-                  <div><div class="muted" style="font-size:12px;">戶號/申請人</div><div style="font-weight:600;">${escapeHtml(String(item.houseNo || "—"))}｜${escapeHtml(String(item.applicantName || "—"))}</div></div>
-                  ${st !== "pending" ? `<div><div class="muted" style="font-size:12px;">處理人員</div><div style="font-weight:600;">${escapeHtml(String(item.handlerName || item.doneBy || "—"))}</div></div>` : ""}
-                  ${st === "processing" ? `<div><div class="muted" style="font-size:12px;">接單時間</div><div style="font-weight:600;">${formatTime(item.acceptedAt)}</div></div>` : ""}
-                  ${st === "done" ? `<div><div class="muted" style="font-size:12px;">完成時間</div><div style="font-weight:600;">${formatTime(item.doneAt)}</div></div>` : ""}
-                </div>
-                <div style="background:#f9fafb; border-radius:10px; padding:10px 12px; white-space:pre-wrap; line-height:1.6;">${escapeHtml(String(item.description || "（無說明）"))}</div>
-                ${submitImages.length ? `
-                  <div style="margin-top:12px;">
-                    <div class="muted" style="font-size:12px; margin-bottom:6px;">申請附圖</div>
-                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                      ${submitImages.map((s, i) => `<img src="${escapeHtml(s)}" alt="申請圖${i + 1}" style="width:96px; height:96px; object-fit:cover; border-radius:10px; cursor:zoom-in;" data-clean-submit-img="${i}" />`).join("")}
-                    </div>
-                  </div>
-                ` : ""}
-                ${st === "processing" && (item.processNote || item.handlerName) ? `
-                  <div style="margin-top:12px; padding:10px 12px; background:#fefce8; border-radius:10px;">
-                    <div style="font-weight:600; margin-bottom:4px;">處理進度</div>
-                    ${item.handlerName ? `<div class="muted" style="font-size:12px;">派員：${escapeHtml(String(item.handlerName))}</div>` : ""}
-                    ${item.processNote ? `<div style="white-space:pre-wrap; line-height:1.5; margin-top:4px;">${escapeHtml(String(item.processNote))}</div>` : ""}
-                  </div>
-                ` : ""}
-                ${st === "done" ? `
-                  <div style="margin-top:12px; padding:10px 12px; background:#f0fdf4; border-radius:10px;">
-                    <div style="font-weight:600; margin-bottom:4px;">處理結果</div>
-                    ${item.doneBy ? `<div class="muted" style="font-size:12px;">完成人員：${escapeHtml(String(item.doneBy))}</div>` : ""}
-                    ${item.doneRemark ? `<div style="white-space:pre-wrap; line-height:1.5; margin-top:4px;">${escapeHtml(String(item.doneRemark))}</div>` : ""}
-                    ${doneImages.length ? `
-                      <div style="margin-top:8px;">
-                        <div class="muted" style="font-size:12px; margin-bottom:6px;">完成相片</div>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                          ${doneImages.map((s, i) => `<img src="${escapeHtml(s)}" alt="完成圖${i + 1}" style="width:96px; height:96px; object-fit:cover; border-radius:10px; cursor:zoom-in;" data-clean-done-img="${i}" />`).join("")}
-                        </div>
-                      </div>
-                    ` : ""}
-                  </div>
-                ` : ""}
-              </div>
-              <div class="modal-ft" style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
-                <button class="btn" type="button" data-modal-close="1">關閉</button>
-                ${st === "pending" ? `<button class="btn btn-primary" type="button" id="cleanDetailAccept">接單處理</button>` : ""}
-                ${(st === "pending" || st === "processing") ? `<button class="btn btn-primary" type="button" id="cleanDetailDone">完成（拍照+回覆）</button>` : ""}
-              </div>
-            </div>
-          `.trim();
-          modal.querySelectorAll("[data-clean-submit-img]").forEach((img) => {
-            img.addEventListener("click", () => {
-              const idx = Number(img.getAttribute("data-clean-submit-img"));
-              if (!isNaN(idx) && submitImages[idx]) openImageViewer([submitImages[idx]], `申請圖 ${idx + 1}`);
-            });
-          });
-          modal.querySelectorAll("[data-clean-done-img]").forEach((img) => {
-            img.addEventListener("click", () => {
-              const idx = Number(img.getAttribute("data-clean-done-img"));
-              if (!isNaN(idx) && doneImages[idx]) openImageViewer([doneImages[idx]], `完成相片 ${idx + 1}`);
-            });
-          });
-          const btnAccept = document.getElementById("cleanDetailAccept");
-          if (btnAccept) btnAccept.addEventListener("click", () => { try { modal.hidden = true; } catch {}; setTimeout(() => openCleanAcceptModal(item), 50); });
-          const btnDone = document.getElementById("cleanDetailDone");
-          if (btnDone) btnDone.addEventListener("click", () => { try { modal.hidden = true; } catch {}; setTimeout(() => openCleanDoneModal(item), 50); });
-          modal.hidden = false;
-        } catch (err) {
-          console.error("[openCleanDetail]", err);
-          toast("開啟失敗：" + String(err && err.message || err));
-        }
-      };
-
-      const renderList = (listEl) => {
-        if (!listEl) return;
-        const list = (itemsData || []).filter((x) => String(x.status || "pending") === String(currentTab || "pending"));
-        if (!list.length) {
-          listEl.innerHTML = `<div class="status">目前沒有${STATUS_LABEL[currentTab] || currentTab}的清潔通報</div>`;
-          return;
-        }
-        listEl.innerHTML = list.map((item) => {
-          const st = String(item.status || "pending");
-          const badge = STATUS_BADGE[st] || STATUS_BADGE.pending;
-          const catLabel = CATEGORY_LABEL[item.category] || item.category || "其他";
-          const imgs = Array.isArray(item.images) ? item.images.slice(0, 3) : [];
-          return `
-            <div class="card" style="margin:0;" data-clean-id="${escapeHtml(String(item.id || ""))}">
-              <div class="card-hd">
-                <div class="left" style="min-width:0;">
-                  <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:6px;">
-                    <span class="tag ${badge.cls}">${STATUS_LABEL[st] || st}</span>
-                    <span class="tag">${escapeHtml(catLabel)}</span>
-                  </div>
-                  <h3 style="font-size:16px; margin:0 0 6px 0;">${escapeHtml(String(item.title || "清潔通報"))}</h3>
-                  <div class="muted" style="font-size:13px;">位置：${escapeHtml(String(item.location || "—"))}｜申請人：${escapeHtml(String(item.houseNo || "—"))} ${escapeHtml(String(item.applicantName || ""))}</div>
-                  <div class="muted" style="font-size:13px; margin-top:4px;">申請時間：${formatTime(item.createdAt)}${st !== "pending" ? `｜最後更新：${formatTime(item.updatedAt || item.acceptedAt || item.doneAt)}` : ""}</div>
-                </div>
-                <div class="bulletin-head-actions">
-                  ${st === "pending" ? `<button class="btn btn-sm btn-primary" type="button" data-clean-accept="${escapeHtml(String(item.id || ""))}">接單處理</button>` : ""}
-                  ${(st === "pending" || st === "processing") ? `<button class="btn btn-sm" type="button" data-clean-done="${escapeHtml(String(item.id || ""))}">完成(拍照+回覆)</button>` : ""}
-                  <button class="icon-btn sm" type="button" data-clean-detail="${escapeHtml(String(item.id || ""))}" aria-label="查看" title="查看">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                      <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <div class="card-bd">
-                <div style="white-space:pre-wrap; line-height:1.6; color:#1f2937; margin-bottom:10px;">${escapeHtml(String(item.description || "（無說明）"))}</div>
-                ${imgs.length ? `
-                  <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    ${imgs.map((s, i) => `<img src="${escapeHtml(s)}" alt="申請圖${i + 1}" style="width:84px; height:84px; object-fit:cover; border-radius:10px; cursor:zoom-in;" data-clean-img="${escapeHtml(String(item.id || ""))}:${i}" />`).join("")}
-                  </div>
-                ` : ""}
-                ${st === "processing" && item.handlerName ? `
-                  <div style="margin-top:10px; padding:8px 10px; background:#fefce8; border-radius:10px; font-size:13px;">
-                    <b>處理中</b>｜派員：${escapeHtml(String(item.handlerName))}${item.processNote ? `｜${escapeHtml(String(item.processNote))}` : ""}
-                  </div>
-                ` : ""}
-                ${st === "done" ? `
-                  <div style="margin-top:10px; padding:8px 10px; background:#f0fdf4; border-radius:10px; font-size:13px;">
-                    <b>處理完成</b>${item.doneBy ? `｜人員：${escapeHtml(String(item.doneBy))}` : ""}
-                    ${item.doneRemark ? `<div style="white-space:pre-wrap; line-height:1.5; margin-top:4px;">${escapeHtml(String(item.doneRemark))}</div>` : ""}
-                  </div>
-                ` : ""}
-              </div>
-            </div>
-          `;
-        }).join("");
-
-        listEl.querySelectorAll("[data-clean-accept]").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const id = String(btn.getAttribute("data-clean-accept") || "").trim();
-            const item = itemsData.find((x) => String(x.id || "") === id);
-            if (item) openCleanAcceptModal(item);
-          });
-        });
-        listEl.querySelectorAll("[data-clean-done]").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const id = String(btn.getAttribute("data-clean-done") || "").trim();
-            const item = itemsData.find((x) => String(x.id || "") === id);
-            if (item) openCleanDoneModal(item);
-          });
-        });
-        listEl.querySelectorAll("[data-clean-detail]").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const id = String(btn.getAttribute("data-clean-detail") || "").trim();
-            const item = itemsData.find((x) => String(x.id || "") === id);
-            if (item) openCleanDetail(item);
-          });
-        });
-        listEl.querySelectorAll("[data-clean-img]").forEach((img) => {
-          img.addEventListener("click", () => {
-            const raw = String(img.getAttribute("data-clean-img") || "");
-            const [id, idxStr] = raw.split(":");
-            const item = itemsData.find((x) => String(x.id || "") === id);
-            const idx = Number(idxStr);
-            const arr = Array.isArray(item?.images) ? item.images : [];
-            if (!isNaN(idx) && arr[idx]) openImageViewer([arr[idx]], `申請圖 ${idx + 1}`);
-          });
-        });
-      };
-
-      const setupListener = (listEl) => {
-        if (unsubscribeClean) { try { unsubscribeClean(); } catch {} }
-        if (!cid) {
-          if (listEl) listEl.innerHTML = `<div class="status">尚未選擇社區</div>`;
-          return;
-        }
-        unsubscribeClean = db
-          .collection("communities")
-          .doc(cid)
-          .collection("bulletins")
-          .where("type", "==", "clean")
-          .onSnapshot(
-            (snap) => {
-              itemsData = [];
-              snap.forEach((doc) => itemsData.push({ id: doc.id, ...doc.data() }));
-              itemsData.sort((a, b) => {
-                const getT = (x) => {
-                  const t = x.updatedAt || x.createdAt;
-                  if (!t) return 0;
-                  if (t && typeof t.toMillis === "function") return t.toMillis();
-                  if (t instanceof Date) return t.getTime();
-                  const d = new Date(t);
-                  return isNaN(d.getTime()) ? 0 : d.getTime();
-                };
-                return getT(b) - getT(a);
-              });
-              renderList(listEl);
-            },
-            (err) => {
-              if (listEl) listEl.innerHTML = `<div class="status">讀取失敗：${escapeHtml(String(err.message || ""))}</div>`;
-            }
-          );
-      };
-
-      const renderPage = () => {
-        renderSubnav();
-        contentEl.innerHTML = `
-          <section class="card parcel-page">
-            <div class="card-hd">
-              <div class="left">
-                <div class="chip" aria-hidden="true">${iconSvg("clean")}</div>
-                <div style="min-width:0;">
-                  <h2>清潔通報${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
-                  <p>住戶提報清潔需求、後台接單派員、完成拍照回覆</p>
-                </div>
-              </div>
-              <div style="display:flex; align-items:center; gap:10px;">
-                <a class="btn btn-sm" target="_blank" rel="noopener noreferrer" href="bulletin-clean.html?c=${encodeURIComponent(communityKey)}&v=2">另開視窗（前台）</a>
-                <span class="tag yellow">環境</span>
-              </div>
-            </div>
-            <div class="card-bd">
-              <div id="cleanList" style="display:flex; flex-direction:column; gap:12px; width:100%;">
-                <div class="status">讀取中...</div>
-              </div>
-            </div>
-          </section>
-        `.trim();
-        const listEl = document.getElementById("cleanList");
-        setupListener(listEl);
-      };
-
-      renderPage();
-    } catch (err) {
-      console.error("[renderCleanModule]", err);
-      if (contentEl) {
-        try {
-          contentEl.innerHTML = `<section class="card"><div class="card-hd"><h2>清潔通報</h2></div><div class="card-bd"><div class="status" style="color:#b91c1c;">載入失敗：${escapeHtml(String(err && err.message || err))}</div></div></section>`;
-        } catch (_) {}
-      }
-      try { toast("載入清潔通報頁面失敗：" + String(err && err.message || err)); } catch (_) {}
     }
   }
 

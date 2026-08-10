@@ -437,39 +437,39 @@
   };
 
   const defaultRowDButtons = [
-    { name: "包裹郵件", icon: "photo/a01.png", url: "parcel.html", hint: "領件/到件通知" },
-    { name: "訪客登記", icon: "photo/a02.png", url: "visitor-resident.html", hint: "預約訪客通行" },
-    { name: "社區園地", icon: "photo/a03.png", url: "bulletin-community.html", hint: "公告事項" },
-    { name: "公設預約", icon: "photo/a04.png", url: "facility.html", hint: "預約設施" },
-    { name: "車位管理", icon: "photo/a05.png", url: "parking.html", hint: "車位/共享" },
-    { name: "抄表紀錄", icon: "photo/a06.png", url: "#", hint: "水電瓦斯" },
-    { name: "財務報表", icon: "photo/a07.png", url: "bulletin-finance.html", hint: "公設收支" },
-    { name: "區大直播", icon: "photo/a08.png", url: "live-meeting.html", hint: "線上開會" },
-    { name: "會議記錄", icon: "photo/a09.png", url: "bulletin-meeting.html", hint: "歷次紀錄" },
-    { name: "清潔通報", icon: "photo/a10.png", url: "bulletin-clean.html", hint: "立即派員" },
-    { name: "社區活動", icon: "photo/a11.png", url: "bulletin-activity.html", hint: "影片/相片" },
-    { name: "AI對話", icon: "photo/a12.png", url: "https://gemini.google.com/?hl=zh-TW", openExternal: true, hint: "智慧助理" },
+    { name: "包裹郵件", icon: "photo/a01.png", url: "parcel.html" },
+    { name: "訪客登記", icon: "photo/a02.png", url: "visitor-resident.html" },
+    { name: "社區園地", icon: "photo/a03.png", url: "bulletin-community.html" },
+    { name: "公設預約", icon: "photo/a04.png", url: "facility.html" },
+    { name: "車位管理", icon: "photo/a05.png", url: "parking.html" },
+    { name: "抄表紀錄", icon: "photo/a06.png", url: "#" },
+    { name: "財務報表", icon: "photo/a07.png", url: "bulletin-finance.html" },
+    { name: "區大直播", icon: "photo/a08.png", url: "live-meeting.html" },
+    { name: "會議記錄", icon: "photo/a09.png", url: "bulletin-meeting.html" },
+    { name: "清潔通報", icon: "photo/a10.png", url: "bulletin-clean.html" },
+    { name: "社區活動", icon: "photo/a11.png", url: "bulletin-activity.html" },
+    { name: "AI對話", icon: "photo/a12.png", url: "https://gemini.google.com/?hl=zh-TW", openExternal: true },
   ];
 
   const defaultRowFButtons = [
-    { name: "福利通", icon: "photo/b09.png", url: "https://info.talk.tw/", openExternal: true, hint: "好康優惠" },
-    { name: "銀髮族", icon: "photo/b10.png", url: "https://www.hpa.gov.tw/Pages/List.aspx?nodeid=39", openExternal: true, hint: "健康資訊" },
-    { name: "美食街", icon: "photo/b11.png", url: "https://www.dachu.co/node/dishes", openExternal: false, hint: "外送/食記" },
-    { name: "購物樂", icon: "photo/b12.png", url: "https://www.gomaji.com/?city=1", openExternal: true, hint: "優惠券" },
-    { name: "聽音樂", icon: "photo/b13.png", url: "https://tradio.gov.taipei/", openExternal: true, hint: "線上廣播" },
-    { name: "影視台", icon: "photo/b14.png", url: "https://m.4gtv.tv/", openExternal: false, hint: "線上看" },
-    { name: "電子書", icon: "photo/b15.png", url: "https://www.pubu.com.tw/", openExternal: true, hint: "免費閱讀" },
-    { name: "遊戲網", icon: "photo/b16.png", url: "https://www.pubu.com.tw/", openExternal: false, hint: "休閒遊戲" },
+    { name: "福利通", icon: "photo/b09.png", url: "https://info.talk.tw/", openExternal: true },
+    { name: "銀髮族", icon: "photo/b10.png", url: "https://www.hpa.gov.tw/Pages/List.aspx?nodeid=39", openExternal: true },
+    { name: "美食街", icon: "photo/b11.png", url: "https://www.dachu.co/node/dishes", openExternal: false },
+    { name: "購物樂", icon: "photo/b12.png", url: "https://www.gomaji.com/?city=1", openExternal: true },
+    { name: "聽音樂", icon: "photo/b13.png", url: "https://tradio.gov.taipei/", openExternal: true },
+    { name: "影視台", icon: "photo/b14.png", url: "https://m.4gtv.tv/", openExternal: false },
+    { name: "電子書", icon: "photo/b15.png", url: "https://www.pubu.com.tw/", openExternal: true },
+    { name: "遊戲網", icon: "photo/b16.png", url: "https://www.pubu.com.tw/", openExternal: false },
   ];
   const defaultCommitteeButtons = [
-    { name: "社區班表", icon: "photo/k01.png", url: "#", openExternal: false, hint: "值班/人員" },
-    { name: "監視畫面", icon: "photo/k02.png", url: "#", openExternal: false, hint: "攝影機" },
-    { name: "待辦事項", icon: "photo/k03.png", url: "#", openExternal: false, hint: "任務追蹤" },
-    { name: "例行會議", icon: "photo/k04.png", url: "#", openExternal: false, hint: "會議排程" },
-    { name: "每日日誌", icon: "photo/k05.png", url: "#", openExternal: false, hint: "行政記錄" },
-    { name: "每日督巡", icon: "photo/k06.png", url: "#", openExternal: false, hint: "督導巡檢" },
-    { name: "每日巡邏", icon: "photo/k07.png", url: "#", openExternal: false, hint: "安全巡邏" },
-    { name: "每日清潔", icon: "photo/k08.png", url: "#", openExternal: false, hint: "環境整理" },
+    { name: "社區班表", icon: "photo/k01.png", url: "#", openExternal: false },
+    { name: "監視畫面", icon: "photo/k02.png", url: "#", openExternal: false },
+    { name: "待辦事項", icon: "photo/k03.png", url: "#", openExternal: false },
+    { name: "例行會議", icon: "photo/k04.png", url: "#", openExternal: false },
+    { name: "每日日誌", icon: "photo/k05.png", url: "#", openExternal: false },
+    { name: "每日督巡", icon: "photo/k06.png", url: "#", openExternal: false },
+    { name: "每日巡邏", icon: "photo/k07.png", url: "#", openExternal: false },
+    { name: "每日清潔", icon: "photo/k08.png", url: "#", openExternal: false },
   ];
 
   const state = {
@@ -973,7 +973,6 @@
       pageTitleEl.textContent = "";
       pageSubtitleEl.textContent = "";
       contentEl.innerHTML = committeeView();
-      bindHomeSearch();
       return;
     }
     if (moduleId === "resident-service") {
@@ -988,7 +987,6 @@
     if (moduleId === "home") {
       renderRowACarousel();
     }
-    bindHomeSearch();
   }
 
   // 使用事件委托处理按钮点击
@@ -1196,34 +1194,20 @@
     }
   }
   
-  function renderButtonGrid(buttons, searchScope) {
+  function renderButtonGrid(buttons) {
     if (!buttons || buttons.length === 0) return "";
-    const scope = String(searchScope || "global");
     return `
-      <div class="card-grid" data-search-scope="${scope}">
+      <div class="button-grid">
         ${buttons.map(b => {
           const isRemoteIcon = b.icon && (b.icon.startsWith("http") || b.icon.startsWith("//"));
           const imgSrc = isRemoteIcon ? b.icon : (b.data || b.icon || "photo/logo.png?v=2");
           const isExternal = b.openExternal ? "1" : "";
-          const hintText = String(b.hint || "").trim();
-          const nameText = String(b.name || "").trim();
-          const searchable = `${nameText} ${hintText}`.toLowerCase();
-          const extBadge = b.openExternal
-            ? `<span class="card-ext-badge" aria-label="外部連結"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 4h6v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M20 4 10 14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M20 14v6H4V4h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`
-            : "";
           return `
-            <a href="${b.url || "#"}" class="card-btn" data-url="${b.url || ""}" data-name="${nameText}" data-external="${isExternal}" data-search-text="${escapeHtml(searchable)}">
-              ${extBadge}
-              <div class="card-btn-icon">
-                <img src="${imgSrc}" alt="${nameText}" loading="lazy" />
+            <a href="${b.url || "#"}" class="grid-btn" data-url="${b.url || ""}" data-name="${b.name || ""}" data-external="${isExternal}">
+              <div class="grid-btn-icon">
+                <img src="${imgSrc}" alt="${b.name}" />
               </div>
-              <div class="card-btn-body">
-                <div class="card-btn-label">${nameText}</div>
-                ${hintText ? `<div class="card-btn-hint">${hintText}</div>` : ""}
-              </div>
-              <div class="card-btn-arrow" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              </div>
+              <div class="grid-btn-label">${b.name}</div>
             </a>
           `;
         }).join("")}
@@ -1231,227 +1215,42 @@
     `;
   }
 
-  function sectionCard({ id, tone, icon, title, subtitle, count, bodyHtml }) {
-    const toneClass = `sec-tone-${tone || "rose"}`;
-    const countHtml = count != null
-      ? `<span class="sec-count-badge" aria-hidden="true">${Number(count) || 0} 項</span>`
-      : "";
-    return `
-      <section class="section-card ${toneClass}" data-section-id="${id || ""}">
-        <div class="sec-ribbon" aria-hidden="true"></div>
-        <header class="sec-hd-card">
-          <div class="sec-left">
-            <span class="sec-icon-wrap" aria-hidden="true">${icon || ""}</span>
-            <div class="sec-texts">
-              <h3 class="sec-title">${title || ""}</h3>
-              ${subtitle ? `<p class="sec-subtitle">${subtitle}</p>` : ""}
-            </div>
-          </div>
-          <div class="sec-right">
-            ${countHtml}
-          </div>
-        </header>
-        <div class="sec-body">
-          ${bodyHtml || ""}
-        </div>
-        <div class="sec-empty-state" hidden>
-          <div class="sec-empty-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          </div>
-          <div class="sec-empty-text">找不到符合的項目</div>
-          <div class="sec-empty-sub">試試其他關鍵字，例如：包裹、訪客、清潔</div>
-        </div>
-      </section>
-    `;
-  }
-
-  function sosCardView(sosButtonText) {
-    const sosText = String(sosButtonText || "").trim() || "SOS";
-    return `
-      <section class="sos-card">
-        <div class="sos-bg-orb sos-bg-orb-1" aria-hidden="true"></div>
-        <div class="sos-bg-orb sos-bg-orb-2" aria-hidden="true"></div>
-        <div class="sos-left">
-          <div class="sos-icon-chip" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M12 3a9 9 0 1 0 9 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </div>
-          <div class="sos-texts">
-            <div class="sos-title">緊急通報</div>
-            <div class="sos-sub">按下按鈕後，立即通知社區管理中心</div>
-          </div>
-        </div>
-        <button class="sos-action" type="button" id="btnSOS">
-          <span class="sos-action-text">${escapeHtml(sosText)}</span>
-          <span class="sos-pulse-ring" aria-hidden="true"></span>
-        </button>
-      </section>
-    `;
-  }
-
-  function searchBarView() {
-    return `
-      <section class="search-card">
-        <div class="search-input-wrap">
-          <span class="search-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.9"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
-          </span>
-          <input id="homeSearchInput" class="search-input" type="text" inputmode="search" autocomplete="off" spellcheck="false" placeholder="搜尋服務，例如：訪客、清潔、美食、包裹" />
-          <button type="button" class="search-clear" id="homeSearchClear" aria-label="清除搜尋" hidden>
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
-          </button>
-        </div>
-        <div class="search-tags" id="homeSearchTags">
-          <button type="button" class="search-tag" data-keyword="包裹">📦 包裹</button>
-          <button type="button" class="search-tag" data-keyword="訪客">🚪 訪客</button>
-          <button type="button" class="search-tag" data-keyword="清潔">🧹 清潔</button>
-          <button type="button" class="search-tag" data-keyword="活動">🎉 活動</button>
-          <button type="button" class="search-tag" data-keyword="美食">🍴 美食</button>
-          <button type="button" class="search-tag" data-keyword="車位">🚗 車位</button>
-        </div>
-      </section>
-    `;
-  }
-
   function homeView() {
     const cfg = loadConfig();
     const sosButtonText = String(cfg.sosButtonText || "").trim() || "SOS";
-    const rowD = (cfg.rowDButtons || []).filter(b => b && b.enabled !== false);
-    const rowF = (cfg.rowFButtons || []).filter(b => b && b.enabled !== false);
-
-    const carouselHtml = `
-      <section class="carousel-card" id="rowACarousel">
-        <div class="carousel-container">
-          <div class="carousel-track" id="carouselTrack"></div>
-          <div class="q-badge" aria-hidden="true">精選</div>
-          <div class="carousel-dots" id="carouselDots"></div>
-        </div>
-      </section>
-    `;
-
-    const communityIcon = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px;height:20px;"><path d="M3 11.5 12 4l9 7.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 10.5V20h14V10.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 20v-5h4v5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-    const lifeIcon = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px;height:20px;"><path d="M12 3c2.3 2.2 4 4.6 4 7a4 4 0 0 1-8 0c0-2.4 1.7-4.8 4-7Z" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 14c-1.6 1.5-3 3.4-3 5.5A2.5 2.5 0 0 0 7.5 22h9a2.5 2.5 0 0 0 2.5-2.5c0-2.1-1.4-4-3-5.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-
-    const communityHtml = sectionCard({
-      id: "community",
-      tone: "rose",
-      icon: communityIcon,
-      title: "社區服務",
-      subtitle: "管委會、公設、財務、清潔與活動",
-      count: rowD.length,
-      bodyHtml: renderButtonGrid(rowD, "community")
-    });
-
-    const lifeHtml = sectionCard({
-      id: "life",
-      tone: "sky",
-      icon: lifeIcon,
-      title: "生活服務",
-      subtitle: "美食、購物、影音與休閒推薦",
-      count: rowF.length,
-      bodyHtml: renderButtonGrid(rowF, "life")
-    });
-
     return `
-      <div class="home-v2">
-        ${searchBarView()}
-        ${carouselHtml}
-        ${sosCardView(sosButtonText)}
-        ${communityHtml}
-        ${lifeHtml}
-        <div class="home-v2-spacer"></div>
+      <div class="home-grid">
+        <section class="row-a" id="rowACarousel">
+          <div class="carousel-container">
+            <div class="carousel-track" id="carouselTrack"></div>
+            <div class="carousel-dots" id="carouselDots"></div>
+          </div>
+        </section>
+        <section class="row-b">
+          <button class="btn-sos" type="button" id="btnSOS">${escapeHtml(sosButtonText)}</button>
+        </section>
+        <section class="row-c">社區服務</section>
+        <section class="row-d">
+          ${renderButtonGrid(cfg.rowDButtons)}
+        </section>
+        <section class="row-e">生活服務</section>
+        <section class="row-f">
+          ${renderButtonGrid(cfg.rowFButtons)}
+        </section>
       </div>
     `;
   }
 
   function committeeView() {
     const cfg = loadConfig();
-    const list = (cfg.committeeButtons || []).filter(b => b && b.enabled !== false);
-    const committeeIcon = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px;height:20px;"><path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="18" cy="17" r="2.5" stroke="currentColor" stroke-width="1.9"/></svg>`;
-    const body = sectionCard({
-      id: "committee",
-      tone: "amber",
-      icon: committeeIcon,
-      title: "管委會專區",
-      subtitle: "社區行政、督巡與日常作業",
-      count: list.length,
-      bodyHtml: renderButtonGrid(list, "committee")
-    });
     return `
-      <div class="home-v2">
-        ${searchBarView()}
-        ${body}
-        <div class="home-v2-spacer"></div>
+      <div class="home-grid">
+        <section class="row-c">管委會專區</section>
+        <section class="row-d">
+          ${renderButtonGrid(cfg.committeeButtons)}
+        </section>
       </div>
     `;
-  }
-
-  function applyHomeSearch(keyword) {
-    const q = String(keyword || "").trim().toLowerCase();
-    const sections = contentEl ? contentEl.querySelectorAll(".section-card[data-section-id]") : null;
-    if (!sections || !sections.length) return;
-    let anyMatchGlobal = false;
-
-    sections.forEach((sec) => {
-      const cards = sec.querySelectorAll(".card-btn");
-      const emptyEl = sec.querySelector(".sec-empty-state");
-      const bodyEl = sec.querySelector(".sec-body");
-      let anyMatch = false;
-      cards.forEach((btn) => {
-        const hay = String(btn.getAttribute("data-search-text") || "").toLowerCase();
-        const name = String(btn.getAttribute("data-name") || "").toLowerCase();
-        const hit = !q || hay.includes(q) || name.includes(q);
-        if (hit) {
-          btn.removeAttribute("hidden");
-          btn.classList.add("match");
-          anyMatch = true;
-        } else {
-          btn.setAttribute("hidden", "");
-          btn.classList.remove("match");
-        }
-      });
-      if (bodyEl) bodyEl.hidden = !anyMatch;
-      if (emptyEl) emptyEl.hidden = anyMatch;
-      if (anyMatch) anyMatchGlobal = true;
-    });
-
-    const clearBtn = document.getElementById("homeSearchClear");
-    if (clearBtn) clearBtn.hidden = !q;
-  }
-
-  function bindHomeSearch() {
-    const input = document.getElementById("homeSearchInput");
-    const clearBtn = document.getElementById("homeSearchClear");
-    const tagsWrap = document.getElementById("homeSearchTags");
-    if (!input) return;
-
-    let timer = null;
-    input.addEventListener("input", () => {
-      if (timer) window.clearTimeout(timer);
-      timer = window.setTimeout(() => applyHomeSearch(input.value), 120);
-    });
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        input.value = "";
-        applyHomeSearch("");
-      }
-    });
-    if (clearBtn) {
-      clearBtn.addEventListener("click", () => {
-        input.value = "";
-        applyHomeSearch("");
-        try { input.focus(); } catch {}
-      });
-    }
-    if (tagsWrap) {
-      tagsWrap.addEventListener("click", (e) => {
-        const btn = e.target.closest(".search-tag");
-        if (!btn) return;
-        const kw = String(btn.getAttribute("data-keyword") || "").trim();
-        input.value = kw;
-        applyHomeSearch(kw);
-        try { input.focus(); } catch {}
-      });
-    }
   }
 
   function renderRowACarousel() {
