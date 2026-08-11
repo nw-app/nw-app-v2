@@ -217,6 +217,11 @@ service cloud.firestore {
         allow read, list: if request.auth != null && (isAdmin() || slug == getUserData().community);
         allow write: if request.auth != null && (isAdmin() || slug == getUserData().community);
       }
+
+      match /liveMeetingHistory/{docId} {
+        allow read, list: if true;
+        allow create, update, delete: if request.auth != null && (isAdmin() || (isCommunityStaff() && slug == getUserData().community));
+      }
     }
 
     // --- SOS 警報規則 (關鍵修復) ---

@@ -27,7 +27,6 @@
 
   const tabBtns = document.querySelectorAll('.tab-btn');
   const liveList = document.getElementById('liveList');
-  const myRecordList = document.getElementById('myRecordList');
   const communityLiveTitle = document.getElementById('communityLiveTitle');
 
   let currentRoom = null;
@@ -42,43 +41,217 @@
   let pendingBookingsByRoom = {}; // 按直播室统计待审核预约
   let totalPendingBookings = 0;
   let liveMeetingYoutubeUrl = "";
+  let liveMeetingEnabled = true;
   let __unsubLiveConfig = null;
+  let liveHistoryItems = [];
+  let __unsubLiveHistory = null;
 
-  function switchTab(tab) {
-    tabBtns.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.tab === tab);
-    });
+  function formatHistoryDate(date) {
+    if (!date) return "";
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    const hh = String(date.getHours()).padStart(2, "0");
+    const mm = String(date.getMinutes()).padStart(2, "0");
+    return `${y}-${m}-${d} ${hh}:${mm}`;
+  }
 
-    const residentWrap = document.getElementById('residentLiveStreamWrap');
-    if (tab === 'live') {
-      if (residentWrap) residentWrap.classList.remove('hidden');
-      liveList.classList.remove('hidden');
-      myRecordList.classList.add('hidden');
-    } else {
-      if (residentWrap) residentWrap.classList.add('hidden');
-      liveList.classList.add('hidden');
-      myRecordList.classList.remove('hidden');
+  function ensureLiveHistorySubscription(cid) {
+    const communityId = String(cid || "").trim() || "default";
+    if (__unsubLiveHistory) {
+      try { __unsubLiveHistory(); } catch {}
+      __unsubLiveHistory = null;
+    }
+    try {
+      __unsubLiveHistory = db.collection("communities").doc(communityId).collection("liveMeetingHistory")
+        .orderBy("datetime", "desc")
+        .onSnapshot(
+          (snap) => {
+            const items = (snap && snap.docs ? snap.docs : []).map((d) => {
+              const data = d.data() || {};
+              const dt = data.datetime && typeof data.datetime.toDate === "function" ? data.datetime.toDate() : (data.datetime ? new Date(data.datetime) : null);
+              const ca = data.createdAt && typeof data.createdAt.toDate === "function" ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date(0));
+              return {
+                id: d.id,
+                title: String(data.title || "").trim(),
+                datetime: dt && dt.getTime() ? dt : null,
+                youtubeUrl: String(data.youtubeUrl || "").trim(),
+                createdAt: ca,
+              };
+            });
+            items.sort((a, b) => {
+              const ta = a.datetime ? a.datetime.getTime() : 0;
+              const tb = b.datetime ? b.datetime.getTime() : 0;
+              if (ta !== tb) return tb - ta;
+              const ca = a.createdAt ? a.createdAt.getTime() : 0;
+              const cb = b.createdAt ? b.createdAt.getTime() : 0;
+              return cb - ca;
+            });
+            liveHistoryItems = items;
+            const activeTab = (() => {
+              const ab = document.querySelector('.tab-btn.active');
+              return ab ? String(ab.dataset.tab || "").trim() : "live";
+            })();
+            if (activeTab === "history") try { renderHistoryList(); } catch (e) { console.warn('[LiveHistory] render 失敗', e); }
+          },
+          (err) => {
+            console.warn('[LiveHistory] onSnapshot 失敗', err);
+            liveHistoryItems = [];
+            const activeTab = (() => {
+              const ab = document.querySelector('.tab-btn.active');
+              return ab ? String(ab.dataset.tab || "").trim() : "live";
+            })();
+            if (activeTab === "history") try { renderHistoryList(); } catch (e) {}
+          }
+        );
+    } catch (e) {
+      console.warn('[LiveHistory] 訂閱失敗', e);
+      liveHistoryItems = [];
     }
   }
 
-  function switchMyRecordsTab(subtab) {
-    const myRecordsTabBtns = document.querySelectorAll('.my-record-tab-btn');
-    myRecordsTabBtns.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.subtab === subtab);
+  function renderHistoryList() {
+    const bd = document.getElementById('historyList');
+    if (!bd) return;
+    bd.style.display = 'flex';
+    bd.style.flexDirection = 'column';
+    bd.style.gap = '14px';
+    const items = Array.isArray(liveHistoryItems) ? liveHistoryItems : [];
+    if (!items.length) {
+      bd.innerHTML = `
+        <div style="aspect-ratio:16/5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border-radius:20px;border:1px solid rgba(17,24,39,0.06);background:linear-gradient(135deg,#f9fafB 0%,#f3f4f6 100%);">
+          <div style="width:72px;height:72px;border-radius:999px;background:rgba(156,163,175,0.14);display:flex;align-items:center;justify-content:center;">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:34px;height:34px;color:#9ca3af;">
+              <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              <path d="M10 9v6l6-3-6-3Z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div style="font-size:20px;font-weight:900;color:#111827;letter-spacing:0.2px;">目前尚無歷史影片</div>
+        </div>
+      `;
+      return;
+    }
+    const html = items.map((it) => {
+      const vid = youtubeVideoId98(it.youtubeUrl);
+      const thumb = vid ? `https://img.youtube.com/vi/${vid}/hqdefault.jpg` : "";
+      const dtStr = formatHistoryDate(it.datetime);
+      return `
+        <div class="card" data-hist-card="${escapeHtml(it.id)}" style="overflow:hidden;border-radius:20px;border:1px solid rgba(17,24,39,0.08);background:#fff;cursor:${it.youtubeUrl ? "pointer" : "default"};position:relative;">
+          <div style="display:flex;gap:14px;align-items:stretch;">
+            <div style="flex:0 0 34%;min-width:0;position:relative;aspect-ratio:16/6;background:#000;background-image:url('${thumb ? escapeHtml(thumb) : ""}');background-size:cover;background-position:center;">
+              <div style="position:absolute;inset:0;background:rgba(0,0,0,0.32);display:flex;align-items:center;justify-content:center;">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:44px;height:44px;color:#fff;filter:drop-shadow(0 3px 10px rgba(0,0,0,0.32));">
+                  <path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l11.3-6.8a1 1 0 0 0 0-1.7l-11.3-6.8A1 1 0 0 0 8 5.2Z" fill="currentColor"/>
+                </svg>
+              </div>
+            </div>
+            <div style="flex:1 1 auto;min-width:0;padding:12px 16px 12px 0;display:flex;flex-direction:column;gap:10px;">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+                <div style="min-width:0;flex:1;">
+                  <div style="font-size:15px;font-weight:800;color:#111827;line-height:1.5;">${escapeHtml(it.title || "未命名影片")}</div>
+                  <div style="margin-top:5px;display:inline-flex;align-items:center;gap:6px;padding:4.5px 10px;border-radius:999px;background:rgba(17,24,39,0.04);color:#6b7280;font-size:12px;font-weight:700;">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:13.5px;height:13.5px;">
+                      <path d="M4 8.5h16M6.5 4.5v4M17.5 4.5v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                      <path d="M3 8.5V20a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    </svg>
+                    ${escapeHtml(dtStr)}
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top:auto;">
+                <button class="btn btn-sm" type="button" data-action="hist-open" data-hist-id="${escapeHtml(it.id)}" style="padding:7px 12px;border-radius:11px;font-weight:700;font-size:13px;">
+                  <span style="display:inline-flex;align-items:center;gap:7px;">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:15px;height:15px;">
+                      <path d="M14 4h6v6M20 4l-9 9M10 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    另開 YouTube
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+    bd.innerHTML = html;
+
+    bd.querySelectorAll("[data-hist-card]").forEach((card) => {
+      const id = String(card.getAttribute("data-hist-card") || "").trim();
+      if (!id) return;
+      const it = items.find((x) => x.id === id) || null;
+      if (!it) return;
+      card.style.transition = "transform .18s ease, box-shadow .18s ease";
+      card.addEventListener("mouseenter", () => {
+        card.style.transform = "translateY(-2px)";
+        card.style.boxShadow = "0 16px 36px rgba(17,24,39,0.12)";
+      });
+      card.addEventListener("mouseleave", () => {
+        card.style.transform = "";
+        card.style.boxShadow = "";
+      });
+      card.addEventListener("click", (e) => {
+        if (e.target.closest("button,a")) return;
+        if (it.youtubeUrl) window.open(it.youtubeUrl, "_blank", "noopener,noreferrer");
+      });
     });
 
-    const recentRecordsEl = document.getElementById('recentRecord');
-    const historyRecordsEl = document.getElementById('historyRecord');
-    
-    if (recentRecordsEl && historyRecordsEl) {
-      if (subtab === 'recent') {
-        recentRecordsEl.classList.remove('hidden');
-        historyRecordsEl.classList.add('hidden');
-      } else {
-        recentRecordsEl.classList.add('hidden');
-        historyRecordsEl.classList.remove('hidden');
-      }
+    if (!bd._histDelegBound) {
+      bd._histDelegBound = true;
+      bd.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-action='hist-open']");
+        if (!btn) return;
+        e.stopPropagation();
+        const id = String(btn.getAttribute("data-hist-id") || "").trim();
+        if (!id) return;
+        const it = items.find((x) => x.id === id) || null;
+        if (it && it.youtubeUrl) window.open(it.youtubeUrl, "_blank", "noopener,noreferrer");
+      });
     }
+  }
+
+  function getCurrentTab() {
+    const ab = document.querySelector('.tab-btn.active');
+    const raw = ab ? String(ab.dataset.tab || "").trim() : "";
+    return (raw === "live" || raw === "history") ? raw : "live";
+  }
+
+  function applyTabVisibility(tab) {
+    const actual = (tab === "live" || tab === "history") ? tab : "live";
+    const residentWrap = document.getElementById('residentLiveStreamWrap');
+    const historyList = document.getElementById('historyList');
+    if (actual === 'live') {
+      if (residentWrap) { residentWrap.classList.remove('hidden'); residentWrap.style.removeProperty('display'); residentWrap.style.setProperty('display', 'block', 'important'); }
+      if (liveList) { liveList.classList.remove('hidden'); liveList.style.display = ''; }
+      if (historyList) { historyList.classList.add('hidden'); historyList.style.display = 'none'; }
+    } else {
+      if (residentWrap) { residentWrap.classList.add('hidden'); residentWrap.style.removeProperty('display'); residentWrap.style.setProperty('display', 'none', 'important'); }
+      if (liveList) { liveList.classList.add('hidden'); liveList.style.display = 'none'; }
+      if (historyList) { historyList.classList.remove('hidden'); historyList.style.display = 'flex'; }
+      try { renderHistoryList(); } catch (e) { console.warn('[LiveHistory] 首次渲染失敗', e); }
+    }
+  }
+
+  function switchTab(tab) {
+    const actual = (tab === "live" || tab === "history") ? tab : "live";
+    tabBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === actual);
+    });
+    applyTabVisibility(actual);
+  }
+
+  function switchMyRecordsTab(subtab) {
+    // 我的記錄功能已停用，保留空實作避免外部呼叫直接噴錯
+  }
+
+  function ensureHiddenForHistoryTab() {
+    if (getCurrentTab() !== 'history') return;
+    const rw = document.getElementById('residentLiveStreamWrap');
+    if (rw) { rw.classList.add('hidden'); rw.style.removeProperty('display'); rw.style.setProperty('display', 'none', 'important'); }
+    if (liveList) { liveList.classList.add('hidden'); liveList.style.display = 'none'; }
+  }
+
+  async function loadAndRenderMyRecords() {
+    // 我的記錄功能已停用，保留空實作避免外部呼叫直接噴錯
   }
 
   function goBack() {
@@ -296,55 +469,6 @@
     `;
   }
 
-  async function loadAndRenderMyRecords() {
-    const recentRecordsEl = document.getElementById('recentRecord');
-    const historyRecordsEl = document.getElementById('historyRecord');
-    if (!recentRecordsEl || !historyRecordsEl) return;
-    
-    try {
-      console.log('加载预约 - currentCommunityId:', currentCommunityId, 'currentUserId:', currentUserId);
-      const records = await loadUserRecords(currentCommunityId, currentUserId);
-      console.log('找到的预约数量:', records.length);
-      console.log('预约数据:', records);
-      
-      const now = new Date();
-      
-      // 分离近期预约和历史预约
-      const recentRecords = [];
-      const historyRecords = [];
-      
-      records.forEach(record => {
-        const endDateTime = makeDateTime80(record.dateKey, record.endTime);
-        if (endDateTime && endDateTime >= now) {
-          // 未结束的预约
-          recentRecords.push(record);
-        } else {
-          // 已结束的预约
-          historyRecords.push(record);
-        }
-      });
-      
-      // 渲染近期预约
-      if (!recentRecords.length) {
-        recentRecordsEl.innerHTML = '<div class="status">目前沒有近期預約</div>';
-      } else {
-        recentRecordsEl.innerHTML = recentRecords.map(renderRecordItem).join('');
-      }
-      
-      // 渲染历史预约
-      if (!historyRecords.length) {
-        historyRecordsEl.innerHTML = '<div class="status">目前沒有歷史預約</div>';
-      } else {
-        historyRecordsEl.innerHTML = historyRecords.map(renderRecordItem).join('');
-      }
-      
-    } catch (e) {
-      console.error('Error loading records:', e);
-      recentRecordsEl.innerHTML = '<div class="status error">載入預約失敗，請稍後再試</div>';
-      historyRecordsEl.innerHTML = '<div class="status error">載入預約失敗，請稍後再試</div>';
-    }
-  }
-
   async function loadRooms(userData) {
     const candidates = readCommunityCandidates(userData);
     
@@ -399,13 +523,17 @@
 
       try {
         ensureLiveConfigSubscription(resolvedCommunityId);
+        ensureLiveHistorySubscription(resolvedCommunityId);
       } catch (e) {
         console.warn("[LiveMeeting] 註冊設定監聽失敗", e);
         (async () => {
           try {
-            const v = await loadAppLiveUrl(resolvedCommunityId);
-            if (v && v !== liveMeetingYoutubeUrl) {
+            const res = await loadAppLiveUrl(resolvedCommunityId);
+            const v = (res && res.url) || "";
+            const e = res ? (res.enabled !== false) : true;
+            if (v !== liveMeetingYoutubeUrl || e !== liveMeetingEnabled) {
               liveMeetingYoutubeUrl = v;
+              liveMeetingEnabled = e;
               renderLiveStreamCard();
             }
           } catch {}
@@ -431,12 +559,8 @@
         liveList.insertAdjacentHTML('beforeend', roomsHtml);
       }
       
-      // 加载我的预约
-      if (currentCommunityId && currentUserId) {
-        loadAndRenderMyRecords();
-      } else {
-        myRecordList.innerHTML = '<div class="status">載入預約中...</div>';
-      }
+      // 加载我的预约（功能已停用，仅保留避免呼叫时函数不存在）
+      // loadAndRenderMyRecords() 呼叫與 DOM 皆已移除
       
     } catch (e) {
       console.error('Error loading rooms:', e);
@@ -444,7 +568,8 @@
         liveList.innerHTML = '<div class="status error">載入直播室失敗，請稍後再試</div>';
       }
       try { renderLiveStreamCard(); } catch {}
-      if (myRecordList) myRecordList.innerHTML = '';
+    } finally {
+      try { ensureHiddenForHistoryTab(); } catch {}
     }
   }
 
@@ -485,12 +610,15 @@
       const doc = await db.collection("communities").doc(communityId).collection("settings").doc("app_config").get();
       if (doc && doc.exists) {
         const data = doc.data() || {};
-        return String(data.liveMeetingYoutubeUrl || "").trim();
+        return {
+          url: String(data.liveMeetingYoutubeUrl || "").trim(),
+          enabled: data.liveMeetingEnabled !== false,
+        };
       }
     } catch (e) {
       console.warn("[LiveMeeting] 讀取 app_config.liveMeetingYoutubeUrl 失敗 (直接 get)", e);
     }
-    return "";
+    return { url: "", enabled: true };
   }
 
   function ensureLiveConfigSubscription(cid) {
@@ -505,9 +633,11 @@
           (doc) => {
             try {
               const data = doc && doc.exists ? (doc.data() || {}) : {};
-              const next = String(data.liveMeetingYoutubeUrl || "").trim();
-              if (next !== liveMeetingYoutubeUrl) {
-                liveMeetingYoutubeUrl = next;
+              const nextUrl = String(data.liveMeetingYoutubeUrl || "").trim();
+              const nextEnabled = data.liveMeetingEnabled !== false;
+              if (nextUrl !== liveMeetingYoutubeUrl || nextEnabled !== liveMeetingEnabled) {
+                liveMeetingYoutubeUrl = nextUrl;
+                liveMeetingEnabled = nextEnabled;
                 renderLiveStreamCard();
               }
             } catch (e) {
@@ -516,9 +646,12 @@
           },
           (err) => {
             console.warn("[LiveMeeting] onSnapshot 權限/連線錯誤，嘗試一次性讀取", err);
-            loadAppLiveUrl(communityId).then((v) => {
-              if (v && v !== liveMeetingYoutubeUrl) {
+            loadAppLiveUrl(communityId).then((res) => {
+              const v = (res && res.url) || "";
+              const e = res ? (res.enabled !== false) : true;
+              if (v !== liveMeetingYoutubeUrl || e !== liveMeetingEnabled) {
                 liveMeetingYoutubeUrl = v;
+                liveMeetingEnabled = e;
                 renderLiveStreamCard();
               }
             }).catch(() => {});
@@ -526,9 +659,12 @@
         );
     } catch (e) {
       console.warn("[LiveMeeting] 註冊 onSnapshot 失敗", e);
-      loadAppLiveUrl(communityId).then((v) => {
-        if (v && v !== liveMeetingYoutubeUrl) {
+      loadAppLiveUrl(communityId).then((res) => {
+        const v = (res && res.url) || "";
+        const e = res ? (res.enabled !== false) : true;
+        if (v !== liveMeetingYoutubeUrl || e !== liveMeetingEnabled) {
           liveMeetingYoutubeUrl = v;
+          liveMeetingEnabled = e;
           renderLiveStreamCard();
         }
       }).catch(() => {});
@@ -542,6 +678,7 @@
       const url = String(liveMeetingYoutubeUrl || "").trim();
       const videoId = youtubeVideoId98(url);
       const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : "";
+      const enabled = liveMeetingEnabled !== false;
 
       const wrapper = document.getElementById('residentLiveStreamWrap');
       if (!wrapper) {
@@ -557,6 +694,29 @@
 
       if (!cardEl || !coverEl) {
         console.warn('[LiveMeeting] 直播卡片靜態 DOM 節點缺失', { cardEl: !!cardEl, coverEl: !!coverEl });
+        return;
+      }
+
+      if (!enabled) {
+        cardEl.setAttribute('data-live-card', '0');
+        cardEl.style.cursor = 'default';
+        coverEl.setAttribute('data-resident-cover', 'disabled');
+        coverEl.style.cssText = 'aspect-ratio:16/9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;border-radius:20px;border:1px solid rgba(17,24,39,0.06);background:linear-gradient(135deg,#f9fafB 0%,#f3f4f6 100%);';
+        coverEl.innerHTML = `
+          <div style="width:72px;height:72px;border-radius:999px;background:rgba(156,163,175,0.14);display:flex;align-items:center;justify-content:center;">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:34px;height:34px;color:#9ca3af;">
+              <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              <path d="M7 9.5 17 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M17 9.5 7 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div style="font-size:20px;font-weight:900;color:#111827;letter-spacing:0.2px;">目前無社區區大直播</div>
+          <div style="font-size:13px;color:#6b7280;">管理員暫未開放直播顯示</div>
+        `;
+        if (cardEl.dataset.boundLiveHover !== "1") {
+          cardEl.style.transition = 'transform .18s ease, box-shadow .18s ease';
+          cardEl.dataset.boundLiveHover = "1";
+        }
         return;
       }
 
@@ -612,6 +772,8 @@
       }
     } catch (e) {
       console.error('[LiveMeeting] renderLiveStreamCard 失敗', e);
+    } finally {
+      try { ensureHiddenForHistoryTab(); } catch {}
     }
   }
 
@@ -1468,13 +1630,7 @@
       });
     });
 
-    // 绑定我的预约的分页按钮
-    const myRecordsTabBtns = document.querySelectorAll('.my-record-tab-btn');
-    myRecordsTabBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        switchMyRecordsTab(btn.dataset.subtab);
-      });
-    });
+    try { applyTabVisibility(getCurrentTab()); } catch {}
 
     bindSignOut();
     bindModalEvents();
@@ -1492,7 +1648,6 @@
       const showNeedLogin = () => {
         const html = `<div class="status error">請先在主頁登入後再開啟此頁面</div>`;
         if (liveList) liveList.innerHTML = html;
-        if (myRecordList) myRecordList.innerHTML = '';
         setTimeout(() => { try { renderLiveStreamCard(); } catch {} }, 0);
       };
 

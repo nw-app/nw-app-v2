@@ -659,6 +659,9 @@
     if (id === "parking") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 16.5 7.4 11.8A2.5 2.5 0 0 1 9.8 10h4.4a2.5 2.5 0 0 1 2.4 1.8L18 16.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M6 16.5h12v2a1.5 1.5 0 0 1-1.5 1.5H7.5A1.5 1.5 0 0 1 6 18.5v-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8.2 10.4 9.2 7.8A2 2 0 0 1 11.1 6.5h1.8a2 2 0 0 1 1.9 1.3l1 2.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M9 18.2h.01M15 18.2h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>`;
     if (id === "clean") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10 12h4l3 4H7l3-4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M7.5 16 6 21.5M9.5 16 8.5 21.5M11.5 16 11 21.5M13.5 16l.5 5.5M15.5 16l1 5.5M17.5 16l2 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
     if (id === "activity") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21.2a9.2 9.2 0 1 0 0-18.4 9.2 9.2 0 0 0 0 18.4Z" stroke="currentColor" stroke-width="1.7"/><path d="M10 8.5v7l6-3.5-6-3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`;
+    if (id === "settings") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px;height:20px;"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M19.4 15a7.3 7.3 0 0 0 .1-1l2-1.3a.8.8 0 0 0 .1-1l-1.9-3.3a.8.8 0 0 0-.6-.4l-2.4-.4a7.8 7.8 0 0 0-.2-1.8l-.4-2.4a.8.8 0 0 0-.7-.6h-3.8a.8.8 0 0 0-.7.6l-.4 2.4c-.1.6-.2 1.2-.2 1.8l-2.4.4a.8.8 0 0 0-.6.4L2.4 11.7a.8.8 0 0 0 .1 1l2 1.3c0 .3 0 .7.1 1l-.4 2.4a.8.8 0 0 0 .7.9h3.8c.6 0 1.2.1 1.8.2l1.9 3.3a.8.8 0 0 0 .6.4.8.8 0 0 0 .7-.1l2-1.3c.3 0 .7 0 1-.1l.4 2.4a.8.8 0 0 0 .7.6h3.8a.8.8 0 0 0 .7-.6l.4-2.4Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    if (id === "qr-scan") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px;height:20px;"><path d="M7 4H5a1 1 0 0 0-1 1v2M17 4h2a1 1 0 0 1 1 1v2M7 20H5a1 1 0 0 1-1-1v-2M17 20h2a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 9h10M7 12h10M7 15h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+    if (id === "plus") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px;height:20px;"><path d="M12 5v14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>`;
     return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21.5c5.247 0 9.5-4.253 9.5-9.5S17.247 2.5 12 2.5 2.5 6.753 2.5 12 6.753 21.5 12 21.5Z" stroke="currentColor" stroke-width="1.7" opacity="0.9"/></svg>`;
   }
 
@@ -3970,11 +3973,8 @@
               <p>登記到貨、通知住戶、領取簽收</p>
             </div>
           </div>
-          <button class="icon-btn sm" type="button" id="btnCourierConfig" aria-label="物流設定" title="物流設定">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.7"></path>
-              <path d="M19.2 12a7.2 7.2 0 0 0-.12-1.3l2.05-1.6-2-3.46-2.47 1a7.3 7.3 0 0 0-2.25-1.3L13 2h-4l-.43 3.34a7.3 7.3 0 0 0-2.25 1.3l-2.47-1-2 3.46 2.05 1.6A7.2 7.2 0 0 0 4.8 12c0 .44.04.88.12 1.3l-2.05 1.6 2 3.46 2.47-1a7.3 7.3 0 0 0 2.25 1.3L9 22h4l.43-3.34a7.3 7.3 0 0 0 2.25-1.3l2.47 1 2-3.46-2.05-1.6c.08-.42.12-.86.12-1.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
-            </svg>
+          <button class="btn btn-sm btn-ghost" type="button" id="btnCourierConfig" aria-label="物流設定" title="物流設定">
+            ${iconSvg("settings")}
           </button>
         </div>
         <div class="card-bd">
@@ -3993,11 +3993,8 @@
             </div>
             <button class="btn btn-sm" type="button" id="btnParcelFilterClear">清除</button>
             <button class="btn btn-sm danger" type="button" id="btnRegisterParcel">登記包裹</button>
-            <button class="icon-btn sm" type="button" id="btnScanResidentParcel" aria-label="掃描住戶 QR Code" title="掃描住戶 QR Code">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M7 4H5a1 1 0 0 0-1 1v2M17 4h2a1 1 0 0 1 1 1v2M7 20H5a1 1 0 0 1-1-1v-2M17 20h2a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                <path d="M7 9h10M7 12h10M7 15h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              </svg>
+            <button class="btn btn-sm btn-ghost" type="button" id="btnScanResidentParcel" aria-label="掃描住戶 QR Code" title="掃描住戶 QR Code">
+              ${iconSvg("qr-scan")}
             </button>
           </div>
           <div class="parcel-list-container" id="parcelList">
@@ -5937,17 +5934,14 @@
               <p>時段控管、名額與審核流程</p>
             </div>
           </div>
-          <button class="icon-btn sm" type="button" id="btnFacilityExpense80" aria-label="消費明細" title="消費明細">
+          <button class="btn btn-sm btn-ghost" type="button" id="btnFacilityExpense80" aria-label="消費明細" title="消費明細" style="width:20px;height:20px;padding:0;">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px; height:20px;">
               <path d="M10 4h4a2 2 0 0 1 2 2v1H6V6a2 2 0 0 1 2-2h2Zm-5 4h14v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
               <path d="M8 12h8M8 16h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
             </svg>
           </button>
-          <button class="icon-btn sm" type="button" id="btnFacilityManage80" aria-label="設施設定" title="設施設定">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.7"/>
-              <path d="M19.2 12a7.2 7.2 0 0 0-.12-1.3l2.05-1.6-2-3.46-2.47 1a7.3 7.3 0 0 0-2.25-1.3L13 2h-4l-.43 3.34a7.3 7.3 0 0 0-2.25 1.3l-2.47-1-2 3.46 2.05 1.6A7.2 7.2 0 0 0 4.8 12c0 .44.04.88.12 1.3l-2.05 1.6 2 3.46 2.47-1a7.3 7.3 0 0 0 2.25 1.3L9 22h4l.43-3.34a7.3 7.3 0 0 0 2.25-1.3l2.47 1 2-3.46-2.05-1.6c.08-.42.12-.86.12-1.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-            </svg>
+          <button class="btn btn-sm btn-ghost" type="button" id="btnFacilityManage80" aria-label="設施設定" title="設施設定">
+            ${iconSvg("settings")}
           </button>
         </div>
         <div class="card-bd">
@@ -7059,11 +7053,8 @@
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
-            <button class="icon-btn sm" type="button" id="btnNewCommunityPost" aria-label="新增公告" title="新增公告">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 5v14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
-                <path d="M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
-              </svg>
+            <button class="btn btn-sm btn-ghost" type="button" id="btnNewCommunityPost" aria-label="新增公告" title="新增公告">
+              ${iconSvg("plus")}
             </button>
           </div>
           <div class="card-bd">
@@ -7099,11 +7090,8 @@
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
-            <button class="icon-btn sm" type="button" id="btnNewFinanceReport" aria-label="上傳報表" title="上傳報表">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 5v14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
-                <path d="M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
-              </svg>
+            <button class="btn btn-sm btn-ghost" type="button" id="btnNewFinanceReport" aria-label="上傳報表" title="上傳報表">
+              ${iconSvg("plus")}
             </button>
           </div>
           <div class="card-bd">
@@ -7139,11 +7127,8 @@
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
-            <button class="icon-btn sm" type="button" id="btnNewMeetingMinutes" aria-label="新增紀錄" title="新增紀錄">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 5v14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
-                <path d="M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
-              </svg>
+            <button class="btn btn-sm btn-ghost" type="button" id="btnNewMeetingMinutes" aria-label="新增紀錄" title="新增紀錄">
+              ${iconSvg("plus")}
             </button>
           </div>
           <div class="card-bd">
@@ -7179,11 +7164,8 @@
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
-            <button class="icon-btn sm" type="button" id="btnNewRepairReport" aria-label="新增報告" title="新增報告">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 5v14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
-                <path d="M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
-              </svg>
+            <button class="btn btn-sm btn-ghost" type="button" id="btnNewRepairReport" aria-label="新增報告" title="新增報告">
+              ${iconSvg("plus")}
             </button>
           </div>
           <div class="card-bd">
@@ -9123,11 +9105,8 @@
             </div>
             <div style="display:flex; gap:8px; align-items:center;">
               ${isCurrentSystemAdmin() ? `
-              <button class="icon-btn sm" type="button" id="btnResidentsSubnavSettings" aria-label="子分頁設定" title="子分頁設定">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M12 8.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2Z" stroke="currentColor" stroke-width="1.7"/>
-                  <path d="M19.2 13.1v-2.2l-1.9-.5a5.8 5.8 0 0 0-.5-1.2l1.1-1.7-1.6-1.6-1.7 1.1a5.8 5.8 0 0 0-1.2-.5l-.5-1.9h-2.2l-.5 1.9a5.8 5.8 0 0 0-1.2.5L7.4 5.9 5.8 7.5l1.1 1.7a5.8 5.8 0 0 0-.5 1.2l-1.9.5v2.2l1.9.5a5.8 5.8 0 0 0 .5 1.2l-1.1 1.7 1.6 1.6 1.7-1.1a5.8 5.8 0 0 0 1.2.5l.5 1.9h2.2l.5-1.9a5.8 5.8 0 0 0 1.2-.5l1.7 1.1 1.6-1.6-1.1-1.7a5.8 5.8 0 0 0 .5-1.2l1.9-.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                </svg>
+              <button class="btn btn-sm btn-ghost" type="button" id="btnResidentsSubnavSettings" aria-label="子分頁設定" title="子分頁設定">
+                ${iconSvg("settings")}
               </button>` : ""}
               <button class="icon-btn sm" type="button" id="btnUnits" aria-label="戶號列表" title="戶號列表">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -9495,11 +9474,8 @@
                 <p>住戶/承租/車位/聯絡方式彙整</p>
               </div>
             </div>
-            <button class="icon-btn sm" type="button" id="btnPointsSettings" aria-label="點數設定" title="點數設定">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-              </svg>
+            <button class="btn btn-sm btn-ghost" type="button" id="btnPointsSettings" aria-label="點數設定" title="點數設定">
+              ${iconSvg("settings")}
             </button>
           </div>
           <div class="card-bd">
@@ -11357,11 +11333,8 @@
               <input id="visitorSearch" type="text" placeholder="搜尋 姓名 / 手機 / 車牌 / 事由" autocomplete="off" />
             </div>
             <button class="btn btn-sm danger" type="button" id="btnAddVisitor">新增訪客</button>
-            <button class="icon-btn sm" type="button" id="btnScanVisitor" aria-label="掃碼登記" title="掃碼登記">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M4 7V4h3M20 7V4h-3M4 17v3h3M20 17v3h-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                <path d="M9 12h6M12 9v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              </svg>
+          <button class="btn btn-sm btn-ghost" type="button" id="btnScanVisitor" aria-label="掃碼登記" title="掃碼登記">
+              ${iconSvg("qr-scan")}
             </button>
           </div>
           <div class="status" id="visitorStatus" hidden></div>
@@ -14592,11 +14565,8 @@
               </div>
             </div>
             <div style="display:flex; gap:8px; align-items:center;">
-              <button class="icon-btn sm" type="button" id="btnSosSettings" aria-label="SOS設定" title="SOS設定">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.7"/>
-                  <path d="M19.2 12a7.2 7.2 0 0 0-.12-1.3l2.05-1.6-2-3.46-2.47 1a7.3 7.3 0 0 0-2.25-1.3L13 2h-4l-.43 3.34a7.3 7.3 0 0 0-2.25 1.3l-2.47-1-2 3.46 2.05 1.6A7.2 7.2 0 0 0 4.8 12c0 .44.04.88.12 1.3l-2.05 1.6 2 3.46 2.47-1a7.3 7.3 0 0 0 2.25 1.3L9 22h4l.43-3.34a7.3 7.3 0 0 0 2.25-1.3l2.47 1 2-3.46-2.05-1.6c.08-.42.12-.86.12-1.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                </svg>
+              <button class="btn btn-sm btn-ghost" type="button" id="btnSosSettings" aria-label="SOS設定" title="SOS設定">
+                ${iconSvg("settings")}
               </button>
             </div>
           </div>
@@ -14777,6 +14747,7 @@
     const modal = ensureModal("liveMeetingSettingsModal80", "modal-live-meeting-settings", "80%");
     if (modal.dataset.initialized === "1") return modal;
     modal.dataset.initialized = "1";
+    bindModalClose(modal);
     modal.innerHTML = `
       <div class="modal-backdrop" data-modal-close="1"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="liveMeetingSettingsTitle80" style="width:min(900px,80vw);max-width:80vw;max-height:80vh;display:flex;flex-direction:column;">
@@ -14893,6 +14864,160 @@
       }
     }
 
+    let __unsubLiveHistory = null;
+    const ensureLiveHistorySubscription = (cid, onChange) => {
+      if (__unsubLiveHistory) {
+        try { __unsubLiveHistory(); } catch {}
+        __unsubLiveHistory = null;
+      }
+      try {
+        __unsubLiveHistory = db.collection("communities").doc(cid).collection("liveMeetingHistory")
+          .orderBy("datetime", "desc")
+          .onSnapshot(
+            (snap) => {
+              const items = (snap && snap.docs ? snap.docs : []).map((d) => {
+                const data = d.data() || {};
+                const dt = data.datetime && typeof data.datetime.toDate === "function" ? data.datetime.toDate() : (data.datetime ? new Date(data.datetime) : null);
+                return {
+                  id: d.id,
+                  title: String(data.title || "").trim(),
+                  datetime: dt && dt.getTime() ? dt : null,
+                  youtubeUrl: String(data.youtubeUrl || "").trim(),
+                  createdAt: data.createdAt && typeof data.createdAt.toDate === "function" ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date(0)),
+                };
+              });
+              items.sort((a, b) => {
+                const ta = a.datetime ? a.datetime.getTime() : 0;
+                const tb = b.datetime ? b.datetime.getTime() : 0;
+                if (ta !== tb) return tb - ta;
+                const ca = a.createdAt ? a.createdAt.getTime() : 0;
+                const cb = b.createdAt ? b.createdAt.getTime() : 0;
+                return cb - ca;
+              });
+              if (typeof onChange === "function") onChange(items);
+            },
+            (err) => {
+              console.warn("[LiveHistory] onSnapshot 失敗", err);
+              if (typeof onChange === "function") onChange([]);
+            }
+          );
+      } catch (e) {
+        console.warn("[LiveHistory] 訂閱失敗", e);
+        if (typeof onChange === "function") onChange([]);
+      }
+    };
+
+    const formatHistoryDate = (date) => {
+      if (!date) return "";
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, "0");
+      const d = String(date.getDate()).padStart(2, "0");
+      const hh = String(date.getHours()).padStart(2, "0");
+      const mm = String(date.getMinutes()).padStart(2, "0");
+      return `${y}-${m}-${d} ${hh}:${mm}`;
+    };
+
+    const formatHistoryInputValue = (date) => {
+      if (!date) return "";
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, "0");
+      const d = String(date.getDate()).padStart(2, "0");
+      const hh = String(date.getHours()).padStart(2, "0");
+      const mm = String(date.getMinutes()).padStart(2, "0");
+      return `${y}-${m}-${d}T${hh}:${mm}`;
+    };
+
+    const parseHistoryDatetime = (val) => {
+      if (!val) return null;
+      const d = new Date(val);
+      if (!d || Number.isNaN(d.getTime())) return null;
+      return d;
+    };
+
+    const openLiveHistoryModal = (item) => {
+      const mid = "liveMeetingHistoryModal";
+      const modal = ensureModal(mid, `modal-${mid}`, "82%");
+      const existing = modal.querySelector(`.modal-dialog`);
+      if (existing) existing.remove();
+      bindModalClose(modal);
+
+      const isEdit = item && item.id;
+      const titleVal = (item && item.title) || "";
+      const dtVal = (item && item.datetime) ? formatHistoryInputValue(item.datetime) : formatHistoryInputValue(new Date());
+      const ytVal = (item && item.youtubeUrl) || "";
+
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-modal-close="1"></div>
+        <div class="modal-dialog" role="dialog" aria-modal="true" style="width:min(760px,82vw);max-width:82vw;max-height:84vh;display:flex;flex-direction:column;">
+          <div class="modal-hd">
+            <h3 class="modal-title">${isEdit ? "編輯歷史影片" : "新增歷史影片"}</h3>
+            <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          </div>
+          <div class="modal-body" style="display:flex;flex-direction:column;gap:16px;">
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <label style="font-size:14px;font-weight:700;color:#111827;">影片標題</label>
+              <input id="hist-title" type="text" value="${escapeHtml(titleVal)}" placeholder="例如：113年8月管委會會議" maxlength="80" style="padding:12px 16px;border:1px solid rgba(17,24,39,0.2);border-radius:12px;font-size:16px;">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <label style="font-size:14px;font-weight:700;color:#111827;">日期時間</label>
+              <input id="hist-datetime" type="datetime-local" value="${escapeHtml(dtVal)}" style="padding:12px 16px;border:1px solid rgba(17,24,39,0.2);border-radius:12px;font-size:16px;">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <label style="font-size:14px;font-weight:700;color:#111827;">YouTube 連結網址</label>
+              <input id="hist-yt" type="url" value="${escapeHtml(ytVal)}" placeholder="例如：https://www.youtube.com/watch?v=xxxxxx" style="padding:12px 16px;border:1px solid rgba(17,24,39,0.2);border-radius:12px;font-size:16px;">
+              <div style="font-size:12.5px;color:#6b7280;line-height:1.65;">支援 YouTube 觀看網址、youtu.be 短網址，自動解析產生封面</div>
+            </div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">取消</button>
+            <button class="btn btn-primary" type="button" id="hist-save">${isEdit ? "儲存" : "新增"}</button>
+          </div>
+        </div>
+      `.trim();
+
+      const saveBtn = modal.querySelector("#hist-save");
+      if (saveBtn) {
+        saveBtn.addEventListener("click", async () => {
+          try {
+            const Timestamp = firebase.firestore.Timestamp;
+            const t = String(document.getElementById("hist-title").value || "").trim();
+            const dt = parseHistoryDatetime(document.getElementById("hist-datetime").value);
+            const yt = String(document.getElementById("hist-yt").value || "").trim();
+            if (!t) { toast("請輸入影片標題"); return; }
+            if (!dt) { toast("請選擇日期時間"); return; }
+            if (!yt) { toast("請輸入 YouTube 連結"); return; }
+            const vid = youtubeVideoId98(yt);
+            if (!vid) { toast("YouTube 連結格式錯誤"); return; }
+
+            const payload = {
+              title: t,
+              datetime: Timestamp.fromDate(dt),
+              youtubeUrl: yt,
+              updatedAt: FieldValue.serverTimestamp(),
+            };
+            const cid = resolveActiveCommunityId();
+            const col = db.collection("communities").doc(cid).collection("liveMeetingHistory");
+            if (isEdit) {
+              await col.doc(item.id).set(payload, { merge: true });
+              toast("已儲存變更");
+            } else {
+              payload.createdAt = FieldValue.serverTimestamp();
+              await col.add(payload);
+              toast("已新增影片");
+            }
+            if (modal && modal.hidden !== undefined) modal.hidden = true;
+          } catch (e) {
+            console.error("[LiveHistory] 儲存失敗", e);
+            const code = String(e && e.code || "");
+            const msg = e && e.message ? e.message : "未知錯誤";
+            toast(code.includes("permission-denied") ? "沒有權限儲存（請更新 Firestore Rules）" : `儲存失敗：${msg}`);
+          }
+        });
+      }
+
+      modal.hidden = false;
+    };
+
     // 渲染 subnav 按钮的函数
     const renderSubnav = () => {
       if (!subnavEl) return;
@@ -14914,11 +15039,14 @@
     const renderLivePage = () => {
       const cfg = loadConfig(cid) || {};
       const youtubeUrl = String(cfg.liveMeetingYoutubeUrl || "").trim();
+      const enabled = cfg.liveMeetingEnabled !== false;
       const videoId = youtubeVideoId98(youtubeUrl);
       const embedUrl = youtubeEmbedUrl98(youtubeUrl);
       const thumbnailUrl = videoId
         ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
         : "";
+
+      const toggleId = "liveMeetingEnabledToggle_" + Math.random().toString(36).slice(2, 8);
 
       contentEl.innerHTML = `
         <section class="card">
@@ -14938,62 +15066,73 @@
             </button>
           </div>
           <div class="card-bd" style="display:flex;flex-direction:column;gap:18px;">
-            <div class="card" data-live-card="${youtubeUrl ? "1" : "0"}" style="cursor:${youtubeUrl ? "pointer" : "default"};position:relative;overflow:hidden;border-radius:20px;border:1px solid rgba(17,24,39,0.08);background:#fff;">
-              ${youtubeUrl && thumbnailUrl
-                ? `<div style="position:relative;aspect-ratio:16/9;background:#000;background-image:url('${thumbnailUrl}');background-size:cover;background-position:center;">
-                     <div style="position:absolute;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">
-                       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:68px;height:68px;color:#fff;filter:drop-shadow(0 4px 16px rgba(0,0,0,0.35));">
-                         <path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l11.3-6.8a1 1 0 0 0 0-1.7l-11.3-6.8A1 1 0 0 0 8 5.2Z" fill="currentColor"/>
-                       </svg>
-                     </div>
-                     <div style="position:absolute;top:12px;left:12px;display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(220,38,38,0.95);color:#fff;font-size:12px;font-weight:800;">
-                       <span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:sosCardPulse 1.5s ease-in-out infinite;"></span>
-                       LIVE
-                     </div>
-                     <div style="position:absolute;top:12px;right:12px;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:999px;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:12px;font-weight:800;box-shadow:0 6px 18px rgba(239,68,68,0.35);">
-                       ↗ 另開
-                     </div>
-                   </div>`
-                : `<div style="aspect-ratio:16/9;background:linear-gradient(135deg,#f3f4f6,#e5e7eb);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#6b7280;">
-                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:56px;height:56px;">
-                       <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-                       <path d="m10 9 5 3-5 3V9Z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
-                     </svg>
-                     <div style="font-size:14px;font-weight:700;">尚未設定直播連結</div>
-                     <div style="font-size:13px;">點擊右上角齒輪按鈕進行設定</div>
-                   </div>`
-              }
-              <div style="padding:16px 18px;display:flex;align-items:center;gap:14px;">
-                <div style="flex:1;min-width:0;">
-                  <div style="font-size:16px;font-weight:800;color:#111827;line-height:1.5;">
-                    ${youtubeUrl ? (videoId ? `YouTube 直播串流 (${videoId})` : "直播連結已設定") : "尚未設定直播"}
-                  </div>
-                  <div style="margin-top:4px;font-size:13px;color:#6b7280;word-break:break-all;">
-                    ${youtubeUrl ? escapeHtml(youtubeUrl) : "請先於設定中輸入 YouTube 直播或影片連結"}
-                  </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-radius:16px;background:linear-gradient(135deg,#fef2f2 0%,#fff1f2 100%);border:1px solid rgba(239,68,68,0.12);">
+              <div style="display:flex;align-items:center;gap:12px;">
+                <div style="width:36px;height:36px;border-radius:10px;background:rgba(220,38,38,0.1);display:flex;align-items:center;justify-content:center;color:#dc2626;">
+                  ${iconSvg("live-meeting")}
+                </div>
+                <div>
+                  <div style="font-size:15px;font-weight:800;color:#111827;">啟用社區直播</div>
+                  <div style="font-size:12.5px;color:#6b7280;margin-top:2px;">關閉時住戶端與後台皆顯示「目前無社區區大直播」</div>
                 </div>
               </div>
+              <label for="${toggleId}" style="display:inline-flex;align-items:center;cursor:pointer;user-select:none;position:relative;flex:0 0 auto;min-width:54px;min-height:30px;touch-action:manipulation;">
+                <input type="checkbox" id="${toggleId}" data-live-enabled-toggle style="position:absolute;inset:0;opacity:0;margin:0;padding:0;appearance:none;-webkit-appearance:none;border:0;outline:0;" ${enabled ? "checked" : ""}>
+                <span aria-hidden="true" style="pointer-events:none;position:relative;display:inline-block;width:54px;height:30px;border-radius:999px;background:${enabled ? "linear-gradient(135deg,#ef4444,#dc2626)" : "rgba(156,163,175,0.55)"};box-shadow:${enabled ? "0 6px 16px rgba(239,68,68,0.28)" : "inset 0 1px 2px rgba(0,0,0,0.06)"};transition:background 200ms ease, box-shadow 200ms ease;">
+                  <span aria-hidden="true" style="pointer-events:none;position:absolute;top:2px;left:${enabled ? "calc(100% - 26px)" : "2px"};width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(17,24,39,0.18);transition:left 200ms cubic-bezier(.4,0,.2,1);"></span>
+                </span>
+              </label>
             </div>
 
-            <div style="display:flex;gap:10px;flex-wrap:wrap;">
-              <button class="btn btn-primary" type="button" data-toggle-embed style="flex:1;min-width:160px;display:inline-flex;align-items:center;justify-content:center;gap:8px;" ${!embedUrl ? "disabled" : ""}>
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:18px;height:18px;">
-                  <path d="M4 5h16v10H8l-4 4V5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                </svg>
-                <span id="embedToggleLabel">嵌入顯示直播畫面</span>
-              </button>
-              <a class="btn" target="_blank" rel="noopener noreferrer" href="${youtubeUrl ? escapeHtml(youtubeUrl) : "#"}" style="min-width:140px;display:inline-flex;align-items:center;justify-content:center;gap:6px;${!youtubeUrl ? "pointer-events:none;opacity:0.5;" : ""}">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:18px;height:18px;">
-                  <path d="M14 4h6v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                  <path d="M10 14 20 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                  <path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                </svg>
-                另開新視窗
-              </a>
-              <button class="btn btn-sm btn-ghost" type="button" data-back style="min-width:110px;">
-                返回總覽
-              </button>
-            </div>
+            ${enabled
+              ? `<div class="card" data-live-card="${youtubeUrl ? "1" : "0"}" style="cursor:${youtubeUrl ? "pointer" : "default"};position:relative;overflow:hidden;border-radius:20px;border:1px solid rgba(17,24,39,0.08);background:#fff;">
+                  ${youtubeUrl && thumbnailUrl
+                    ? `<div style="position:relative;aspect-ratio:16/9;background:#000;background-image:url('${thumbnailUrl}');background-size:cover;background-position:center;">
+                         <div style="position:absolute;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">
+                           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:68px;height:68px;color:#fff;filter:drop-shadow(0 4px 16px rgba(0,0,0,0.35));">
+                             <path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l11.3-6.8a1 1 0 0 0 0-1.7l-11.3-6.8A1 1 0 0 0 8 5.2Z" fill="currentColor"/>
+                           </svg>
+                         </div>
+                         <div style="position:absolute;top:12px;left:12px;display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(220,38,38,0.95);color:#fff;font-size:12px;font-weight:800;">
+                           <span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:sosCardPulse 1.5s ease-in-out infinite;"></span>
+                           LIVE
+                         </div>
+                         <div style="position:absolute;top:12px;right:12px;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:999px;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:12px;font-weight:800;box-shadow:0 6px 18px rgba(239,68,68,0.35);">
+                           ↗ 另開
+                         </div>
+                       </div>`
+                    : `<div style="aspect-ratio:16/9;background:linear-gradient(135deg,#f3f4f6,#e5e7eb);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#6b7280;">
+                         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:56px;height:56px;">
+                           <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                           <path d="m10 9 5 3-5 3V9Z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+                         </svg>
+                         <div style="font-size:14px;font-weight:700;">尚未設定直播連結</div>
+                         <div style="font-size:13px;">點擊右上角齒輪按鈕進行設定</div>
+                       </div>`
+                  }
+                  <div style="padding:16px 18px;display:flex;align-items:center;gap:14px;">
+                    <div style="flex:1;min-width:0;">
+                      <div style="font-size:16px;font-weight:800;color:#111827;line-height:1.5;">
+                        ${youtubeUrl ? (videoId ? `YouTube 直播串流 (${videoId})` : "直播連結已設定") : "尚未設定直播"}
+                      </div>
+                      <div style="margin-top:4px;font-size:13px;color:#6b7280;word-break:break-all;">
+                        ${youtubeUrl ? escapeHtml(youtubeUrl) : "請先於設定中輸入 YouTube 直播或影片連結"}
+                      </div>
+                    </div>
+                  </div>
+                </div>`
+              : `<div data-live-disabled-card style="aspect-ratio:16/9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;border-radius:20px;border:1px solid rgba(17,24,39,0.06);background:linear-gradient(135deg,#f9fafB 0%,#f3f4f6 100%);">
+                   <div style="width:72px;height:72px;border-radius:999px;background:rgba(156,163,175,0.14);display:flex;align-items:center;justify-content:center;">
+                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:34px;height:34px;color:#9ca3af;">
+                       <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                       <path d="M7 9.5 17 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                       <path d="M17 9.5 7 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                     </svg>
+                   </div>
+                   <div style="font-size:20px;font-weight:900;color:#111827;letter-spacing:0.2px;">目前無社區區大直播</div>
+                   <div style="font-size:13px;color:#6b7280;">管理員已關閉直播顯示，若需開啟請使用上方開關</div>
+                 </div>`
+            }
 
             <div id="liveEmbedContainer" style="display:none;border-radius:20px;overflow:hidden;border:1px solid rgba(17,24,39,0.08);background:#000;aspect-ratio:16/9;">
               ${embedUrl
@@ -15005,13 +15144,6 @@
         </section>
       `;
 
-      const backBtn = contentEl.querySelector("[data-back]");
-      if (backBtn) {
-        backBtn.addEventListener("click", () => {
-          location.hash = "#community/community-dashboard";
-        });
-      }
-      
       const settingsBtn = contentEl.querySelector("[data-open-live-settings]");
       if (settingsBtn) {
         settingsBtn.addEventListener("click", () => {
@@ -15019,8 +15151,32 @@
         });
       }
 
+      const toggleInput = contentEl.querySelector("[data-live-enabled-toggle]");
+      if (toggleInput) {
+        toggleInput.addEventListener("change", async () => {
+          try {
+            const nextEnabled = Boolean(toggleInput.checked);
+            const refCfg = loadConfig(cid) || {};
+            refCfg.liveMeetingEnabled = nextEnabled;
+            if (state.config && typeof state.config === "object") {
+              state.config.liveMeetingEnabled = nextEnabled;
+            }
+            await configDocRef(cid).set(
+              { liveMeetingEnabled: nextEnabled, updatedAt: FieldValue.serverTimestamp() },
+              { merge: true }
+            );
+            toast(nextEnabled ? "已啟用直播" : "已關閉直播");
+            renderLivePage();
+          } catch (e) {
+            console.error("[LiveMeeting] 啟用狀態儲存失敗", e);
+            toast("儲存失敗");
+            renderLivePage();
+          }
+        });
+      }
+
       const liveCard = contentEl.querySelector("[data-live-card]");
-      if (liveCard && youtubeUrl) {
+      if (liveCard && youtubeUrl && enabled) {
         liveCard.style.transition = "transform .18s ease, box-shadow .18s ease";
         liveCard.addEventListener("mouseenter", () => {
           liveCard.style.transform = "translateY(-2px)";
@@ -15035,23 +15191,163 @@
           window.open(youtubeUrl, "_blank", "noopener,noreferrer");
         });
       }
+    };
 
-      const toggleBtn = contentEl.querySelector("[data-toggle-embed]");
-      const embedContainer = document.getElementById("liveEmbedContainer");
-      const embedLabel = document.getElementById("embedToggleLabel");
-      if (toggleBtn && embedContainer && embedLabel) {
-        toggleBtn.addEventListener("click", () => {
-          const isHidden = embedContainer.style.display === "none";
-          if (isHidden) {
-            embedContainer.style.display = "block";
-            embedLabel.textContent = "隱藏嵌入畫面";
-            setTimeout(() => embedContainer.scrollIntoView({ behavior: "smooth", block: "nearest" }), 60);
-          } else {
-            embedContainer.style.display = "none";
-            embedLabel.textContent = "嵌入顯示直播畫面";
-          }
-        });
+    let historyItems = [];
+
+    const renderHistoryPage = () => {
+      const rightBtnHtml = `<button class="btn btn-sm btn-ghost" type="button" id="hist-new-btn" aria-label="新增影片" title="新增影片">${iconSvg("plus")}</button>`;
+
+      contentEl.innerHTML = `
+        <section class="card">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("live-meeting")}</div>
+              <div style="min-width:0;">
+                <h2>歷史影片${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <p>過往直播錄影檔案</p>
+              </div>
+            </div>
+            ${rightBtnHtml}
+          </div>
+          <div class="card-bd" id="hist-list-bd" style="display:flex;flex-direction:column;gap:16px;"></div>
+        </section>
+      `;
+
+      const newBtn = document.getElementById("hist-new-btn");
+      if (newBtn) newBtn.addEventListener("click", () => openLiveHistoryModal(null));
+
+      renderHistoryItems();
+    };
+
+    const renderHistoryItems = () => {
+      const bd = document.getElementById("hist-list-bd");
+      if (!bd) return;
+      const items = Array.isArray(historyItems) ? historyItems : [];
+      if (!items.length) {
+        bd.innerHTML = `
+          <div style="aspect-ratio:16/5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border-radius:20px;border:1px solid rgba(17,24,39,0.06);background:linear-gradient(135deg,#f9fafB 0%,#f3f4f6 100%);">
+            <div style="width:72px;height:72px;border-radius:999px;background:rgba(156,163,175,0.14);display:flex;align-items:center;justify-content:center;">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:34px;height:34px;color:#9ca3af;">
+                <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                <path d="M10 9v6l6-3-6-3Z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div style="font-size:20px;font-weight:900;color:#111827;letter-spacing:0.2px;">尚未新增歷史影片</div>
+            <div style="font-size:13px;color:#6b7280;">點擊右上角「＋」新增卡片式影片</div>
+          </div>
+        `;
+        return;
       }
+
+      const html = items.map((it) => {
+        const vid = youtubeVideoId98(it.youtubeUrl);
+        const thumb = vid ? `https://img.youtube.com/vi/${vid}/hqdefault.jpg` : "";
+        const dtStr = formatHistoryDate(it.datetime);
+        return `
+          <div class="card" data-hist-id="${escapeHtml(it.id)}" style="overflow:hidden;border-radius:20px;border:1px solid rgba(17,24,39,0.08);background:#fff;">
+            <div style="display:flex;gap:14px;align-items:stretch;">
+              <div style="flex:0 0 34%;min-width:0;position:relative;aspect-ratio:16/6;background:#000;background-image:url('${thumb ? escapeHtml(thumb) : ""}');background-size:cover;background-position:center;">
+                <div style="position:absolute;inset:0;background:rgba(0,0,0,0.32);display:flex;align-items:center;justify-content:center;">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:44px;height:44px;color:#fff;filter:drop-shadow(0 3px 10px rgba(0,0,0,0.32));">
+                    <path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l11.3-6.8a1 1 0 0 0 0-1.7l-11.3-6.8A1 1 0 0 0 8 5.2Z" fill="currentColor"/>
+                  </svg>
+                </div>
+              </div>
+              <div style="flex:1 1 auto;min-width:0;padding:12px 16px 12px 0;display:flex;flex-direction:column;gap:10px;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+                  <div style="min-width:0;flex:1;">
+                    <div style="font-size:15px;font-weight:800;color:#111827;line-height:1.5;">${escapeHtml(it.title || "未命名影片")}</div>
+                    <div style="margin-top:5px;display:inline-flex;align-items:center;gap:6px;padding:4.5px 10px;border-radius:999px;background:rgba(17,24,39,0.04);color:#6b7280;font-size:12px;font-weight:700;">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:13.5px;height:13.5px;">
+                        <path d="M4 8.5h16M6.5 4.5v4M17.5 4.5v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                        <path d="M3 8.5V20a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                      </svg>
+                      ${escapeHtml(dtStr)}
+                    </div>
+                  </div>
+                  <div style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;">
+                    <button class="btn btn-sm btn-ghost" type="button" data-action="hist-edit" data-hist-id="${escapeHtml(it.id)}" aria-label="編輯" title="編輯" style="width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:17px;height:17px;">
+                        <path d="M12 20h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4L16.5 3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </button>
+                    <button class="btn btn-sm btn-ghost" type="button" data-action="hist-del" data-hist-id="${escapeHtml(it.id)}" aria-label="刪除" title="刪除" style="width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;color:#dc2626;">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:17px;height:17px;">
+                        <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div style="margin-top:auto;">
+                  <button class="btn btn-sm" type="button" data-action="hist-open" data-hist-id="${escapeHtml(it.id)}" style="padding:7px 12px;border-radius:11px;font-weight:700;font-size:13px;">
+                    <span style="display:inline-flex;align-items:center;gap:7px;">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:15px;height:15px;">
+                        <path d="M14 4h6v6M20 4l-9 9M10 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      另開 YouTube
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+      bd.innerHTML = html;
+
+      bd.querySelectorAll("[data-hist-id]").forEach((card) => {
+        if (!card.classList || !card.classList.contains("card")) return;
+        card.style.transition = "transform .18s ease, box-shadow .18s ease";
+        card.addEventListener("mouseenter", () => {
+          card.style.transform = "translateY(-2px)";
+          card.style.boxShadow = "0 16px 36px rgba(17,24,39,0.12)";
+        });
+        card.addEventListener("mouseleave", () => {
+          card.style.transform = "";
+          card.style.boxShadow = "";
+        });
+        card.addEventListener("click", (e) => {
+          if (e.target.closest("button")) return;
+          const id = String(card.getAttribute("data-hist-id") || "").trim();
+          const it = items.find((x) => x.id === id) || null;
+          if (it && it.youtubeUrl) window.open(it.youtubeUrl, "_blank", "noopener,noreferrer");
+        });
+      });
+
+      bd.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-action]");
+        if (!btn) return;
+        e.stopPropagation();
+        const action = String(btn.getAttribute("data-action") || "").trim();
+        const id = String(btn.getAttribute("data-hist-id") || "").trim();
+        if (!action || !id) return;
+        const it = items.find((x) => x.id === id) || null;
+        if (action === "hist-edit") {
+          if (it) openLiveHistoryModal(it);
+        } else if (action === "hist-open") {
+          if (it && it.youtubeUrl) window.open(it.youtubeUrl, "_blank", "noopener,noreferrer");
+        } else if (action === "hist-del") {
+          if (!it) return;
+          const ok1 = window.confirm("確認要刪除此歷史影片？\n刪除後無法復原。");
+          if (!ok1) return;
+          const ok2 = window.confirm("再次確認：確定永久刪除「" + (it.title || "未命名影片") + "」？");
+          if (!ok2) return;
+          (async () => {
+            try {
+              await db.collection("communities").doc(resolveActiveCommunityId()).collection("liveMeetingHistory").doc(it.id).delete();
+              toast("已刪除");
+            } catch (e) {
+              console.error("[LiveHistory] 刪除失敗", e);
+              const code = String(e && e.code || "");
+              const msg = e && e.message ? e.message : "未知錯誤";
+              toast(code.includes("permission-denied") ? "沒有權限刪除（請更新 Firestore Rules）" : `刪除失敗：${msg}`);
+            }
+          })();
+        }
+      }, { once: true });
     };
 
     // 渲染页面内容
@@ -15059,34 +15355,17 @@
       renderSubnav();
       
       if (currentPage === "live") {
+        if (__unsubLiveHistory) {
+          try { __unsubLiveHistory(); } catch {}
+          __unsubLiveHistory = null;
+        }
         renderLivePage();
       } else if (currentPage === "history") {
-        contentEl.innerHTML = `
-          <section class="card">
-            <div class="card-hd">
-              <div class="left">
-                <div class="chip" aria-hidden="true">${iconSvg("live-meeting")}</div>
-                <div style="min-width:0;">
-                  <h2>歷史影片${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
-                  <p>過往直播錄影檔案</p>
-                </div>
-              </div>
-            </div>
-            <div class="card-bd">
-              <div class="row">
-                <div class="muted">此功能頁面尚未建置（示意）。</div>
-              </div>
-              <button class="btn" type="button" data-back>返回總覽</button>
-            </div>
-          </section>
-        `;
-
-        const backBtn = contentEl.querySelector("[data-back]");
-        if (backBtn) {
-          backBtn.addEventListener("click", () => {
-            location.hash = "#community/community-dashboard";
-          });
-        }
+        renderHistoryPage();
+        ensureLiveHistorySubscription(cid, (items) => {
+          historyItems = Array.isArray(items) ? items : [];
+          renderHistoryItems();
+        });
       }
       
       updateFooterActiveNav();

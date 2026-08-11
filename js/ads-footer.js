@@ -33,59 +33,87 @@
   }
 
   async function resolveCommunityId() {
-    const keyFromUrl = (() => {
-      try {
-        const urlParams = new URLSearchParams(location.search);
-        return normalizeText(urlParams.get("c"));
-      } catch {
-        return "";
-      }
-    })();
-    const saved = (() => {
-      try {
-        return normalizeText(localStorage.getItem("csp_active_community_v1"));
-      } catch {
-        return "";
-      }
-    })();
-    const key = keyFromUrl || saved;
-    if (key) {
-      try {
-        const byIdSnap = await db.collection("communities").where("id", "==", key).limit(1).get();
-        const byId = byIdSnap && byIdSnap.docs && byIdSnap.docs[0] ? byIdSnap.docs[0] : null;
-        if (byId && byId.exists) {
-          const v = byId.data() || {};
-          const cid = normalizeText(v.id || byId.id);
-          if (cid) {
-            try { localStorage.setItem("csp_active_community_v1", cid); } catch {}
-            return cid;
-          }
-        }
-      } catch {}
-      try {
-        const byUserSnap = await db.collection("communities").where("username", "==", key).limit(1).get();
-        const byUser = byUserSnap && byUserSnap.docs && byUserSnap.docs[0] ? byUserSnap.docs[0] : null;
-        if (byUser && byUser.exists) {
-          const v = byUser.data() || {};
-          const cid = normalizeText(v.id || byUser.id);
-          if (cid) {
-            try { localStorage.setItem("csp_active_community_v1", cid); } catch {}
-            return cid;
-          }
-        }
-      } catch {}
-      return key;
-    }
+    const candidates = [];
+    const seen = new Set();
 
+    const pushCandidate = (raw) => {
+      const s = normalizeText(raw);
+      if (!s || s === 'default') return;
+      if (seen.has(s)) return;
+      seen.add(s);
+      candidates.push(s);
+    };
+
+    try {
+      const urlParams = new URLSearchParams(location.search);
+      pushCandidate(urlParams.get("c"));
+    } catch {}
+    try {
+      pushCandidate(localStorage.getItem("csp_active_community_v1"));
+    } catch {}
+
+    let userCommunity = "";
+    let userCommunityAlt = "";
     const user = auth.currentUser;
     if (user && user.uid) {
       try {
         const udoc = await db.collection("users").doc(String(user.uid)).get();
-        const udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
-        const cid = normalizeText(udata.community);
-        if (cid) return cid;
+        if (udoc && udoc.exists) {
+          const udata = udoc.data() || {};
+          userCommunityAlt = normalizeText(udata.__communityId);
+          userCommunity = normalizeText(udata.community);
+        }
       } catch {}
     }
+
+    pushCandidate(userCommunityAlt);
+    pushCandidate(userCommunity);
+
+    if (!candidates.includes("default") && !seen.has("default")) {
+      candidates.push("default");
+    }
+
+    for (let i = 0; i < candidates.length; i += 1) {
+      const key = candidates[i];
+      if (!key) continue;
+      const isLast = i === candidates.length - 1;
+      let hit = null;
+      try {
+        const byIdSnap = await db.collection("communities").where("id", "==", key).limit(1).get();
+        const byId = byIdSnap && byIdSnap.docs && byIdSnap.docs[0] ? byIdSnap.docs[0] : null;
+        if (byId && byId.exists) {
+          hit = byId;
+        }
+      } catch {}
+      if (!hit) {
+        try {
+          const byUserSnap = await db.collection("communities").where("username", "==", key).limit(1).get();
+          const byUser = byUserSnap && byUserSnap.docs && byUserSnap.docs[0] ? byUserSnap.docs[0] : null;
+          if (byUser && byUser.exists) {
+            hit = byUser;
+          }
+        } catch {}
+      }
+      if (hit) {
+        const v = hit.data() || {};
+        const cid = normalizeText(v.id || hit.id);
+        if (cid && cid !== 'default') {
+          try { localStorage.setItem("csp_active_community_v1", cid); } catch {}
+          return cid;
+        }
+        if (isLast && cid) {
+          try { localStorage.setItem("csp_active_community_v1", cid); } catch {}
+          return cid;
+        }
+      }
+      if (isLast) {
+        if (key !== 'default') {
+          try { localStorage.setItem("csp_active_community_v1", key); } catch {}
+        }
+        return key || 'default';
+      }
+    }
+
     return "default";
   }
 
@@ -108,15 +136,52 @@
     wrap.setAttribute("tabindex", "0");
     wrap.innerHTML = `
       <div class="ads-footer-track">
-        <img alt="" />
+        <img alt="" style="display:block;width:100%;height:100%;object-fit:fill;-o-object-fit:fill;-webkit-object-fit:fill;box-sizing:border-box;padding:0;margin:0;border:0;" />
       </div>
     `.trim();
     footer.innerHTML = "";
     footer.classList.add("has-ads");
     footer.appendChild(wrap);
 
+    const track = wrap.querySelector(".ads-footer-track");
     const img = wrap.querySelector("img");
-    if (!img) return;
+    if (!track || !img) return;
+
+    let rafPending = 0;
+    const fitImageToTrack = () => {
+      try {
+        if (rafPending) return;
+        rafPending = 1;
+        window.requestAnimationFrame(() => {
+          rafPending = 0;
+          try {
+            const tw = Math.max(0, Math.round(track.clientWidth || track.offsetWidth || 0));
+            const th = Math.max(0, Math.round(track.clientHeight || track.offsetHeight || 0));
+            if (tw > 0) {
+              img.style.removeProperty("width");
+              img.style.setProperty("width", tw + "px", "important");
+            }
+            if (th > 0) {
+              img.style.removeProperty("height");
+              img.style.setProperty("height", th + "px", "important");
+            }
+          } catch {}
+        });
+      } catch {}
+    };
+    if (window.ResizeObserver) {
+      try {
+        const ro = new ResizeObserver(() => { fitImageToTrack(); });
+        ro.observe(track);
+        ro.observe(wrap);
+        if (footer) ro.observe(footer);
+      } catch {}
+    }
+    let resizeTimer = 0;
+    window.addEventListener("resize", () => {
+      if (resizeTimer) window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => { fitImageToTrack(); }, 50);
+    }, { passive: true });
 
     let idx = 0;
     let currentLink = "";
@@ -127,8 +192,14 @@
       const clickable = Boolean(currentLink);
       wrap.classList.toggle("is-clickable", clickable);
       wrap.setAttribute("aria-label", clickable ? "廣告（點擊另開新視窗）" : "廣告");
+      fitImageToTrack();
     };
+    img.addEventListener("load", () => { fitImageToTrack(); }, { passive: true });
+    img.addEventListener("error", () => { fitImageToTrack(); }, { passive: true });
     apply();
+    window.setTimeout(() => { fitImageToTrack(); }, 0);
+    window.setTimeout(() => { fitImageToTrack(); }, 120);
+    window.setTimeout(() => { fitImageToTrack(); }, 400);
 
     if (!wrap._boundAdsClick) {
       wrap._boundAdsClick = true;

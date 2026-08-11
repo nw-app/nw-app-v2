@@ -2434,11 +2434,17 @@
     };
 
     const ADS_PAGES = [
-      "facility.html",
+      "member.html",
+      "live-meeting.html",
+      "parking.html",
+      "visitor-resident.html",
+      "bulletin-activity.html",
+      "bulletin-clean.html",
       "bulletin-community.html",
       "bulletin-finance.html",
       "bulletin-meeting.html",
       "bulletin-repair.html",
+      "facility.html",
       "parcel.html",
     ];
     let adsActivePage = ADS_PAGES[0];
