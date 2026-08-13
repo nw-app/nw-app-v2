@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>QAi｜生活網</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg?v=4" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#d32f2f" />
+    <meta property="og:title" content="「 QAi生活網 」智慧社區平台解決方案">
+    <meta property="og:description" content="尊榮服務，智慧升級：打造有溫度且高效的智慧社區。">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://nw-com.github.io/nw-namecard-2026/photo/qai-001.png">
+    <meta property="og:image:width" content="1600">
+    <meta property="og:image:height" content="900">
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="icon-192.png?v=2" />
+    <link rel="stylesheet" href="css/role-placeholder.css" />
+    <style>
+      .role-page {
+        position: relative;
+        min-height: 100dvh;
+        box-sizing: border-box;
+      }
+      .role-header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        height: 10dvh;
+        min-height: 64px;
+        max-height: 96px;
+        padding-top: calc(6px + env(safe-area-inset-top, 0px)) !important;
+        padding-bottom: 6px !important;
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+        box-sizing: border-box;
+      }
+      .role-header .role-brand-title {
+        font-size: 22px;
+        font-weight: 950;
+        letter-spacing: 0.4px;
+        color: #111;
+      }
+      .role-header img {
+        width: 40px;
+        height: 40px;
+        flex: 0 0 40px;
+      }
+      .qai-main {
+        min-height: calc(100dvh - 10dvh - 10dvh - 24px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px 16px calc(10dvh + 20px);
+        box-sizing: border-box;
+      }
+      .qai-card {
+        width: 100%;
+        max-width: 960px;
+        background: #fff;
+        border-radius: 16px;
+        padding: 24px 20px 28px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+        box-sizing: border-box;
+      }
+      .qai-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .qai-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 999px;
+        background: #fff1f0;
+        color: #d32f2f;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+      }
+      .qai-download {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 7px 14px;
+        border-radius: 999px;
+        background: rgba(211, 47, 47, 0.08);
+        color: #b91c1c !important;
+        font-size: 13px;
+        font-weight: 700;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .qai-download:active {
+        transform: translateY(1px);
+      }
+      .qai-download .icon {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        line-height: 0;
+        flex: 0 0 14px;
+      }
+      .qai-download .icon svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .qai-title {
+        margin: 16px 0 6px;
+        font-size: 26px;
+        font-weight: 800;
+        color: #111;
+      }
+      .qai-desc {
+        margin: 0 0 20px;
+        font-size: 14px;
+        color: #666;
+        line-height: 1.6;
+      }
+      .qai-video-wrap {
+        position: relative;
+        width: 100%;
+        padding-top: 56.25%;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #000;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+      }
+      .qai-video-wrap iframe {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+      .qai-footer {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9999;
+        height: 10dvh;
+        min-height: 56px;
+        background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+        border-top: 1px solid rgba(211, 47, 47, 0.12);
+        box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 16px;
+        box-sizing: border-box;
+        padding-bottom: env(safe-area-inset-bottom, 0);
+      }
+      .qai-footer a {
+        flex: 1 1 0;
+        min-width: 0;
+        max-width: calc(50% - 6px);
+      }
+      .qai-footer-tel,
+      .qai-footer-line {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.10);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        white-space: nowrap;
+        box-sizing: border-box;
+        width: 100%;
+      }
+      .qai-footer-tel {
+        background: linear-gradient(135deg, #e53935 0%, #d32f2f 100%);
+        color: #ffffff !important;
+        box-shadow: 0 4px 14px rgba(211, 47, 47, 0.3);
+      }
+      .qai-footer-line {
+        background: linear-gradient(135deg, #06c755 0%, #04a344 100%);
+        color: #ffffff !important;
+        box-shadow: 0 4px 14px rgba(6, 199, 85, 0.3);
+      }
+      .qai-footer-tel:active,
+      .qai-footer-line:active {
+        transform: translateY(1px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
+      }
+      .qai-footer .icon {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        line-height: 0;
+        flex: 0 0 16px;
+      }
+      .qai-footer .icon svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .qai-footer-line .icon svg {
+        fill: currentColor;
+        stroke: none;
+      }
+      @media (min-width: 768px) {
+        .role-header {
+          padding-left: 24px !important;
+          padding-right: 24px !important;
+          gap: 18px;
+          min-height: 72px;
+          max-height: 108px;
+        }
+        .role-header .role-brand-title {
+          font-size: 26px;
+        }
+        .role-header img {
+          width: 48px !important;
+          height: 48px !important;
+          flex-basis: 48px !important;
+        }
+        .qai-main {
+          padding: 36px 24px calc(10dvh + 36px);
+        }
+        .qai-card {
+          padding: 32px 28px 40px;
+          border-radius: 20px;
+        }
+        .qai-title {
+          font-size: 30px;
+        }
+        .qai-desc {
+          font-size: 15px;
+        }
+        .qai-footer {
+          padding: 0 32px;
+          min-height: 64px;
+          justify-content: center;
+          gap: 20px;
+        }
+        .qai-footer a {
+          flex: 0 0 auto;
+          max-width: 260px;
+        }
+        .qai-footer-tel,
+        .qai-footer-line {
+          padding: 12px 26px;
+          font-size: 15px;
+          gap: 10px;
+          width: auto;
+        }
+        .qai-footer .icon {
+          width: 18px;
+          height: 18px;
+          flex-basis: 18px;
+        }
+      }
+      @media (min-width: 1024px) {
+        .qai-card {
+          max-width: 1040px;
+          padding: 40px 40px 48px;
+        }
+        .qai-title {
+          font-size: 34px;
+        }
+        .qai-footer {
+          padding: 0 48px;
+          min-height: 72px;
+          gap: 24px;
+        }
+        .qai-footer a {
+          max-width: 280px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="role-page">
+      <header class="role-header">
+        <img src="logo.svg?v=4" alt="QAi生活網" />
+        <div class="role-brand-title">QAi生活網</div>
+      </header>
+
+      <main class="qai-main">
+        <section class="qai-card">
+          <div class="qai-card-head">
+            <div class="qai-badge">QAi</div>
+            <a href="data/all/qai_pdf.pdf" download class="qai-download">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              </span>
+              下載
+            </a>
+          </div>
+          <h1 class="qai-title">智慧社區平台解決方案</h1>
+          <p class="qai-desc">QAi 生活網整合智慧社區服務，從住戶互動、後台管理到數位管控，一次到位。</p>
+          <div class="qai-video-wrap">
+            <iframe
+              src="https://www.youtube.com/embed/l7TvTar94ZY?rel=0"
+              title="智慧社區平台解決方案"
+              frameborder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen
+            ></iframe>
+          </div>
+        </section>
+      </main>
+
+      <footer class="qai-footer">
+        <a href="tel:0980072761" class="qai-footer-tel">
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.86 19.86 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/>
+            </svg>
+          </span>
+          客服專線
+        </a>
+        <a href="https://line.me/ti/p/0WR6LUcb_b" target="_blank" rel="noopener noreferrer" class="qai-footer-line">
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 2C6.48 2 2 5.92 2 10.77c0 2.78 1.53 5.26 3.88 6.82l-.87 2.72 3.1-1.62c.89.24 1.85.37 2.89.37 5.52 0 10-3.92 10-8.77S17.52 2 12 2zm4.87 10.93c-.17.48-.87.89-1.32.92-.35.02-.79.03-1.27-.06-.3-.06-.68-.21-1.17-.41-2.06-.84-3.4-2.8-3.5-2.93-.1-.13-.83-1.1-.83-2.1 0-1 .53-1.5.72-1.7.19-.2.41-.25.55-.25l.39.01c.13 0 .31-.05.47.38.17.48.59 1.66.64 1.78.05.12.08.26.02.42-.07.17-.1.27-.21.41-.1.15-.22.33-.32.44-.1.12-.21.25-.09.49.12.24.55 1.07 1.18 1.73.81.84 1.49 1.1 1.7 1.22.21.13.34.11.47-.07.13-.17.55-.64.7-.86.15-.22.3-.19.51-.11.21.08 1.33.63 1.56.75.23.12.38.18.44.28.05.11.05.62-.12 1.1z"/>
+            </svg>
+          </span>
+          Line客服
+        </a>
+      </footer>
+    </div>
+  </body>
+</html>
