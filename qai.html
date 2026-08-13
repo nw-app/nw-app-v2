@@ -10,7 +10,7 @@
     <meta property="og:title" content="「 QAi生活網 」智慧社區平台解決方案">
     <meta property="og:description" content="尊榮服務，智慧升級：打造有溫度且高效的智慧社區。">
     <meta property="og:type" content="website">
-    <meta property="og:image" content="https://nw-com.github.io/nw-namecard-2026/photo/qai-001.png">
+    <meta property="og:image" content="https://nw-app.github.io/nw-app-v2/photo/qai-001.png">
     <meta property="og:image:width" content="1600">
     <meta property="og:image:height" content="900">
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -18,6 +18,20 @@
     <link rel="apple-touch-icon" href="icon-192.png?v=2" />
     <link rel="stylesheet" href="css/role-placeholder.css" />
     <style>
+      html, body {
+        overflow: hidden;
+        overscroll-behavior: none;
+        height: 100%;
+      }
+      * {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      *::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+      }
       .role-page {
         position: relative;
         min-height: 100dvh;
@@ -41,11 +55,48 @@
         font-weight: 950;
         letter-spacing: 0.4px;
         color: #111;
+        margin-right: auto;
       }
       .role-header img {
         width: 40px;
         height: 40px;
         flex: 0 0 40px;
+      }
+      .role-header .qai-download {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 7px 14px;
+        border-radius: 999px;
+        background: rgba(211, 47, 47, 0.08);
+        color: #b91c1c !important;
+        font-size: 13px;
+        font-weight: 700;
+        text-decoration: none;
+        white-space: nowrap;
+        flex: 0 0 auto;
+      }
+      .role-header .qai-download:active {
+        transform: translateY(1px);
+        box-shadow: none;
+      }
+      .role-header .qai-download .icon {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        line-height: 0;
+        flex: 0 0 14px;
+      }
+      .role-header .qai-download .icon svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
       }
       .qai-main {
         min-height: calc(100dvh - 10dvh - 10dvh - 24px);
@@ -64,12 +115,6 @@
         box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
         box-sizing: border-box;
       }
-      .qai-card-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-      }
       .qai-badge {
         display: inline-block;
         padding: 4px 12px;
@@ -79,40 +124,6 @@
         font-size: 13px;
         font-weight: 600;
         letter-spacing: 0.5px;
-      }
-      .qai-download {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        padding: 7px 14px;
-        border-radius: 999px;
-        background: rgba(211, 47, 47, 0.08);
-        color: #b91c1c !important;
-        font-size: 13px;
-        font-weight: 700;
-        text-decoration: none;
-        white-space: nowrap;
-      }
-      .qai-download:active {
-        transform: translateY(1px);
-      }
-      .qai-download .icon {
-        display: inline-block;
-        width: 14px;
-        height: 14px;
-        line-height: 0;
-        flex: 0 0 14px;
-      }
-      .qai-download .icon svg {
-        display: block;
-        width: 100%;
-        height: 100%;
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 2.4;
-        stroke-linecap: round;
-        stroke-linejoin: round;
       }
       .qai-title {
         margin: 16px 0 6px;
@@ -237,6 +248,16 @@
           height: 48px !important;
           flex-basis: 48px !important;
         }
+        .role-header .qai-download {
+          padding: 9px 18px;
+          font-size: 14px;
+          gap: 8px;
+        }
+        .role-header .qai-download .icon {
+          width: 16px;
+          height: 16px;
+          flex-basis: 16px;
+        }
         .qai-main {
           padding: 36px 24px calc(10dvh + 36px);
         }
@@ -297,23 +318,21 @@
       <header class="role-header">
         <img src="logo.svg?v=4" alt="QAi生活網" />
         <div class="role-brand-title">QAi生活網</div>
+        <a href="https://nw-app.github.io/nw-app-v2/data/all/qai_pdf.pdf" download="qai_pdf.pdf" type="application/pdf" onclick="return forceDownload(event)" class="qai-download">
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </span>
+          下載
+        </a>
       </header>
 
       <main class="qai-main">
         <section class="qai-card">
-          <div class="qai-card-head">
-            <div class="qai-badge">QAi</div>
-            <a href="data/all/qai_pdf.pdf" download class="qai-download">
-              <span class="icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/>
-                  <line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-              </span>
-              下載
-            </a>
-          </div>
+          <div class="qai-badge">QAi</div>
           <h1 class="qai-title">智慧社區平台解決方案</h1>
           <p class="qai-desc">QAi 生活網整合智慧社區服務，從住戶互動、後台管理到數位管控，一次到位。</p>
           <div class="qai-video-wrap">
@@ -348,5 +367,44 @@
         </a>
       </footer>
     </div>
+    <script>
+      function forceDownload(e) {
+        var a = e.currentTarget;
+        var url = a.getAttribute("href");
+        var filename = a.getAttribute("download") || "qai_pdf.pdf";
+        e.preventDefault();
+        try {
+          fetch(url, { mode: "cors" })
+            .then(function (res) {
+              if (!res.ok) throw new Error("net");
+              return res.blob();
+            })
+            .then(function (blob) {
+              var objUrl = URL.createObjectURL(blob);
+              var link = document.createElement("a");
+              link.href = objUrl;
+              link.download = filename;
+              link.style.display = "none";
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              setTimeout(function () { URL.revokeObjectURL(objUrl); }, 5000);
+            })
+            .catch(function () {
+              var fallback = document.createElement("a");
+              fallback.href = url;
+              fallback.download = filename;
+              fallback.target = "_self";
+              fallback.rel = "noopener";
+              document.body.appendChild(fallback);
+              fallback.click();
+              document.body.removeChild(fallback);
+            });
+        } catch (_) {
+          return true;
+        }
+        return false;
+      }
+    </script>
   </body>
 </html>
