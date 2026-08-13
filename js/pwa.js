@@ -733,6 +733,12 @@
       return "";
     };
 
+    const isCommunityAccount = (user, data) => {
+      const role = String(data && data.role ? data.role : "").trim();
+      if (role === "community" || role === "社區") return true;
+      return false;
+    };
+
     const updateSwitchButtons = () => {
       if (!switchEl) return;
       const fb = window.firebase;
@@ -741,20 +747,29 @@
       const page = String(location.pathname || "").split("/").pop().toLowerCase();
       const isSystemPage = page === "system.html";
       if (sessionRole === "admin") markSystemAdminSession(user, true);
-      const canSwitch = Boolean(
-        isSystemAdminAccount(user, switchEl._profileData || {}) ||
+      const profileData = switchEl._profileData || {};
+      const isSysAdmin = Boolean(
+        isSystemAdminAccount(user, profileData) ||
         switchEl._isSystemAdmin ||
         isSystemAdminSession(user) ||
         isSystemAdminFlag() ||
         sessionRole === "admin" ||
         isSystemPage
       );
+      const isCommunity = Boolean(
+        isCommunityAccount(user, profileData) ||
+        sessionRole === "community"
+      );
+      const canSwitch = isSysAdmin || isCommunity;
       if (!canSwitch) {
         switchEl.hidden = true;
         switchEl.innerHTML = "";
         return;
       }
-      const targets = resolveSwitchTargets();
+      let targets = resolveSwitchTargets();
+      if (!isSysAdmin) {
+        targets = targets.filter((t) => t !== "system");
+      }
       if (!targets.length) {
         switchEl.hidden = true;
         switchEl.innerHTML = "";

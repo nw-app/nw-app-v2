@@ -2691,7 +2691,10 @@
     state.currentUserProfile = userProfile || {};
     state.currentUserRole = normalizeSessionOrDocRole(role || (userProfile && userProfile.role) || "");
 
-    if (role && role !== "resident" && role !== "admin") {
+    const profileRole = normalizeSessionOrDocRole(userProfile && userProfile.role);
+    const isElevatedAccount = profileRole === "admin" || profileRole === "community";
+
+    if (role && role !== "resident" && role !== "admin" && !isElevatedAccount) {
       if (role === "community") {
         const key = readUrlCommunityKey();
         const cPart = key ? `?c=${encodeURIComponent(key)}` : "";

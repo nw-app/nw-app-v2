@@ -110,12 +110,53 @@
     }
   }
 
+  let __histPlayModalBound = false;
+  function ensureHistPlayModal() {
+    if (document.getElementById('histPlayModal')) return document.getElementById('histPlayModal');
+    const modal = document.createElement('div');
+    modal.id = 'histPlayModal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', '播放歷史影片');
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.82);padding:16px;';
+    modal.innerHTML = `
+      <div data-modal-close style="position:absolute;inset:0;"></div>
+      <div style="position:relative;width:100%;max-width:1080px;box-sizing:border-box;">
+        <button type="button" data-modal-close aria-label="關閉播放視窗" style="position:absolute;top:-44px;right:0;width:36px;height:36px;border-radius:999px;border:0;background:rgba(255,255,255,0.95);color:#111827;font-size:20px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,0.35);padding:0;">×</button>
+        <div style="aspect-ratio:16/9;width:100%;border-radius:16px;overflow:hidden;background:#000;box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+          <iframe id="histPlayFrame" title="歷史影片播放" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" style="width:100%;height:100%;border:0;display:block;" allowfullscreen loading="lazy"></iframe>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const close = () => {
+      modal.style.display = 'none';
+      const f = document.getElementById('histPlayFrame');
+      if (f) f.src = 'about:blank';
+    };
+    modal.querySelectorAll('[data-modal-close]').forEach((el) => el.addEventListener('click', close));
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal.style.display && modal.style.display !== 'none') close();
+    });
+    __histPlayModalBound = true;
+    return modal;
+  }
+  function openHistPlay(youtubeUrl) {
+    const vid = youtubeVideoId98(youtubeUrl);
+    if (!vid) return;
+    const modal = ensureHistPlayModal();
+    const f = document.getElementById('histPlayFrame');
+    if (f) f.src = `https://www.youtube.com/embed/${vid}?rel=0&autoplay=1&mute=1&playsinline=1&modestbranding=1`;
+    modal.style.display = 'flex';
+  }
+
   function renderHistoryList() {
     const bd = document.getElementById('historyList');
     if (!bd) return;
     bd.style.display = 'flex';
     bd.style.flexDirection = 'column';
-    bd.style.gap = '14px';
+    bd.style.gap = '12px';
     const items = Array.isArray(liveHistoryItems) ? liveHistoryItems : [];
     if (!items.length) {
       bd.innerHTML = `
@@ -137,36 +178,26 @@
       const dtStr = formatHistoryDate(it.datetime);
       return `
         <div class="card" data-hist-card="${escapeHtml(it.id)}" style="overflow:hidden;border-radius:20px;border:1px solid rgba(17,24,39,0.08);background:#fff;cursor:${it.youtubeUrl ? "pointer" : "default"};position:relative;">
-          <div style="display:flex;gap:14px;align-items:stretch;">
-            <div style="flex:0 0 34%;min-width:0;position:relative;aspect-ratio:16/6;background:#000;background-image:url('${thumb ? escapeHtml(thumb) : ""}');background-size:cover;background-position:center;">
+          <div style="display:flex;gap:12px;align-items:stretch;">
+            <div style="flex:0 0 34%;min-width:0;position:relative;aspect-ratio:16/5;background:#000;background-image:url('${thumb ? escapeHtml(thumb) : ""}');background-size:cover;background-position:center;">
               <div style="position:absolute;inset:0;background:rgba(0,0,0,0.32);display:flex;align-items:center;justify-content:center;">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:44px;height:44px;color:#fff;filter:drop-shadow(0 3px 10px rgba(0,0,0,0.32));">
-                  <path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l11.3-6.8a1 1 0 0 0 0-1.7l-11.3-6.8A1 1 0 0 0 8 5.2Z" fill="currentColor"/>
-                </svg>
+                <button type="button" data-action="hist-play" data-hist-id="${escapeHtml(it.id)}" style="display:inline-flex;align-items:center;justify-content:center;padding:0;margin:0;border:0;background:transparent;cursor:pointer;appearance:none;">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:38px;height:38px;color:#fff;filter:drop-shadow(0 3px 10px rgba(0,0,0,0.32));">
+                    <path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l11.3-6.8a1 1 0 0 0 0-1.7l-11.3-6.8A1 1 0 0 0 8 5.2Z" fill="currentColor"/>
+                  </svg>
+                </button>
               </div>
             </div>
-            <div style="flex:1 1 auto;min-width:0;padding:12px 16px 12px 0;display:flex;flex-direction:column;gap:10px;">
-              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
-                <div style="min-width:0;flex:1;">
-                  <div style="font-size:15px;font-weight:800;color:#111827;line-height:1.5;">${escapeHtml(it.title || "未命名影片")}</div>
-                  <div style="margin-top:5px;display:inline-flex;align-items:center;gap:6px;padding:4.5px 10px;border-radius:999px;background:rgba(17,24,39,0.04);color:#6b7280;font-size:12px;font-weight:700;">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:13.5px;height:13.5px;">
-                      <path d="M4 8.5h16M6.5 4.5v4M17.5 4.5v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                      <path d="M3 8.5V20a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                    </svg>
-                    ${escapeHtml(dtStr)}
-                  </div>
+            <div style="flex:1 1 auto;min-width:0;padding:10px 14px 10px 0;display:flex;flex-direction:column;gap:8px;">
+              <div style="min-width:0;flex:1;">
+                <div style="font-size:14px;font-weight:800;color:#111827;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(it.title || "未命名影片")}</div>
+                <div style="margin-top:4px;display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:rgba(17,24,39,0.04);color:#6b7280;font-size:11.5px;font-weight:700;">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:13px;height:13px;">
+                    <path d="M4 8.5h16M6.5 4.5v4M17.5 4.5v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M3 8.5V20a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                  </svg>
+                  ${escapeHtml(dtStr)}
                 </div>
-              </div>
-              <div style="margin-top:auto;">
-                <button class="btn btn-sm" type="button" data-action="hist-open" data-hist-id="${escapeHtml(it.id)}" style="padding:7px 12px;border-radius:11px;font-weight:700;font-size:13px;">
-                  <span style="display:inline-flex;align-items:center;gap:7px;">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:15px;height:15px;">
-                      <path d="M14 4h6v6M20 4l-9 9M10 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    另開 YouTube
-                  </span>
-                </button>
               </div>
             </div>
           </div>
@@ -190,7 +221,7 @@
         card.style.boxShadow = "";
       });
       card.addEventListener("click", (e) => {
-        if (e.target.closest("button,a")) return;
+        if (e.target.closest("button[data-action='hist-play'],button,a")) return;
         if (it.youtubeUrl) window.open(it.youtubeUrl, "_blank", "noopener,noreferrer");
       });
     });
@@ -198,13 +229,16 @@
     if (!bd._histDelegBound) {
       bd._histDelegBound = true;
       bd.addEventListener("click", (e) => {
-        const btn = e.target.closest("button[data-action='hist-open']");
-        if (!btn) return;
-        e.stopPropagation();
-        const id = String(btn.getAttribute("data-hist-id") || "").trim();
-        if (!id) return;
-        const it = items.find((x) => x.id === id) || null;
-        if (it && it.youtubeUrl) window.open(it.youtubeUrl, "_blank", "noopener,noreferrer");
+        const playBtn = e.target.closest("button[data-action='hist-play']");
+        if (playBtn) {
+          e.stopPropagation();
+          e.preventDefault();
+          const id = String(playBtn.getAttribute("data-hist-id") || "").trim();
+          if (!id) return;
+          const it = items.find((x) => x.id === id) || null;
+          if (it && it.youtubeUrl) openHistPlay(it.youtubeUrl);
+          return;
+        }
       });
     }
   }
