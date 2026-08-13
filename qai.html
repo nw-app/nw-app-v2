@@ -232,6 +232,162 @@
         fill: currentColor;
         stroke: none;
       }
+      .qai-line-guide {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: none;
+        align-items: flex-start;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.78);
+        padding: 24px 20px;
+        box-sizing: border-box;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+      }
+      .qai-line-guide.is-open {
+        display: flex;
+      }
+      .qai-line-guide-card {
+        width: 100%;
+        max-width: 420px;
+        background: #ffffff;
+        border-radius: 20px;
+        padding: 26px 22px 22px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+        position: relative;
+        overflow: hidden;
+        box-sizing: border-box;
+        margin-top: 12px;
+      }
+      .qai-line-guide-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 5px;
+        background: linear-gradient(90deg, #06c755, #00b900, #06c755);
+      }
+      .qai-line-guide-title {
+        font-size: 19px;
+        font-weight: 900;
+        line-height: 1.4;
+        color: #111827;
+        margin: 0 0 4px;
+        letter-spacing: 0.2px;
+      }
+      .qai-line-guide-sub {
+        font-size: 13px;
+        color: #6b7280;
+        line-height: 1.6;
+        margin: 0 0 18px;
+        font-weight: 500;
+      }
+      .qai-line-guide-steps {
+        background: linear-gradient(180deg, #f9fafb 0%, #f3f4f6 100%);
+        border-radius: 14px;
+        padding: 16px 14px 14px;
+        counter-reset: step;
+        margin-bottom: 18px;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+      }
+      .qai-line-guide-step {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 8px 0;
+        position: relative;
+      }
+      .qai-line-guide-step + .qai-line-guide-step {
+        border-top: 1px dashed rgba(0, 0, 0, 0.08);
+        margin-top: 8px;
+        padding-top: 16px;
+      }
+      .qai-line-guide-step::before {
+        counter-increment: step;
+        content: counter(step);
+        flex: 0 0 24px;
+        width: 24px;
+        height: 24px;
+        line-height: 24px;
+        text-align: center;
+        border-radius: 999px;
+        background: #06c755;
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 900;
+        box-shadow: 0 2px 6px rgba(6, 199, 85, 0.35);
+      }
+      .qai-line-guide-step strong {
+        display: block;
+        font-size: 14px;
+        font-weight: 800;
+        color: #111827;
+        line-height: 1.4;
+        margin-bottom: 2px;
+      }
+      .qai-line-guide-step span {
+        display: block;
+        font-size: 12.5px;
+        color: #4b5563;
+        line-height: 1.5;
+        font-weight: 500;
+      }
+      .qai-line-guide-tip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(6, 199, 85, 0.1);
+        color: #047a33;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        margin-bottom: 18px;
+      }
+      .qai-line-guide-tip svg {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 14px;
+      }
+      .qai-line-guide-arrow {
+        position: absolute;
+        top: 10px;
+        right: 14px;
+        width: 64px;
+        height: 64px;
+        pointer-events: none;
+        opacity: 0.95;
+      }
+      .qai-line-guide-arrow svg {
+        width: 100%;
+        height: 100%;
+      }
+      .qai-line-guide-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        padding: 13px 18px;
+        border-radius: 999px;
+        background: linear-gradient(180deg, #06c755 0%, #04a344 100%);
+        color: #ffffff !important;
+        text-decoration: none;
+        font-size: 15px;
+        font-weight: 900;
+        letter-spacing: 0.5px;
+        box-shadow: 0 6px 18px rgba(6, 199, 85, 0.45);
+        border: 0;
+        cursor: pointer;
+        transition: transform 0.12s ease, box-shadow 0.12s ease;
+        box-sizing: border-box;
+      }
+      .qai-line-guide-close:active {
+        transform: translateY(1px);
+        box-shadow: 0 3px 10px rgba(6, 199, 85, 0.45);
+      }
       @media (min-width: 768px) {
         .role-header {
           padding-left: 24px !important;
@@ -292,6 +448,34 @@
           width: 18px;
           height: 18px;
           flex-basis: 18px;
+        }
+        .qai-line-guide-card {
+          max-width: 480px;
+          padding: 30px 28px 26px;
+          margin-top: 24px;
+          border-radius: 24px;
+        }
+        .qai-line-guide-title {
+          font-size: 22px;
+        }
+        .qai-line-guide-sub {
+          font-size: 14px;
+        }
+        .qai-line-guide-step strong {
+          font-size: 15px;
+        }
+        .qai-line-guide-step span {
+          font-size: 13px;
+        }
+        .qai-line-guide-arrow {
+          width: 76px;
+          height: 76px;
+          top: 14px;
+          right: 18px;
+        }
+        .qai-line-guide-close {
+          font-size: 16px;
+          padding: 14px 22px;
         }
       }
       @media (min-width: 1024px) {
@@ -366,9 +550,76 @@
           Line客服
         </a>
       </footer>
+      <div id="qaiLineGuide" class="qai-line-guide" role="dialog" aria-modal="true" aria-labelledby="qaiLineGuideTitle" onclick="if(event.target===this)hideLineGuide()">
+        <div class="qai-line-guide-card">
+          <div class="qai-line-guide-arrow" aria-hidden="true">
+            <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M44 4 59.5 19.5 44 35" stroke="#06c755" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M59 20H28C13.64 20 4 29.64 4 44v12" stroke="#06c755" stroke-width="3.5" stroke-linecap="round"/>
+              <circle cx="52" cy="12" r="9" fill="#06c755" fill-opacity="0.18"/>
+            </svg>
+          </div>
+          <h2 id="qaiLineGuideTitle" class="qai-line-guide-title">LINE 瀏覽器請切換外部瀏覽器</h2>
+          <p class="qai-line-guide-sub">LINE 內建瀏覽器預設禁止檔案下載，請照下方 3 步驟操作即可完成下載。</p>
+          <div class="qai-line-guide-tip" role="note" aria-label="小提醒">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>
+            </svg>
+            約 5 秒即可完成
+          </div>
+          <div class="qai-line-guide-steps" aria-label="切換步驟">
+            <div class="qai-line-guide-step">
+              <div>
+                <strong>點擊右上角「⋯」功能鍵</strong>
+                <span>在 LINE 瀏覽器畫面的右上角，找到「三個點」按鈕並點擊</span>
+              </div>
+            </div>
+            <div class="qai-line-guide-step">
+              <div>
+                <strong>選擇「以瀏覽器開啟」</strong>
+                <span>iOS 選 Safari / Chrome；Android 選 Chrome 或手機原生瀏覽器</span>
+              </div>
+            </div>
+            <div class="qai-line-guide-step">
+              <div>
+                <strong>再次點擊「下載」按鈕</strong>
+                <span>外部瀏覽器支援完整下載功能，點擊後即可直接儲存 PDF 檔案</span>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="qai-line-guide-close" onclick="hideLineGuide()">我知道了</button>
+        </div>
+      </div>
     </div>
     <script>
+      var ua = (navigator && navigator.userAgent) ? navigator.userAgent : "";
+      var isLineBrowser = /Line|NAVER|LINE|LIKE/i.test(ua);
+      function showLineGuide() {
+        var el = document.getElementById("qaiLineGuide");
+        if (!el) return;
+        el.classList.add("is-open");
+        if (document.body) {
+          document.body.style.overflow = "hidden";
+        }
+        var closeBtn = el.querySelector(".qai-line-guide-close");
+        if (closeBtn) {
+          setTimeout(function () { try { closeBtn.focus(); } catch (_) {} }, 80);
+        }
+      }
+      function hideLineGuide() {
+        var el = document.getElementById("qaiLineGuide");
+        if (!el) return;
+        el.classList.remove("is-open");
+        if (document.body) {
+          document.body.style.overflow = "";
+        }
+      }
       function forceDownload(e) {
+        if (isLineBrowser) {
+          e.preventDefault();
+          try { showLineGuide(); } catch (_) {}
+          return false;
+        }
         var a = e.currentTarget;
         var url = a.getAttribute("href");
         var filename = a.getAttribute("download") || "qai_pdf.pdf";
