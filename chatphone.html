@@ -440,6 +440,7 @@
         function normalizeRoleText(role) {
           const value = String(role || "").trim().toLowerCase();
           if (value === "admin" || value === "系統管理員" || value === "系統管理者" || value === "system") return "admin";
+          if (value === "community" || value === "社區" || value === "社區管理員" || value === "社區管理者") return "admin";
           return "resident";
         }
 

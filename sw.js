@@ -1,10 +1,10 @@
-const CACHE_VERSION = "nwapp-v282";
+const CACHE_VERSION = "nwapp-v284";
 const PRECACHE = [
   "./",
   "./index.html",
   "./system.html",
   "./admin.html?v=8",
-  "./member.html?v=9",
+  "./member.html?v=10",
   "./parking.html?v=8",
   "./facility.html?v=8",
   "./parcel.html?v=8",
@@ -27,8 +27,8 @@ const PRECACHE = [
   "./css/member.css",
   "./js/index.js?v=7",
   "./js/system.js?v=19",
-  "./js/admin.js?v=179",
-  "./js/member.js?v=34",
+  "./js/admin.js?v=180",
+  "./js/member.js?v=35",
   "./js/parking.js?v=30",
   "./js/facility.js?v=7",
   "./js/parcel.js?v=17",
