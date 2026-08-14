@@ -2438,26 +2438,22 @@
     intercomIncomingUnsub = db
       .collection("calls")
       .where("toRole", "==", "resident")
+      .where("toUid", "==", myUid)
       .where("status", "==", "ringing")
-      .limit(50)
+      .limit(20)
       .onSnapshot(async (snap) => {
         const docs = snap && snap.docs ? snap.docs : [];
         const list = docs
           .map((d) => ({ id: d.id, ...(d.data() || {}) }))
-          .filter((x) => {
-            if (!x || String(x.status || "") !== "ringing") return false;
-            const tUid = String(x.toUid || "").trim();
-            if (tUid && tUid !== myUid) return false;
-            return true;
-          })
+          .filter((x) => x && String(x.status || "") === "ringing")
           .sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
         const latest = list[0] || null;
         // #region debug-point R:member-incoming-snapshot
-        fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"post-fix-2",point:"member-incoming-snapshot",location:"member.js:startMemberIntercomIncomingListener:onSnapshot",data:{uid:String(user.uid||""),community:cid,docCount:Number(docs.length||0),listCount:Number(list.length||0),latestId:String((latest&&latest.id)||""),latestStatus:String((latest&&latest.status)||""),latestCommunity:String((latest&&latest.community)||""),latestFromRole:String((latest&&latest.fromRole)||""),latestToRole:String((latest&&latest.toRole)||""),latestToUid:String((latest&&latest.toUid)||""),latestCreatedAtMs:Number((latest&&latest.createdAtMs)||0)},ts:Date.now()})}).catch(()=>{});
+        fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"post-fix-3",point:"member-incoming-snapshot",location:"member.js:startMemberIntercomIncomingListener:onSnapshot",data:{uid:String(user.uid||""),community:cid,docCount:Number(docs.length||0),listCount:Number(list.length||0),latestId:String((latest&&latest.id)||""),latestStatus:String((latest&&latest.status)||""),latestCommunity:String((latest&&latest.community)||""),latestFromRole:String((latest&&latest.fromRole)||""),latestToRole:String((latest&&latest.toRole)||""),latestToUid:String((latest&&latest.toUid)||""),latestCreatedAtMs:Number((latest&&latest.createdAtMs)||0)},ts:Date.now()})}).catch(()=>{});
         // #endregion
         if (!latest) {
           // #region debug-point R:member-incoming-empty
-          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"post-fix-2",point:"member-incoming-empty",location:"member.js:startMemberIntercomIncomingListener:empty",data:{uid:String(user.uid||""),community:cid},ts:Date.now()})}).catch(()=>{});
+          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"post-fix-3",point:"member-incoming-empty",location:"member.js:startMemberIntercomIncomingListener:empty",data:{uid:String(user.uid||""),community:cid},ts:Date.now()})}).catch(()=>{});
           // #endregion
           closeIntercomIncomingPrompt({ delayMs: 0 });
           return;
