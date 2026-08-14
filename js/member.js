@@ -1775,7 +1775,7 @@
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <div class="modal-body" style="padding:0;min-height:0;flex:1 1 auto;">
-          <iframe id="intercomHistoryIframe" src="" frameborder="0" style="width:100%;height:100%;display:block;"></iframe>
+          <iframe id="intercomHistoryIframe" src="" frameborder="0" allow="autoplay; clipboard-write; encrypted-media" style="width:100%;height:100%;display:block;"></iframe>
         </div>
       </div>
     `.trim();
@@ -2457,9 +2457,22 @@
           closeIntercomIncomingPrompt({ delayMs: 0 });
           return;
         }
-        if (cid && String(latest.community || "").trim() && String(latest.community || "").trim() !== cid) {
+        const accounts = loadAccounts();
+        const userCommunityList = (accounts.communities || []).filter(Boolean);
+        const userCommunityIds = userCommunityList.map((x) => String(x.id || "").trim()).filter(Boolean);
+        const userCommunityUsernames = userCommunityList.map((x) => String(x.username || "").trim()).filter(Boolean);
+        const latestCommunityRaw = String(latest.community || "").trim();
+        const latestCommunityLower = latestCommunityRaw.toLowerCase();
+        const isUserCommunityMatch = !latestCommunityRaw
+          || latestCommunityRaw === "default"
+          || (cid && latestCommunityRaw === cid)
+          || userCommunityIds.some((id) => id === latestCommunityRaw)
+          || userCommunityIds.some((id) => id.toLowerCase() === latestCommunityLower)
+          || userCommunityUsernames.some((un) => un === latestCommunityRaw)
+          || userCommunityUsernames.some((un) => un.toLowerCase() === latestCommunityLower);
+        if (latestCommunityRaw && !isUserCommunityMatch) {
           // #region debug-point R:member-incoming-community-mismatch
-          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"pre-fix",point:"member-incoming-community-mismatch",location:"member.js:startMemberIntercomIncomingListener:community-check",data:{uid:String(user.uid||""),community:cid,latestCommunity:String(latest.community||""),callId:String(latest.id||"")},ts:Date.now()})}).catch(()=>{});
+          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-no-ring",phase:"post-fix",point:"member-incoming-community-mismatch",location:"member.js:startMemberIntercomIncomingListener:community-check",data:{uid:String(user.uid||""),community:cid,latestCommunity:latestCommunityRaw,userCommunityIds,userCommunityUsernames,callId:String(latest.id||"")},ts:Date.now()})}).catch(()=>{});
           // #endregion
           return;
         }
