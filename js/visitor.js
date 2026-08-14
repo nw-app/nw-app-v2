@@ -332,19 +332,28 @@
         try {
           const canvas = await html2canvas(card, {
             useCORS: true,
-            scale: 2, // 提高解析度
+            scale: 2,
             backgroundColor: null,
             logging: false
           });
-          
+
+          const blob = await new Promise((resolve, reject) => {
+            canvas.toBlob((b) => b ? resolve(b) : reject(new Error("toBlob-failed")), "image/png");
+          });
+          const url = URL.createObjectURL(blob);
           const link = document.createElement("a");
+          link.href = url;
           link.download = `訪客證_${current.cname || "社區"}.png`;
-          link.href = canvas.toDataURL("image/png");
-          link.click();
+          document.body.appendChild(link);
+          try { link.click(); } catch {}
+          setTimeout(() => {
+            try { URL.revokeObjectURL(url); } catch {}
+            if (link && link.parentNode) link.parentNode.removeChild(link);
+          }, 500);
           setStatus("訪客證已儲存至您的裝置。", false);
         } catch (err) {
           console.error("Save image failed:", err);
-          setStatus("儲存圖片失敗，請嘗試直接截圖。", true);
+          setStatus("儲存圖片失敗，請嘗試直接截圖或長按圖片另存。", true);
         } finally {
           btnSavePassImage.disabled = false;
           btnSavePassImage.textContent = originalText;

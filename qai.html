@@ -521,7 +521,7 @@
           <p class="qai-desc">QAi 生活網整合智慧社區服務，從住戶互動、後台管理到數位管控，一次到位。</p>
           <div class="qai-video-wrap">
             <iframe
-              src="https://www.youtube.com/embed/l7TvTar94ZY?rel=0"
+              src="https://www.youtube.com/embed/GEaY3gE69sU?rel=0"
               title="智慧社區平台解決方案"
               frameborder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -593,7 +593,7 @@
     </div>
     <script>
       var ua = (navigator && navigator.userAgent) ? navigator.userAgent : "";
-      var isLineBrowser = /Line|NAVER|LINE|LIKE/i.test(ua);
+      var isLineBrowser = /\bLine\//i.test(ua);
       function showLineGuide() {
         var el = document.getElementById("qaiLineGuide");
         if (!el) return;
@@ -614,6 +614,19 @@
           document.body.style.overflow = "";
         }
       }
+      function doAnchorClick(href, filename, target) {
+        var link = document.createElement("a");
+        link.href = href;
+        if (filename) link.download = filename;
+        link.target = target || "_blank";
+        link.rel = "noopener noreferrer";
+        link.style.display = "none";
+        document.body.appendChild(link);
+        try { link.click(); } catch (_) {}
+        setTimeout(function () {
+          if (link && link.parentNode) link.parentNode.removeChild(link);
+        }, 500);
+      }
       function forceDownload(e) {
         if (isLineBrowser) {
           e.preventDefault();
@@ -624,6 +637,16 @@
         var url = a.getAttribute("href");
         var filename = a.getAttribute("download") || "qai_pdf.pdf";
         e.preventDefault();
+        var tried = false;
+        var onFailed = function () {
+          if (tried) return;
+          tried = true;
+          try {
+            doAnchorClick(url, filename, "_blank");
+          } catch (_) {
+            try { window.open(url, "_blank", "noopener"); } catch (__) {}
+          }
+        };
         try {
           fetch(url, { mode: "cors" })
             .then(function (res) {
@@ -637,22 +660,15 @@
               link.download = filename;
               link.style.display = "none";
               document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-              setTimeout(function () { URL.revokeObjectURL(objUrl); }, 5000);
+              try { link.click(); } catch (_) { onFailed(); return; }
+              setTimeout(function () {
+                try { URL.revokeObjectURL(objUrl); } catch (_) {}
+                if (link && link.parentNode) link.parentNode.removeChild(link);
+              }, 500);
             })
-            .catch(function () {
-              var fallback = document.createElement("a");
-              fallback.href = url;
-              fallback.download = filename;
-              fallback.target = "_self";
-              fallback.rel = "noopener";
-              document.body.appendChild(fallback);
-              fallback.click();
-              document.body.removeChild(fallback);
-            });
+            .catch(onFailed);
         } catch (_) {
-          return true;
+          onFailed();
         }
         return false;
       }

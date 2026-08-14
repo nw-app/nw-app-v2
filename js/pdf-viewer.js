@@ -7,6 +7,22 @@
   const btnDownload = document.getElementById('btnDownloadPdf');
   const btnClose = document.getElementById('btnClosePdfViewer');
   let sourceUrl = './';
+  let currentBlobUrl = '';
+  let currentFilename = '附件.pdf';
+
+  function isLineBrowser() {
+    const ua = String(navigator.userAgent || '').toLowerCase();
+    return ua.includes('line/') || ua.includes(' line ');
+  }
+
+  function isEmbeddedRestrictedBrowser() {
+    const ua = String(navigator.userAgent || '').toLowerCase();
+    if (isLineBrowser()) return true;
+    if (ua.includes('fban') || ua.includes('fbav')) return true;
+    if (ua.includes('instagram')) return true;
+    if (ua.includes('micromessenger') || ua.includes('wechat')) return true;
+    return false;
+  }
 
   function setStatus(text, isError) {
     if (!statusEl) return;
@@ -77,6 +93,27 @@
     }
   }
 
+  async function forceDownloadPdf() {
+    if (!currentBlobUrl) {
+      setStatus('PDF 尚未準備完成，請稍後再試。', true);
+      return;
+    }
+    if (isEmbeddedRestrictedBrowser()) {
+      const name = isLineBrowser() ? 'LINE 內建瀏覽器' : '目前的內建瀏覽器';
+      setStatus(`${name}封鎖了直接下載。請點右上角選單「用瀏覽器開啟」，或在 PDF 頁面上長按選擇「另存新檔」。`, true);
+      window.alert(`${name}封鎖了直接下載功能。\n\n解決方式：\n① 點擊右上角選單 → 選擇「用瀏覽器開啟」或「在外部瀏覽器中開啟」，即可正常下載；\n② 或直接在 PDF 頁面上長按，選擇「另存新檔/下載圖片」。`);
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = currentBlobUrl;
+    a.download = currentFilename;
+    document.body.appendChild(a);
+    try { a.click(); } catch {}
+    setTimeout(() => {
+      if (a && a.parentNode) a.parentNode.removeChild(a);
+    }, 500);
+  }
+
   async function init() {
     const payload = getPayload();
     if (!payload || !payload.dataUrl) {
@@ -85,10 +122,10 @@
     }
 
     const filename = String(payload.filename || '附件.pdf').trim() || '附件.pdf';
+    currentFilename = filename;
     sourceUrl = String(payload.sourceUrl || './').trim() || './';
     if (titleEl) titleEl.textContent = filename;
 
-    let blobUrl = '';
     try {
       const bytes = dataUrlToUint8Array(payload.dataUrl);
       const headTxt = String.fromCharCode(...bytes.slice(0, 5));
@@ -98,10 +135,14 @@
       }
 
       const blob = new Blob([bytes], { type: 'application/pdf' });
-      blobUrl = URL.createObjectURL(blob);
+      currentBlobUrl = URL.createObjectURL(blob);
       if (btnDownload) {
-        btnDownload.href = blobUrl;
+        btnDownload.href = currentBlobUrl;
         btnDownload.download = filename;
+        btnDownload.addEventListener('click', (e) => {
+          e.preventDefault();
+          forceDownloadPdf();
+        });
       }
 
       await renderPdf(bytes, filename);
@@ -111,8 +152,8 @@
     }
 
     window.addEventListener('beforeunload', () => {
-      if (blobUrl) {
-        try { URL.revokeObjectURL(blobUrl); } catch {}
+      if (currentBlobUrl) {
+        try { URL.revokeObjectURL(currentBlobUrl); } catch {}
       }
     });
   }
