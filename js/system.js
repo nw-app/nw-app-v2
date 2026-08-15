@@ -1754,12 +1754,12 @@
             </div>
             <div class="community-row2">
               <div class="community-meta meta">
-                ${levelBadgeHtml(c.level)}
                 <div class="switch-label">${c.enabled ? "啟用" : "停用"}</div>
                 <label class="switch">
                   <input type="checkbox" data-toggle-community="${c.id}" ${c.enabled ? "checked" : ""} />
                   <span class="slider"></span>
                 </label>
+                ${levelBadgeHtml(c.level)}
               </div>
               <div class="community-actions">
                 <button class="icon-btn" type="button" data-go-admin="${c.id}" aria-label="前往社區後台" title="前往社區後台">

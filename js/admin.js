@@ -12288,7 +12288,7 @@
       const cfg = resolveUrl(m.id);
       const disabled = !cfg.enabled || !cfg.url;
       return `
-        <article class="card" data-id="${m.id}">
+        <article class="card" data-id="${m.id}" role="button" tabindex="0" aria-label="${m.name}" ${disabled ? "aria-disabled=\"true\"" : ""}>
           <div class="card-hd">
             <div class="left">
               <div class="chip" aria-hidden="true">${iconSvg(m.id)}</div>
@@ -12309,16 +12309,39 @@
       `;
     }).join("");
 
+    const openModule = (id) => {
+      const { url } = resolveUrl(id);
+      if (!url) {
+        toast("尚未設定連結（示意）");
+        return;
+      }
+      location.href = url;
+    };
+
+    grid.querySelectorAll("article.card").forEach((card) => {
+      const id = card.getAttribute("data-id");
+      const disabled = card.getAttribute("aria-disabled") === "true";
+      card.addEventListener("click", (e) => {
+        if (didDrag) { didDrag = false; return; }
+        if (disabled) return;
+        if (e.target.closest("[data-open]")) return;
+        openModule(id);
+      });
+      card.addEventListener("keydown", (e) => {
+        if (disabled) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openModule(id);
+        }
+      });
+    });
+
     grid.querySelectorAll("[data-open]").forEach((btn) => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
         const card = btn.closest("[data-id]");
         const id = card.getAttribute("data-id");
-        const { url } = resolveUrl(id);
-        if (!url) {
-          toast("尚未設定連結（示意）");
-          return;
-        }
-        location.href = url;
+        openModule(id);
       });
     });
     updateFooterActiveNav();

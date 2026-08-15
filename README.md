@@ -4,7 +4,7 @@
 >
 > **技術堆疊**：`Firebase Auth / Firestore / Storage` + `原生 HTML / CSS / JavaScript` + `Service Worker（PWA 離線快取）` + `WebRTC 對講`
 >
-> **目前版本**：CACHE_VERSION `nwapp-v289`（每次升級需同步三項版本，詳見後方部署 SOP）
+> **目前版本**：CACHE_VERSION `nwapp-v295`（每次升級需同步三項版本，詳見後方部署 SOP）
 
 ---
 
@@ -423,11 +423,11 @@
 
 | 項目 | 檔案路徑 / 版本 | 用途說明 |
 |---|---|---|
-| **Service Worker（PWA 快取核心）** | `sw.js`（`CACHE_VERSION = nwapp-v289`） | 離線可用、所有靜態資源版本控管、PWA 安裝到手機桌面 |
+| **Service Worker（PWA 快取核心）** | `sw.js`（`CACHE_VERSION = nwapp-v295`） | 離線可用、所有靜態資源版本控管、PWA 安裝到手機桌面 |
 | **PWA 安裝引導** | `js/pwa.js?v=6` + `css/pwa.css` | 彈窗引導使用者「加到主畫面」安裝 QAi生活網到手機桌面像 App 一樣 |
 | **Firebase 設定 + 權限 Rules** | `js/firebase-config.js`<br>`firebase.rules`（根目錄）<br>`firebase/firebase.rules`（子目錄） | Auth 登入驗證 / Firestore 資料庫初始化；**重要：兩份 Rules 內容必須 100% 同步，否則權限會跑掉** |
 | **PDF 檢視器** | `pdf-viewer.html` + `js/pdf-viewer.js` + `js/pdf-viewer-launcher.js?v=3` | 所有公告附件 PDF（財報/會議手冊/合約）線上直接檢視，不需強制下載 |
-| **全站 CSS 主題** | `css/system.css?v=5`、`css/admin.css`、`css/member.css`、`css/index.css` | 主色 `#d32f2f`（深紅）、卡片/按鈕/表單共用樣式、響應式（手機/平板/桌機）|
+| **全站 CSS 主題** | `css/system.css?v=6`、`css/admin.css?v=5`、`css/member.css`、`css/index.css` | 主色 `#d32f2f`（深紅）、卡片/按鈕/表單共用樣式、響應式（手機/平板/桌機）|
 | **PWA 設定檔** | `manifest.webmanifest` | App 名稱（生活網）、主題色、Icon（192px/512px SVG）、手機安裝用 |
 
 ---

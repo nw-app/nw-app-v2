@@ -446,6 +446,27 @@ a { color: inherit; text-decoration: none; }
   display: grid;
   grid-template-rows: auto 1fr;
 }
+#moduleGrid > article.card[role="button"] {
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+#moduleGrid > article.card[role="button"]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(17, 24, 39, 0.1);
+  border-color: rgba(211, 47, 47, 0.35);
+}
+#moduleGrid > article.card[role="button"]:active {
+  transform: translateY(1px);
+  box-shadow: 0 8px 18px rgba(17, 24, 39, 0.08);
+}
+#moduleGrid > article.card[role="button"]:focus-visible {
+  outline: 2px solid #d32f2f;
+  outline-offset: 2px;
+}
+#moduleGrid > article.card[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
 .grid.reorder-mode .card { user-select: none; }
 .card.dragging {
   opacity: 0.85;
@@ -486,9 +507,9 @@ a { color: inherit; text-decoration: none; }
 .resident-page-actions { display: flex; gap: 10px; align-items: center; flex: 0 0 auto; flex-wrap: wrap; }
 .card-hd .left { display: flex; gap: 12px; align-items: center; min-width: 0; flex: 1 1 200px; }
 .chip {
-  width: 44px;
-  height: 44px;
-  border-radius: 16px;
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
   display: grid;
   place-items: center;
   background: linear-gradient(180deg, #c62828 0%, #d32f2f 45%, #b71c1c 100%);
@@ -496,7 +517,13 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
   flex: 0 0 auto;
 }
-.card-hd h2 { margin: 0; font-size: 16px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip svg,
+.chip img {
+  width: 48px;
+  height: 48px;
+  display: block;
+}
+.card-hd h2 { margin: 0; font-size: 32px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-hd p {
   margin: 2px 0 0;
   font-size: 11px;
@@ -2124,12 +2151,17 @@ a { color: inherit; text-decoration: none; }
     padding: 10px;
   }
   .chip {
-    width: 40px;
-    height: 40px;
-    border-radius: 14px;
+    width: 56px;
+    height: 56px;
+    border-radius: 18px;
+  }
+  .chip svg,
+  .chip img {
+    width: 42px;
+    height: 42px;
   }
   .card-hd h2 {
-    font-size: 15px;
+    font-size: 30px;
   }
 }
 
@@ -2144,15 +2176,20 @@ a { color: inherit; text-decoration: none; }
     padding: 10px;
   }
   .card-hd .left {
-    gap: 8px;
+    gap: 10px;
   }
   .chip {
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+  }
+  .chip svg,
+  .chip img {
     width: 38px;
     height: 38px;
-    border-radius: 12px;
   }
   .card-hd h2 {
-    font-size: 14px;
+    font-size: 28px;
   }
   .card-hd p {
     font-size: 11px;
@@ -2168,21 +2205,26 @@ a { color: inherit; text-decoration: none; }
     box-shadow: 0 6px 18px rgba(17, 24, 39, 0.05);
   }
   .card-hd {
-    padding: 8px 10px;
+    padding: 10px 12px;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
   }
   .card-hd .left {
     width: 100%;
-    gap: 10px;
+    gap: 12px;
   }
   .chip {
-    width: 36px;
-    height: 36px;
-    border-radius: 12px;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+  }
+  .chip svg,
+  .chip img {
+    width: 34px;
+    height: 34px;
   }
   .card-hd h2 {
-    font-size: 14px;
+    font-size: 28px;
   }
   .card-hd p {
     font-size: 11px;
