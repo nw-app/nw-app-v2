@@ -1,4 +1,4 @@
-const CACHE_VERSION = "nwapp-v294";
+const CACHE_VERSION = "nwapp-v309";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -6,6 +6,7 @@ const PRECACHE = [
   "./admin.html?v=9",
   "./member.html?v=12",
   "./parking.html?v=8",
+  "./parking-view.html?v=11",
   "./facility.html?v=8",
   "./parcel.html?v=8",
   "./callrecord.html",
@@ -21,7 +22,7 @@ const PRECACHE = [
   "./live-meeting.html?v=30",
   "./qai.html?v=15",
   "./css/parcel.css?v=3",
-  "./css/ads-footer.css?v=13",
+  "./css/ads-footer.css?v=16",
   "./css/system.css?v=6",
   "./css/admin.css?v=5",
   "./css/member.css",
@@ -30,11 +31,12 @@ const PRECACHE = [
   "./js/admin.js?v=182",
   "./js/member.js?v=36",
   "./js/parking.js?v=30",
+  "./js/parking-view.js?v=11",
   "./js/facility.js?v=7",
   "./js/parcel.js?v=17",
   "./js/visitor.js?v=9",
   "./js/visitor-resident.js?v=5",
-  "./js/ads-footer.js?v=14",
+  "./js/ads-footer.js?v=16",
   "./js/bulletin-clean.js?v=1",
   "./js/bulletin-activity.js?v=2",
   "./js/bulletin-repair.js?v=4",

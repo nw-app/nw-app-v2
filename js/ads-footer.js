@@ -141,6 +141,30 @@
     `.trim();
     footer.innerHTML = "";
     footer.classList.add("has-ads");
+    const parentLayout = footer.closest(".parcel-layout, .layout");
+    if (parentLayout) {
+      parentLayout.classList.add("has-footer-ads");
+      try {
+        const cs = getComputedStyle(parentLayout);
+        const orig = cs.gridTemplateRows || "";
+        const rows = orig.trim().split(/\s+/).filter(Boolean);
+        if (rows.length >= 4) {
+          const contentIdx = rows.length - 2;
+          rows[contentIdx] = "minmax(0px, 1fr)";
+          rows[rows.length - 1] = "minmax(0px, max-content)";
+          parentLayout.style.setProperty("grid-template-rows", rows.join(" "), "important");
+          parentLayout.style.setProperty("align-content", "stretch", "important");
+          parentLayout.style.setProperty("justify-content", "stretch", "important");
+          parentLayout.style.setProperty("row-gap", "0px", "important");
+          parentLayout.style.setProperty("column-gap", "0px", "important");
+          parentLayout.style.setProperty("gap", "0px", "important");
+        }
+      } catch {}
+      try {
+        footer.style.setProperty("align-self", "end", "important");
+        footer.style.setProperty("justify-self", "stretch", "important");
+      } catch {}
+    }
     footer.appendChild(wrap);
 
     const track = wrap.querySelector(".ads-footer-track");

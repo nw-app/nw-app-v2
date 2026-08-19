@@ -1,65 +1,92 @@
+.parcel-layout.has-footer-ads,
+.layout.has-footer-ads {
+  align-content: stretch !important;
+  justify-content: stretch !important;
+  row-gap: 0 !important;
+  column-gap: 0 !important;
+  gap: 0 !important;
+}
+
 .parcel-ft.has-ads,
 .frame-ft.has-ads {
+  align-self: end !important;
+  justify-self: stretch !important;
   padding: 0 !important;
   margin: 0 !important;
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+  background: transparent !important;
   justify-content: stretch !important;
   align-items: stretch !important;
   align-content: stretch !important;
   min-height: 0 !important;
   max-height: 96px !important;
   height: auto !important;
-  overflow: visible !important;
+  line-height: 0 !important;
+  overflow: hidden !important;
   flex: 0 0 auto !important;
   flex-shrink: 0 !important;
   flex-grow: 0 !important;
   display: flex !important;
   width: 100% !important;
   box-sizing: border-box !important;
+  row-gap: 0 !important;
+  column-gap: 0 !important;
+  gap: 0 !important;
 }
 
-.frame-ft.has-ads nav#nav {
+.frame-ft.has-ads nav#nav,
+.frame-ft.has-ads .nav {
   display: none !important;
 }
 
 .ads-footer {
   width: 100% !important;
-  height: 100% !important;
+  height: auto !important;
   max-height: 96px !important;
   min-height: 0 !important;
   border-radius: 0 !important;
-  overflow: visible !important;
+  overflow: hidden !important;
   border: 0 !important;
   background: transparent !important;
   position: relative !important;
   flex: 1 1 100% !important;
-  flex-shrink: 1 !important;
+  flex-shrink: 0 !important;
   flex-grow: 1 !important;
-  display: flex !important;
+  display: block !important;
   align-items: stretch !important;
   justify-content: stretch !important;
   box-sizing: border-box !important;
+  line-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  gap: 0 !important;
 }
 
 .ads-footer-track {
   width: 100% !important;
   height: auto !important;
   max-height: 96px !important;
-  min-height: 40px !important;
+  min-height: 0 !important;
   position: relative !important;
-  display: flex !important;
+  display: block !important;
   align-items: stretch !important;
   justify-content: stretch !important;
-  overflow: visible !important;
+  overflow: hidden !important;
   flex: 1 1 100% !important;
   box-sizing: border-box !important;
+  line-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  gap: 0 !important;
 }
 
 .ads-footer-track img,
 .ads-footer img {
   width: 100% !important;
-  height: 100% !important;
+  height: auto !important;
   min-width: 100% !important;
-  min-height: 40px !important;
+  min-height: 0 !important;
   max-width: 100% !important;
   max-height: 96px !important;
   display: block !important;
@@ -77,9 +104,11 @@
   image-rendering: auto !important;
   opacity: 1;
   transition: opacity 220ms ease;
-  flex: 1 1 100% !important;
-  flex-shrink: 1 !important;
-  flex-grow: 1 !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  vertical-align: bottom !important;
+  line-height: 0 !important;
 }
 
 .ads-footer-track img.is-fading {
