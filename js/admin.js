@@ -248,7 +248,7 @@
     { id: "live-meeting", name: "區大直播", desc: "直播室預約、時段管理與會議記錄", badge: "直播", page: "live-meeting.html" },
     { id: "digital-signage", name: "電子看版", desc: "社區公告、活動訊息與即時資訊顯示", badge: "看版", page: "#community/digital-signage" },
     { id: "company-support", name: "公司支援", desc: "回報需求、聯絡紀錄與處理進度（示意）", badge: "支援", page: "#community/company-support" },
-    { id: "meter-reading", name: "抄表紀錄", desc: "水電瓦斯抄表、拍照與歷史紀錄（示意）", badge: "抄表", page: "#community/meter-reading" },
+    { id: "meter-reading", name: "抄表紀錄", desc: "水電瓦斯抄表登記、批量匯入、審核核異與統計分析", badge: "抄表", page: "#community/meter-reading" },
     { id: "finance", name: "收支報表", desc: "收入/支出彙總、分類與月份查詢（示意）", badge: "財務", page: "#community/finance" },
     { id: "checkin-vote", name: "報到投票", desc: "活動報到、投票與統計結果（示意）", badge: "活動", page: "#community/checkin-vote" },
     { id: "assignments", name: "交辦事項", desc: "派工、追蹤進度、回報與結案（示意）", badge: "待辦", page: "#community/assignments" },
@@ -476,8 +476,20 @@
     const communityId = resolveActiveCommunityId();
     const cfg = loadConfig(communityId);
     const v = cfg && cfg.communityButtons ? cfg.communityButtons[moduleId] : null;
-    if (!v) return { enabled: true, url: `#community/${moduleId}` };
-    return { enabled: v.enabled !== false, url: String(v.url || "").trim() || `#community/${moduleId}` };
+    const isMeter = moduleId === "meter-reading";
+    const legacyMeterUrl = "#community/meter-reading";
+    const meterFallback = "number-list.html";
+    const defaultFallback = `#community/${moduleId}`;
+    const fallbackUrl = isMeter ? meterFallback : defaultFallback;
+    if (!v) return { enabled: true, url: fallbackUrl };
+    const rawUrl = String(v.url || "").trim();
+    let finalUrl;
+    if (isMeter) {
+      finalUrl = (!rawUrl || rawUrl === legacyMeterUrl) ? meterFallback : rawUrl;
+    } else {
+      finalUrl = rawUrl || defaultFallback;
+    }
+    return { enabled: v.enabled !== false, url: finalUrl };
   }
 
   function refreshLoginInfo(user) {
@@ -501,6 +513,27 @@
       state.unsubConfig = configDocRef(cid).onSnapshot(
         (doc) => {
           state.config = doc && doc.exists ? (doc.data() || null) : null;
+          const buttons = state.config && state.config.communityButtons ? state.config.communityButtons : null;
+          const meterCfg = buttons && buttons["meter-reading"] ? buttons["meter-reading"] : null;
+          const rawMeterUrl = meterCfg ? String(meterCfg.url || "").trim() : "";
+          const legacyMeterUrl = "#community/meter-reading";
+          const meterTarget = "number-list.html";
+          const needMeterMigration = !meterCfg
+            ? true
+            : (!rawMeterUrl || rawMeterUrl === legacyMeterUrl) && meterCfg.enabled !== false;
+          if (needMeterMigration && cid) {
+            try {
+              configDocRef(cid).set(
+                {
+                  communityButtons: {
+                    "meter-reading": { enabled: true, url: meterTarget }
+                  },
+                  updatedAt: (typeof firebase !== 'undefined' && firebase.firestore && firebase.firestore.FieldValue) ? firebase.firestore.FieldValue.serverTimestamp() : null
+                },
+                { merge: true }
+              ).catch(() => {});
+            } catch {}
+          }
           if (handleHashRoute()) {
             renderFooterNav();
             updateFooterActiveNav();
@@ -16398,6 +16431,32 @@
     }
     if (moduleId === "activity") {
       renderActivityModule();
+      return;
+    }
+    if (moduleId === "meter-reading") {
+      if (subnavEl) subnavEl.innerHTML = "";
+      const cid = String(resolveActiveCommunityId() || "").trim() || "default";
+      const profile = state.currentAdminProfile || state.currentUserProfile || {};
+      const currentUser = (typeof auth !== "undefined" && auth && auth.currentUser) ? auth.currentUser : null;
+      const uidStr = currentUser ? String(currentUser.uid || "") : "";
+      const displayName = String(profile.displayName || profile.name || (currentUser && currentUser.displayName) || "").trim();
+      const roleRaw = String(state.currentUserRole || profile.role || "").trim().toLowerCase();
+      let role = "meter_reader";
+      if (roleRaw === "admin" || roleRaw === "super_admin" || roleRaw === "community_admin") role = "admin";
+      else if (roleRaw === "community" || roleRaw === "manager" || roleRaw === "management") role = "community";
+      const opId = String(profile.operatorId || profile.staffId || profile.employeeId || uidStr || "").trim();
+      if (typeof window.NwMeterReading !== "undefined" && window.NwMeterReading.UI) {
+        window.NwMeterReading.UI.renderAdminPage(contentEl, {
+          communityId: cid,
+          role,
+          uid: uidStr,
+          name: displayName,
+          opId: opId || uidStr,
+        });
+      } else {
+        contentEl.innerHTML = `<div style="padding:24px;color:#d00;">抄錶模組尚未載入，請稍後再試。</div>`;
+      }
+      updateFooterActiveNav();
       return;
     }
     if (subnavEl) subnavEl.innerHTML = "";

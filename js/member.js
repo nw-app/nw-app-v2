@@ -442,7 +442,7 @@
     { name: "社區園地", icon: "photo/a03.png", url: "bulletin-community.html" },
     { name: "公設預約", icon: "photo/a04.png", url: "facility.html" },
     { name: "車位管理", icon: "photo/a05.png", url: "parking.html" },
-    { name: "抄表紀錄", icon: "photo/a06.png", url: "#" },
+    { name: "抄表紀錄", icon: "photo/a06.png", url: "number-list.html" },
     { name: "財務報表", icon: "photo/a07.png", url: "bulletin-finance.html" },
     { name: "區大直播", icon: "photo/a08.png", url: "live-meeting.html" },
     { name: "會議記錄", icon: "photo/a09.png", url: "bulletin-meeting.html" },
@@ -633,7 +633,14 @@
           merged.openExternal = Boolean(b.openExternal);
           const savedUrl = String(b.url || "").trim();
           const defUrl = String(def.url || "").trim();
-          if ((!savedUrl || savedUrl === "#") && defUrl && defUrl !== "#") merged.url = defUrl;
+          const nameKey = String(b.name || def.name || "").trim();
+          const LEGACY_METER_URL = "#resident/meter-reading";
+          const TARGET_METER_URL = "number-list.html";
+          if (nameKey === "抄表紀錄" && savedUrl === LEGACY_METER_URL) {
+            merged.url = TARGET_METER_URL;
+          } else if ((!savedUrl || savedUrl === "#") && defUrl && defUrl !== "#") {
+            merged.url = defUrl;
+          }
           out.push(merged);
           const k = norm(def.icon) || norm(def.name);
           if (k) used.add(k);
@@ -691,6 +698,31 @@
     if (state._configUnsub) state._configUnsub();
     state._configUnsub = configDocRef(cid).onSnapshot((doc) => {
       state.config = doc && doc.exists ? (doc.data() || null) : null;
+      const raw = state.config && typeof state.config === "object" ? state.config : {};
+      const LEGACY_METER_URL = "#resident/meter-reading";
+      const TARGET_METER_URL = "number-list.html";
+      let patch = {};
+      let needPatch = false;
+      const rowD = Array.isArray(raw.rowDButtons) ? raw.rowDButtons : null;
+      const meterButton = Array.isArray(rowD) && rowD.length >= 6 ? rowD[5] : null;
+      if (meterButton && typeof meterButton === "object") {
+        const savedUrl = String(meterButton.url || "").trim();
+        if (savedUrl === LEGACY_METER_URL || (!savedUrl && String(meterButton.name || "") === "抄表紀錄")) {
+          patch.rowDButtons = rowD.map((b, i) => {
+            if (i !== 5 || !b || typeof b !== "object") return b;
+            return { ...b, url: TARGET_METER_URL };
+          });
+          needPatch = true;
+        }
+      }
+      if (needPatch && doc && doc.exists && cid) {
+        const serverTs = (typeof firebase !== "undefined" && firebase.firestore && firebase.firestore.FieldValue)
+          ? firebase.firestore.FieldValue.serverTimestamp() : null;
+        if (serverTs) patch.updatedAt = serverTs;
+        try {
+          configDocRef(cid).set(patch, { merge: true }).catch(() => {});
+        } catch {}
+      }
       render();
     }, () => {
       state.config = null;
@@ -979,6 +1011,28 @@
       pageTitleEl.textContent = "客服中心";
       pageSubtitleEl.textContent = "聯繫社區管理處或系統客服（開發中）";
       contentEl.innerHTML = "";
+      return;
+    }
+    if (moduleId === "meter-reading") {
+      pageTitleEl.textContent = "抄錶紀錄／繳費";
+      pageSubtitleEl.textContent = "自家水電瓦斯歷史用量、核異申請與繳費通知";
+      contentEl.innerHTML = "";
+      const profile = state.currentUserProfile || {};
+      const displayName = String(profile.displayName || profile.name || "").trim();
+      const houseNo = String(profile.houseNo || profile.unit || "").trim() || "—";
+      const communityId = String(resolveActiveCommunityId() || "").trim() || (sessionStorage.getItem("csp_last_cid") || "").trim() || "default";
+      const currentUser = (typeof auth !== "undefined" && auth && auth.currentUser) ? auth.currentUser : null;
+      const uidStr = currentUser ? String(currentUser.uid || "") : "";
+      if (typeof window.NwMeterReading !== "undefined" && window.NwMeterReading.UI) {
+        window.NwMeterReading.UI.renderResidentPage(contentEl, {
+          communityId,
+          houseNo,
+          uid: uidStr,
+          name: displayName,
+        });
+      } else {
+        contentEl.innerHTML = `<div style="padding:24px;color:#d00;">抄錶模組尚未載入，請稍後再試。</div>`;
+      }
       return;
     }
     pageTitleEl.textContent = "";

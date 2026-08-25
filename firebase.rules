@@ -538,6 +538,41 @@ service cloud.firestore {
         allow read, list: if true;
         allow create, update, delete: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
+
+      match /meterReadings/{rid} {
+        allow list: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || (userCanAccessCommunitySlug(slug) && (
+              resource.data.houseNo in userUnitKeys()
+              || resource.data.residentUid == request.auth.uid
+            ))
+        );
+        allow get: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || (userCanAccessCommunitySlug(slug) && (
+              resource.data.houseNo in userUnitKeys()
+              || resource.data.residentUid == request.auth.uid
+            ))
+        );
+        allow create: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || (userCanAccessCommunitySlug(slug)
+              && request.resource.data.residentUid == request.auth.uid
+              && (request.resource.data.houseNo in userUnitKeys())
+            )
+        );
+        allow update: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+        );
+        allow delete: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+        );
+      }
     }
 
     match /sos_alerts/{alertId} {

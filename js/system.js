@@ -116,10 +116,12 @@
     { id: "facility", name: "設施預約", defaultUrl: "#community/facility" },
     { id: "bulletin", name: "公告系統", defaultUrl: "#community/bulletin" },
     { id: "parking", name: "綠色停車", defaultUrl: "#community/parking" },
+    { id: "meter-reading", name: "抄表紀錄", defaultUrl: "number-list.html" },
   ];
 
   const catalogResidentButtons = [
     { id: "resident-bulletin", name: "通知", defaultUrl: "#resident/resident-bulletin" },
+    { id: "meter-reading", name: "抄表紀錄", defaultUrl: "number-list.html" },
   ];
 
   const legacyRowDButtons = [
@@ -154,7 +156,7 @@
     { name: "社區園地", icon: "photo/a03.png", url: "bulletin-community.html" },
     { name: "公設預約", icon: "photo/a04.png", url: "facility.html" },
     { name: "綠色停車", icon: "photo/a05.png", url: "#" },
-    { name: "抄表紀錄", icon: "photo/a06.png", url: "#" },
+    { name: "抄表紀錄", icon: "photo/a06.png", url: "number-list.html" },
     { name: "財務報表", icon: "photo/a07.png", url: "bulletin-finance.html" },
     { name: "區大直播", icon: "photo/a08.png", url: "live-meeting.html" },
     { name: "會議記錄", icon: "photo/a09.png", url: "bulletin-meeting.html" },
@@ -212,6 +214,7 @@
       changed = patchInternal(next, 0, "包裹郵件", "photo/a01.png", "parcel.html") || changed;
       changed = patchInternal(next, 2, "社區園地", "photo/a03.png", "bulletin-community.html") || changed;
       changed = patchInternal(next, 3, "公設預約", "photo/a04.png", "facility.html") || changed;
+      changed = patchInternal(next, 5, "抄表紀錄", "photo/a06.png", "number-list.html") || changed;
       changed = patchInternal(next, 6, "財務報表", "photo/a07.png", "bulletin-finance.html") || changed;
       changed = patchInternal(next, 8, "會議記錄", "photo/a09.png", "bulletin-meeting.html") || changed;
       changed = patchExternal(next, 11, "AI對話", "photo/a12.png", "https://gemini.google.com/?hl=zh-TW") || changed;
@@ -219,8 +222,44 @@
     };
 
     const res = applyRules(saved);
-    if (!res.changed) return { changed: false };
-    await configDocRef(cid).set({ rowDButtons: res.next, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+
+    const LEGACY_METER_RESIDENT = "#resident/meter-reading";
+    const LEGACY_METER_ADMIN = "#community/meter-reading";
+    const TARGET_METER = "number-list.html";
+    const meterButtons = res && Array.isArray(res.next) ? res.next : null;
+    const meterRowD = meterButtons && meterButtons.length >= 6 ? meterButtons[5] : null;
+    if (meterRowD && typeof meterRowD === "object") {
+      const u = String(meterRowD.url || "").trim();
+      if (!u || u === "#" || u === LEGACY_METER_ADMIN || u === LEGACY_METER_RESIDENT) {
+        meterRowD.url = TARGET_METER;
+        res.changed = true;
+      }
+    }
+
+    const buttons = cfg.communityButtons && typeof cfg.communityButtons === "object" ? cfg.communityButtons : null;
+    const meter = buttons && buttons["meter-reading"] && typeof buttons["meter-reading"] === "object"
+      ? buttons["meter-reading"] : null;
+    const meterUrl = meter ? String(meter.url || "").trim() : "";
+    const needMeter = !meter
+      ? true
+      : (meter.enabled !== false) && (!meterUrl || meterUrl === "#" || meterUrl === LEGACY_METER_ADMIN || meterUrl === LEGACY_METER_RESIDENT);
+    let nextCommunityButtons = null;
+    if (needMeter) {
+      const base = buttons && typeof buttons === "object" ? { ...buttons } : {};
+      base["meter-reading"] = {
+        enabled: meter && typeof meter.enabled === "boolean" ? meter.enabled : true,
+        url: TARGET_METER
+      };
+      nextCommunityButtons = base;
+    }
+
+    if (!res.changed && !nextCommunityButtons) return { changed: false };
+
+    const patch = { updatedAt: FieldValue.serverTimestamp() };
+    if (res.changed) patch.rowDButtons = res.next;
+    if (nextCommunityButtons) patch.communityButtons = nextCommunityButtons;
+
+    await configDocRef(cid).set(patch, { merge: true });
     return { changed: true };
   };
 
@@ -2195,7 +2234,8 @@
         { value: "bulletin-community.html", label: "社區園地" },
         { value: "bulletin-finance.html", label: "財務報表" },
         { value: "bulletin-meeting.html", label: "會議記錄" },
-        { value: "bulletin-repair.html", label: "修繕報告" }
+        { value: "bulletin-repair.html", label: "修繕報告" },
+        { value: "number-list.html", label: "抄表紀錄" }
       ];
 
       const buttonCount = Array.isArray(defaultButtons) ? defaultButtons.length : 0;
