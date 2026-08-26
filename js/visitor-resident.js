@@ -62,12 +62,119 @@
     currentUserRole: "resident",
     visitors: [],
     unsubVisitors: null,
+    permissionDenied: false,
+    permissionHint: "",
   };
 
   function escapeHtml(v) {
     const s = String(v ?? "");
     return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] || c));
   }
+
+  function normalizeUnitForStorage(s) {
+    const t = normalizeDash(String(s || "")).trim();
+    if (!t) return "";
+    const idx = t.indexOf("-");
+    const base = idx > 0 ? t.slice(0, idx) : t;
+    return base;
+  }
+
+  function buildVisitorPayload({ vid, name, partySize, phone, plate, email, purpose, purposeType, purposeOther, note, unit, source, status, passAuthorized, createdBy, createdByName }) {
+    const safePurposeOther = purposeType === "其他" ? (purposeOther || "其他") : "";
+    const payload = {
+      qrToken: vid,
+      name,
+      email,
+      phone,
+      unit,
+      partySize,
+      plate,
+      purpose,
+      purposeType,
+      purposeOther: safePurposeOther,
+      note,
+      inAt: null,
+      outAt: null,
+      keep: null,
+      source,
+      status,
+      passAuthorized,
+      passAuthorizedAt: null,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+      createdBy,
+      createdByName,
+    };
+    return payload;
+  }
+
+  function formatFriendlyError(err) {
+    const e = err && typeof err === "object" ? err : {};
+    const code = String(e.code || "").trim();
+    const msg = String(e.message || "").trim();
+    const combined = (code && msg) ? `${code}｜${msg}` : (msg || code || "");
+    if (combined.indexOf("permission-denied") >= 0 || combined.indexOf("Missing or insufficient permissions") >= 0 || combined.indexOf("permission") >= 0) {
+      return "權限不足，無法載入訪客資料。請確認您已使用住戶帳號登入且為本社區住戶，或稍後再試一次。";
+    }
+    if (combined.indexOf("unavailable") >= 0 || combined.indexOf("network") >= 0 || combined.indexOf("timeout") >= 0) {
+      return "網路連線不穩，無法載入訪客資料。請檢查網路後再試。";
+    }
+    if (combined.indexOf("not-found") >= 0) {
+      return "訪客資料不存在，可能已被移除。";
+    }
+    return combined || "操作失敗，請稍後再試。";
+  }
+
+  function friendlyErrorWrap(err, actionLabel) {
+    const base = formatFriendlyError(err);
+    const label = actionLabel ? `${actionLabel}失敗：` : "";
+    return `${label}${base}`;
+  }
+
+  function renderNeedLogin() {
+    if (!activeContentEl || !historyContentEl) return;
+    const loginUrl = `member.html?redirect=${encodeURIComponent("visitor-resident.html")}`;
+    const html = `<div class="status error" style="display:grid; gap:10px; justify-items:stretch; align-items:start; padding:18px; border-radius:14px; text-align:left;">
+      <div style="font-weight:900; font-size:15px;">請先登入社區帳號</div>
+      <div style="font-weight:700; color:#374151; font-size:13px;">訪客登記僅開放給本社區住戶使用；未登入狀態或訪客身分無法編輯或查看訪客預約。</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <a class="btn btn-primary" href="${escapeHtml(loginUrl)}" style="text-decoration:none;">前往登入</a>
+        <button class="btn" type="button" onclick="location.reload()">重新整理</button>
+      </div>
+    </div>`;
+    activeContentEl.innerHTML = html;
+    historyContentEl.innerHTML = html;
+  }
+
+  function renderPermissionDenied(hint) {
+    if (!activeContentEl || !historyContentEl) return;
+    const message = String(hint || "").trim() || "您目前沒有權限查看本社區的訪客預約。請確認登入的帳號為本社區住戶，或聯絡社區管理員協助開啟權限。";
+    const loginUrl = `member.html?redirect=${encodeURIComponent("visitor-resident.html")}`;
+    const html = `<div class="status error" style="display:grid; gap:10px; justify-items:stretch; align-items:start; padding:18px; border-radius:14px; text-align:left;">
+      <div style="font-weight:900; font-size:15px;">無法載入訪客登記</div>
+      <div style="font-weight:700; color:#374151; font-size:13px;">${escapeHtml(message)}</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <a class="btn btn-primary" href="${escapeHtml(loginUrl)}" style="text-decoration:none;">重新登入</a>
+        <button class="btn" type="button" onclick="location.reload()">再試一次</button>
+      </div>
+    </div>`;
+    activeContentEl.innerHTML = html;
+    historyContentEl.innerHTML = html;
+  }
+
+  function renderEmptyHouseNo() {
+    if (!activeContentEl || !historyContentEl) return;
+    const html = `<div class="status error" style="display:grid; gap:10px; justify-items:stretch; align-items:start; padding:18px; border-radius:14px; text-align:left;">
+      <div style="font-weight:900; font-size:15px;">尚未設定戶號</div>
+      <div style="font-weight:700; color:#374151; font-size:13px;">您的住戶帳號尚未設定戶號（houseNo / unit），因此無法查詢或登記訪客預約。請聯絡社區管理員協助補齊住戶資訊後再使用。</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-primary" type="button" onclick="location.reload()">重新整理</button>
+      </div>
+    </div>`;
+    activeContentEl.innerHTML = html;
+    historyContentEl.innerHTML = html;
+  }
+
 
   function setStatus(el, message, isError) {
     if (!el) return;
@@ -117,28 +224,32 @@
       return idx > 0 ? normalizeDash(v.slice(0, idx)) : v;
     })();
     const variants = new Set();
-    [houseNo, fullHouseNo, base].forEach((x) => {
-      const v = normalizeDash(x);
-      if (!v) return;
-      variants.add(v);
-      const fullDash = v.replace(/-/g, "－");
-      if (fullDash !== v) variants.add(fullDash);
-      const idx = v.indexOf("-");
+    function addVariant(v) {
+      const t = normalizeDash(String(v || "").trim());
+      if (!t) return;
+      variants.add(t);
+      const fullDash = t.replace(/-/g, "－");
+      if (fullDash !== t) variants.add(fullDash);
+      const idx = t.indexOf("-");
       if (idx > 0) {
-        const b = normalizeDash(v.slice(0, idx));
+        const b = normalizeDash(t.slice(0, idx));
         if (b) {
           variants.add(b);
           const bFull = b.replace(/-/g, "－");
           if (bFull !== b) variants.add(bFull);
         }
       }
-    });
+    }
+    if (base) addVariant(base);
+    if (houseNo && houseNo !== base) addVariant(houseNo);
+    if (fullHouseNo && fullHouseNo !== houseNo && fullHouseNo !== base) addVariant(fullHouseNo);
     return {
       variants,
       normalizedHouseNo: houseNo,
       normalizedSubHouseNo: subHouseNo,
       displayHouseNo: fullHouseNo,
       normalizedKeys: Array.from(variants),
+      baseKey: base,
     };
   }
   function matchesUserUnit(dataUnit, variants) {
@@ -449,7 +560,7 @@
             .doc(id)
             .update({ status: "cancelled", updatedAt: FieldValue.serverTimestamp() });
         } catch (e) {
-          alert("操作失敗：" + formatFirebaseError(e));
+          alert(friendlyErrorWrap(e, "取消預約"));
         }
       });
     });
@@ -534,76 +645,74 @@
   async function loadVisitors() {
     stopVisitorsSubscription();
     const cid = state.currentCommunityId;
-    if (!cid || cid === "default") return;
-    const keys = state.currentUserHouseVariants && Array.isArray(state.currentUserHouseVariants.normalizedKeys)
-      ? state.currentUserHouseVariants.normalizedKeys.filter(x => String(x || "").trim())
-      : [];
+    if (!cid || cid === "default") {
+      state.visitors = [];
+      renderActive();
+      renderHistory();
+      return;
+    }
+    const authUid = state.currentUserId ? String(state.currentUserId).trim() : "";
+    if (!authUid) {
+      state.visitors = [];
+      renderNeedLogin();
+      return;
+    }
+    const variants = state.currentUserHouseVariants || null;
+    const rawKeys = variants && Array.isArray(variants.normalizedKeys) ? variants.normalizedKeys : [];
+    const keys = rawKeys.filter(x => String(x || "").trim());
+    if (keys.length === 0) {
+      state.visitors = [];
+      renderEmptyHouseNo();
+      return;
+    }
     try {
-      if (keys.length === 0) {
-        state.visitors = [];
-        renderActive();
-        renderHistory();
-        return;
-      }
-      if (keys.length === 1) {
-        state.unsubVisitors = db
-          .collection("communities")
-          .doc(cid)
-          .collection(COL_VISITORS)
-          .where("unit", "==", keys[0])
-          .onSnapshot(
-            (snap) => {
-              state.visitors = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
-              renderActive();
-              renderHistory();
-            },
-            (err) => {
-              console.error("Visitors subscribe failed:", err);
-              if (activeContentEl) activeContentEl.innerHTML = `<div class="status error">載入失敗：${formatFirebaseError(err)}</div>`;
-              if (historyContentEl) historyContentEl.innerHTML = `<div class="status error">載入失敗：${formatFirebaseError(err)}</div>`;
-            }
-          );
-        return;
-      }
-      const chunks = [];
-      for (let i = 0; i < keys.length; i += 10) chunks.push(keys.slice(i, i + 10));
-      let stopped = false;
+      const safeUnitKey = keys[0];
+      const createdByQuery = keys.length > 1 ? true : false;
       const combinedMap = new Map();
-      const doneCounts = new Map(chunks.map((_, i) => [i, false]));
-      const tryFinish = () => {
-        if (stopped) return;
-        for (const done of doneCounts.values()) if (!done) return;
+      const errorState = { flag: false };
+      const pending = { count: 0 };
+      function mergeSnapshot(snap, allowAllUnitKeys) {
+        (snap && snap.docChanges ? snap.docChanges() : []).forEach((ch) => {
+          const d = ch.doc;
+          if (!d || !d.exists) return;
+          const id = d.id;
+          if (ch.type === "removed") {
+            combinedMap.delete(id);
+            return;
+          }
+          const data = d.data() || {};
+          if (allowAllUnitKeys || matchesUserUnit(data.unit, variants.variants) || data.createdBy === authUid) {
+            combinedMap.set(id, { id, ...data });
+          }
+        });
+      }
+      function setDoneOrError(wasError) {
+        if (wasError) errorState.flag = true;
+        pending.count -= 1;
+        if (pending.count > 0) return;
+        if (errorState.flag) {
+          renderPermissionDenied();
+          return;
+        }
         state.visitors = Array.from(combinedMap.values());
         renderActive();
         renderHistory();
-      };
-      const unsubs = chunks.map((chunk, idx) => db
-        .collection("communities")
-        .doc(cid)
-        .collection(COL_VISITORS)
-        .where("unit", "in", chunk)
-        .onSnapshot(
-          (snap) => {
-            if (stopped) return;
-            (snap && snap.docChanges ? snap.docChanges() : []).forEach((ch) => {
-              const d = ch.doc;
-              if (!d || !d.exists) return;
-              const id = d.id;
-              if (ch.type === "removed") combinedMap.delete(id);
-              else combinedMap.set(id, { id, ...(d.data() || {}) });
-            });
-            doneCounts.set(idx, true);
-            tryFinish();
-          },
-          (err) => {
-            console.error("Visitors subscribe failed:", err);
-            if (activeContentEl) activeContentEl.innerHTML = `<div class="status error">載入失敗：${formatFirebaseError(err)}</div>`;
-            if (historyContentEl) historyContentEl.innerHTML = `<div class="status error">載入失敗：${formatFirebaseError(err)}</div>`;
-          }
-        )
-      );
+      }
+      const unsubs = [];
+      const baseRef = db.collection("communities").doc(cid).collection(COL_VISITORS);
+      pending.count += 1;
+      unsubs.push(baseRef.where("unit", "==", safeUnitKey).onSnapshot(
+        (snap) => { mergeSnapshot(snap, false); setDoneOrError(false); },
+        (err) => { console.error("Visitors subscribe unit fallback failed:", err); setDoneOrError(true); }
+      ));
+      if (createdByQuery) {
+        pending.count += 1;
+        unsubs.push(baseRef.where("createdBy", "==", authUid).onSnapshot(
+          (snap) => { mergeSnapshot(snap, true); setDoneOrError(false); },
+          (err) => { console.error("Visitors subscribe createdBy fallback failed:", err); setDoneOrError(true); }
+        ));
+      }
       state.unsubVisitors = () => {
-        stopped = true;
         unsubs.forEach((u) => { try { u(); } catch {} });
       };
     } catch (e) {
@@ -635,60 +744,70 @@
     btnSaveVisitorEl.disabled = true;
     setStatus(visitorFormStatusEl, "送出中...", false);
     try {
-      const name = String(vNameEl ? vNameEl.value : "").trim();
-      const partyRaw = String(vPartyEl ? vPartyEl.value : "").trim();
+      const authUid = state.currentUserId ? String(state.currentUserId).trim() : "";
+      if (!authUid) {
+        setStatus(visitorFormStatusEl, "您尚未登入，無法送出訪客登記。請重新登入後再試。", true);
+        return;
+      }
+      const cid = state.currentCommunityId;
+      if (!cid || cid === "default") {
+        setStatus(visitorFormStatusEl, "無法識別您的社區，請先完成住戶社區驗證。", true);
+        return;
+      }
+      const name = String(vNameEl ? vNameEl.value || "" : "").trim();
+      const partyRaw = String(vPartyEl ? vPartyEl.value || "" : "").trim();
       const partySize = Math.max(1, Math.min(20, parseInt(partyRaw, 10) || 1));
-      const phone = String(vPhoneEl ? vPhoneEl.value : "").trim();
-      const plate = String(vPlateEl ? vPlateEl.value : "").trim();
-      const email = String(vEmailEl ? vEmailEl.value : "").trim();
-      const purposeType = String(vPurposeTypeEl ? vPurposeTypeEl.value : "").trim() || "親友拜訪";
-      const purposeOther = String(vPurposeOtherEl ? vPurposeOtherEl.value : "").trim();
-      const note = String(vNoteEl ? vNoteEl.value : "").trim();
-      const purpose = purposeType === "其他" ? (purposeOther || "其他") : purposeType;
-      const unit = String(state.currentUserHouseNo || "").trim();
+      const phone = String(vPhoneEl ? vPhoneEl.value || "" : "").trim();
+      const plate = String(vPlateEl ? vPlateEl.value || "" : "").trim();
+      const email = String(vEmailEl ? vEmailEl.value || "" : "").trim();
+      const purposeType = String(vPurposeTypeEl ? vPurposeTypeEl.value || "" : "").trim() || "親友拜訪";
+      const purposeOtherRaw = String(vPurposeOtherEl ? vPurposeOtherEl.value || "" : "").trim();
+      const note = String(vNoteEl ? vNoteEl.value || "" : "").trim();
+      const purposeOther = purposeType === "其他" ? (purposeOtherRaw || "其他") : "";
+      const purpose = purposeType === "其他" ? (purposeOtherRaw || "其他") : purposeType;
+      const unit = normalizeUnitForStorage(state.currentUserHouseNo || state.currentUserHouseVariants?.baseKey || "");
 
       if (!name) {
         setStatus(visitorFormStatusEl, "請填寫訪客姓名", true);
         return;
       }
       if (!unit) {
-        setStatus(visitorFormStatusEl, "無法取得您的戶號資訊", true);
+        setStatus(visitorFormStatusEl, "您的住戶帳號尚未設定戶號，無法登記訪客。請聯絡管理員協助補齊住戶資訊。", true);
         return;
       }
 
-      const docRef = db.collection("communities").doc(state.currentCommunityId).collection(COL_VISITORS).doc();
-      const vid = docRef.id;
-      const nowTs = Timestamp.now();
-      const payload = {
-        qrToken: vid,
+      const docRef = db.collection("communities").doc(cid).collection(COL_VISITORS).doc();
+      const vid = String(docRef.id || "").trim();
+      if (!vid) {
+        setStatus(visitorFormStatusEl, "無法建立訪客預約編號，請重新整理後再試一次。", true);
+        return;
+      }
+      const createdByName = String(state.currentUserName || "").trim() || "住戶";
+      const payload = buildVisitorPayload({
+        vid,
         name,
-        email,
-        phone,
-        unit,
         partySize,
+        phone,
         plate,
+        email,
         purpose,
         purposeType,
-        purposeOther: purposeType === "其他" ? purposeOther : "",
+        purposeOther,
         note,
-        inAt: null,
-        outAt: null,
-        keep: null,
+        unit,
         source: "resident",
         status: "pending",
         passAuthorized: false,
-        passAuthorizedAt: null,
-        createdAt: nowTs,
-        updatedAt: nowTs,
-        createdBy: state.currentUserId || "resident",
-        createdByName: state.currentUserName || "住戶",
-      };
+        createdBy: authUid,
+        createdByName,
+      });
       await docRef.set(payload, { merge: true });
       setStatus(visitorFormStatusEl, "", false);
       closeModal(visitorFormModal);
       switchTab("active");
     } catch (e) {
-      setStatus(visitorFormStatusEl, formatFirebaseError(e), true);
+      const msg = friendlyErrorWrap(e, "送出訪客登記");
+      setStatus(visitorFormStatusEl, msg, true);
     } finally {
       if (btnSaveVisitorEl) btnSaveVisitorEl.disabled = false;
     }
@@ -773,16 +892,16 @@
     switchTab("active");
   }
 
-  function renderNeedLogin() {
-    if (activeContentEl) activeContentEl.innerHTML = `<div class="status error">請先登入</div>`;
-    if (historyContentEl) historyContentEl.innerHTML = `<div class="status error">請先登入</div>`;
-  }
-
   ensureEmbedLayout();
   bindHostMessaging();
   bindEvents();
+  try { window.__vr_state = state; } catch(e) {}
   auth.onAuthStateChanged((user) => {
+    stopVisitorsSubscription();
     if (!user) {
+      state.currentUserId = "";
+      state.currentCommunityId = "default";
+      state.visitors = [];
       renderNeedLogin();
       return;
     }

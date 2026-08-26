@@ -116,7 +116,7 @@
     { id: "facility", name: "設施預約", defaultUrl: "#community/facility" },
     { id: "bulletin", name: "公告系統", defaultUrl: "#community/bulletin" },
     { id: "parking", name: "綠色停車", defaultUrl: "#community/parking" },
-    { id: "meter-reading", name: "抄表紀錄", defaultUrl: "number-list.html" },
+    { id: "meter-reading", name: "抄表紀錄", defaultUrl: "#community/meter-reading" },
   ];
 
   const catalogResidentButtons = [
@@ -240,15 +240,17 @@
     const meter = buttons && buttons["meter-reading"] && typeof buttons["meter-reading"] === "object"
       ? buttons["meter-reading"] : null;
     const meterUrl = meter ? String(meter.url || "").trim() : "";
+    const ADMIN_TARGET_METER = "#community/meter-reading";
+    const WRONG_METER_ADMIN = "number-list.html";
     const needMeter = !meter
       ? true
-      : (meter.enabled !== false) && (!meterUrl || meterUrl === "#" || meterUrl === LEGACY_METER_ADMIN || meterUrl === LEGACY_METER_RESIDENT);
+      : (meter.enabled !== false) && (!meterUrl || meterUrl === "#" || meterUrl === LEGACY_METER_RESIDENT || meterUrl === WRONG_METER_ADMIN);
     let nextCommunityButtons = null;
     if (needMeter) {
       const base = buttons && typeof buttons === "object" ? { ...buttons } : {};
       base["meter-reading"] = {
         enabled: meter && typeof meter.enabled === "boolean" ? meter.enabled : true,
-        url: TARGET_METER
+        url: ADMIN_TARGET_METER
       };
       nextCommunityButtons = base;
     }

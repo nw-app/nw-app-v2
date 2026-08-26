@@ -1,11 +1,81 @@
 (function () {
   'use strict';
 
-  const METER_TYPES = Object.freeze({
-    ELECTRIC: { id: 'electric', name: '電錶', unit: '度', digits: 6, icon: '⚡', color: '#f59e0b' },
-    WATER: { id: 'water', name: '自來水錶', unit: '度', digits: 5, icon: '💧', color: '#0ea5e9' },
-    GAS: { id: 'gas', name: '天然氣瓦斯錶', unit: '度', digits: 5, icon: '🔥', color: '#ef4444' }
+  const METER_TYPES_DEFAULT = Object.freeze({
+    ELECTRIC: { id: 'electric', name: '電錶', unit: '度', digits: 4, icon: '⚡', color: '#f59e0b' },
+    WATER: { id: 'water', name: '自來水錶', unit: '度', digits: 4, icon: '💧', color: '#0ea5e9' },
+    GAS: { id: 'gas', name: '天然氣瓦斯錶', unit: '度', digits: 4, icon: '🔥', color: '#ef4444' }
   });
+
+  let METER_TYPES = Object.freeze(JSON.parse(JSON.stringify(METER_TYPES_DEFAULT)));
+  let __meterSettingsCache = null;
+  let __meterSettingsCachedAt = 0;
+
+  function normalizeMeterTypeFromRaw(raw) {
+    const base = Object.values(METER_TYPES_DEFAULT).reduce((o, t) => { o[t.id] = { id: t.id, name: t.name, unit: t.unit, digits: t.digits, icon: t.icon, color: t.color }; return o; }, {});
+    const order = ['electric', 'water', 'gas'];
+    if (!raw || typeof raw !== 'object') return { map: Object.freeze(base), order, settings: null };
+    order.forEach((id) => {
+      const r = raw[id];
+      if (!r || typeof r !== 'object') return;
+      const b = base[id];
+      if (!b) return;
+      if (typeof r.id === 'string' && r.id) b.id = r.id;
+      if (typeof r.name === 'string' && r.name.trim()) b.name = r.name.trim();
+      if (typeof r.unit === 'string' && r.unit.trim()) b.unit = r.unit.trim();
+      if (typeof r.enabled === 'boolean') b.enabled = r.enabled;
+      const digits = Number.isFinite(Number(r.digits)) ? Math.max(2, Math.min(8, Math.floor(Number(r.digits)))) : NaN;
+      if (Number.isFinite(digits)) b.digits = digits;
+      const up = Number.isFinite(Number(r.unitPrice)) ? Math.max(0, Number(r.unitPrice)) : NaN;
+      if (Number.isFinite(up)) b.unitPrice = up;
+      const pf = Number.isFinite(Number(r.presetFee)) ? Math.max(0, Number(r.presetFee)) : NaN;
+      if (Number.isFinite(pf)) b.presetFee = pf;
+      if (typeof r.icon === 'string' && r.icon.trim()) b.icon = r.icon.trim();
+    });
+    const enabledOrder = order.filter(id => base[id].enabled !== false);
+    const mapOut = {};
+    Object.keys(base).forEach(id => { mapOut[id.toUpperCase()] = Object.freeze(base[id]); mapOut[id] = Object.freeze(base[id]); });
+    return { map: Object.freeze(mapOut), order: enabledOrder.length ? enabledOrder : order, settings: JSON.parse(JSON.stringify(raw)) };
+  }
+
+  function getActiveMeterTypesMap() { return METER_TYPES; }
+  function getActiveMeterTypeIds() { return (window.__nwMeterOrder || ['electric','water','gas']).filter(id => {
+    const m = METER_TYPES[id] || METER_TYPES[(id||'').toUpperCase()];
+    return m && (m.enabled !== false);
+  }); }
+
+  async function loadCommunityMeterSettings(db, communityId, force) {
+    const nowT = Date.now();
+    if (!force && __meterSettingsCache && (nowT - __meterSettingsCachedAt) < 60*1000 && __meterSettingsCache.communityId === communityId) return __meterSettingsCache.payload;
+    const cid = String(communityId || '').trim();
+    const def = normalizeMeterTypeFromRaw(null);
+    if (!db || !cid || cid === 'default') {
+      METER_TYPES = def.map; window.__nwMeterOrder = def.order; __meterSettingsCache = null; return null;
+    }
+    try {
+      const snap = await db.collection('communities').doc(cid).get();
+      const doc = snap && snap.exists ? (snap.data() || {}) : {};
+      const raw = doc.meterSettings || null;
+      const nr = normalizeMeterTypeFromRaw(raw);
+      METER_TYPES = nr.map;
+      window.__nwMeterOrder = nr.order;
+      __meterSettingsCache = { communityId: cid, payload: nr.settings || raw, normalized: nr, fetchedAt: nowT };
+      __meterSettingsCachedAt = nowT;
+      return nr.settings || raw;
+    } catch (e) {
+      console.warn('[meter-reading] loadCommunityMeterSettings failed:', e);
+      METER_TYPES = def.map; window.__nwMeterOrder = def.order; __meterSettingsCache = null; return null;
+    }
+  }
+
+  function digitBoxesStringify(digits, initial, meterColor) {
+    const n = Math.max(2, Math.min(8, Number.isFinite(Number(digits)) ? Math.floor(Number(digits)) : 4));
+    const base = Math.max(0, Math.min(Math.pow(10, n)-1, Number.isFinite(Number(initial)) ? Math.floor(Number(initial)) : 0));
+    const arr = String(base).padStart(n, '0').split('');
+    const color = String(meterColor || '#1f2937');
+    const boxes = arr.map((d) => `<div class="nl-digit"><div class="nl-digit-inner" style="color:${color};border-color:${color}77;">${d}</div></div>`).join('');
+    return boxes;
+  }
 
   const VALIDATION_STATUS = Object.freeze({
     PENDING: 'pending',
@@ -113,21 +183,29 @@
     return usage;
   }
 
-  function calcFee(usage, typeId) {
+  function calcFee(usage, typeId, opts) {
     const u = safeParseNumber(usage);
     if (isNaN(u) || u < 0) return 0;
-    const tiers = FEE_TIERS[typeId] || [];
-    let remaining = u;
+    const t = getMeterType(typeId);
+    const up = Number.isFinite(Number(opts && opts.unitPrice)) ? Number(opts.unitPrice) : (t && Number.isFinite(Number(t.unitPrice)) ? Number(t.unitPrice) : NaN);
+    const pf = Number.isFinite(Number(opts && opts.presetFee)) ? Number(opts.presetFee) : (t && Number.isFinite(Number(t.presetFee)) ? Number(t.presetFee) : 0);
     let total = 0;
-    let prevLimit = 0;
-    for (const tier of tiers) {
-      const tierRange = tier.limit - prevLimit;
-      if (remaining <= 0) break;
-      const inTier = Math.min(remaining, tierRange);
-      total += inTier * tier.rate;
-      remaining -= inTier;
-      prevLimit = tier.limit;
-      if (tier.limit === Infinity) break;
+    if (Number.isFinite(up) && up >= 0) {
+      total = u * up + (pf || 0);
+    } else {
+      const tiers = FEE_TIERS[typeId] || [];
+      let remaining = u;
+      let prevLimit = 0;
+      for (const tier of tiers) {
+        const tierRange = tier.limit - prevLimit;
+        if (remaining <= 0) break;
+        const inTier = Math.min(remaining, tierRange);
+        total += inTier * tier.rate;
+        remaining -= inTier;
+        prevLimit = tier.limit;
+        if (tier.limit === Infinity) break;
+      }
+      total = total + (pf || 0);
     }
     return Math.round(total * 100) / 100;
   }
@@ -269,32 +347,50 @@
   }
 
   async function listRecordsByHouse(db, communityId, houseNo, options) {
-    if (!db || !communityId || !houseNo) return [];
+    if (!db || !communityId) return [];
     const opts = options || {};
     const meterType = opts.meterType || '';
     const dateFrom = opts.dateFrom || '';
     const dateTo = opts.dateTo || '';
-    try {
-      let ref = db
-        .collection('communities').doc(String(communityId))
-        .collection('meterReadings')
-        .where('houseNo', '==', String(houseNo));
-      const snap = await ref.orderBy('readingDate', 'desc').limit(opts.limit || 200).get();
-      const list = [];
-      snap.docs.forEach(doc => {
-        const d = doc.data() || {};
-        if (meterType && d.meterType !== meterType) return;
-        const rDate = toDateValue(d.readingDate);
-        const rdStr = rDate ? formatDateYYYYMM(rDate) : '';
-        if (dateFrom && rdStr < dateFrom) return;
-        if (dateTo && rdStr > dateTo) return;
-        list.push({ id: doc.id, ...d });
-      });
-      return list;
-    } catch (e) {
-      console.warn('[meter] listRecordsByHouse failed:', e);
-      return [];
+    const uid = opts.uid || '';
+    const resultsById = new Map();
+    const tryQuery = async (buildRef) => {
+      try {
+        const ref = buildRef();
+        const snap = await ref.orderBy('readingDate', 'desc').limit(opts.limit || 200).get();
+        snap.docs.forEach(doc => {
+          const d = doc.data() || {};
+          if (meterType && d.meterType !== meterType) return;
+          const rDate = toDateValue(d.readingDate);
+          const rdStr = rDate ? formatDateYYYYMM(rDate) : '';
+          if (dateFrom && rdStr < dateFrom) return;
+          if (dateTo && rdStr > dateTo) return;
+          if (!resultsById.has(doc.id)) resultsById.set(doc.id, { id: doc.id, ...d });
+        });
+        return true;
+      } catch (e) {
+        console.warn('[meter] listRecordsByHouse sub-query failed:', e);
+        return false;
+      }
+    };
+    const coll = () => db
+      .collection('communities').doc(String(communityId))
+      .collection('meterReadings');
+    if (houseNo) {
+      await tryQuery(() => coll().where('houseNo', '==', String(houseNo)));
     }
+    if (uid) {
+      await tryQuery(() => coll().where('residentUid', '==', String(uid)));
+      await tryQuery(() => coll().where('createdBy.uid', '==', String(uid)));
+    }
+    let list = Array.from(resultsById.values());
+    list.sort((a, b) => {
+      const da = a.readingDate ? new Date(a.readingDate).getTime() : 0;
+      const db2 = b.readingDate ? new Date(b.readingDate).getTime() : 0;
+      return db2 - da;
+    });
+    if (opts.limit && list.length > opts.limit) list = list.slice(0, opts.limit);
+    return list;
   }
 
   async function listRecordsByCommunity(db, communityId, options) {
@@ -339,6 +435,8 @@
     const readingDate = toDateValue(rawData.readingDate) || new Date();
     const operatorId = String(rawData.operatorId || '').trim();
     const period = String(rawData.period || formatDateYYYYMM(readingDate)).trim();
+    const source = String(rawData.source || '').trim().toLowerCase();
+    const isResidentSource = source.includes('resident') || String(rawData.residentUid || '').trim().length > 0;
 
     if (!meterId) errors.push('儀表編號不可為空');
     if (!houseNo) errors.push('住戶門牌號不可為空');
@@ -354,18 +452,36 @@
     let previousValue = last ? safeParseNumber(last.currentValue) : (safeParseNumber(rawData.previousValue));
     if (isNaN(previousValue) || previousValue < 0) previousValue = 0;
 
+    if (!isNaN(currentValue) && !isNaN(previousValue) && currentValue < previousValue) {
+      const mt = getMeterType(meterType);
+      if (!mt || calcUsage(previousValue, currentValue, meterType) <= 0) {
+        errors.push(`${mt ? mt.name : '儀表'}本期數值(${currentValue})不得小於上期數值(${previousValue})`);
+      }
+    }
+
     const usage = calcUsage(previousValue, currentValue, meterType);
     const fee = calcFee(usage, meterType);
     const historyAvg = await getHistoryAvg(db, communityId, meterId, meterType, 6);
     const abnormalCheck = detectAbnormal({
       meterType, previousValue, currentValue, usage
     }, historyAvg);
-    let status = VALIDATION_STATUS.VALID;
+    let status = isResidentSource ? VALIDATION_STATUS.PENDING : VALIDATION_STATUS.VALID;
     if (abnormalCheck.isAbnormal) {
-      status = VALIDATION_STATUS.ABNORMAL;
+      status = isResidentSource ? VALIDATION_STATUS.PENDING : VALIDATION_STATUS.ABNORMAL;
       warnings.push(...abnormalCheck.reasons);
     }
     if (errors.length > 0) status = VALIDATION_STATUS.PENDING;
+
+    writeLog({
+      action: 'validate_record',
+      communityId, meterId, houseNo, meterType,
+      source, isResidentSource,
+      currentValue, previousValue, usage,
+      computedStatus: status,
+      valid: errors.length === 0,
+      errors: errors.slice(),
+      warnings: warnings.slice()
+    });
 
     return {
       valid: errors.length === 0,
@@ -385,7 +501,10 @@
         operatorId,
         validationStatus: status,
         abnormalReasons: warnings.filter(w => abnormalCheck.reasons.includes(w)),
-        lastRecordId: last ? last.id : ''
+        lastRecordId: last ? last.id : '',
+        source: String(rawData.source || (isResidentSource ? 'resident_app' : 'admin_app')),
+        residentUid: String(rawData.residentUid || '').trim(),
+        residentName: String(rawData.residentName || '').trim()
       }
     };
   }
@@ -393,43 +512,78 @@
   async function createRecord(db, communityId, rawData, operatorInfo) {
     const v = await validateRecord(db, communityId, rawData);
     if (!v.valid) {
+      const errMsg = (v.errors || []).join('；') || '驗證失敗';
       writeLog({
         action: 'create_record_fail',
         communityId, meterId: rawData.meterId,
-        errors: v.errors, operator: operatorInfo
+        houseNo: rawData.houseNo, meterType: rawData.meterType,
+        errors: v.errors, warnings: v.warnings, operator: operatorInfo
       });
-      return { ok: false, errors: v.errors, warnings: v.warnings };
+      try { console.error('[meter-reading] createRecord validation failed:', v.errors, rawData); } catch {}
+      return { ok: false, errors: v.errors, warnings: v.warnings, _errorMessage: errMsg };
     }
     try {
       const id = genId();
+      const safeResidentUid = String(rawData.residentUid || (operatorInfo && operatorInfo.uid) || v.data.residentUid || '').trim();
+      const safeResidentName = String(rawData.residentName || (operatorInfo && operatorInfo.name) || v.data.residentName || '').trim();
+      const safeHouseNo = String(rawData.houseNo || (operatorInfo && operatorInfo.houseNo) || v.data.houseNo || '').trim() || '—';
+      const createdByUid = String((operatorInfo && operatorInfo.uid) || safeResidentUid || '').trim();
+      const createdByName = String((operatorInfo && operatorInfo.name) || safeResidentName || '').trim();
+      const createdByRole = String((operatorInfo && operatorInfo.role) || (safeResidentUid ? 'resident' : 'system')).trim();
+      const safeSource = String(v.data.source || rawData.source || (safeResidentUid ? 'resident_app' : 'admin_app')).trim().toLowerCase();
       const data = {
         ...v.data,
+        residentUid: safeResidentUid,
+        residentName: safeResidentName,
+        houseNo: safeHouseNo,
+        source: safeSource,
         id,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         createdAtMs: Date.now(),
-        createdBy: operatorInfo || {},
+        createdBy: {
+          uid: createdByUid,
+          name: createdByName,
+          role: createdByRole,
+          houseNo: safeHouseNo
+        },
         modifyHistory: [],
         dispute: null
       };
+      try { console.log('[meter-reading] createRecord writing doc:', id, data.meterType, data.houseNo, data.currentValue); } catch {}
       await db
         .collection('communities').doc(String(communityId))
         .collection('meterReadings').doc(id)
         .set(data);
+      const snap = await db
+        .collection('communities').doc(String(communityId))
+        .collection('meterReadings').doc(id)
+        .get();
+      if (!snap || !snap.exists) {
+        throw new Error('寫入後無法讀取文件，Firestore 同步失敗');
+      }
       writeLog({
         action: 'create_record',
         recordId: id, communityId,
         meterId: data.meterId, houseNo: data.houseNo,
         meterType: data.meterType, currentValue: data.currentValue,
-        operator: operatorInfo
+        usage: data.usage, fee: data.fee, status: data.validationStatus,
+        operator: operatorInfo, residentUid: data.residentUid
       });
+      try { console.log('[meter-reading] createRecord success:', id, 'status=', data.validationStatus); } catch {}
       cacheClear();
       return { ok: true, id, data, warnings: v.warnings };
     } catch (e) {
+      const msg = String(e && e.message || e) || '未知寫入錯誤';
+      try { console.error('[meter-reading] createRecord firestore error:', msg, e, rawData); } catch {}
       writeLog({
         action: 'create_record_error',
-        communityId, error: String(e && e.message || e), operator: operatorInfo
+        communityId, meterId: rawData.meterId,
+        houseNo: rawData.houseNo, meterType: rawData.meterType,
+        currentValue: rawData.currentValue,
+        error: msg, stack: e && e.stack ? String(e.stack).slice(0, 500) : '',
+        operator: operatorInfo
       });
-      return { ok: false, errors: ['儲存失敗：' + (e && e.message || e)] };
+      return { ok: false, errors: ['儲存失敗：' + msg], _errorMessage: msg };
     }
   }
 
@@ -484,20 +638,40 @@
 
   async function submitDispute(db, communityId, recordId, payload) {
     if (!db || !communityId || !recordId) return { ok: false, errors: ['參數錯誤'] };
+    const p = payload || {};
     try {
       const docRef = db
         .collection('communities').doc(String(communityId))
         .collection('meterReadings').doc(String(recordId));
       const docSnap = await docRef.get();
       if (!docSnap.exists) return { ok: false, errors: ['查無此筆紀錄'] };
+      const residentName = String(
+        p.residentName || p.reporterName || (p.submittedBy && p.submittedBy.name) || ''
+      ).trim();
+      const residentUid = String(
+        p.residentUid || p.reporterUid || (p.submittedBy && p.submittedBy.uid) || ''
+      ).trim();
+      const houseNo = String(
+        p.reporterHouseNo || p.houseNo || (p.submittedBy && p.submittedBy.houseNo) || ''
+      ).trim();
+      const description = String(p.description || p.reason || '').trim();
+      const photoKeys = Array.isArray(p.photos) ? p.photos.filter(Boolean) : [];
+      const primaryPhoto = String(p.photoDataUrl || (photoKeys[0] || '')).trim();
+      if (!description) return { ok: false, errors: ['請填寫核異說明'] };
       const dispute = {
         id: 'ds_' + Date.now().toString(36),
         submittedAt: Date.now(),
-        submittedBy: payload.submittedBy || {},
-        residentName: String(payload.residentName || '').trim(),
-        residentUid: String(payload.residentUid || '').trim(),
-        description: String(payload.description || '').trim(),
-        photoDataUrl: String(payload.photoDataUrl || '').trim(),
+        submittedBy: p.submittedBy || (residentUid ? { uid: residentUid, name: residentName, houseNo } : {}),
+        reporterUid: residentUid,
+        reporterName: residentName,
+        reporterHouseNo: houseNo,
+        residentName,
+        residentUid,
+        houseNo,
+        description,
+        reason: description,
+        photos: photoKeys,
+        photoDataUrl: primaryPhoto,
         status: 'pending',
         reply: '',
         repliedAt: null,
@@ -510,12 +684,20 @@
       }, { merge: true });
       writeLog({
         action: 'submit_dispute', recordId, communityId,
-        disputeId: dispute.id, resident: dispute.residentName
+        disputeId: dispute.id, resident: dispute.residentName,
+        reasonLen: description.length, hasPhoto: !!primaryPhoto || photoKeys.length > 0
       });
+      try { console.log('[meter-reading] submitDispute success:', dispute.id, 'record=', recordId); } catch {}
       cacheClear();
       return { ok: true, dispute };
     } catch (e) {
-      return { ok: false, errors: ['提交失敗：' + (e && e.message || e)] };
+      const msg = String(e && e.message || e) || '未知錯誤';
+      try { console.error('[meter-reading] submitDispute error:', msg, e); } catch {}
+      writeLog({
+        action: 'submit_dispute_error', recordId, communityId,
+        error: msg, stack: e && e.stack ? String(e.stack).slice(0, 500) : ''
+      });
+      return { ok: false, errors: ['提交失敗：' + msg] };
     }
   }
 
@@ -591,12 +773,33 @@
     } catch { return []; }
   }
 
+  async function listPendingRecords(db, communityId) {
+    if (!db || !communityId) return [];
+    try {
+      const snap = await db
+        .collection('communities').doc(String(communityId))
+        .collection('meterReadings')
+        .where('validationStatus', '==', VALIDATION_STATUS.PENDING)
+        .orderBy('createdAtMs', 'desc')
+        .limit(200)
+        .get();
+      const out = [];
+      snap.docs.forEach(d => out.push({ id: d.id, ...d.data() }));
+      return out;
+    } catch {
+      try {
+        const all = await listRecordsByCommunity(db, communityId, { limit: 500 });
+        return all.filter(r => String(r.validationStatus || VALIDATION_STATUS.PENDING) === VALIDATION_STATUS.PENDING);
+      } catch { return []; }
+    }
+  }
+
   function computeStatistics(records) {
     const byType = {};
     const byHouse = {};
     const byPeriod = {};
     const totalRecords = records.length;
-    let validCount = 0, abnormalCount = 0, disputedCount = 0;
+    let validCount = 0, abnormalCount = 0, disputedCount = 0, pendingCount = 0;
 
     records.forEach(r => {
       const t = String(r.meterType || '');
@@ -610,6 +813,7 @@
       if (st === VALIDATION_STATUS.VALID || st === VALIDATION_STATUS.RESOLVED) validCount++;
       if (st === VALIDATION_STATUS.ABNORMAL) abnormalCount++;
       if (st === VALIDATION_STATUS.DISPUTED) disputedCount++;
+      if (st === VALIDATION_STATUS.PENDING) pendingCount++;
 
       if (!byType[t]) byType[t] = { totalUsage: 0, totalFee: 0, count: 0, name: (getMeterType(t) || {}).name || t };
       byType[t].totalUsage += usage;
@@ -639,6 +843,7 @@
       validCount,
       abnormalCount,
       disputedCount,
+      pendingCount,
       byType,
       byHouse,
       byPeriod,
@@ -936,6 +1141,7 @@
       }
       const communityId = String(ctx.communityId || '').trim();
       const houseNo = String(ctx.houseNo || '').trim();
+      const uid = String(ctx.uid || '').trim();
       if (!communityId || !houseNo) {
         container.innerHTML = `<div class="mr-alert warning"><div class="ico">ℹ</div><div class="msg">缺少社區或戶號資訊，請重新登入後再試</div></div>`;
         return;
@@ -949,29 +1155,53 @@
         loading: true
       };
 
-      const reload = async () => {
-        state.loading = true;
-        renderLayout();
-        const opts = { meterType: state.filterType, dateFrom: state.dateFrom, dateTo: state.dateTo, limit: 300 };
-        state.records = await listRecordsByHouse(db, communityId, houseNo, opts);
-        state.loading = false;
-        renderLayout();
+      const __resEnabledFilter = (arr) => {
+        const out = [];
+        for (const it of arr) {
+          if (!it) continue;
+          const id = typeof it === 'string' ? it : (it.id || it.v || '');
+          const t = getMeterType(id);
+          if (!t) continue;
+          if (t.enabled === false) continue;
+          out.push(it);
+        }
+        return out;
+      };
+
+      const __reload = reload;
+      reload = async () => {
+        try { await loadCommunityMeterSettings(db, communityId, !!state.loading); } catch(e) { console.warn(e); }
+        return __reload();
       };
 
       const renderLayout = () => {
-        const types = [
+        const baseTypes = [
           { id: '', label: '全部' },
           { id: 'electric', label: '⚡ 電錶' },
           { id: 'water', label: '💧 自來水' },
           { id: 'gas', label: '🔥 瓦斯' }
         ];
+        const types = __resEnabledFilter(baseTypes);
+        if (state.filterType) {
+          const t = getMeterType(state.filterType);
+          if (!t || t.enabled === false) state.filterType = '';
+        }
         const stats = computeStatistics(state.records);
-        const cards = [
-          { cls: 'total', label: '本期總筆數', value: String(stats.totalRecords), sub: '已登記的抄表紀錄' },
-          { cls: 'electric', label: '電費累計', value: 'NT$ ' + (stats.byType.electric ? stats.byType.electric.totalFee.toFixed(2) : '0.00'), sub: stats.byType.electric ? `${stats.byType.electric.totalUsage.toFixed(0)} 度` : '0 度' },
-          { cls: 'water', label: '水費累計', value: 'NT$ ' + (stats.byType.water ? stats.byType.water.totalFee.toFixed(2) : '0.00'), sub: stats.byType.water ? `${stats.byType.water.totalUsage.toFixed(0)} 度` : '0 度' },
-          { cls: 'gas', label: '瓦斯費累計', value: 'NT$ ' + (stats.byType.gas ? stats.byType.gas.totalFee.toFixed(2) : '0.00'), sub: stats.byType.gas ? `${stats.byType.gas.totalUsage.toFixed(0)} 度` : '0 度' }
+        const baseCards = [
+          { cls: 'total', label: '本期總筆數', value: String(stats.totalRecords), sub: '已登記的抄表紀錄', keep: true },
+          { cls: 'electric', label: '電費累計', value: 'NT$ ' + (stats.byType.electric ? stats.byType.electric.totalFee.toFixed(2) : '0.00'), sub: stats.byType.electric ? `${stats.byType.electric.totalUsage.toFixed(0)} 度` : '0 度', mid: 'electric' },
+          { cls: 'water', label: '水費累計', value: 'NT$ ' + (stats.byType.water ? stats.byType.water.totalFee.toFixed(2) : '0.00'), sub: stats.byType.water ? `${stats.byType.water.totalUsage.toFixed(0)} 度` : '0 度', mid: 'water' },
+          { cls: 'gas', label: '瓦斯費累計', value: 'NT$ ' + (stats.byType.gas ? stats.byType.gas.totalFee.toFixed(2) : '0.00'), sub: stats.byType.gas ? `${stats.byType.gas.totalUsage.toFixed(0)} 度` : '0 度', mid: 'gas' }
         ];
+        const cards = baseCards.filter(c => (!!c.keep) || !(c.mid) || ((() => { const t = getMeterType(c.mid); return !(!t || t.enabled === false); })()));
+        const filterRecords = (recs) => {
+          if (!Array.isArray(recs)) return [];
+          return recs.filter(r => {
+            const t = getMeterType(r.meterType);
+            if (!t) return false;
+            return t.enabled !== false;
+          });
+        };
         container.innerHTML = `
           <div class="mr-page">
             <div class="mr-stat-grid">
@@ -997,7 +1227,7 @@
 
             ${state.loading ? `<div class="mr-alert info"><div class="ico">⏳</div><div class="msg">載入中，請稍候...</div></div>` : ''}
             ${!state.loading && state.records.length === 0 ? emptyState('尚無抄錶紀錄', '管理員完成抄錶登記後，資料會顯示於此', '📝') : ''}
-            ${!state.loading && state.records.length > 0 ? `<div class="mr-record-list">${state.records.map(r => recordCard(r, { showDetail: true, showDispute: r.validationStatus !== 'disputed', showFee: true })).join('')}</div>` : ''}
+            ${!state.loading && state.records.length > 0 ? `<div class="mr-record-list">${filterRecords(state.records).map(r => recordCard(r, { showDetail: true, showDispute: r.validationStatus !== 'disputed', showFee: true })).join('')}</div>` : ''}
           </div>
         `;
         bindResidentEvents();
@@ -1226,6 +1456,7 @@
         records: [],
         disputes: [],
         abnormalRecords: [],
+        pendingRecords: [],
         stats: null,
         loading: true
       };
@@ -1238,11 +1469,30 @@
       const communities = (ctx.state && Array.isArray(ctx.state.communities)) ? ctx.state.communities : (window.NwApp && window.NwApp.state && Array.isArray(window.NwApp.state.communities) ? window.NwApp.state.communities : []);
       const communityName = (communities.find(c => c.id === communityId) || {}).name || '';
 
+      const __filterEnabled = (arr) => {
+        const out = [];
+        for (const it of arr) {
+          if (!it) continue;
+          const id = typeof it === 'string' ? it : (it.id || it.v || '');
+          const t = getMeterType(id);
+          if (!t) continue;
+          if (t.enabled === false) continue;
+          out.push(it);
+        }
+        return out;
+      };
+      const __filterRecords = (rs) => (Array.isArray(rs) ? rs : []).filter(r => {
+        const t = getMeterType(r && (r.type || r.meterType));
+        return !t || t.enabled !== false;
+      });
+
+      let reload;
+
       const renderSubnav = () => {
         if (!subnavEl) return;
         const tabs = [
-          { id: 'records', label: '抄表紀錄', badge: state.records.length },
-          { id: 'pending', label: '待處理', badge: (state.disputes.length + state.abnormalRecords.length), hidden: !canReview },
+          { id: 'records', label: '抄表紀錄', badge: __filterRecords(state.records).length },
+          { id: 'pending', label: '待處理', badge: (__filterRecords(state.pendingRecords).length + __filterRecords(state.disputes).length + __filterRecords(state.abnormalRecords).length), hidden: !canReview },
           { id: 'create', label: '手動登記', hidden: !canCreate },
           { id: 'import', label: '匯入/匯出', hidden: !canImport && !canExport },
           { id: 'stats', label: '統計分析', hidden: !canStats }
@@ -1263,7 +1513,7 @@
         });
       };
 
-      const reload = async () => {
+      const __baseReload = async () => {
         state.loading = true;
         renderLayout();
         try {
@@ -1271,6 +1521,7 @@
           if (state.filterHouse) opts.houseNo = state.filterHouse;
           state.records = await listRecordsByCommunity(db, communityId, opts);
           if (canReview) {
+            state.pendingRecords = await listPendingRecords(db, communityId);
             state.disputes = await listPendingDisputes(db, communityId);
             state.abnormalRecords = await listAbnormalRecords(db, communityId);
           }
@@ -1279,6 +1530,35 @@
         state.loading = false;
         renderLayout();
       };
+
+      reload = async () => {
+        try { await loadCommunityMeterSettings(db, communityId, !!state.loading); } catch(e){ console.warn(e); }
+        return __baseReload();
+      };
+
+      (function bindStorageSync(){
+        try {
+          if (window.__nwMeterAdminStorageBound) return;
+          window.__nwMeterAdminStorageBound = true;
+        } catch {}
+        let lastSyncAt = 0;
+        window.addEventListener('storage', (ev) => {
+          try {
+            if (!ev || ev.key !== 'nwapp:meterSettingsChanged') return;
+            const raw = ev && ev.newValue;
+            if (!raw) return;
+            const d = JSON.parse(raw);
+            if (!d || !d.communityId) return;
+            if (String(d.communityId) !== String(communityId)) return;
+            const at = Number(d.at) || 0;
+            if (at && at <= lastSyncAt) return;
+            lastSyncAt = at;
+            try {
+              loadCommunityMeterSettings(db, communityId, true).then(() => { try { reload(); } catch {} }).catch(() => {});
+            } catch {}
+          } catch {}
+        });
+      })();
 
       const renderLayout = () => {
         renderSubnav();
@@ -1293,8 +1573,9 @@
                 </div>
               </div>
               <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
-                <div class="tag red" title="總筆數">${state.records.length}</div>
-                ${canCreate ? `<button class="btn btn-sm btn-ghost" id="mrBtnGotoCreate" title="手動登記">${iconSvgFn('settings')}</button>` : ''}
+                <div class="tag red" title="總筆數">${__filterRecords(state.records).length}</div>
+                <button class="btn btn-sm btn-ghost" id="mrBtnOpenSettings" title="抄錶顯示與費率設定" aria-label="抄錶設定">${iconSvgFn('settings')}</button>
+                ${canCreate ? `<button class="btn btn-sm btn-ghost" id="mrBtnGotoCreate" title="手動登記" aria-label="手動登記"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>` : ''}
               </div>
             </div>
             <div class="card-bd">
@@ -1310,12 +1591,12 @@
       };
 
       const renderRecordsTab = () => {
-        const chips = [
+        const chips = __filterEnabled([
           { id: '', label: '全部' },
           { id: 'electric', label: '⚡ 電錶' },
           { id: 'water', label: '💧 自來水' },
           { id: 'gas', label: '🔥 瓦斯' }
-        ];
+        ]);
         const statusOptions = [
           { v: '', l: '全部狀態' },
           { v: 'valid', l: '正常' },
@@ -1324,6 +1605,8 @@
           { v: 'resolved', l: '已處理' },
           { v: 'pending', l: '待審核' }
         ];
+        const filterTypeValid = state.filterType ? (getMeterType(state.filterType) && (getMeterType(state.filterType).enabled!==false)) : true;
+        if (!filterTypeValid) state.filterType = '';
         return `
           <div style="display:flex;flex-direction:column;gap:14px;">
             <div class="parcel-filter-bar" id="mrFilterBar" style="flex-wrap:wrap;">
@@ -1346,8 +1629,8 @@
               ${canCreate ? `<button class="btn btn-sm danger" type="button" id="fGotoCreate">登記抄表</button>` : ''}
             </div>
             ${state.loading ? `<div class="muted" style="padding:14px;">⏳ 載入中，請稍候...</div>` : ''}
-            ${!state.loading && state.records.length === 0 ? emptyState('尚無抄錶資料', '切換至「手動登記」或「匯入/匯出」分頁開始建立資料', '📝') : ''}
-            ${!state.loading && state.records.length > 0 ? `<div style="display:grid;gap:12px;">${state.records.map(r => recordCard(r, { showDetail: true, showEdit: canReview, showResolve: canReview && r.validationStatus === 'disputed' })).join('')}</div>` : ''}
+            ${!state.loading && __filterRecords(state.records).length === 0 ? emptyState('尚無抄錶資料', '切換至「手動登記」或「匯入/匯出」分頁開始建立資料', '📝') : ''}
+            ${!state.loading && __filterRecords(state.records).length > 0 ? `<div style="display:grid;gap:12px;">${__filterRecords(state.records).map(r => recordCard(r, { showDetail: true, showEdit: canReview, showResolve: canReview && r.validationStatus === 'disputed' })).join('')}</div>` : ''}
           </div>
         `;
       };
@@ -1358,25 +1641,37 @@
             <section class="card" style="box-shadow:none;border:1px solid rgba(17,24,39,0.08);">
               <div class="card-hd" style="padding:12px 14px;">
                 <div class="left">
-                  <div class="chip" style="width:36px;height:36px;">🔔</div>
-                  <div style="min-width:0;"><h2 style="font-size:15px;margin:0;">住戶核異申請</h2><p style="margin:0;">共 ${state.disputes.length} 筆待處理</p></div>
+                  <div class="chip" style="width:36px;height:36px;">📝</div>
+                  <div style="min-width:0;"><h2 style="font-size:15px;margin:0;">住戶申報待審核</h2><p style="margin:0;">共 ${__filterRecords(state.pendingRecords).length} 筆新申報待管理員審核</p></div>
                 </div>
-                <div class="tag yellow">${state.disputes.length}</div>
+                <div class="tag yellow">${__filterRecords(state.pendingRecords).length}</div>
               </div>
               <div class="card-bd" style="padding-top:0;">
-                ${state.disputes.length === 0 ? `<div class="muted" style="padding:18px;text-align:center;">目前沒有待處理的核異申請 🎉</div>` : `<div style="display:grid;gap:12px;">${state.disputes.map(r => recordCard(r, { showDetail: true, showResolve: true, showEdit: true })).join('')}</div>`}
+                ${__filterRecords(state.pendingRecords).length === 0 ? `<div class="muted" style="padding:18px;text-align:center;">目前沒有待審核的新申報 🎉</div>` : `<div style="display:grid;gap:12px;">${__filterRecords(state.pendingRecords).map(r => recordCard(r, { showDetail: true, showEdit: true, showResolve: false })).join('')}</div>`}
+              </div>
+            </section>
+            <section class="card" style="box-shadow:none;border:1px solid rgba(17,24,39,0.08);">
+              <div class="card-hd" style="padding:12px 14px;">
+                <div class="left">
+                  <div class="chip" style="width:36px;height:36px;">🔔</div>
+                  <div style="min-width:0;"><h2 style="font-size:15px;margin:0;">住戶核異申請</h2><p style="margin:0;">共 ${__filterRecords(state.disputes).length} 筆待處理</p></div>
+                </div>
+                <div class="tag yellow">${__filterRecords(state.disputes).length}</div>
+              </div>
+              <div class="card-bd" style="padding-top:0;">
+                ${__filterRecords(state.disputes).length === 0 ? `<div class="muted" style="padding:18px;text-align:center;">目前沒有待處理的核異申請 🎉</div>` : `<div style="display:grid;gap:12px;">${__filterRecords(state.disputes).map(r => recordCard(r, { showDetail: true, showResolve: true, showEdit: true })).join('')}</div>`}
               </div>
             </section>
             <section class="card" style="box-shadow:none;border:1px solid rgba(17,24,39,0.08);">
               <div class="card-hd" style="padding:12px 14px;">
                 <div class="left">
                   <div class="chip" style="width:36px;height:36px;">⚠</div>
-                  <div style="min-width:0;"><h2 style="font-size:15px;margin:0;">系統偵測異常</h2><p style="margin:0;">共 ${state.abnormalRecords.length} 筆</p></div>
+                  <div style="min-width:0;"><h2 style="font-size:15px;margin:0;">系統偵測異常</h2><p style="margin:0;">共 ${__filterRecords(state.abnormalRecords).length} 筆</p></div>
                 </div>
-                <div class="tag red">${state.abnormalRecords.length}</div>
+                <div class="tag red">${__filterRecords(state.abnormalRecords).length}</div>
               </div>
               <div class="card-bd" style="padding-top:0;">
-                ${state.abnormalRecords.length === 0 ? `<div class="muted" style="padding:18px;text-align:center;">目前沒有偵測到異常資料 🎉</div>` : `<div style="display:grid;gap:12px;">${state.abnormalRecords.map(r => recordCard(r, { showDetail: true, showEdit: true })).join('')}</div>`}
+                ${__filterRecords(state.abnormalRecords).length === 0 ? `<div class="muted" style="padding:18px;text-align:center;">目前沒有偵測到異常資料 🎉</div>` : `<div style="display:grid;gap:12px;">${__filterRecords(state.abnormalRecords).map(r => recordCard(r, { showDetail: true, showEdit: true })).join('')}</div>`}
               </div>
             </section>
           </div>
@@ -1384,14 +1679,15 @@
       };
 
       const renderCreateTab = () => {
-        const typeOptions = Object.values(METER_TYPES).map(t => ({ v: t.id, l: `${t.icon} ${t.name}` }));
+        const baseTypes = Object.values(METER_TYPES).map(t => ({ v: t.id, l: `${t.icon} ${t.name}` }));
+        const typeOptions = __filterEnabled(baseTypes);
         return `
           <form id="createForm" style="display:grid;gap:14px;">
             <section class="card" style="box-shadow:none;border:1px dashed rgba(211,47,47,0.25);background:rgba(211,47,47,0.03);">
               <div class="card-bd">
                 <div class="row" style="gap:10px;align-items:flex-start;">
                   <div class="tag" style="background:rgba(37,99,235,0.1);color:#2563eb;border-color:rgba(37,99,235,0.2);">ℹ</div>
-                  <div style="flex:1;font-size:13px;">單筆抄表登記：系統會自動帶入上期數值、計算用量與費用，並偵測是否有異常。</div>
+                  <div style="flex:1;font-size:13px;">單筆抄表登記：系統會自動帶入上期數值、計算用量與費用，並偵測是否有異常。每個位數獨立輸入框，便於抄表員核對。</div>
                 </div>
               </div>
             </section>
@@ -1414,14 +1710,18 @@
                     <input id="crHouse" type="text" placeholder="例如: A1-10F" required autocomplete="off" />
                   </div>
                 </div>
-                <div class="row" style="gap:12px;flex-wrap:wrap;">
+                <div class="row" style="gap:12px;flex-wrap:wrap;align-items:end;">
                   <div class="field" style="flex:1;min-width:160px;">
                     <label for="crPrev">上期數值（可選）</label>
                     <input id="crPrev" type="number" min="0" step="1" placeholder="留空自動查詢上期" />
                   </div>
-                  <div class="field" style="flex:1;min-width:160px;">
-                    <label for="crCurr">本期抄錶數字 *</label>
-                    <input id="crCurr" type="number" min="0" step="1" placeholder="請輸入抄見的數字" required />
+                  <div class="field" style="flex:1.5;min-width:260px;">
+                    <label>本期抄錶數字 *<span class="muted" style="font-weight:500;font-size:11px;margin-left:6px;">（每位數單獨輸入，自動跳轉）</span></label>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                      <div id="crCurrDigitBoxes" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;"></div>
+                      <input id="crCurr" type="hidden" />
+                      <div id="crCurrHint" class="muted" style="font-size:12px;">請先選擇儀表類型，位數會自動帶入社區設定。</div>
+                    </div>
                   </div>
                   <div class="field" style="flex:1;min-width:160px;">
                     <label for="crDate">抄表日期</label>
@@ -1497,11 +1797,11 @@
 
       const renderStatsTab = () => {
         const s = state.stats || { byType: {}, byPeriod: {}, houseCount: 0, totalRecords: 0, totalFee: 0, validCount: 0, abnormalCount: 0, disputedCount: 0 };
-        const typeCards = [
+        const typeCards = __filterEnabled([
           { id: 'electric', name: '電錶' },
           { id: 'water', name: '自來水錶' },
           { id: 'gas', name: '瓦斯錶' }
-        ];
+        ]);
         const periodKeys = Object.keys(s.byPeriod || {}).sort().slice(-12);
         const maxPeriodUsage = Math.max(1, ...periodKeys.map(k => safeParseNumber(s.byPeriod[k].totalUsage) || 0));
         const summaryCards = [
@@ -1612,6 +1912,81 @@
           state.tab = 'create';
           renderSubnav();
           renderLayout();
+        };
+        const openSettings = container.querySelector('#mrBtnOpenSettings');
+        if (openSettings) openSettings.onclick = () => {
+          const url = 'meter-settings.html?c=' + encodeURIComponent(communityId) + '&ref=admin-meter';
+          const backdrop = document.createElement('div');
+          backdrop.className = 'mr-modal-backdrop';
+          backdrop.setAttribute('role', 'presentation');
+          backdrop.style.setProperty('padding', '0', 'important');
+          backdrop.style.setProperty('z-index', '10001', 'important');
+          backdrop.innerHTML = `
+            <div class="mr-modal" role="dialog" aria-modal="true" aria-labelledby="__nwMeterSettingsTitle" style="width:80vw;max-width:80vw;height:80vh;max-height:80vh;padding:0;border-radius:18px;">
+              <div class="mr-modal-hd" style="padding:12px 18px;">
+                <div class="title" id="__nwMeterSettingsTitle" style="display:flex;align-items:center;gap:10px;">
+                  <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:10px;background:rgba(211,47,47,.1);color:var(--brand,#d32f2f);">⚙</span>
+                  <span>抄錶顯示與費率設定</span>
+                  <span class="pill" id="__nwMeterSettingsStatus" style="margin-left:6px;">載入中…</span>
+                </div>
+                <button class="mr-modal-close" type="button" id="__nwMeterSettingsClose" aria-label="關閉">×</button>
+              </div>
+              <div class="mr-modal-bd" style="padding:0;overflow:hidden;position:relative;flex:1;">
+                <iframe id="__nwMeterSettingsIframe" src="${esc(url)}" title="抄錶設定" style="width:100%;height:100%;border:0;display:block;background:#f8fafc;"></iframe>
+              </div>
+            </div>
+          `;
+          document.body.appendChild(backdrop);
+          const iframe = backdrop.querySelector('#__nwMeterSettingsIframe');
+          const statusPill = backdrop.querySelector('#__nwMeterSettingsStatus');
+          const closeBtn = backdrop.querySelector('#__nwMeterSettingsClose');
+          const close = () => {
+            if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+            window.removeEventListener('keydown', onEsc);
+            window.removeEventListener('message', onSaved);
+          };
+          const onEsc = (e) => { if (e.key === 'Escape') close(); };
+          const onSaved = (ev) => {
+            try {
+              const p = ev && ev.data;
+              if (!p || typeof p !== 'object') return;
+              if (p.type === 'nwapp:meterSettingsIframeReady') {
+                if (statusPill) statusPill.textContent = '就緒';
+                return;
+              }
+              if (p.type === 'nwapp:meterSettingsRequestClose') {
+                close();
+                return;
+              }
+              if (p.type !== 'nwapp:meterSettingsSaved') return;
+              if (p.communityId && String(p.communityId) !== String(communityId)) return;
+              if (statusPill) {
+                statusPill.textContent = '已儲存 · 同步中';
+                statusPill.style.setProperty('background', 'rgba(22,163,74,.1)');
+                statusPill.style.setProperty('color', '#166534');
+              }
+              try {
+                loadCommunityMeterSettings(db, communityId, true).then(() => reload()).catch(() => {});
+              } catch {}
+              setTimeout(() => { if (statusPill) { statusPill.textContent = '已套用'; } }, 1600);
+            } catch {}
+          };
+          if (iframe) {
+            iframe.onload = () => {
+              try {
+                iframe.contentWindow.postMessage({ type: 'nwapp:meterSettingsIframeParentHello' }, '*');
+              } catch {}
+              if (statusPill) {
+                statusPill.textContent = '可編輯';
+                statusPill.style.setProperty('background', 'rgba(37,99,235,.1)');
+                statusPill.style.setProperty('color', '#1d4ed8');
+              }
+            };
+          }
+          closeBtn.onclick = close;
+          backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+          window.addEventListener('keydown', onEsc);
+          window.addEventListener('message', onSaved);
         };
       };
 
@@ -1889,6 +2264,96 @@
         const feePrev = container.querySelector('#crFeePreview');
         const errsEl = container.querySelector('#crErrors');
         const warnEl = container.querySelector('#crWarnings');
+        const typeSelect = form.querySelector('#crType');
+        const digitWrap = form.querySelector('#crCurrDigitBoxes');
+        const crCurrHidden = form.querySelector('#crCurr');
+        const crCurrHint = form.querySelector('#crCurrHint');
+        const rebuildDigitBoxes = (typeId, initialNum) => {
+          if (!digitWrap || !crCurrHint) return;
+          const t = getMeterType(typeId);
+          if (!t) {
+            digitWrap.innerHTML = '';
+            if (crCurrHint) crCurrHint.textContent = '請先選擇儀表類型，位數會自動帶入社區設定。';
+            if (crCurrHidden) crCurrHidden.value = '';
+            return;
+          }
+          const digits = Math.max(2, Math.min(8, Number.isFinite(Number(t.digits)) ? Math.floor(Number(t.digits)) : 4));
+          const raw = String(Math.max(0, Math.min(Math.pow(10,digits)-1, Number.isFinite(Number(initialNum)) ? Math.floor(Number(initialNum)) : 0))).padStart(digits,'0');
+          const chars = raw.split('');
+          const color = t.color || '#1f2937';
+          digitWrap.innerHTML = chars.map((ch,i)=>`
+            <div class="digit-box mr-digit-box" data-i="${i}" style="width:56px;height:74px;border-radius:14px;border:1.5px solid ${color}55;background:linear-gradient(180deg,#fff,#fafafa);box-shadow:inset 0 -2px 0 rgba(17,24,39,.05);">
+              <input inputmode="numeric" pattern="[0-9]*" maxlength="1" value="${esc(ch)}" data-digidx="${i}" aria-label="第${i+1}位" style="width:100%;height:100%;background:transparent;border:0;outline:none;text-align:center;font:900 34px/1 'SF Mono',Consolas,monospace;color:${color};letter-spacing:0;padding:0;"/>
+            </div>`).join('') + `<span class="pill" style="margin-left:4px;">${digits}位</span>`;
+          if (crCurrHint) crCurrHint.textContent = `已選擇 ${t.name}，共 ${digits} 位；左鍵可由左向右輸入，Backspace 可回到前一格。`;
+          digitWrap.querySelectorAll('input[data-digidx]').forEach((inp, idx, arr) => {
+            const digitIdx = Number(inp.getAttribute('data-digidx'));
+            inp.addEventListener('input', () => {
+              const v = (inp.value || '').replace(/[^0-9]/g,'');
+              const fst = v.slice(0,1);
+              const remain = v.slice(1);
+              inp.value = fst || '';
+              if (remain) {
+                for (let j = 0; j < remain.length; j++) {
+                  const next = idx + 1 + j;
+                  if (next >= arr.length) break;
+                  const nextEl = arr[next];
+                  if (nextEl) nextEl.value = remain.charAt(j);
+                }
+                const lastFocus = Math.min(arr.length-1, idx + remain.length);
+                arr[lastFocus] && arr[lastFocus].focus();
+                arr[lastFocus] && arr[lastFocus].setSelectionRange && arr[lastFocus].setSelectionRange((arr[lastFocus].value||'').length,(arr[lastFocus].value||'').length);
+              } else if (fst && idx + 1 < arr.length) {
+                arr[idx+1].focus();
+                try { arr[idx+1].setSelectionRange((arr[idx+1].value||'').length,(arr[idx+1].value||'').length); } catch {}
+              }
+              syncFromBoxes();
+            });
+            inp.addEventListener('keydown', (e) => {
+              const k = e.key;
+              if (k === 'Backspace' && (!inp.value) && idx > 0) {
+                const prev = arr[idx-1];
+                if (prev) { prev.value=''; prev.focus(); e.preventDefault(); }
+                syncFromBoxes();
+              } else if (k === 'ArrowLeft' && idx > 0) {
+                e.preventDefault(); arr[idx-1].focus();
+              } else if (k === 'ArrowRight' && idx < arr.length-1) {
+                e.preventDefault(); arr[idx+1].focus();
+              }
+            });
+            inp.addEventListener('paste', (e) => {
+              e.preventDefault();
+              const txt = ((e.clipboardData || window.clipboardData) || {}).getData ? (e.clipboardData || window.clipboardData).getData('text') : '';
+              if (!txt) return;
+              const digits = txt.replace(/[^0-9]/g,'').slice(0, arr.length - idx);
+              for (let j = 0; j < digits.length; j++) { arr[idx + j] && (arr[idx + j].value = digits.charAt(j)); }
+              const next = Math.min(arr.length-1, idx + Math.max(0, digits.length || 1) - 1);
+              arr[next] && arr[next].focus();
+              syncFromBoxes();
+            });
+          });
+          syncFromBoxes();
+        };
+        const syncFromBoxes = () => {
+          if (!digitWrap || !crCurrHidden) return;
+          const v = Array.from(digitWrap.querySelectorAll('input[data-digidx]')).map(i => (i.value || '').slice(-1)).join('').trim();
+          crCurrHidden.value = v || '';
+        };
+        const setNumericBoxesFromString = (s) => {
+          if (!digitWrap) return;
+          const t = getMeterType(typeSelect && typeSelect.value);
+          if (!t) return;
+          const digits = Math.max(2, Math.min(8, Number.isFinite(Number(t.digits)) ? Math.floor(Number(t.digits)) : 4));
+          const n = Number.isFinite(Number(s)) ? Math.max(0, Math.min(Math.pow(10,digits)-1, Math.floor(Number(s)))) : 0;
+          rebuildDigitBoxes(typeSelect.value, n);
+        };
+        if (typeSelect) {
+          typeSelect.addEventListener('change', () => {
+            rebuildDigitBoxes(typeSelect.value);
+            runValidate().catch(() => {});
+          });
+          setTimeout(() => { if (typeSelect.value) rebuildDigitBoxes(typeSelect.value); else { digitWrap && (digitWrap.innerHTML = ''); } }, 0);
+        }
         const showErrors = (list) => {
           if (!errsEl) return;
           if (!list || !list.length) { errsEl.style.display = 'none'; return; }
@@ -1902,6 +2367,7 @@
           warnEl.style.display = 'block';
         };
         const runValidate = async () => {
+          syncFromBoxes();
           const raw = {
             meterType: form.querySelector('#crType').value,
             meterId: form.querySelector('#crMeterId').value.trim(),
@@ -1939,12 +2405,15 @@
           return v;
         };
         form.querySelector('#crPreviewBtn').onclick = (e) => { e.preventDefault(); runValidate(); };
-        ['crType', 'crMeterId', 'crHouse', 'crPrev', 'crCurr', 'crDate', 'crPeriod'].forEach(id => {
+        ['crType', 'crMeterId', 'crHouse', 'crPrev', 'crDate', 'crPeriod'].forEach(id => {
           const el = form.querySelector('#' + id);
-          if (el) el.addEventListener('change', () => runValidate().catch(() => {}));
+          if (!el) return;
+          if (id === 'crPrev') el.addEventListener('change', () => runValidate().catch(() => {}));
+          else el.addEventListener('change', () => runValidate().catch(() => {}));
         });
         form.onsubmit = async (e) => {
           e.preventDefault();
+          syncFromBoxes();
           const v = await runValidate();
           if (!v.valid) return;
           const confirmed = v.warnings && v.warnings.length ? window.confirm(`存在 ${v.warnings.length} 項警示：\n${v.warnings.join('\n')}\n\n仍要繼續建立嗎？`) : true;
@@ -1955,6 +2424,8 @@
             const today = new Date().toISOString().slice(0, 10);
             form.querySelector('#crDate').value = today;
             form.querySelector('#crPeriod').value = formatDateYYYYMM(new Date());
+            digitWrap && (digitWrap.innerHTML = '');
+            crCurrHidden && (crCurrHidden.value = '');
             if (feePrev) feePrev.style.display = 'none';
             showErrors([]);
             showWarnings([]);
@@ -2124,7 +2595,9 @@
   })();
 
   window.NwMeterReading = {
-    METER_TYPES,
+    METER_TYPES_DEFAULT,
+    get METER_TYPES(){ return getActiveMeterTypesMap(); },
+    set METER_TYPES(v){ if (v && typeof v==='object') { const r = normalizeMeterTypeFromRaw(v); METER_TYPES = r.map; window.__nwMeterOrder = r.order; } },
     VALIDATION_STATUS,
     FEE_TIERS,
     ABNORMAL_THRESHOLDS,
@@ -2134,10 +2607,15 @@
     formatDateFull,
     toDateValue,
     getMeterType,
+    getActiveMeterTypeIds,
+    getActiveMeterTypesMap,
+    normalizeMeterTypeFromRaw,
+    loadCommunityMeterSettings,
     safeParseNumber,
     isValidMeterNumber,
     calcUsage,
     calcFee,
+    digitBoxesStringify,
     detectAbnormal,
     ensureServices,
     cacheGet,
@@ -2156,6 +2634,7 @@
     resolveDispute,
     listPendingDisputes,
     listAbnormalRecords,
+    listPendingRecords,
     computeStatistics,
     exportCSV,
     parseExcelCSV,

@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>抄錶顯示與費率設定｜社區系統</title>
+<link rel="icon" type="image/svg+xml" href="logo-icon.svg"/>
+<style>
+  :root{
+    --brand:#d32f2f; --brand-2:#c62828; --muted:#6b7280; --border:#e5e7eb; --bg:#f8fafc; --card:#ffffff;
+    --ok:#16a34a; --warn:#a16207; --danger:#b91c1c; --chip:#f3f4f6;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;font-size:14px;}
+  header{padding:14px 18px;background:linear-gradient(135deg,var(--brand),#b91c1c);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:5;}
+  header h1{margin:0;font-size:16px;letter-spacing:.2px;display:flex;align-items:center;gap:10px;}
+  header .sub{opacity:.9;font-size:12px;font-weight:600;}
+  header .right{display:flex;gap:8px;align-items:center;}
+  .wrap{padding:18px 18px 80px;max-width:980px;margin:0 auto;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:18px;box-shadow:0 1px 2px rgba(17,24,39,.04);margin-bottom:14px;overflow:hidden;}
+  .card-hd{padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px dashed rgba(17,24,39,.08);}
+  .card-hd h2{margin:0;font-size:15px;letter-spacing:.2px;display:flex;align-items:center;gap:10px;}
+  .card-hd .muted{color:var(--muted);font-size:12px;}
+  .card-bd{padding:16px;}
+  .chip{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:12px;background:var(--chip);font-size:18px;}
+  .row{display:flex;align-items:center;gap:12px;}
+  .row + .row{margin-top:10px;}
+  .muted{color:var(--muted);}
+  .field{flex:1;min-width:0;display:grid;gap:6px;}
+  label{font-weight:700;font-size:12px;color:#1f2937;}
+  input[type="text"],input[type="number"],select{
+    width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff;font-size:14px;outline:none;
+    transition:border-color .15s,box-shadow .15s;
+  }
+  input:focus,select:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(211,47,47,.12);}
+  .btn{padding:9px 14px;border-radius:999px;border:1px solid var(--border);background:#fff;font-weight:700;font-size:13px;cursor:pointer;}
+  .btn-primary{background:linear-gradient(135deg,var(--brand),#ef4444);color:#fff;border-color:transparent;}
+  .btn-primary:disabled{opacity:.6;cursor:not-allowed;}
+  .btn-ghost{background:transparent;}
+  .btn-danger{background:#fff;color:var(--danger);border-color:rgba(185,28,28,.25);}
+  .footer-bar{position:fixed;left:0;right:0;bottom:0;padding:12px 16px;background:rgba(255,255,255,.94);border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;backdrop-filter:blur(6px);z-index:4;}
+  .meter-header{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:12px 14px;border-radius:14px;background:rgba(17,24,39,.02);}
+  .meter-title{flex:1;min-width:0;}
+  .meter-title .mname{font-weight:900;font-size:15px;display:flex;align-items:center;gap:8px;}
+  .meter-title .mdesc{font-size:12px;color:var(--muted);margin-top:2px;}
+  .toggle{position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0;}
+  .toggle input{display:none;}
+  .slider{position:absolute;inset:0;border-radius:999px;background:#cbd5e1;transition:background .15s;}
+  .slider::before{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.18);}
+  input:checked + .slider{background:linear-gradient(135deg,var(--brand),#ef4444);}
+  input:checked + .slider::before{transform:translateX(20px);}
+  .disabled .card-bd{opacity:.55;pointer-events:none;filter:grayscale(.3);}
+  .digit-group{display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .digit-box{
+    width:48px;height:60px;border-radius:12px;border:1.5px solid var(--border);background:#fff;
+    display:flex;align-items:center;justify-content:center;position:relative;
+  }
+  .digit-box input{
+    width:100%;height:100%;border:0;background:transparent;text-align:center;
+    font-size:28px;font-weight:900;color:#111827;letter-spacing:0;font-family:"SF Mono",Consolas,monospace;outline:none;padding:0;
+  }
+  .digit-box[data-readonly] input{color:#475569;}
+  .digit-box::after{content:"";position:absolute;left:8px;right:8px;bottom:10px;height:2px;background:repeating-linear-gradient(90deg,#cbd5e1 0 4px,transparent 4px 8px);border-radius:2px;opacity:.55;}
+  .digit-ctrl{display:inline-flex;gap:6px;align-items:center;margin-left:8px;}
+  .digit-ctrl button{width:30px;height:30px;border-radius:10px;border:1px solid var(--border);background:#fff;font-weight:900;cursor:pointer;}
+  .hint{font-size:12px;color:var(--muted);}
+  .pill{display:inline-flex;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:800;background:rgba(17,24,39,.05);color:#374151;}
+  .pill-ok{background:rgba(22,163,74,.08);color:#166534;}
+  .pill-warn{background:rgba(161,98,7,.08);color:#854d0e;}
+  .pill-err{background:rgba(185,28,28,.08);color:#7f1d1d;}
+  .price-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(140px,0fr) minmax(110px,0fr);gap:10px;align-items:end;}
+  @media (max-width:720px){
+    .price-row{grid-template-columns:1fr 1fr;}
+    .price-row > *:last-child{grid-column:span 2;}
+    .digit-box{width:40px;height:52px;}
+    .digit-box input{font-size:24px;}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>
+      <span class="chip" style="background:rgba(255,255,255,.14);color:#fff;">⚙</span>
+      <div>抄錶顯示與費率設定
+        <div class="sub" id="headerSub">載入中…</div>
+      </div>
+    </h1>
+  </div>
+  <div class="right">
+    <button class="btn" id="btnReset" type="button" style="background:rgba(255,255,255,.14);color:#fff;border-color:transparent;">回復預設</button>
+    <button class="btn" id="btnClose" type="button" style="background:rgba(255,255,255,.22);color:#fff;border-color:transparent;">關閉</button>
+  </div>
+</header>
+<main class="wrap" id="wrap">
+  <section class="card">
+    <div class="card-hd">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+        <div class="chip">🏘</div>
+        <div style="min-width:0;">
+          <h2 style="margin:0;padding:0;font-size:14px;">社區抄錶總開關</h2>
+          <div class="muted" id="communityMeta">—</div>
+        </div>
+      </div>
+      <span class="pill" id="saveStatus">尚未變更</span>
+    </div>
+    <div class="card-bd">
+      <div class="row">
+        <div class="muted" style="font-size:13px;">設定儲存至該社區 `meterSettings`，同步影響住戶前台抄錶申報與後台抄錶紀錄頁的儀表顯示、費率與位數。</div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <div class="hint">⚠ 若關閉某儀表，其既有歷史資料仍會保留於資料庫，但不在列表、統計與申報介面顯示。</div>
+      </div>
+    </div>
+  </section>
+
+  <div id="meterPanels"></div>
+</main>
+
+<div class="footer-bar">
+  <button class="btn btn-ghost" id="btnDiscard" type="button">放棄變更</button>
+  <button class="btn btn-primary" id="btnSave" type="button" disabled>儲存設定</button>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script>
+(function(){
+  'use strict';
+  const DEFAULT_METER = {
+    electric: { id:'electric', name:'電錶', icon:'⚡', unit:'度', enabled:true, unitPrice:5.20, digits:4, presetFee:0 },
+    water:    { id:'water',    name:'自來水錶', icon:'💧', unit:'度', enabled:true, unitPrice:12.60, digits:4, presetFee:0 },
+    gas:      { id:'gas',      name:'天然氣瓦斯錶', icon:'🔥', unit:'度', enabled:true, unitPrice:21.60, digits:4, presetFee:0 }
+  };
+  const TYPE_ORDER = ['electric','water','gas'];
+  const qs = new URLSearchParams(location.search || '');
+  const communityId = String(qs.get('c') || localStorage.getItem('csp_active_community_v1') || '').trim() || 'default';
+  const headerSub = document.getElementById('headerSub');
+  const communityMeta = document.getElementById('communityMeta');
+  const meterPanels = document.getElementById('meterPanels');
+  const saveStatus = document.getElementById('saveStatus');
+  const btnSave = document.getElementById('btnSave');
+  const btnDiscard = document.getElementById('btnDiscard');
+  const btnReset = document.getElementById('btnReset');
+  const btnClose = document.getElementById('btnClose');
+  const MIN_DIGITS = 2, MAX_DIGITS = 8;
+
+  const services = (() => {
+    const cfg = window.FIREBASE_CONFIG;
+    if (!cfg) return { ok:false, db:null, auth:null, msg:'缺少 FIREBASE_CONFIG' };
+    try { if (!firebase.apps.length) firebase.initializeApp(cfg); } catch {}
+    try { var auth = firebase.auth(); } catch {}
+    try { var db = firebase.firestore(); } catch {}
+    return { ok:!!db && !!auth, db, auth, msg: (!db || !auth) ? 'Firebase 初始化失敗' : '' };
+  })();
+
+  let local = {
+    meters: JSON.parse(JSON.stringify(DEFAULT_METER)),
+    dirty:false
+  };
+
+  function esc(v){ return String(v ?? '').replace(/[&<>"']/g, (c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c)); }
+  function cloneMeters(src){
+    const out = {};
+    TYPE_ORDER.forEach(id=>{
+      const d = DEFAULT_METER[id];
+      const s = (src && src[id]) || {};
+      out[id] = {
+        id: s.id || d.id,
+        name: s.name || d.name,
+        icon: s.icon || d.icon,
+        unit: s.unit || d.unit,
+        enabled: typeof s.enabled==='boolean' ? s.enabled : d.enabled,
+        unitPrice: Number.isFinite(Number(s.unitPrice)) ? Math.max(0,Number(s.unitPrice)) : d.unitPrice,
+        digits: Math.max(MIN_DIGITS, Math.min(MAX_DIGITS, Number.isFinite(Number(s.digits))?Math.floor(Number(s.digits)):d.digits)),
+        presetFee: Number.isFinite(Number(s.presetFee)) ? Math.max(0,Number(s.presetFee)) : (d.presetFee||0)
+      };
+    });
+    return out;
+  }
+  function setStatus(text, tone){
+    saveStatus.textContent = text || '尚未變更';
+    saveStatus.className = 'pill ' + (tone ? 'pill-'+tone : '');
+  }
+  function markDirty(){
+    local.dirty = true;
+    btnSave.disabled = false;
+    setStatus('有未儲存的變更', 'warn');
+  }
+  function setMeterField(id, key, value){
+    if (!local.meters[id]) return;
+    local.meters[id][key] = value;
+    markDirty();
+  }
+
+  async function loadCommunity(){
+    if (!services.ok || communityId==='default') {
+      communityMeta.innerHTML = `無法辨識社區 <span class="pill pill-err">cid: ${esc(communityId)}</span>，設定僅暫存於本頁。`;
+      headerSub.textContent = communityId === 'default' ? '未選擇社區' : '社區載入失敗';
+      return null;
+    }
+    try {
+      const snap = await services.db.collection('communities').doc(communityId).get();
+      const c = snap && snap.exists ? (snap.data()||{}) : null;
+      if (c) {
+        const cname = String(c.name||c.communityName||c.displayName||'').trim() || communityId;
+        communityMeta.innerHTML = `${esc(cname)} <span class="pill">${esc(communityId)}</span>`;
+        headerSub.textContent = cname;
+        const s = c.meterSettings;
+        if (s && typeof s === 'object') local.meters = cloneMeters(s);
+      } else {
+        communityMeta.innerHTML = `找不到社區文件 <span class="pill pill-err">${esc(communityId)}</span>，設定僅暫存於本頁。`;
+        headerSub.textContent = '社區文件不存在';
+      }
+      return c;
+    } catch (e) {
+      console.warn(e);
+      communityMeta.innerHTML = `讀取社區失敗 <span class="pill pill-err">${esc(String(e.code||e.message||e))}</span>，設定僅暫存於本頁。`;
+      headerSub.textContent = '讀取失敗';
+      return null;
+    }
+  }
+
+  function digitBoxesHtml(id, digits, sample){
+    const arr = String(sample||'').padStart(digits,'0').slice(-digits).split('');
+    const boxes = [];
+    for (let i=0;i<digits;i++){
+      const d = arr[i] || '0';
+      boxes.push(`<div class="digit-box" data-readonly><input inputmode="numeric" pattern="[0-9]*" maxlength="1" data-digit="${i}" value="${esc(d)}" readonly tabindex="-1"/></div>`);
+    }
+    return `<div class="digit-group" data-meter="${esc(id)}" data-role="preview">${boxes.join('')}
+      <div class="digit-ctrl">
+        <button type="button" data-digits-less aria-label="減少位數">−</button>
+        <span class="pill" data-digits-count title="位數">${digits}</span>
+        <button type="button" data-digits-more aria-label="增加位數">＋</button>
+      </div>
+      <span class="hint">預設 4 位（${MIN_DIGITS}–${MAX_DIGITS}）</span>
+    </div>`;
+  }
+
+  function render(){
+    meterPanels.innerHTML = TYPE_ORDER.map(id => {
+      const m = local.meters[id];
+      const d = DEFAULT_METER[id];
+      const isDisabled = !m.enabled;
+      return `
+      <section class="card ${isDisabled?'disabled':''}" data-card="${esc(id)}">
+        <div class="card-hd">
+          <div class="meter-header" style="margin:0;padding:0;background:transparent;">
+            <span class="chip" style="font-size:18px;">${esc(m.icon||d.icon)}</span>
+            <div class="meter-title">
+              <div class="mname">${esc(m.name||d.name)}
+                ${isDisabled?'<span class="pill pill-err">已關閉</span>':`<span class="pill pill-ok">顯示中</span>`}
+              </div>
+              <div class="mdesc">住戶前台與後台抄錶介面同步顯示。計算：用量 × 每度金額 + 基本費</div>
+            </div>
+          </div>
+          <label class="toggle" title="顯示開關">
+            <input type="checkbox" data-meter="${esc(id)}" data-field="enabled" ${m.enabled?'checked':''}/>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="card-bd">
+          <div class="row" style="margin-top:0;">
+            <div class="field" style="max-width:320px;">
+              <label>顯示名稱</label>
+              <input type="text" data-meter="${esc(id)}" data-field="name" value="${esc(m.name)}" maxlength="20"/>
+            </div>
+            <div class="field" style="max-width:220px;">
+              <label>單位</label>
+              <input type="text" data-meter="${esc(id)}" data-field="unit" value="${esc(m.unit)}" maxlength="6"/>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:14px;align-items:flex-start;flex-wrap:wrap;">
+            <div class="field" style="flex:1;min-width:240px;">
+              <label>顯示位數預覽（每個位數單獨框框）</label>
+              ${digitBoxesHtml(id, m.digits, Math.max(0, Math.pow(10,m.digits)-1).toString())}
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:14px;">
+            <div style="width:100%;display:grid;gap:12px;">
+              <div class="price-row">
+                <div class="field">
+                  <label>每度金額（${esc(m.unit||d.unit)}）</label>
+                  <input type="number" min="0" step="0.01" data-meter="${esc(id)}" data-field="unitPrice" value="${(m.unitPrice).toFixed(2)}" />
+                </div>
+                <div class="field">
+                  <label>每期基本費（NT$）</label>
+                  <input type="number" min="0" step="0.01" data-meter="${esc(id)}" data-field="presetFee" value="${(m.presetFee||0).toFixed(2)}" />
+                </div>
+                <div class="field">
+                  <label>費用預估範例</label>
+                  <div class="muted" style="font-size:12px;padding:8px 10px;border-radius:10px;background:rgba(17,24,39,.03);border:1px solid var(--border);">
+                    100${esc(m.unit)} × NT$${(m.unitPrice).toFixed(2)} ${m.presetFee>0?` + 基本費 NT$${(m.presetFee).toFixed(2)}`:''} = 
+                    <strong style="color:var(--brand);">NT$${(((100*m.unitPrice)+(m.presetFee||0)).toFixed(2))}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>`;
+    }).join('');
+    bindPanelEvents();
+  }
+
+  function bindPanelEvents(){
+    meterPanels.querySelectorAll('input[type=checkbox][data-field=enabled]').forEach(cb=>{
+      cb.onchange = () => {
+        const id = cb.getAttribute('data-meter');
+        setMeterField(id, 'enabled', !!cb.checked);
+        render();
+      };
+    });
+    meterPanels.querySelectorAll('input[type=text][data-field]').forEach(inp=>{
+      inp.oninput = () => {
+        const id = inp.getAttribute('data-meter');
+        const field = inp.getAttribute('data-field');
+        if (field==='name' || field==='unit') setMeterField(id, field, inp.value);
+      };
+    });
+    meterPanels.querySelectorAll('input[type=number][data-field]').forEach(inp=>{
+      inp.oninput = () => {
+        const id = inp.getAttribute('data-meter');
+        const field = inp.getAttribute('data-field');
+        const n = Number(inp.value);
+        if (!Number.isFinite(n)) return;
+        setMeterField(id, field, Math.max(0, n));
+        updatePriceExample(id);
+      };
+    });
+    meterPanels.querySelectorAll('button[data-digits-more]').forEach(b=>{
+      b.onclick = () => {
+        const panel = b.closest('section.card');
+        const id = panel.getAttribute('data-card');
+        const m = local.meters[id];
+        if (m.digits >= MAX_DIGITS) return;
+        setMeterField(id, 'digits', m.digits + 1);
+        render();
+      };
+    });
+    meterPanels.querySelectorAll('button[data-digits-less]').forEach(b=>{
+      b.onclick = () => {
+        const panel = b.closest('section.card');
+        const id = panel.getAttribute('data-card');
+        const m = local.meters[id];
+        if (m.digits <= MIN_DIGITS) return;
+        setMeterField(id, 'digits', m.digits - 1);
+        render();
+      };
+    });
+  }
+  function updatePriceExample(id){
+    const card = meterPanels.querySelector(`section.card[data-card="${esc(id)}"]`);
+    if (!card) return;
+    const m = local.meters[id];
+    const el = card.querySelector('.muted strong');
+    if (el) el.textContent = 'NT$' + (((100*m.unitPrice)+(m.presetFee||0)).toFixed(2));
+  }
+
+  async function saveSettings(){
+    btnSave.disabled = true;
+    setStatus('儲存中…', 'warn');
+    try {
+      if (!services.ok) throw new Error(services.msg || '無法寫入遠端');
+      if (communityId === 'default') throw new Error('請先選擇社區');
+      await services.auth.authStateReady ? services.auth.authStateReady().catch(()=>{}) : Promise.resolve();
+      const user = services.auth.currentUser;
+      if (!user) throw new Error('尚未登入管理員帳號');
+      const payload = JSON.parse(JSON.stringify(local.meters));
+      const ref = services.db.collection('communities').doc(communityId);
+      const snap = await ref.get();
+      if (!(snap && snap.exists)) throw new Error('社區文件不存在，無法寫入');
+      await ref.set({ meterSettings: payload, meterSettingsUpdatedAt: firebase.firestore.Timestamp.now(), meterSettingsUpdatedBy: { uid: user.uid, email: user.email || '' } }, { merge: true });
+      local.dirty = false;
+      btnSave.disabled = true;
+      setStatus('已儲存 · 前後台同步套用', 'ok');
+      const msg = { type:'nwapp:meterSettingsSaved', communityId, settings: payload };
+      try {
+        const syncKey = 'nwapp:meterSettingsChanged';
+        const syncVal = JSON.stringify({ communityId, at: Date.now() });
+        try { localStorage.setItem(syncKey, syncVal); } catch {}
+        try { sessionStorage.setItem(syncKey, syncVal); } catch {}
+      } catch {}
+      try { if (window.opener && typeof window.opener.postMessage === 'function') window.opener.postMessage(msg, '*'); } catch {}
+      try { if (window.parent && window.parent !== window && typeof window.parent.postMessage === 'function') window.parent.postMessage(msg, '*'); } catch {}
+    } catch (e) {
+      console.error(e);
+      setStatus('儲存失敗：' + (e.code ? (e.code+'｜'):'') + (e.message||String(e)), 'err');
+      btnSave.disabled = false;
+    }
+  }
+
+  function tryRequestClose(){
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type:'nwapp:meterSettingsRequestClose' }, '*');
+        return true;
+      }
+    } catch {}
+    try { window.close(); return true; } catch {}
+    return false;
+  }
+
+  try {
+    window.addEventListener('message', function(ev){
+      try {
+        const p = ev && ev.data;
+        if (!p || typeof p !== 'object') return;
+        if (p.type === 'nwapp:meterSettingsIframeParentHello') {
+          try {
+            if (window.parent && typeof window.parent.postMessage === 'function') {
+              window.parent.postMessage({ type:'nwapp:meterSettingsIframeReady', communityId }, '*');
+            }
+          } catch {}
+        } else if (p.type === 'nwapp:meterSettingsIframeClose') {
+          tryRequestClose();
+        }
+      } catch {}
+    });
+  } catch {}
+
+  btnDiscard.onclick = () => {
+    if (local.dirty && !confirm('確定放棄未儲存的變更？')) return;
+    loadCommunity().then(render);
+  };
+  btnReset.onclick = () => {
+    if (!confirm('確定回復為系統預設（儀表全開、位數 4、內建單價）？')) return;
+    local.meters = JSON.parse(JSON.stringify(DEFAULT_METER));
+    markDirty();
+    render();
+  };
+  btnSave.onclick = saveSettings;
+  btnClose.onclick = () => {
+    if (local.dirty && !confirm('有未儲存變更，確定要關閉？')) return;
+    const closed = tryRequestClose();
+    if (!closed) setTimeout(()=>{ if (window.opener) history.back(); else window.location.href = 'admin.html#community/meter-reading'; }, 0);
+  };
+
+  document.title = `抄錶顯示與費率設定${communityId && communityId!=='default' ? '｜'+communityId : ''}`;
+  loadCommunity().then(render);
+})();
+</script>
+</body>
+</html>

@@ -95,6 +95,32 @@
         font-weight: 700;
         text-align: center;
       }
+      .btn-submit {
+        min-width: 160px;
+        min-height: 44px;
+        padding: 10px 22px;
+        border-radius: 999px;
+        font-weight: 900;
+        font-size: 15px;
+        letter-spacing: 0.04em;
+        background: linear-gradient(135deg, #d32f2f 0%, #c2185b 100%);
+        box-shadow: 0 10px 22px rgba(194, 24, 91, 0.24), inset 0 1px 0 rgba(255,255,255,0.18);
+        border: 1px solid rgba(17, 24, 39, 0.08);
+        transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+        color: #fff;
+      }
+      .btn-submit:hover { box-shadow: 0 14px 28px rgba(194, 24, 91, 0.28), inset 0 1px 0 rgba(255,255,255,0.18); }
+      .btn-submit:active { transform: translateY(1px); box-shadow: 0 6px 14px rgba(194, 24, 91, 0.22), inset 0 1px 0 rgba(255,255,255,0.18); }
+      .btn-submit[disabled], .btn-submit:disabled { opacity: 0.58; cursor: not-allowed; filter: grayscale(0.1); }
+      .nl-meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgba(243, 244, 246, 0.85);
+        border: 1px solid rgba(17, 24, 39, 0.08);
+      }
     </style>
   </head>
   <body>
@@ -117,9 +143,14 @@
         <div class="parcel-list" id="submitTab">
           <div style="display:grid; gap:10px;">
             <div class="parcel-filter-bar" style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-              <div style="font-weight:900;">本期申報</div>
+              <div style="font-weight:900; display:flex; flex-direction:column; gap:4px;">
+                <div>本期申報</div>
+                <div id="nlLastEdited" class="nl-meta" style="font-weight:700; color:#6b7280; font-size:12px;">尚未輸入資料</div>
+              </div>
               <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <label for="nlPeriod" style="font-size:13px; color:#374151; font-weight:800;">月份</label>
                 <input id="nlPeriod" type="month" style="min-width:160px;" />
+                <label for="nlReadDate" style="font-size:13px; color:#374151; font-weight:800;">抄見日</label>
                 <input id="nlReadDate" type="date" style="min-width:160px;" />
               </div>
             </div>
@@ -129,8 +160,7 @@
             </div>
 
             <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
-              <button class="btn" type="button" id="btnPreviewFee">預覽計算</button>
-              <button class="btn btn-primary" type="button" id="btnSubmitReadings">送出申報</button>
+              <button class="btn btn-primary btn-submit" type="button" id="btnSubmitReadings">送出申報</button>
             </div>
             <div class="status" id="nlSubmitStatus" hidden></div>
           </div>
@@ -146,8 +176,9 @@
                 <button class="tab-btn" type="button" data-meter-filter="gas" style="min-width:80px; flex:0 0 auto; padding:0 14px;">🔥 瓦斯</button>
               </div>
               <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                <input id="nlHistFrom" type="month" style="min-width:160px;" />
-                <input id="nlHistTo" type="month" style="min-width:160px;" />
+                <label for="nlHistMonth" style="font-size:13px; color:#374151; font-weight:800;">月份篩選</label>
+                <input id="nlHistMonth" type="month" style="min-width:160px;" />
+                <button class="btn" type="button" id="btnHistMonthReset">清除月份</button>
                 <button class="btn" type="button" id="btnHistReset">重置</button>
               </div>
             </div>
@@ -216,8 +247,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="js/firebase-config.js"></script>
-    <script src="js/meter-reading.js?v=2"></script>
-    <script src="js/number-list.js?v=2"></script>
+    <script src="js/meter-reading.js?v=17"></script>
+    <script src="js/number-list.js?v=17"></script>
     <script src="js/ads-footer.js?v=16"></script>
     <script src="js/pwa.js?v=6"></script>
   </body>

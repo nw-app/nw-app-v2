@@ -476,18 +476,12 @@
     const communityId = resolveActiveCommunityId();
     const cfg = loadConfig(communityId);
     const v = cfg && cfg.communityButtons ? cfg.communityButtons[moduleId] : null;
-    const isMeter = moduleId === "meter-reading";
-    const legacyMeterUrl = "#community/meter-reading";
-    const meterFallback = "number-list.html";
     const defaultFallback = `#community/${moduleId}`;
-    const fallbackUrl = isMeter ? meterFallback : defaultFallback;
-    if (!v) return { enabled: true, url: fallbackUrl };
+    if (!v) return { enabled: true, url: defaultFallback };
     const rawUrl = String(v.url || "").trim();
-    let finalUrl;
-    if (isMeter) {
-      finalUrl = (!rawUrl || rawUrl === legacyMeterUrl) ? meterFallback : rawUrl;
-    } else {
-      finalUrl = rawUrl || defaultFallback;
+    let finalUrl = rawUrl || defaultFallback;
+    if (moduleId === "meter-reading" && finalUrl === "number-list.html") {
+      finalUrl = defaultFallback;
     }
     return { enabled: v.enabled !== false, url: finalUrl };
   }
@@ -516,17 +510,17 @@
           const buttons = state.config && state.config.communityButtons ? state.config.communityButtons : null;
           const meterCfg = buttons && buttons["meter-reading"] ? buttons["meter-reading"] : null;
           const rawMeterUrl = meterCfg ? String(meterCfg.url || "").trim() : "";
-          const legacyMeterUrl = "#community/meter-reading";
-          const meterTarget = "number-list.html";
+          const adminMeterTarget = "#community/meter-reading";
+          const wrongMeterUrls = ["", "#", "number-list.html", "#resident/meter-reading"];
           const needMeterMigration = !meterCfg
             ? true
-            : (!rawMeterUrl || rawMeterUrl === legacyMeterUrl) && meterCfg.enabled !== false;
+            : (wrongMeterUrls.includes(rawMeterUrl)) && meterCfg.enabled !== false;
           if (needMeterMigration && cid) {
             try {
               configDocRef(cid).set(
                 {
                   communityButtons: {
-                    "meter-reading": { enabled: true, url: meterTarget }
+                    "meter-reading": { enabled: true, url: adminMeterTarget }
                   },
                   updatedAt: (typeof firebase !== 'undefined' && firebase.firestore && firebase.firestore.FieldValue) ? firebase.firestore.FieldValue.serverTimestamp() : null
                 },

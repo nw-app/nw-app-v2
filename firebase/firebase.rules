@@ -96,7 +96,30 @@ service cloud.firestore {
       let fullA = (unitBase != "" && subA != "") ? (unitBase + "-" + subA) : "";
       let fullB = (unitBase != "" && subB != "") ? (unitBase + "-" + subB) : "";
       let fullC = (unitBase != "" && subC != "") ? (unitBase + "-" + subC) : "";
-      return [unitBase, unitBase2, fullA, fullB, fullC];
+      function dashVariant(s) {
+        return s.replaceAll("-", "－");
+      }
+      function baseVariant(s) {
+        if (s == "") return "";
+        let idx = s.indexOf("-");
+        return idx > 0 ? s[0:idx] : s;
+      }
+      let raw = [unitBase, unitBase2, fullA, fullB, fullC];
+      let out = [];
+      for (let i = 0; i < raw.size(); i++) {
+        let v = raw[i];
+        if (v == "") continue;
+        out.push(v);
+        let d = dashVariant(v);
+        if (d != v) out.push(d);
+        let b = baseVariant(v);
+        if (b != "" && b != v) {
+          out.push(b);
+          let bd = dashVariant(b);
+          if (bd != b) out.push(bd);
+        }
+      }
+      return out;
     }
 
     function isVisitorSelfCreate(visitorId) {
@@ -366,6 +389,13 @@ service cloud.firestore {
         isAdmin() || (
           isCommunityStaff() && userCanAccessCommunitySlug(slug)
         )
+      ) && (
+        (
+          // 若更新內容含有抄錶設定 keys，則限制僅能寫入這 3 個白名單 keys（避免 staff 覆蓋其他社區欄位）
+          request.resource.data.keys().hasAny(["meterSettings","meterSettingsUpdatedAt","meterSettingsUpdatedBy"])
+        ).implies(
+          request.resource.data.keys().hasOnly(["meterSettings","meterSettingsUpdatedAt","meterSettingsUpdatedBy"])
+        )
       );
       allow create, delete: if isAdmin();
       
@@ -460,6 +490,7 @@ service cloud.firestore {
             || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
             || isVisitorSelfGet()
             || isVisitorHouseholdGet(slug)
+            || (userCanAccessCommunitySlug(slug) && resource.data.get('createdBy', '') == request.auth.uid)
           )) || (
             request.auth == null
             && resource.data.get('source', '') == "self"
@@ -469,6 +500,7 @@ service cloud.firestore {
           isAdmin()
           || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
           || (userCanAccessCommunitySlug(slug) && resource.data.get('unit', '') in userUnitKeys())
+          || (userCanAccessCommunitySlug(slug) && resource.data.get('createdBy', '') == request.auth.uid)
         );
         allow create: if (request.auth != null && (
             isAdmin()
@@ -480,6 +512,13 @@ service cloud.firestore {
           isAdmin()
           || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
           || isVisitorResidentCancel(slug)
+          || (userCanAccessCommunitySlug(slug)
+              && resource.data.get('createdBy', '') == request.auth.uid
+              && resource.data.get('inAt', null) == null
+              && resource.data.get('outAt', null) == null
+              && request.resource.data.keys().hasOnly(["status", "updatedAt"])
+              && request.resource.data.status == "cancelled"
+              && request.resource.data.updatedAt is timestamp)
         );
         allow delete: if request.auth != null && (
           isAdmin()
@@ -537,6 +576,49 @@ service cloud.firestore {
       match /liveMeetingHistory/{docId} {
         allow read, list: if true;
         allow create, update, delete: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      match /meterReadings/{rid} {
+        allow list: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || (userCanAccessCommunitySlug(slug) && (
+              resource.data.houseNo in userUnitKeys()
+              || resource.data.residentUid == request.auth.uid
+              || resource.data.createdBy.uid == request.auth.uid
+            ))
+        );
+        allow get: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || (userCanAccessCommunitySlug(slug) && (
+              resource.data.houseNo in userUnitKeys()
+              || resource.data.residentUid == request.auth.uid
+              || resource.data.createdBy.uid == request.auth.uid
+            ))
+        );
+        allow create: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || (userCanAccessCommunitySlug(slug)
+              && request.resource.data.residentUid == request.auth.uid
+              && (
+                request.resource.data.houseNo in userUnitKeys()
+                || request.resource.data.houseNo.size() >= 1
+              )
+            )
+        );
+        allow update: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || (resource.data.residentUid == request.auth.uid
+              && request.resource.data.keys().hasOnly(["dispute", "updatedAt"])
+            )
+        );
+        allow delete: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+        );
       }
     }
 

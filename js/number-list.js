@@ -4,43 +4,78 @@
 
   const MR = (typeof window.NwMeterReading !== "undefined" && window.NwMeterReading) || null;
 
+  function refreshMeterTypesFromMR() {
+    const normalized = normalizeMeterTypes(MR ? MR.METER_TYPES : null);
+    const raw = normalized || FALLBACK_METER_TYPES;
+    const filtered = {};
+    for (const k of Object.keys(raw)) {
+      const v = raw[k];
+      if (!v) continue;
+      if (v.enabled === false) continue;
+      if (raw[k].enabled === false) continue;
+      filtered[k] = v;
+    }
+    const ordered = {};
+    ["electric", "water", "gas"].forEach((k) => {
+      if (filtered[k]) ordered[k] = filtered[k];
+      else if (raw[k] && !(raw[k].enabled === false)) ordered[k] = raw[k];
+    });
+    Object.keys(filtered).forEach((k) => { if (!ordered[k]) ordered[k] = filtered[k]; });
+    return ordered;
+  }
+
+  function getUrlCid() {
+    try {
+      const p = new URLSearchParams(window.location.search || "");
+      const c = p.get("c") || p.get("community") || "";
+      return c.trim();
+    } catch { return ""; }
+  }
+
   function normalizeMeterTypes(raw) {
     if (!raw || typeof raw !== "object") return null;
     const vals = Object.values(raw);
     if (!vals.length) return null;
-    const first = vals[0];
-    if (first && typeof first.id === "string") {
-      const out = {};
-      const shortMap = { electric: "電", water: "水", gas: "瓦斯" };
-      const dotMap = { electric: "橘", water: "藍", gas: "紅" };
-      for (const v of vals) {
-        const k = String(v.id || "").trim().toLowerCase();
-        if (!k) continue;
-        out[k] = {
-          key: k,
-          label: `${v.icon || ""} ${v.name || k}`.trim(),
-          short: shortMap[k] || (v.name || k).slice(0, 1),
-          digits: Number(v.digits) || (k === "electric" ? 6 : 5),
-          dot: dotMap[k] || "—",
-          accent: String(v.color || "#6b7280"),
-        };
-      }
-      return Object.keys(out).length ? out : null;
+    const nonNull = vals.find(v => v && typeof v === "object" && typeof v.id === "string");
+    if (!nonNull) return raw;
+    const out = {};
+    const shortMap = { electric: "電", water: "水", gas: "瓦斯" };
+    const dotMap = { electric: "橘", water: "藍", gas: "紅" };
+    for (const v of vals) {
+      const k = String(v.id || "").trim().toLowerCase();
+      if (!k) continue;
+      const digits = Number.isFinite(Number(v.digits)) ? Math.max(2, Math.min(8, Math.floor(Number(v.digits)))) : 4;
+      out[k] = {
+        key: k,
+        label: `${v.icon || ""} ${v.name || k}`.trim(),
+        short: shortMap[k] || ((typeof v.name === "string" && v.name) ? v.name.slice(0, 1) : k.slice(0, 1)),
+        digits,
+        dot: dotMap[k] || "—",
+        accent: String(v.color || "#6b7280"),
+        enabled: typeof v.enabled === "boolean" ? v.enabled : true,
+        unit: String(v.unit || "度"),
+      };
     }
-    return raw;
+    return Object.keys(out).length ? out : null;
   }
 
   const FALLBACK_METER_TYPES = {
-    electric: { key: "electric", label: "⚡ 電錶", short: "電", digits: 6, dot: "橘", accent: "#ea580c" },
-    water: { key: "water", label: "💧 自來水錶", short: "水", digits: 5, dot: "藍", accent: "#2563eb" },
-    gas: { key: "gas", label: "🔥 天然氣瓦斯錶", short: "瓦斯", digits: 5, dot: "紅", accent: "#dc2626" },
+    electric: { key: "electric", label: "⚡ 電錶", short: "電", digits: 4, dot: "橘", accent: "#ea580c", enabled: true, unit: "度" },
+    water: { key: "water", label: "💧 自來水錶", short: "水", digits: 4, dot: "藍", accent: "#2563eb", enabled: true, unit: "度" },
+    gas: { key: "gas", label: "🔥 天然氣瓦斯錶", short: "瓦斯", digits: 4, dot: "紅", accent: "#dc2626", enabled: true, unit: "度" },
   };
 
-  const METER_TYPES = normalizeMeterTypes(MR ? MR.METER_TYPES : null) || FALLBACK_METER_TYPES;
+  let METER_TYPES = refreshMeterTypesFromMR();
+
+  function getMeterTypesCopy() {
+    const raw = refreshMeterTypesFromMR();
+    METER_TYPES = raw;
+    return METER_TYPES;
+  }
 
   const state = {
     user: null,
-    communityId: (sessionStorage.getItem("csp_last_cid") || "").trim() || "default",
+    communityId: (getUrlCid() || sessionStorage.getItem("csp_last_cid") || "").trim() || "default",
     houseNo: "—",
     displayName: "",
     uid: "",
@@ -48,6 +83,121 @@
     lastByType: {},
     selectedDetailId: null,
   };
+
+  const LS_PREFIX = "nwapp:meter";
+  const draftKey = (uid, cid, hn) => `${LS_PREFIX}:draft:u=${String(uid || "")}:c=${String(cid || "")}:h=${String(hn || "")}`;
+  const recentKey = (uid, cid, hn) => `${LS_PREFIX}:recent:u=${String(uid || "")}:c=${String(cid || "")}:h=${String(hn || "")}`;
+  const LS_MAX_RECORDS = 500;
+  let __debounceDraft = 0;
+  function lsGet(key, fb) { try { const v = localStorage.getItem(key); if (v == null) return fb; return JSON.parse(v); } catch { return fb; } }
+  function lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
+  function lsRemove(key) { try { localStorage.removeItem(key); } catch {} }
+  function lsRemovePattern(prefix) {
+    try {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf(prefix) === 0) keys.push(k); }
+      keys.forEach(k => localStorage.removeItem(k));
+    } catch {}
+  }
+  function saveDraftImmediate() {
+    if (!state.uid) return;
+    const ts = Date.now();
+    const out = { period: "", readDate: "", values: {}, skips: {}, savedAt: ts };
+    const p = $("nlPeriod"); const d = $("nlReadDate");
+    if (p) out.period = String(p.value || "");
+    if (d) out.readDate = String(d.value || "");
+    for (const t of Object.keys(METER_TYPES)) {
+      syncDigitBoxesFor(t);
+      const hidden = document.querySelector(`[data-meter-cur-hidden="${CSS.escape(t)}"]`);
+      const idEl = document.querySelector(`[data-meter-id="${CSS.escape(t)}"]`);
+      const skipEl = document.querySelector(`[data-meter-skip="${CSS.escape(t)}"]`);
+      out.values[t] = {
+        cur: hidden && hidden.value !== "" ? String(hidden.value) : "",
+        id: idEl ? String(idEl.value || "") : "",
+      };
+      out.skips[t] = !!(skipEl && skipEl.checked);
+    }
+    lsSet(draftKey(state.uid, state.communityId, state.houseNo), out);
+    setLastEditedAt(ts);
+  }
+  function saveDraftDebounced() {
+    if (__debounceDraft) { window.clearTimeout(__debounceDraft); }
+    __debounceDraft = window.setTimeout(saveDraftImmediate, 250);
+  }
+  function loadDraftAndApply() {
+    if (!state.uid) return;
+    const d = lsGet(draftKey(state.uid, state.communityId, state.houseNo), null);
+    if (!d || typeof d !== "object") return;
+    try {
+      if (d.period) { const p = $("nlPeriod"); if (p) p.value = String(d.period); }
+      if (d.readDate) { const rd = $("nlReadDate"); if (rd) rd.value = String(d.readDate); }
+      const values = d.values || {}; const skips = d.skips || {};
+      for (const t of Object.keys(METER_TYPES)) {
+        const v = values[t];
+        if (!v) continue;
+        if (typeof v.id === "string") { const idEl = document.querySelector(`[data-meter-id="${CSS.escape(t)}"]`); if (idEl) idEl.value = v.id; }
+        if (typeof v.cur === "string" && v.cur !== "") {
+          applyDigitValueFromString(t, v.cur);
+        }
+        if (skips[t]) { const skipEl = document.querySelector(`[data-meter-skip="${CSS.escape(t)}"]`); if (skipEl) skipEl.checked = true; }
+      }
+    } catch (e) { console.warn("[number-list] loadDraftAndApply failed:", e); }
+  }
+  function clearDraft() {
+    if (!state.uid) return;
+    lsRemove(draftKey(state.uid, state.communityId, state.houseNo));
+  }
+  function saveRecentRecords() {
+    if (!state.uid) return;
+    try {
+      const arr = Array.isArray(state.records) ? state.records.slice(0, LS_MAX_RECORDS) : [];
+      lsSet(recentKey(state.uid, state.communityId, state.houseNo), { records: arr, lastByType: state.lastByType || {}, savedAt: Date.now() });
+    } catch {}
+  }
+  function loadRecentRecords() {
+    if (!state.uid) return false;
+    try {
+      const r = lsGet(recentKey(state.uid, state.communityId, state.houseNo), null);
+      if (!r || typeof r !== "object") return false;
+      if (Array.isArray(r.records)) state.records = r.records.slice(0, LS_MAX_RECORDS);
+      if (r.lastByType && typeof r.lastByType === "object") state.lastByType = { ...(r.lastByType || {}) };
+      return true;
+    } catch { return false; }
+  }
+  function clearRecentRecords(uid, cid, hn) {
+    try { lsRemove(recentKey(String(uid || ""), String(cid || ""), String(hn || ""))); } catch {}
+    try { lsRemove(draftKey(String(uid || ""), String(cid || ""), String(hn || ""))); } catch {}
+  }
+  function resetStateOnUidChanged(newUid) {
+    const prevUid = String(state.uid || "");
+    const nextUid = String(newUid || "");
+    if (prevUid !== nextUid && prevUid) {
+      state.records = [];
+      state.lastByType = {};
+      state.selectedDetailId = null;
+    }
+  }
+  function formatDateTime(value) {
+    const v = Number(value);
+    if (!Number.isFinite(v) || v <= 0) return "尚未輸入資料";
+    const d = new Date(v);
+    if (!Number.isFinite(d.getTime())) return "尚未輸入資料";
+    return `最後輸入：${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  }
+  function setLastEditedAt(tsOrNull) {
+    const el = $("nlLastEdited");
+    if (!el) return;
+    const ts = tsOrNull == null ? (() => {
+      const dk = state.uid ? draftKey(state.uid, state.communityId, state.houseNo) : "";
+      const rk = state.uid ? recentKey(state.uid, state.communityId, state.houseNo) : "";
+      const draft = dk ? lsGet(dk, null) : null;
+      const recent = rk ? lsGet(rk, null) : null;
+      const a = (draft && draft.savedAt) ? Number(draft.savedAt) : 0;
+      const b = (recent && recent.savedAt) ? Number(recent.savedAt) : 0;
+      return Math.max(a, b) || 0;
+    })() : Number(tsOrNull);
+    el.textContent = formatDateTime(ts);
+  }
 
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
@@ -92,14 +242,21 @@
     const auth = firebase.auth();
     const db = firebase.firestore();
     const uid = user ? String(user.uid || "") : "";
+    const uidBefore = String(state.uid || "");
+    const cidBefore = String(state.communityId || "");
+    const hnBefore = String(state.houseNo || "");
+    resetStateOnUidChanged(uid);
     state.uid = uid;
     state.user = user || null;
     state.displayName = String((user && user.displayName) || "").trim();
-    if (!uid) return;
+    if (!uid) {
+      if (uidBefore) { try { clearRecentRecords(uidBefore, cidBefore, hnBefore); } catch {} }
+      return;
+    }
     try {
       const snap = await db.collection("users").doc(uid).get();
       const d = (snap && snap.exists && snap.data()) || {};
-      state.communityId = String(d.community || state.communityId || sessionStorage.getItem("csp_last_cid") || "default").trim() || "default";
+      state.communityId = String(getUrlCid() || d.community || state.communityId || sessionStorage.getItem("csp_last_cid") || "default").trim() || "default";
       state.houseNo = String(d.houseNo || d.unit || state.houseNo || "").trim() || "—";
       state.displayName = String(d.displayName || d.name || state.displayName || (user && user.displayName) || "").trim();
       try { sessionStorage.setItem("csp_last_cid", state.communityId); } catch {}
@@ -115,22 +272,40 @@
   }
 
   async function loadLastRecords() {
-    if (!MR || !MR.listRecordsByHouse || !state.uid) return;
+    if (!state.uid) {
+      state.records = [];
+      state.lastByType = {};
+      return;
+    }
     const db = firebase.firestore();
+    if (MR && MR.loadCommunityMeterSettings && db) { try { await MR.loadCommunityMeterSettings(db, state.communityId, true); getMeterTypesCopy(); } catch(e) { console.warn('[number-list] meterSettings load failed', e); } }
+    const hadCache = loadRecentRecords();
+    renderHistoryList();
+    if (!MR || !MR.listRecordsByHouse) return;
     try {
-      const list = await MR.listRecordsByHouse(db, state.communityId, state.houseNo, { limit: 200 });
-      state.records = Array.isArray(list) ? list : [];
+      const list = await MR.listRecordsByHouse(db, state.communityId, state.houseNo, { limit: 500, uid: state.uid });
+      const finalList = Array.isArray(list) && list.length ? list : (hadCache ? (Array.isArray(state.records) ? state.records.slice() : []) : []);
+      state.records = finalList;
       const last = {};
       for (const r of state.records) {
         const t = String(r.meterType || "");
         if (!t) continue;
-        if (!last[t] || (r.readingDate && last[t].readingDate && new Date(r.readingDate) > new Date(last[t].readingDate))) {
-          last[t] = r;
-        }
+        if (!METER_TYPES[t]) continue;
+        const rd = r.readingDate ? new Date(r.readingDate) : null;
+        const prevRd = last[t] && last[t].readingDate ? new Date(last[t].readingDate) : null;
+        if (!prevRd || (rd && Number.isFinite(rd.getTime()) && rd.getTime() >= prevRd.getTime())) last[t] = r;
       }
       state.lastByType = last;
+      saveRecentRecords();
+      setLastEditedAt();
+      renderHistoryFilterButtons();
+      renderMeterArea();
+      renderHistoryList();
+      renderFeeArea();
     } catch (e) {
-      console.warn("[number-list] loadLastRecords failed", e);
+      console.warn("[number-list] loadLastRecords failed (using cache if any):", e);
+      setLastEditedAt();
+      renderMeterArea();
     }
   }
 
@@ -139,11 +314,13 @@
     const last = state.lastByType[typeKey] || null;
     const meterId = last && last.meterId ? String(last.meterId) : defaultMeterId(typeKey);
     const prev = last && Number.isFinite(numOr(last.currentValue)) ? numOr(last.currentValue) : 0;
+    const digits = Math.max(2, Math.min(8, Number.isFinite(Number(mt.digits)) ? Math.floor(Number(mt.digits)) : 4));
+    const color = String(mt.accent || "#1f2937");
     return `
       <div class="nl-meter-card" data-meter="${esc(typeKey)}">
         <div class="nl-meter-head">
           <div class="nl-meter-title">
-            <div class="dot" style="background:${esc(mt.accent)};"></div>
+            <div class="dot" style="background:${esc(color)};"></div>
             <div>${esc(mt.label)}</div>
           </div>
           <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#6b7280; font-weight:800;">
@@ -165,13 +342,124 @@
             <input type="number" min="0" step="1" data-meter-prev="${esc(typeKey)}" value="${prev}" readonly style="background:#f3f4f6; color:#374151;" />
           </div>
           <div class="field">
-            <label>本次抄表數字（${esc(mt.digits)}位以內）</label>
-            <input type="number" min="0" step="1" data-meter-cur="${esc(typeKey)}" maxlength="${esc(mt.digits)}" placeholder="請輸入本次抄見的${esc(mt.short)}數字" autocomplete="off" />
+            <label>本次抄表數字（${esc(digits)} 位，每格單獨輸入）</label>
+            <div data-meter-cur-boxes="${esc(typeKey)}" class="nl-digit-grid" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding-top:4px;">
+              ${Array.from({length: digits}).map((_, i) => `
+                <div class="nl-digit" style="width:48px; height:60px; border:1.5px solid ${esc(color)}55; border-radius:14px; background:linear-gradient(180deg,#fff,#fafafa); box-shadow:inset 0 -2px 0 rgba(17,24,39,.05); position:relative; overflow:hidden;">
+                  <input inputmode="numeric" pattern="[0-9]*" maxlength="1" data-meter-cur="${esc(typeKey)}" data-digidx="${i}" aria-label="${esc(mt.short)}第${i+1}位" style="width:100%; height:100%; background:transparent; border:0; outline:none; text-align:center; font:900 28px/1 'SF Mono',Consolas,monospace; color:${esc(color)}; padding:0;" />
+                </div>
+              `).join('')}
+              <span class="pill" style="margin-left:4px; background:rgba(17,24,39,.05); border-radius:999px; color:#374151; padding:2px 10px; font-size:11px; font-weight:800;">${esc(digits)}位</span>
+            </div>
+            <input type="hidden" data-meter-cur-hidden="${esc(typeKey)}" />
+            <div style="font-size:11px; color:#6b7280; font-weight:700; margin-top:4px;">※ 輸入後自動跳至下一格，Backspace 空值可回到上一格。</div>
           </div>
         </div>
-        <div class="nl-preview-box" data-meter-preview="${esc(typeKey)}" hidden></div>
       </div>
     `;
+  }
+
+  function syncDigitBoxesFor(typeKey) {
+    const wrap = document.querySelector(`[data-meter-cur-boxes="${CSS.escape(typeKey)}"]`);
+    const hidden = document.querySelector(`[data-meter-cur-hidden="${CSS.escape(typeKey)}"]`);
+    if (!wrap || !hidden) return;
+    const val = Array.from(wrap.querySelectorAll(`input[data-meter-cur="${CSS.escape(typeKey)}"]`)).map(i => (i.value || '').slice(-1)).join('').trim();
+    hidden.value = val || '';
+    const curInputs = Array.from(document.querySelectorAll(`input[data-meter-cur="${CSS.escape(typeKey)}"]`)).filter(i => !i.hasAttribute('data-digidx'));
+    if (curInputs.length) { curInputs.forEach(ci => { ci.value = val; try { ci.dispatchEvent(new Event('input', { bubbles: true })); } catch {} }); }
+  }
+
+  function bindDigitBoxEvents() {
+    const grids = document.querySelectorAll("[data-meter-cur-boxes]");
+    grids.forEach((grid) => {
+      const typeKey = String(grid.getAttribute("data-meter-cur-boxes") || "");
+      const inputs = Array.from(grid.querySelectorAll(`input[data-meter-cur="${CSS.escape(typeKey)}"]`)).filter(i => i.hasAttribute('data-digidx'));
+      inputs.forEach((inp, idx, arr) => {
+        inp.oninput = () => {
+          const v = (inp.value || "").replace(/[^0-9]/g, "");
+          const fst = v.charAt(0) || "";
+          const remain = v.slice(1);
+          inp.value = fst;
+          if (remain) {
+            for (let j = 0; j < remain.length; j++) {
+              const next = idx + 1 + j;
+              if (next >= arr.length) break;
+              const n = arr[next];
+              if (n) n.value = remain.charAt(j);
+            }
+            const last = Math.min(arr.length - 1, idx + Math.max(1, remain.length) - 1);
+            arr[last] && arr[last].focus && arr[last].focus();
+            arr[last] && arr[last].setSelectionRange && arr[last].setSelectionRange((arr[last].value || '').length, (arr[last].value || '').length);
+          } else if (fst && idx + 1 < arr.length) {
+            const nxt = arr[idx + 1];
+            nxt && nxt.focus();
+            try { nxt.setSelectionRange((nxt.value || '').length, (nxt.value || '').length); } catch {}
+          }
+          syncDigitBoxesFor(typeKey);
+          saveDraftDebounced();
+        };
+        inp.onkeydown = (e) => {
+          const k = e.key;
+          if (k === 'Backspace' && !(inp.value) && idx > 0) {
+            const prev = arr[idx - 1];
+            if (prev) { prev.value = ''; prev.focus(); e.preventDefault(); }
+            syncDigitBoxesFor(typeKey);
+            saveDraftDebounced();
+          } else if (k === 'ArrowLeft' && idx > 0) {
+            e.preventDefault(); arr[idx-1].focus();
+          } else if (k === 'ArrowRight' && idx < arr.length - 1) {
+            e.preventDefault(); arr[idx+1].focus();
+          }
+        };
+        inp.onpaste = (e) => {
+          e.preventDefault();
+          const txt = (e.clipboardData || window.clipboardData || {}).getData ? (e.clipboardData || window.clipboardData).getData('text') : '';
+          if (!txt) return;
+          const digits = txt.replace(/[^0-9]/g, '').slice(0, Math.max(0, arr.length - idx));
+          for (let j = 0; j < digits.length; j++) { if (arr[idx + j]) arr[idx + j].value = digits.charAt(j); }
+          const lastFocus = Math.min(arr.length - 1, idx + Math.max(1, digits.length || 1) - 1);
+          arr[lastFocus] && arr[lastFocus].focus && arr[lastFocus].focus();
+          syncDigitBoxesFor(typeKey);
+          saveDraftDebounced();
+        };
+      });
+    });
+  }
+
+  function applyDigitValueFromString(typeKey, value) {
+    const grid = document.querySelector(`[data-meter-cur-boxes="${CSS.escape(typeKey)}"]`);
+    if (!grid) return;
+    const inputs = Array.from(grid.querySelectorAll(`input[data-meter-cur="${CSS.escape(typeKey)}"]`)).filter(i => i.hasAttribute('data-digidx'));
+    if (!inputs.length) return;
+    const digits = inputs.length;
+    const n = Math.max(0, Math.min(Math.pow(10, digits) - 1, Number.isFinite(Number(value)) ? Math.floor(Number(value)) : 0));
+    const arr = String(n).padStart(digits, '0').split('');
+    inputs.forEach((inp, i) => { inp.value = arr[i] || '0'; });
+    syncDigitBoxesFor(typeKey);
+  }
+
+  function renderHistoryFilterButtons() {
+    const tab = document.getElementById("historyTab");
+    if (!tab) return;
+    const bar = tab.querySelector("#historyTab [data-meter-filter]");
+    if (!bar) return;
+    const wrap = bar.parentNode;
+    const filters = [{ id: "all", label: "全部" }].concat(
+      Object.keys(METER_TYPES).map(k => {
+        const m = METER_TYPES[k];
+        return { id: k, label: m.label };
+      })
+    );
+    const existing = Array.from(tab.querySelectorAll("[data-meter-filter]"));
+    const current = (existing.find(b => b.classList.contains("active")) || {}).getAttribute("data-meter-filter") || "all";
+    const currentValid = filters.some(f => f.id === current);
+    const newHtml = filters.map(f => {
+      const active = currentValid ? (f.id === current) : (f.id === "all");
+      const minw = f.id === "all" ? 64 : 96;
+      return `<button class="tab-btn ${active?'active':''}" type="button" data-meter-filter="${esc(f.id)}" style="min-width:${minw}px; flex:0 0 auto; padding:0 14px;">${esc(f.label)}</button>`;
+    }).join("");
+    existing.forEach(n => n.remove());
+    wrap.insertAdjacentHTML("afterbegin", newHtml);
   }
 
   function renderMeterArea() {
@@ -181,7 +469,13 @@
       area.innerHTML = `<div class="nl-empty">請先登入社區帳號，再進行抄錶申報。</div>`;
       return;
     }
-    area.innerHTML = Object.keys(METER_TYPES).map(meterCardHtml).join("");
+    const keys = Object.keys(METER_TYPES);
+    if (!keys.length) {
+      area.innerHTML = `<div class="nl-empty">本社區目前未開放任何抄錶申報項目，請聯繫管理員。</div>`;
+      return;
+    }
+    area.innerHTML = keys.map(meterCardHtml).join("");
+    window.setTimeout(() => { loadDraftAndApply(); bindDigitBoxEvents(); }, 0);
   }
 
   function readSubmitForm() {
@@ -192,10 +486,11 @@
     for (const t of Object.keys(METER_TYPES)) {
       const skip = document.querySelector(`[data-meter-skip="${CSS.escape(t)}"]`);
       if (skip && skip.checked) continue;
-      const curEl = document.querySelector(`[data-meter-cur="${CSS.escape(t)}"]`);
-      if (!curEl) continue;
-      const curVal = curEl.value === "" ? null : numOr(curEl.value, NaN);
-      if (curVal == null || !Number.isFinite(curVal)) continue;
+      syncDigitBoxesFor(t);
+      const hidden = document.querySelector(`[data-meter-cur-hidden="${CSS.escape(t)}"]`);
+      const curValStr = hidden && hidden.value !== "" ? String(hidden.value) : "";
+      const curVal = curValStr === "" ? NaN : numOr(curValStr, NaN);
+      if (!Number.isFinite(curVal)) continue;
       const idEl = document.querySelector(`[data-meter-id="${CSS.escape(t)}"]`);
       const prevEl = document.querySelector(`[data-meter-prev="${CSS.escape(t)}"]`);
       out.push({
@@ -242,19 +537,32 @@
     statusBox($("nlSubmitStatus"), "已更新費用預覽", false);
   }
 
+  function setSubmitButtonDisabled(disabled) {
+    const btn = $("btnSubmitReadings");
+    if (!btn) return;
+    btn.disabled = !!disabled;
+    btn.classList.toggle("is-loading", !!disabled);
+  }
+
   async function submitAll() {
     if (!MR || !MR.createRecord) { toast("抄錶模組尚未載入"); return; }
     if (!state.uid) { toast("請先登入"); return; }
     const rows = readSubmitForm();
     if (!rows.length) { toast("請至少填寫一項儀表數字再送出"); return; }
     const statusEl = $("nlSubmitStatus");
-    const btn = $("btnSubmitReadings");
-    if (btn) { btn.disabled = true; btn.style.opacity = "0.7"; btn.style.cursor = "wait"; }
+    setSubmitButtonDisabled(true);
     statusBox(statusEl, "申報中，請稍候...", false);
     const db = firebase.firestore();
     let ok = 0;
     let fail = 0;
     const errs = [];
+    const submittedResults = [];
+    const operatorInfo = {
+      uid: state.uid,
+      name: state.displayName,
+      role: 'resident',
+      houseNo: state.houseNo
+    };
     try {
       for (const r of rows) {
         try {
@@ -271,25 +579,78 @@
             residentName: state.displayName,
             source: r.source || "resident_app",
           };
-          await MR.createRecord(db, state.communityId, patch);
-          ok += 1;
+          try { console.log('[number-list] 提交抄表:', r.meterType, 'meterId=', r.meterId, 'prev=', r.previousValue, 'cur=', r.currentValue); } catch {}
+          const res = await MR.createRecord(db, state.communityId, patch, operatorInfo);
+          submittedResults.push(res);
+          if (res && res.ok) {
+            ok += 1;
+            try { console.log('[number-list] 寫入成功 id=', res.id, 'status=', res.data && res.data.validationStatus); } catch {}
+          } else {
+            fail += 1;
+            const errMsgs = (res && res.errors && res.errors.length) ? res.errors : ["儲存失敗"];
+            const joined = errMsgs.join("；");
+            errs.push(`${METER_TYPES[r.meterType].short}：${joined}`);
+            try { console.error('[number-list] 寫入失敗:', r.meterType, joined, res); } catch {}
+          }
         } catch (e) {
           fail += 1;
-          errs.push(`${METER_TYPES[r.meterType].short}：${(e && e.message) ? e.message : "儲存失敗"}`);
+          const msg = (e && e.message) ? e.message : "儲存失敗";
+          errs.push(`${METER_TYPES[r.meterType].short}：${msg}`);
+          try { console.error('[number-list] 異常錯誤:', r.meterType, e); } catch {}
         }
       }
     } catch (e) {
-      console.warn(e);
+      console.warn('[number-list] submitAll outer error:', e);
     }
-    if (btn) { btn.disabled = false; btn.style.opacity = ""; btn.style.cursor = ""; }
+    setSubmitButtonDisabled(false);
+    setLastEditedAt(Date.now());
+    const newlyAdded = [];
+    // 先把成功寫入的 record 手動加入前端快取，避免 loadLastRecords 延遲/失敗時歷史空白
+    for (let i = submittedResults.length - 1; i >= 0; i--) {
+      const sr = submittedResults[i];
+      if (sr && sr.ok && sr.data) {
+        newlyAdded.push(sr.data);
+      }
+    }
     await loadLastRecords();
-    if (fail === 0) {
+    if (newlyAdded.length) {
+      const existIds = new Set(state.records.map(r => String(r.id || "")));
+      for (const nr of newlyAdded) {
+        const nid = String(nr.id || "");
+        if (nid && !existIds.has(nid)) {
+          state.records.unshift(nr);
+          existIds.add(nid);
+        }
+      }
+      const last = state.lastByType || {};
+      for (const nr of newlyAdded) {
+        const t = String(nr.meterType || "");
+        if (!t) continue;
+        const rd = nr.readingDate ? new Date(nr.readingDate) : null;
+        const prevRd = last[t] && last[t].readingDate ? new Date(last[t].readingDate) : null;
+        if (!prevRd || (rd && Number.isFinite(rd.getTime()) && rd.getTime() >= prevRd.getTime())) {
+          last[t] = nr;
+        }
+      }
+      state.lastByType = last;
+    }
+    if (fail === 0 && ok > 0) {
+      clearDraft();
+      saveRecentRecords();
       statusBox(statusEl, `申報成功：共 ${ok} 筆已送交後台管理員審核`, false);
       toast(`已送出 ${ok} 筆抄錶申報`);
       switchTab("history");
       renderHistoryList();
+    } else if (ok === 0 && fail > 0) {
+      saveRecentRecords();
+      saveDraftDebounced();
+      statusBox(statusEl, `申報失敗（${fail} 筆）：\n${errs.join("\n")}`, true);
+      toast(`申報失敗，請檢查輸入`);
     } else {
-      statusBox(statusEl, `部分失敗：成功 ${ok} / 失敗 ${fail}\n${errs.join("\n")}`, true);
+      saveRecentRecords();
+      if (ok > 0) clearDraft(); else saveDraftDebounced();
+      statusBox(statusEl, `部分完成：成功 ${ok} / 失敗 ${fail}\n${errs.join("\n")}`, true);
+      if (ok > 0) { switchTab("history"); renderHistoryList(); }
     }
   }
 
@@ -320,9 +681,8 @@
     const tabBtns = Array.from(document.querySelectorAll("#historyTab [data-meter-filter]"));
     const active = tabBtns.find((b) => b.classList.contains("active"));
     const meterType = active ? String(active.getAttribute("data-meter-filter") || "all") : "all";
-    const f = String($("nlHistFrom") && $("nlHistFrom").value || "").trim();
-    const t = String($("nlHistTo") && $("nlHistTo").value || "").trim();
-    return { meterType, dateFrom: f ? `${f}-01` : "", dateTo: t ? `${t}-28` : "" };
+    const m = String($("nlHistMonth") && $("nlHistMonth").value || "").trim();
+    return { meterType, month: m };
   }
 
   function renderHistoryList() {
@@ -333,15 +693,20 @@
       return;
     }
     const f = currentHistoryFilters();
-    let rows = state.records.slice();
+    let rows = (Array.isArray(state.records) ? state.records.slice() : []).filter(r => !!METER_TYPES[String(r.meterType || "")]);
     if (f.meterType && f.meterType !== "all") rows = rows.filter((r) => String(r.meterType || "") === f.meterType);
-    if (f.dateFrom) {
-      const from = new Date(`${f.dateFrom}T00:00:00`).getTime();
-      rows = rows.filter((r) => r.readingDate && new Date(r.readingDate).getTime() >= from);
-    }
-    if (f.dateTo) {
-      const to = new Date(`${f.dateTo}T23:59:59`).getTime();
-      rows = rows.filter((r) => r.readingDate && new Date(r.readingDate).getTime() <= to);
+    if (f.month && /^\d{4}-\d{2}$/.test(f.month)) {
+      rows = rows.filter((r) => {
+        const ymText = (() => {
+          const rd = r.readingDate;
+          const dt = rd ? new Date(rd instanceof Date ? rd : String(rd)) : null;
+          if (dt && Number.isFinite(dt.getTime())) return ym(dt);
+          const p = String(r.period || "").trim();
+          if (p && /^\d{4}-\d{2}/.test(p)) return p.slice(0, 7);
+          return "";
+        })();
+        return ymText === f.month;
+      });
     }
     rows.sort((a, b) => (new Date(b.readingDate || 0) - new Date(a.readingDate || 0)));
     if (!rows.length) {
@@ -452,15 +817,27 @@
       tab.querySelectorAll("[data-meter-filter]").forEach((x) => x.classList.toggle("active", x === b));
       renderHistoryList();
     });
-    const from = $("nlHistFrom"); const to = $("nlHistTo"); const reset = $("btnHistReset");
-    if (from) from.addEventListener("change", renderHistoryList);
-    if (to) to.addEventListener("change", renderHistoryList);
-    if (reset) reset.addEventListener("click", () => {
-      if (from) from.value = ""; if (to) to.value = "";
-      const first = tab.querySelector("[data-meter-filter]");
-      tab.querySelectorAll("[data-meter-filter]").forEach((x) => x.classList.toggle("active", x === first));
-      renderHistoryList();
-    });
+    const month = $("nlHistMonth");
+    const monthReset = $("btnHistMonthReset");
+    const reset = $("btnHistReset");
+    if (month) {
+      if (!month.value) month.value = ym();
+      month.addEventListener("change", renderHistoryList);
+    }
+    if (monthReset) {
+      monthReset.addEventListener("click", () => {
+        if (month) month.value = "";
+        renderHistoryList();
+      });
+    }
+    if (reset) {
+      reset.addEventListener("click", () => {
+        if (month) month.value = ym();
+        const first = tab.querySelector("[data-meter-filter]");
+        tab.querySelectorAll("[data-meter-filter]").forEach((x) => x.classList.toggle("active", x === first));
+        renderHistoryList();
+      });
+    }
   }
 
   function bindDisputePhoto() {
@@ -505,24 +882,34 @@
         try { localStorage.setItem(key, b64); photoKeys.push(key); } catch (e) { console.warn(e); }
       });
       const db = firebase.firestore();
-      await MR.submitDispute(db, state.communityId, state.selectedDetailId, {
+      try { console.log('[number-list] 送出核異 recordId=', state.selectedDetailId, 'reasonLen=', reason.length, 'photos=', photoKeys.length); } catch {}
+      const res = await MR.submitDispute(db, state.communityId, state.selectedDetailId, {
         reason,
         photos: photoKeys,
         reporterUid: state.uid,
         reporterName: state.displayName,
         reporterHouseNo: state.houseNo,
       });
-      statusBox(st, "核異已送出，管理員將儘速與您聯繫", false);
-      toast("已送出核異申請");
-      window.setTimeout(() => {
-        const m = $("nlDisputeModal"); if (m) m.hidden = true;
-        const dm = $("nlDetailModal"); if (dm) dm.hidden = true;
-        loadLastRecords().then(renderHistoryList);
-      }, 700);
+      if (res && res.ok) {
+        statusBox(st, "核異已送出，管理員將儘速與您聯繫", false);
+        toast("已送出核異申請");
+        try { console.log('[number-list] 核異送出成功 disputeId=', res.dispute && res.dispute.id); } catch {}
+        window.setTimeout(() => {
+          const m = $("nlDisputeModal"); if (m) m.hidden = true;
+          const dm = $("nlDetailModal"); if (dm) dm.hidden = true;
+          loadLastRecords().then(renderHistoryList);
+        }, 700);
+      } else {
+        const errs = (res && res.errors && res.errors.length) ? res.errors.join("；") : "請稍後再試";
+        statusBox(st, `送出失敗：${errs}`, true);
+        try { console.error('[number-list] 核異送出失敗:', errs, res); } catch {}
+      }
     } catch (e) {
-      statusBox(st, `送出失敗：${(e && e.message) ? e.message : "請稍後再試"}`, true);
+      const msg = (e && e.message) ? e.message : "請稍後再試";
+      statusBox(st, `送出失敗：${msg}`, true);
+      try { console.error('[number-list] 核異送出異常:', e); } catch {}
     } finally {
-      if (btn) btn.disabled = false; btn.style.opacity = "";
+      if (btn) { btn.disabled = false; btn.style.opacity = ""; }
     }
   }
 
@@ -595,25 +982,18 @@
     if (date && !date.value) date.value = ymd();
     const fp = $("nlFeePeriod");
     if (fp && !fp.value) fp.value = ym();
-    const p = $("btnPreviewFee");
-    if (p && !p._bound) { p._bound = true; p.addEventListener("click", previewAll); }
     const s = $("btnSubmitReadings");
     if (s && !s._bound) { s._bound = true; s.addEventListener("click", submitAll); }
     document.addEventListener("input", (e) => {
-      const cur = e.target.closest("[data-meter-cur]");
-      if (!cur) return;
-      const t = String(cur.getAttribute("data-meter-cur") || "");
-      const prevEl = document.querySelector(`[data-meter-prev="${CSS.escape(t)}"]`);
-      const skipEl = document.querySelector(`[data-meter-skip="${CSS.escape(t)}"]`);
-      if (skipEl && skipEl.checked) { setPreviewBox(t, null); return; }
-      if (!MR || !MR.calcUsage || !MR.calcFee) return;
-      const prev = numOr(prevEl && prevEl.value, 0);
-      const curr = cur.value === "" ? NaN : numOr(cur.value, NaN);
-      if (!Number.isFinite(curr)) { setPreviewBox(t, null); return; }
-      const u = MR.calcUsage(prev, curr, { meterType: t });
-      const f = MR.calcFee(u, t);
-      const ab = MR.detectAbnormal ? MR.detectAbnormal({ meterType: t, previousValue: prev, currentValue: curr, usage: u }, null) || [] : [];
-      setPreviewBox(t, { usage: u, feeText: Number.isFinite(f) ? f.toFixed(2) : "0.00", abnormal: ab });
+      const isMeterInput = e.target && e.target.matches && (e.target.matches("[data-meter-cur], [data-meter-id], [data-meter-skip]"));
+      if (isMeterInput || e.target === period || e.target === date) {
+        saveDraftDebounced();
+      }
+    });
+    document.addEventListener("change", (e) => {
+      const chk = e.target && e.target.closest && e.target.closest("[data-meter-skip]");
+      if (chk) saveDraftDebounced();
+      if (e.target === period || e.target === date) saveDraftDebounced();
     });
   }
 
@@ -629,9 +1009,58 @@
     bindFeePeriod();
     bindDisputePhoto();
     bindModals();
+    setLastEditedAt();
+    const initialHistMonth = $("nlHistMonth");
+    if (initialHistMonth && !initialHistMonth.value) initialHistMonth.value = ym();
     renderMeterArea();
     const db = firebase.firestore();
     try { db.settings({ ignoreUndefinedProperties: true }); } catch {}
+    window.addEventListener("message", (ev) => {
+      try {
+        const p = ev && ev.data;
+        if (!p || typeof p !== "object") return;
+        if (p.type !== "nwapp:meterSettingsSaved") return;
+        if (p.communityId && String(p.communityId) !== String(state.communityId)) return;
+        (async () => {
+          try {
+            if (MR && MR.loadCommunityMeterSettings) {
+              await MR.loadCommunityMeterSettings(db, state.communityId, true);
+            }
+            getMeterTypesCopy();
+            renderHistoryFilterButtons();
+            renderMeterArea();
+            renderHistoryList();
+            renderFeeArea();
+          } catch(e) { console.warn("[number-list] meterSettings postMessage reload failed", e); }
+        })();
+      } catch {}
+    });
+    let __lastSettingsSyncAt = 0;
+    window.addEventListener("storage", (ev) => {
+      try {
+        if (!ev || ev.key !== "nwapp:meterSettingsChanged") return;
+        const raw = ev && ev.newValue;
+        if (!raw) return;
+        const d = JSON.parse(raw);
+        if (!d || !d.communityId) return;
+        if (String(d.communityId) !== String(state.communityId)) return;
+        const at = Number(d.at) || 0;
+        if (at && at <= __lastSettingsSyncAt) return;
+        __lastSettingsSyncAt = at;
+        (async () => {
+          try {
+            if (MR && MR.loadCommunityMeterSettings) {
+              await MR.loadCommunityMeterSettings(db, state.communityId, true);
+            }
+            getMeterTypesCopy();
+            renderHistoryFilterButtons();
+            renderMeterArea();
+            renderHistoryList();
+            renderFeeArea();
+          } catch(e) { console.warn("[number-list] meterSettings storage reload failed", e); }
+        })();
+      } catch {}
+    });
     firebase.auth().onAuthStateChanged(async (user) => {
       await loadUserProfile(user || null);
       if (!user) {
@@ -640,8 +1069,12 @@
           toast("請先登入住戶帳號，3 秒後跳轉...");
           window.setTimeout(() => { location.href = url; }, 2200);
         } catch {}
+        return;
       }
+      setLastEditedAt();
       await loadLastRecords();
+      const historyMonthEl = $("nlHistMonth");
+      if (historyMonthEl && !historyMonthEl.value) historyMonthEl.value = ym();
       renderMeterArea();
       renderHistoryList();
       renderFeeArea();
@@ -653,4 +1086,22 @@
   } else {
     boot();
   }
+  window.__nlDebug = {
+    getMeterTypes: () => { try { return JSON.parse(JSON.stringify(METER_TYPES)); } catch(e) { return {}; } },
+    forceReloadSettings: async () => {
+      try {
+        const db = firebase.firestore();
+        if (MR && MR.loadCommunityMeterSettings) {
+          await MR.loadCommunityMeterSettings(db, state.communityId, true);
+        }
+        getMeterTypesCopy();
+        renderHistoryFilterButtons();
+        renderMeterArea();
+        renderHistoryList();
+        renderFeeArea();
+        return { ok: true, METER_TYPES: JSON.parse(JSON.stringify(METER_TYPES)) };
+      } catch(e) { return { ok: false, err: String(e && e.message || e) }; }
+    },
+    getState: () => { try { return JSON.parse(JSON.stringify({ communityId: state.communityId, uid: state.uid, houseNo: state.houseNo })); } catch(e){ return {}; } }
+  };
 })();
