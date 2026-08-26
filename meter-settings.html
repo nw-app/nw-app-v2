@@ -136,7 +136,30 @@
   };
   const TYPE_ORDER = ['electric','water','gas'];
   const qs = new URLSearchParams(location.search || '');
-  const communityId = String(qs.get('c') || localStorage.getItem('csp_active_community_v1') || '').trim() || 'default';
+  function __pickCid(){
+    try {
+      const cands = [
+        qs.get('c') || qs.get('community') || qs.get('communityId') || '',
+        window.top && (new URLSearchParams((window.top.location || {}).search || '')).get('c') || '',
+        window.top && (new URLSearchParams((window.top.location || {}).search || '')).get('community') || '',
+        (localStorage.getItem('csp_active_community_v1') || '').trim(),
+        (localStorage.getItem('csp_active_community') || '').trim(),
+        (sessionStorage.getItem('csp_last_cid') || '').trim(),
+        (localStorage.getItem('csp_last_cid') || '').trim()
+      ];
+      for (const x of cands) {
+        const s = String(x || '').trim();
+        if (s && s !== 'default') return s;
+      }
+      const s2 = String(qs.get('c') || qs.get('community') || '').trim();
+      if (s2) return s2;
+      return 'default';
+    } catch {
+      const s = String(qs.get('c') || qs.get('community') || localStorage.getItem('csp_active_community_v1') || '').trim();
+      return s || 'default';
+    }
+  }
+  const communityId = __pickCid();
   const headerSub = document.getElementById('headerSub');
   const communityMeta = document.getElementById('communityMeta');
   const meterPanels = document.getElementById('meterPanels');
@@ -362,20 +385,43 @@
     if (el) el.textContent = 'NT$' + (((100*m.unitPrice)+(m.presetFee||0)).toFixed(2));
   }
 
+  async function waitCurrentUser(timeoutMs){
+    const auth = services.auth;
+    if (!auth) return null;
+    if (auth.currentUser) return auth.currentUser;
+    let unsubscribe;
+    const timeoutP = new Promise(resolve => setTimeout(()=>resolve(null), timeoutMs));
+    const authP = new Promise(resolve => {
+      try {
+        unsubscribe = auth.onAuthStateChanged(u => { try { unsubscribe && unsubscribe(); } catch {} resolve(u || null); }, ()=>resolve(null));
+      } catch { resolve(null); }
+    });
+    const u = await Promise.race([authP, timeoutP]);
+    try { unsubscribe && unsubscribe(); } catch {}
+    return u;
+  }
+
   async function saveSettings(){
+    if (btnSave.disabled && saveStatus.textContent === '儲存中…') return;
     btnSave.disabled = true;
     setStatus('儲存中…', 'warn');
     try {
       if (!services.ok) throw new Error(services.msg || '無法寫入遠端');
-      if (communityId === 'default') throw new Error('請先選擇社區');
-      await services.auth.authStateReady ? services.auth.authStateReady().catch(()=>{}) : Promise.resolve();
-      const user = services.auth.currentUser;
+      if (!communityId || communityId === 'default') throw new Error('請先選擇社區');
+      const user = await waitCurrentUser(5000);
       if (!user) throw new Error('尚未登入管理員帳號');
       const payload = JSON.parse(JSON.stringify(local.meters));
       const ref = services.db.collection('communities').doc(communityId);
-      const snap = await ref.get();
+      const snap = await ref.get().catch(err => { throw new Error((err && err.code ? (err.code + '｜') : '') + (err && err.message ? err.message : '讀取社區失敗')); });
       if (!(snap && snap.exists)) throw new Error('社區文件不存在，無法寫入');
-      await ref.set({ meterSettings: payload, meterSettingsUpdatedAt: firebase.firestore.Timestamp.now(), meterSettingsUpdatedBy: { uid: user.uid, email: user.email || '' } }, { merge: true });
+      await ref.set({ meterSettings: payload, meterSettingsUpdatedAt: firebase.firestore.Timestamp.now(), meterSettingsUpdatedBy: { uid: String(user.uid || ''), email: String(user.email || '') } }, { merge: true })
+        .catch(err => {
+          const msg = (err && err.code) ? String(err.code) + (err && err.message ? '｜' + err.message : '') : (err && err.message ? String(err.message) : String(err || '寫入失敗'));
+          if (String(err && err.code) === 'permission-denied') {
+            throw new Error('permission-denied｜Firestore 權限不足，請先部署 firebase.rules 到專案 nw-app-v2 再重試');
+          }
+          throw new Error('寫入失敗｜' + msg);
+        });
       local.dirty = false;
       btnSave.disabled = true;
       setStatus('已儲存 · 前後台同步套用', 'ok');
@@ -388,9 +434,17 @@
       } catch {}
       try { if (window.opener && typeof window.opener.postMessage === 'function') window.opener.postMessage(msg, '*'); } catch {}
       try { if (window.parent && window.parent !== window && typeof window.parent.postMessage === 'function') window.parent.postMessage(msg, '*'); } catch {}
+      try {
+        const isIframe = (window.parent && window.parent !== window);
+        const isOpener = !!window.opener;
+        if (isIframe || isOpener) {
+          setTimeout(function(){ try { tryRequestClose(); } catch {} }, 500);
+        }
+      } catch {}
     } catch (e) {
-      console.error(e);
-      setStatus('儲存失敗：' + (e.code ? (e.code+'｜'):'') + (e.message||String(e)), 'err');
+      try { console.error(e); } catch {}
+      const txt = (e && e.code ? String(e.code) + '｜' : '') + ((e && e.message) ? String(e.message) : String(e || '未知錯誤'));
+      setStatus('儲存失敗：' + txt, 'err');
       btnSave.disabled = false;
     }
   }

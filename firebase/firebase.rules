@@ -1,11 +1,11 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
-    
+
     function isAdmin() {
       return request.auth != null
         && (
@@ -29,6 +29,26 @@ service cloud.firestore {
 
     function asString(v) {
       return v is string ? v : "";
+    }
+
+    function dashVariant(s) {
+      return asString(s).split("-").join("－");
+    }
+
+    function baseVariant(s) {
+      let parts = asString(s).split("-");
+      return parts.size() > 0 ? parts[0] : "";
+    }
+
+    function expandUnitKey(v) {
+      let sv = asString(v);
+      let withSelf = sv != "" ? [sv] : [];
+      let d = dashVariant(sv);
+      let withDash = withSelf + ((sv != "" && d != sv) ? [d] : []);
+      let b = baseVariant(sv);
+      let withBase = withDash + ((sv != "" && b != "" && b != sv) ? [b] : []);
+      let bd = dashVariant(b);
+      return withBase + ((sv != "" && b != "" && b != sv && bd != b) ? [bd] : []);
     }
 
     function userCommunityIds() {
@@ -96,30 +116,17 @@ service cloud.firestore {
       let fullA = (unitBase != "" && subA != "") ? (unitBase + "-" + subA) : "";
       let fullB = (unitBase != "" && subB != "") ? (unitBase + "-" + subB) : "";
       let fullC = (unitBase != "" && subC != "") ? (unitBase + "-" + subC) : "";
-      function dashVariant(s) {
-        return s.replaceAll("-", "－");
-      }
-      function baseVariant(s) {
-        if (s == "") return "";
-        let idx = s.indexOf("-");
-        return idx > 0 ? s[0:idx] : s;
-      }
-      let raw = [unitBase, unitBase2, fullA, fullB, fullC];
-      let out = [];
-      for (let i = 0; i < raw.size(); i++) {
-        let v = raw[i];
-        if (v == "") continue;
-        out.push(v);
-        let d = dashVariant(v);
-        if (d != v) out.push(d);
-        let b = baseVariant(v);
-        if (b != "" && b != v) {
-          out.push(b);
-          let bd = dashVariant(b);
-          if (bd != b) out.push(bd);
-        }
-      }
-      return out;
+      return expandUnitKey(unitBase)
+           + expandUnitKey(unitBase2)
+           + expandUnitKey(fullA)
+           + expandUnitKey(fullB)
+           + expandUnitKey(fullC);
+    }
+
+    function isVisitorSelfGet() {
+      return request.auth == null
+        && resource.data.get('source', '') == "self"
+        && resource.data.get('createdBy', '') == "public";
     }
 
     function isVisitorSelfCreate(visitorId) {
@@ -336,15 +343,15 @@ service cloud.firestore {
 
     match /users/{uid} {
       allow read: if (request.auth != null && (
-        request.auth.uid == uid || 
-        isAdmin() || 
+        request.auth.uid == uid ||
+        isAdmin() ||
         (isCommunityStaff() && userCanAccessUserCommunity(resource.data.community))
       )) || (
         resource.data.status == "pending" && resource.data.role == "resident"
       );
-      
+
       allow create: if (request.auth != null && (
-        isAdmin() || 
+        isAdmin() ||
         (isCommunityStaff() && userCanAccessUserCommunity(request.resource.data.community))
       )) || (
         request.resource.data.role == "resident" &&
@@ -358,15 +365,15 @@ service cloud.firestore {
         (request.resource.data.password == null || request.resource.data.password is string) &&
         (request.resource.data.avatarDataUrl == null || request.resource.data.avatarDataUrl is string)
       );
-      
+
       allow update: if request.auth != null && (
-        request.auth.uid == uid || 
-        isAdmin() || 
+        request.auth.uid == uid ||
+        isAdmin() ||
         (isCommunityStaff() && userCanAccessUserCommunity(resource.data.community))
       );
-      
+
       allow delete: if request.auth != null && (
-        isAdmin() || 
+        isAdmin() ||
         (isCommunityStaff() && userCanAccessUserCommunity(resource.data.community))
       );
 
@@ -377,28 +384,28 @@ service cloud.firestore {
         allow read: if request.auth != null && request.auth.uid == uid;
       }
     }
-    
+
     match /user_lookup/{phone} {
       allow read: if true;
       allow write: if request.auth != null;
     }
-    
+
     match /communities/{slug} {
       allow read: if true;
       allow update: if request.auth != null && (
-        isAdmin() || (
-          isCommunityStaff() && userCanAccessCommunitySlug(slug)
-        )
-      ) && (
-        (
-          // 若更新內容含有抄錶設定 keys，則限制僅能寫入這 3 個白名單 keys（避免 staff 覆蓋其他社區欄位）
-          request.resource.data.keys().hasAny(["meterSettings","meterSettingsUpdatedAt","meterSettingsUpdatedBy"])
-        ).implies(
-          request.resource.data.keys().hasOnly(["meterSettings","meterSettingsUpdatedAt","meterSettingsUpdatedBy"])
+        isAdmin()
+        || (
+          isCommunityStaff()
+          && userCanAccessCommunitySlug(slug)
+          && (
+            request.resource.data.diff(resource.data).affectedKeys().hasAny(["meterSettings","meterSettingsUpdatedAt","meterSettingsUpdatedBy"])
+          ).implies(
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["meterSettings","meterSettingsUpdatedAt","meterSettingsUpdatedBy"])
+          )
         )
       );
       allow create, delete: if isAdmin();
-      
+
       match /app_modules/{module} {
         allow read: if request.auth != null;
         allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
@@ -422,7 +429,7 @@ service cloud.firestore {
       match /parking_spots/{spotId} {
         allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
         allow write: if request.auth != null && (
-          isAdmin() || 
+          isAdmin() ||
           (isCommunityStaff() && userCanAccessCommunitySlug(slug)) ||
           userCanAccessCommunitySlug(slug)
         );
@@ -452,7 +459,7 @@ service cloud.firestore {
         allow read: if request.auth != null;
         allow create: if request.auth != null;
         allow update, delete: if request.auth != null && (
-          isAdmin() || 
+          isAdmin() ||
           (isCommunityStaff() && userCanAccessCommunitySlug(slug)) ||
           resource.data.createdBy == request.auth.uid
         );
@@ -460,28 +467,23 @@ service cloud.firestore {
 
       match /mails/{mailId} {
         allow read: if request.auth != null && (
-          isAdmin() || 
+          isAdmin() ||
           (isCommunityStaff() && userCanAccessCommunitySlug(slug)) ||
           (getUserData().houseNo == resource.data.houseNo)
         );
         allow write: if request.auth != null && (
-          isAdmin() || 
+          isAdmin() ||
           (isCommunityStaff() && userCanAccessCommunitySlug(slug))
         );
       }
 
       match /parcels/{parcelId} {
         allow read, write: if request.auth != null && (
-          isAdmin() || 
+          isAdmin() ||
           (isCommunityStaff() && userCanAccessCommunitySlug(slug)) ||
           (resource.data.unit in userUnitKeys()) ||
           (resource.data.houseNo in userUnitKeys())
         );
-      }
-      
-      // 允許列出包裹集合（用於調試）
-      match /parcels {
-        allow list: if request.auth != null;
       }
 
       match /visitors/{visitorId} {
@@ -528,7 +530,7 @@ service cloud.firestore {
 
       match /points_logs/{logId} {
         allow read: if request.auth != null && (
-          isAdmin() || 
+          isAdmin() ||
           (isCommunityStaff() && userCanAccessCommunitySlug(slug)) ||
           resource.data.houseNo == getUserData().houseNo
         );
@@ -625,7 +627,7 @@ service cloud.firestore {
     match /sos_alerts/{alertId} {
       allow create: if request.auth != null;
       allow read, update, delete: if request.auth != null && (
-        isAdmin() || 
+        isAdmin() ||
         (isCommunityStaff() && userCanAccessUserCommunity(resource.data.community))
       );
     }
@@ -635,10 +637,9 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
-    // --- 點數歷史紀錄 ---
     match /pointsHistory/{historyId} {
       allow read, write: if request.auth != null && (
-        isAdmin() || 
+        isAdmin() ||
         (isCommunityStaff() && userCanAccessUserCommunity(resource.data.communityId)) ||
         resource.data.userId == request.auth.uid
       );
@@ -665,10 +666,6 @@ service cloud.firestore {
       return callExists(callId) && isCallParticipantByDoc(callData(callId));
     }
 
-    match /calls {
-      allow list: if request.auth != null;
-    }
-    
     match /calls/{callId} {
       allow create: if request.auth != null && (
         (
