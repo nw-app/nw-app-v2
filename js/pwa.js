@@ -770,6 +770,20 @@
       if (!isSysAdmin) {
         targets = targets.filter((t) => t !== "system");
       }
+      if (isCommunity && Array.isArray(profileData.accessiblePages)) {
+        const targetToPage = {
+          member: "resident",
+          board: "board",
+          table: "table",
+          shop: "shop",
+        };
+        const allowed = new Set(profileData.accessiblePages.map((x) => String(x || "").trim()));
+        targets = targets.filter((t) => {
+          const p = targetToPage[t];
+          if (!p) return false;
+          return allowed.has(p);
+        });
+      }
       if (!targets.length) {
         switchEl.hidden = true;
         switchEl.innerHTML = "";

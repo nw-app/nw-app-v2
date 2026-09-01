@@ -866,6 +866,16 @@
         const primaryCode = String(codes[0] || "").trim() || String(communityCodeMap.get(firstId) || "").trim();
         const passwordDisplay = pwPlain ? pwPlain : "------";
         const passwordHint = "";
+        const viewRole = normalizeAccountRoleView(state.accountsRoleView) || "resident";
+        const showSettingsBtn = viewRole === "community" && !r.readOnly;
+        const settingsBtnHtml = showSettingsBtn ? `
+                <button class="icon-btn" type="button" data-page-access="${r.id}" aria-label="頁面切換設定" title="頁面切換設定">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.7"/>
+                    <path d="M19.2 12a7.2 7.2 0 0 0-.1-1.1l2-1.6-1.8-3.1-2.5 1a7.2 7.2 0 0 0-1.9-1.1l-.4-2.7H9.5l-.4 2.7a7.2 7.2 0 0 0-1.9 1.1l-2.5-1-1.8 3.1 2 1.6A7.2 7.2 0 0 0 4.8 12c0 .4 0 .7.1 1.1l-2 1.6 1.8 3.1 2.5-1a7.2 7.2 0 0 0 1.9 1.1l.4 2.7h5l.4-2.7a7.2 7.2 0 0 0 1.9-1.1l2.5 1 1.8-3.1-2-1.6c.1-.4.1-.7.1-1.1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" opacity="0.8"/>
+                  </svg>
+                </button>
+        `.trim() : "";
         return `
             <div class="item account-item" data-account-id="${r.id}" aria-expanded="false">
               <div class="account-left">
@@ -886,6 +896,7 @@
                 </div>
               </div>
               <div class="account-actions">
+                ${settingsBtnHtml}
                 <button class="icon-btn" type="button" data-edit-user="${r.id}" aria-label="編輯" title="編輯">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-2.8l-.2-.2a2 2 0 0 0-2.8 0L5 17v3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
@@ -1009,6 +1020,7 @@
             avatarDataUrl: String(v.avatarDataUrl || ""),
             enabled: v.enabled !== false,
             category: String(v.category || v.residentCategory || ""),
+            accessiblePages: Array.isArray(v.accessiblePages) ? v.accessiblePages : null,
           };
         }).filter(Boolean);
         
@@ -1105,6 +1117,148 @@
       detachKeydown();
       detachKeydown = () => {};
       clearModalStatus();
+    };
+
+    let pageAccessModal = null;
+    let detachPageAccessKeydown = () => {};
+
+    const closePageAccessModal = () => {
+      if (!pageAccessModal) return;
+      pageAccessModal.hidden = true;
+      detachPageAccessKeydown();
+      detachPageAccessKeydown = () => {};
+    };
+
+    const openPageAccessModal = (user) => {
+      if (!user) return;
+      const uid = String(user.id || "");
+      if (!uid) return;
+      const FieldValue = (window.firebase && window.firebase.firestore && window.firebase.firestore.FieldValue) ? window.firebase.firestore.FieldValue : null;
+
+      if (!pageAccessModal) {
+        pageAccessModal = document.createElement("div");
+        pageAccessModal.className = "modal";
+        pageAccessModal.id = "pageAccessModal";
+        pageAccessModal.hidden = true;
+        pageAccessModal.innerHTML = `
+          <div class="modal-backdrop" data-modal-close="1"></div>
+          <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="pageAccessModalTitle" style="width:80vw;max-width:80vw;height:auto;max-height:80vh;grid-template-rows:auto auto auto;">
+            <div class="modal-hd">
+              <h3 class="modal-title" id="pageAccessModalTitle">頁面切換設定</h3>
+              <button class="modal-close" type="button" id="btnClosePageAccessModal" aria-label="關閉">×</button>
+            </div>
+            <div class="modal-body" style="grid-template-rows:auto auto auto;">
+              <div style="font-size:14px;color:rgba(31,41,55,0.85);font-weight:700;line-height:1.5;">除預設登入「社區」頁面外，勾選可切換的頁面</div>
+              <div class="check-grid" id="pageAccessGrid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:4px;">
+                <label class="check" style="display:flex;align-items:flex-start;padding:12px;border:1px solid rgba(17,24,39,0.1);border-radius:10px;">
+                  <input type="checkbox" value="resident" style="margin-top:2px;" />
+                  <div style="display:grid;gap:2px;"><strong style="font-weight:900;">住戶</strong><small style="color:rgba(31,41,55,0.6);font-weight:600;">住戶資料頁面</small></div>
+                </label>
+                <label class="check" style="display:flex;align-items:flex-start;padding:12px;border:1px solid rgba(17,24,39,0.1);border-radius:10px;">
+                  <input type="checkbox" value="board" style="margin-top:2px;" />
+                  <div style="display:grid;gap:2px;"><strong style="font-weight:900;">看板</strong><small style="color:rgba(31,41,55,0.6);font-weight:600;">電子看板頁面</small></div>
+                </label>
+                <label class="check" style="display:flex;align-items:flex-start;padding:12px;border:1px solid rgba(17,24,39,0.1);border-radius:10px;">
+                  <input type="checkbox" value="table" style="margin-top:2px;" />
+                  <div style="display:grid;gap:2px;"><strong style="font-weight:900;">桌板</strong><small style="color:rgba(31,41,55,0.6);font-weight:600;">會議桌板頁面</small></div>
+                </label>
+                <label class="check" style="display:flex;align-items:flex-start;padding:12px;border:1px solid rgba(17,24,39,0.1);border-radius:10px;">
+                  <input type="checkbox" value="shop" style="margin-top:2px;" />
+                  <div style="display:grid;gap:2px;"><strong style="font-weight:900;">商店</strong><small style="color:rgba(31,41,55,0.6);font-weight:600;">生活商店頁面</small></div>
+                </label>
+              </div>
+              <div class="status" id="pageAccessStatus" hidden></div>
+            </div>
+            <div class="modal-ft">
+              <button class="btn" type="button" id="btnCancelPageAccessModal">關閉</button>
+              <button class="btn btn-primary" type="button" id="btnSavePageAccessModal">儲存</button>
+            </div>
+          </div>
+        `;
+        if (document.body) document.body.appendChild(pageAccessModal);
+      }
+
+      const titleEl = pageAccessModal.querySelector("#pageAccessModalTitle");
+      const grid = pageAccessModal.querySelector("#pageAccessGrid");
+      const statusEl = pageAccessModal.querySelector("#pageAccessStatus");
+      const closeBtn = pageAccessModal.querySelector("#btnClosePageAccessModal");
+      const cancelBtn = pageAccessModal.querySelector("#btnCancelPageAccessModal");
+      const saveBtn = pageAccessModal.querySelector("#btnSavePageAccessModal");
+      const backdrop = pageAccessModal.querySelector("[data-modal-close]");
+
+      const displayName = String(user.name || user.username || user.email || uid);
+      if (titleEl) titleEl.textContent = `頁面切換設定｜${displayName}`;
+
+      const currentPages = Array.isArray(user.accessiblePages) ? user.accessiblePages.slice() : [];
+      const checkboxes = grid ? grid.querySelectorAll("input[type=\"checkbox\"]") : [];
+      checkboxes.forEach((cb) => {
+        const v = String(cb.value || "");
+        cb.checked = currentPages.indexOf(v) !== -1;
+      });
+
+      if (statusEl) {
+        statusEl.hidden = true;
+        statusEl.textContent = "";
+        statusEl.classList.remove("error");
+      }
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "儲存";
+      }
+
+      const onKey = (e) => { if (e.key === "Escape") closePageAccessModal(); };
+      document.addEventListener("keydown", onKey);
+      detachPageAccessKeydown = () => document.removeEventListener("keydown", onKey);
+
+      if (closeBtn && !closeBtn._paBound) {
+        closeBtn.addEventListener("click", closePageAccessModal);
+        closeBtn._paBound = true;
+      }
+      if (cancelBtn && !cancelBtn._paBound) {
+        cancelBtn.addEventListener("click", closePageAccessModal);
+        cancelBtn._paBound = true;
+      }
+      if (backdrop && !backdrop._paBound) {
+        backdrop.addEventListener("click", closePageAccessModal);
+        backdrop._paBound = true;
+      }
+      if (saveBtn && !saveBtn._paBound) {
+        saveBtn.addEventListener("click", async () => {
+          if (saveBtn.disabled) return;
+          const selected = [];
+          grid.querySelectorAll("input[type=\"checkbox\"]").forEach((cb) => {
+            if (cb.checked) selected.push(String(cb.value || ""));
+          });
+          saveBtn.disabled = true;
+          saveBtn.textContent = "儲存中…";
+          try {
+            const payload = { accessiblePages: selected };
+            if (FieldValue && FieldValue.serverTimestamp) payload.updatedAt = FieldValue.serverTimestamp();
+            await db.collection("users").doc(uid).set(payload, { merge: true });
+            const found = (currentUsers || []).find((x) => String(x.id || "") === uid);
+            if (found) found.accessiblePages = selected.slice();
+            if (statusEl) {
+              statusEl.hidden = false;
+              statusEl.classList.remove("error");
+              statusEl.textContent = "已儲存設定";
+            }
+            window.setTimeout(() => {
+              closePageAccessModal();
+            }, 500);
+          } catch (err) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = "儲存";
+            if (statusEl) {
+              statusEl.hidden = false;
+              statusEl.classList.add("error");
+              statusEl.textContent = "儲存失敗，請稍後再試。";
+            }
+          }
+        });
+        saveBtn._paBound = true;
+      }
+
+      pageAccessModal.hidden = false;
     };
 
     const openModal = () => {
@@ -1398,6 +1552,7 @@
             avatarDataUrl: resolvedAvatarDataUrl,
             enabled: payload.enabled !== false,
             category: String(payload.category || ""),
+            accessiblePages: Array.isArray(existing && existing.accessiblePages) ? existing.accessiblePages.slice() : null,
           };
           if (existingIdx >= 0) {
             currentUsers[existingIdx] = { ...(currentUsers[existingIdx] || {}), ...nextItem };
@@ -1514,6 +1669,15 @@
           } finally {
             setBusy(false);
           }
+          return;
+        }
+
+        const pageAccessBtn = e.target && e.target.closest ? e.target.closest("[data-page-access]") : null;
+        if (pageAccessBtn) {
+          const id = pageAccessBtn.getAttribute("data-page-access");
+          const found = (currentUsers || []).find((x) => String(x.id || "") === String(id || ""));
+          if (!found || found.readOnly) return;
+          openPageAccessModal(found);
           return;
         }
 

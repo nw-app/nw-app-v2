@@ -1038,8 +1038,9 @@
       const fee = safeParseNumber(r.fee) || 0;
       const abnormalReasons = Array.isArray(r.abnormalReasons) ? r.abnormalReasons : [];
       const dispute = r.dispute || null;
+      const isVoid = String(r.voidStatus || '') === 'voided';
       return `
-        <div class="parcel-item" data-id="${esc(r.id)}" style="display:grid;gap:10px;padding:14px;border-radius:var(--radius,18px);background:#fff;border:1px solid rgba(17,24,39,0.10);box-shadow:0 8px 22px rgba(17,24,39,0.06);">
+        <div class="parcel-item" data-id="${esc(r.id)}"${isVoid ? ' style="display:grid;gap:10px;padding:14px;border-radius:var(--radius,18px);background:#fff;border:1px solid rgba(17,24,39,0.10);box-shadow:0 8px 22px rgba(17,24,39,0.06);opacity:.72;filter:grayscale(.25);"' : ' style="display:grid;gap:10px;padding:14px;border-radius:var(--radius,18px);background:#fff;border:1px solid rgba(17,24,39,0.10);box-shadow:0 8px 22px rgba(17,24,39,0.06);"'}>
           <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px;">
             <div style="display:flex;gap:10px;align-items:flex-start;min-width:0;">
               ${meterTag(r.meterType)}
@@ -1048,7 +1049,7 @@
                 <div class="muted" style="font-size:12px;margin-top:2px;">儀表編號 ${esc(r.meterId || '—')} · 週期 ${esc(periodStr || '—')}</div>
               </div>
             </div>
-            ${statusBadge(r.validationStatus)}
+            ${isVoid ? `<span class="tag" style="display:inline-flex; align-items:center; height:24px; padding:0 10px; border-radius:999px; font-size:12px; background:rgba(107,114,128,0.12); color:#4b5563; border:1px solid rgba(107,114,128,0.25);">已作廢</span>` : statusBadge(r.validationStatus)}
           </div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px 12px;">
             <div class="field" style="gap:2px;margin:0;">
@@ -1086,8 +1087,10 @@
             ${options.showDetail ? `<button class="btn btn-sm btn-ghost" data-action="detail">明細</button>` : ''}
             ${options.showDispute ? `<button class="btn btn-sm" data-action="dispute">核異申請</button>` : ''}
             ${options.showFee ? `<button class="btn btn-sm btn-primary" data-action="fee">繳費通知</button>` : ''}
-            ${options.showEdit ? `<button class="btn btn-sm" data-action="edit">修正</button>` : ''}
+            ${options.showEdit && !isVoid ? `<button class="btn btn-sm" data-action="edit">修正</button>` : ''}
             ${options.showResolve ? `<button class="btn btn-sm btn-primary" data-action="resolve">處理核異</button>` : ''}
+            ${options.showDelete && !isVoid ? `<button class="btn btn-sm btn-danger" data-action="delete">刪除</button>` : ''}
+            ${isVoid ? `<span style="font-size:11px; color:#9ca3af; font-weight:800; align-self:center;">刪除作廢完成</span>` : ''}
           </div>
         </div>
       `;
@@ -1447,12 +1450,21 @@
         return;
       }
       const role = String(ctx.role || '').toLowerCase();
+      const canCreate = checkPermission(role, 'create');
+      const canImport = checkPermission(role, 'import');
+      const canReview = checkPermission(role, 'review');
+      const canExport = checkPermission(role, 'export');
+      const canStats = checkPermission(role, 'statistics');
       const state = {
-        tab: 'records',
+        tab: canReview ? 'pending' : (canCreate ? 'create' : (canStats ? 'stats' : (canImport || canExport ? 'import' : 'pending'))),
         filterType: '',
         filterPeriod: '',
         filterStatus: '',
         filterHouse: '',
+        communityId: communityId,
+        operatorId: String(ctx.uid || ctx.operatorId || '').trim(),
+        operatorName: String(ctx.operatorName || ctx.displayName || '').trim(),
+        currentUid: String(ctx.uid || '').trim(),
         records: [],
         disputes: [],
         abnormalRecords: [],
@@ -1460,12 +1472,6 @@
         stats: null,
         loading: true
       };
-
-      const canCreate = checkPermission(role, 'create');
-      const canImport = checkPermission(role, 'import');
-      const canReview = checkPermission(role, 'review');
-      const canExport = checkPermission(role, 'export');
-      const canStats = checkPermission(role, 'statistics');
       const communities = (ctx.state && Array.isArray(ctx.state.communities)) ? ctx.state.communities : (window.NwApp && window.NwApp.state && Array.isArray(window.NwApp.state.communities) ? window.NwApp.state.communities : []);
       const communityName = (communities.find(c => c.id === communityId) || {}).name || '';
 
@@ -1491,7 +1497,6 @@
       const renderSubnav = () => {
         if (!subnavEl) return;
         const tabs = [
-          { id: 'records', label: '抄表紀錄', badge: __filterRecords(state.records).length },
           { id: 'pending', label: '待處理', badge: (__filterRecords(state.pendingRecords).length + __filterRecords(state.disputes).length + __filterRecords(state.abnormalRecords).length), hidden: !canReview },
           { id: 'create', label: '手動登記', hidden: !canCreate },
           { id: 'import', label: '匯入/匯出', hidden: !canImport && !canExport },
@@ -1579,7 +1584,6 @@
               </div>
             </div>
             <div class="card-bd">
-              ${state.tab === 'records' ? renderRecordsTab() : ''}
               ${state.tab === 'pending' ? renderPendingTab() : ''}
               ${state.tab === 'create' ? renderCreateTab() : ''}
               ${state.tab === 'import' ? renderImportTab() : ''}
@@ -1647,7 +1651,7 @@
                 <div class="tag yellow">${__filterRecords(state.pendingRecords).length}</div>
               </div>
               <div class="card-bd" style="padding-top:0;">
-                ${__filterRecords(state.pendingRecords).length === 0 ? `<div class="muted" style="padding:18px;text-align:center;">目前沒有待審核的新申報 🎉</div>` : `<div style="display:grid;gap:12px;">${__filterRecords(state.pendingRecords).map(r => recordCard(r, { showDetail: true, showEdit: true, showResolve: false })).join('')}</div>`}
+                ${__filterRecords(state.pendingRecords).length === 0 ? `<div class="muted" style="padding:18px;text-align:center;">目前沒有待審核的新申報 🎉</div>` : `<div style="display:grid;gap:12px;">${__filterRecords(state.pendingRecords).map(r => recordCard(r, { showDetail: true, showEdit: true, showDelete: true, showResolve: false })).join('')}</div>`}
               </div>
             </section>
             <section class="card" style="box-shadow:none;border:1px solid rgba(17,24,39,0.08);">
@@ -1659,7 +1663,7 @@
                 <div class="tag yellow">${__filterRecords(state.disputes).length}</div>
               </div>
               <div class="card-bd" style="padding-top:0;">
-                ${__filterRecords(state.disputes).length === 0 ? `<div class="muted" style="padding:18px;text-align:center;">目前沒有待處理的核異申請 🎉</div>` : `<div style="display:grid;gap:12px;">${__filterRecords(state.disputes).map(r => recordCard(r, { showDetail: true, showResolve: true, showEdit: true })).join('')}</div>`}
+                ${__filterRecords(state.disputes).length === 0 ? `<div class="muted" style="padding:18px;text-align:center;">目前沒有待處理的核異申請 🎉</div>` : `<div style="display:grid;gap:12px;">${__filterRecords(state.disputes).map(r => recordCard(r, { showDetail: true, showResolve: true, showEdit: true, showDelete: true })).join('')}</div>`}
               </div>
             </section>
             <section class="card" style="box-shadow:none;border:1px solid rgba(17,24,39,0.08);">
@@ -1671,7 +1675,7 @@
                 <div class="tag red">${__filterRecords(state.abnormalRecords).length}</div>
               </div>
               <div class="card-bd" style="padding-top:0;">
-                ${__filterRecords(state.abnormalRecords).length === 0 ? `<div class="muted" style="padding:18px;text-align:center;">目前沒有偵測到異常資料 🎉</div>` : `<div style="display:grid;gap:12px;">${__filterRecords(state.abnormalRecords).map(r => recordCard(r, { showDetail: true, showEdit: true })).join('')}</div>`}
+                ${__filterRecords(state.abnormalRecords).length === 0 ? `<div class="muted" style="padding:18px;text-align:center;">目前沒有偵測到異常資料 🎉</div>` : `<div style="display:grid;gap:12px;">${__filterRecords(state.abnormalRecords).map(r => recordCard(r, { showDetail: true, showEdit: true, showDelete: true })).join('')}</div>`}
               </div>
             </section>
           </div>
@@ -2017,8 +2021,132 @@
             if (action === 'detail') showDetailAdminModal(rec);
             else if (action === 'edit' && canReview) showEditModal(rec);
             else if (action === 'resolve' && canReview) showResolveModal(rec);
+            else if (action === 'delete' && canReview) showDeleteConfirmModal(rec);
           };
         });
+      };
+
+      const showDeleteConfirmModal = (r) => {
+        if (!r || !r.id) return;
+        if (String(r.voidStatus || '') === 'voided') return;
+        const services = ensureServices();
+        const db = services ? services.db : null;
+        const t = getMeterType(r.meterType);
+        const unit = t ? t.unit : '度';
+        const rd = toDateValue(r.readingDate);
+        const periodStr = String(r.period || (rd ? formatDateYYYYMM(rd) : ''));
+        const usage = safeParseNumber(r.usage) || 0;
+        const fee = safeParseNumber(r.fee) || 0;
+        const body = `
+          <div style="display:grid; gap:12px;">
+            <div style="display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:14px; background:linear-gradient(180deg,#fff,#fafafa); border:1px solid rgba(17,24,39,.08);">
+              <div style="width:10px;height:10px;border-radius:999px;background:${t && t.color ? t.color : 'var(--brand,#2563eb)'};"></div>
+              <div style="font-weight:900;font-size:16px;">${t ? (t.icon + ' ' + t.name) : '抄錶'} 刪除／作廢（${esc(periodStr || '—')}）</div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px;">
+              <div class="field" style="gap:2px;margin:0;">
+                <label style="font-size:11px;">戶號</label>
+                <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(r.houseNo || '—')}</div>
+              </div>
+              <div class="field" style="gap:2px;margin:0;">
+                <label style="font-size:11px;">儀表編號</label>
+                <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(r.meterId || '—')}</div>
+              </div>
+              <div class="field" style="gap:2px;margin:0;">
+                <label style="font-size:11px;">抄見日</label>
+                <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(rd ? formatDateFull(rd) : '—')}</div>
+              </div>
+              <div class="field" style="gap:2px;margin:0;">
+                <label style="font-size:11px;">建立時間</label>
+                <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(r.createdAt ? (new Date(r.createdAt).toLocaleString('zh-TW')) : '—')}</div>
+              </div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px;">
+              <div style="padding:12px 14px; border-radius:14px; background:rgba(243,244,246); border:1px solid rgba(17,24,39,.06);">
+                <div style="font-size:11px; color:#6b7280; font-weight:800;">上期數值</div>
+                <div style="margin-top:6px; font:900 24px/1 'SF Mono',Consolas,monospace; color:#374151;">${esc(String(r.previousValue ?? '—'))}</div>
+              </div>
+              <div style="padding:12px 14px; border-radius:14px; background:rgba(31,41,55); color:#fff; border:1px solid rgba(31,41,55,.3);">
+                <div style="font-size:11px; color:#d1d5db; font-weight:800;">本期數值</div>
+                <div style="margin-top:6px; font:900 24px/1 'SF Mono',Consolas,monospace;">${esc(String(r.currentValue ?? '—'))}</div>
+              </div>
+              <div style="padding:12px 14px; border-radius:14px; background:rgba(194,24,91,0.10); border:1.5px solid rgba(194,24,91,0.22);">
+                <div style="font-size:11px; color:#9f1c1c; font-weight:800;">本期用量（${esc(unit)}）</div>
+                <div style="margin-top:6px; font:900 24px/1 'SF Mono',Consolas,monospace; color:#9f1c1c;">${usage.toFixed(2)}</div>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; border-radius:14px; background:#fff; border:1.5px solid rgba(46,125,50,0.25);">
+              <div style="font-size:13px; color:#374151; font-weight:900;">計算費用</div>
+              <div style="font:900 28px/1 'SF Pro Display',-apple-system,BlinkMacSystemFont,sans-serif; color:#9f1c1c;">NT$ ${fee.toFixed(2)}</div>
+            </div>
+            <div style="padding:12px 14px; border-radius:14px; background:rgba(211,47,47,0.08); border:1.5px solid rgba(211,47,47,0.22); color:#9f1c1c; font-size:13px; font-weight:900; line-height:1.6;">
+              ※ 按下「確認刪除」後，此筆抄錶紀錄將<b>作廢並移出本期用量／費用統計</b>，<b>無法恢復</b>。<br/>
+              ※ 作廢僅影響後續統計，原始資料仍保留可於後台查詢；若有疑慮請先聯繫管理中心。
+            </div>
+          </div>
+        `;
+        const m = openModal('確認刪除抄錶紀錄', body, {
+          footerHtml: `<button class="btn btn-ghost" data-close>取消</button><button class="btn btn-danger btn-submit" type="button" data-confirm-delete>確認刪除</button>`
+        });
+        m.modal.style.width = 'min(80vw, 780px)';
+        m.modal.querySelector('[data-close]').onclick = () => m.close();
+        const okBtn = m.modal.querySelector('[data-confirm-delete]');
+        const statusEl = document.createElement('div');
+        statusEl.className = 'mr-status';
+        statusEl.style.marginTop = '8px';
+        statusEl.style.fontSize = '12px';
+        statusEl.style.fontWeight = '800';
+        statusEl.style.display = 'none';
+        m.modal.querySelector('.mr-modal-bd').appendChild(statusEl);
+        const showStatus = (msg, isErr) => {
+          statusEl.textContent = String(msg || '');
+          statusEl.style.color = isErr ? '#9f1c1c' : '#15803d';
+          statusEl.style.background = isErr ? 'rgba(211,47,47,0.08)' : 'rgba(46,125,50,0.08)';
+          statusEl.style.borderRadius = '12px';
+          statusEl.style.padding = '8px 10px';
+          statusEl.style.border = isErr ? '1px solid rgba(211,47,47,0.22)' : '1px solid rgba(46,125,50,0.22)';
+          statusEl.style.display = String(msg || '').trim() ? 'block' : 'none';
+        };
+        if (okBtn) okBtn.onclick = async () => {
+          if (!db) { showStatus('Firestore 尚未初始化', true); return; }
+          const cid = String(state.communityId || '').trim();
+          const rid = String(r.id || '').trim();
+          if (!cid) { showStatus('缺少社區資訊，請先選擇社區', true); return; }
+          if (!rid) { showStatus('無效的抄錶紀錄 ID', true); return; }
+          okBtn.disabled = true;
+          okBtn.classList.add('is-loading');
+          okBtn.textContent = '刪除中…';
+          showStatus('刪除中，請稍候...', false);
+          try {
+            const recRef = db.collection('communities').doc(cid).collection('meterReadings').doc(rid);
+            const now = Date.now();
+            const patch = {
+              voidStatus: 'voided',
+              voidReason: 'admin_delete',
+              voidAt: db.Timestamp ? db.Timestamp.fromDate(new Date()) : now,
+              voidByUid: String(state.currentUid || state.operatorId || ''),
+              voidByName: String(state.operatorName || ''),
+              updatedAt: db.Timestamp ? db.Timestamp.fromDate(new Date()) : now,
+              validationStatus: 'voided',
+            };
+            await recRef.set(patch, { merge: true });
+            try {
+              const mergePatch = (list) => Array.isArray(list) ? list.map(x => x.id === r.id ? { ...x, voidStatus: 'voided', voidReason: 'admin_delete', validationStatus: 'voided', updatedAt: now, voidAt: now } : x) : list;
+              state.records = mergePatch(state.records);
+              state.disputes = mergePatch(state.disputes);
+              state.abnormalRecords = mergePatch(state.abnormalRecords);
+              state.pendingRecords = (Array.isArray(state.pendingRecords) ? state.pendingRecords : []).filter(x => x.id !== r.id);
+            } catch {}
+            showStatus('已刪除／作廢此筆抄錶紀錄，列表即將刷新...', false);
+            setTimeout(() => { m.close(); try { reload(); } catch {}; try { renderLayout && renderLayout(); } catch {}; }, 550);
+          } catch (e) {
+            try { console.error('[meter-reading] delete failed', r.id, e); } catch {}
+            okBtn.disabled = false;
+            okBtn.classList.remove('is-loading');
+            okBtn.textContent = '確認刪除';
+            showStatus('刪除失敗：' + ((e && e.message) ? e.message : '請檢查網路或聯絡管理員'), true);
+          }
+        };
       };
 
       const showDetailAdminModal = (r) => {
@@ -2430,10 +2558,11 @@
             showErrors([]);
             showWarnings([]);
             const n = openModal('建立成功', `<div style="padding:14px;border-radius:14px;background:rgba(22,163,74,0.08);border:1px solid rgba(22,163,74,0.2);display:flex;gap:10px;align-items:flex-start;"><div style="font-size:22px;">✓</div><div style="flex:1;font-size:14px;font-weight:700;">抄表紀錄已建立。${res.warnings && res.warnings.length ? `<div style="margin-top:6px;font-weight:500;font-size:13px;color:#b45309;">注意事項：${res.warnings.map(esc).join('<br/>')}</div>` : ''}</div></div>`, {
-              footerHtml: `<button class="btn btn-ghost" data-stay>繼續登記</button><button class="btn btn-primary" data-golist>查看清單</button>`
+              footerHtml: `<button class="btn btn-ghost" data-stay>繼續登記</button>${canReview ? `<button class="btn btn-primary" data-golist>前往待處理</button>` : ''}`
             });
             n.modal.querySelector('[data-stay]').onclick = () => n.close();
-            n.modal.querySelector('[data-golist]').onclick = () => { n.close(); state.tab = 'records'; reload(); };
+            const goListBtn = n.modal.querySelector('[data-golist]');
+            if (goListBtn) goListBtn.onclick = () => { n.close(); state.tab = 'pending'; reload(); };
           } else {
             showErrors(res.errors);
           }
@@ -2559,7 +2688,7 @@
                 </div>
               ` : ''}
             `, { footerHtml: `<button class="mr-btn primary" data-ok>確定</button>` });
-            n.modal.querySelector('[data-ok]').onclick = () => { n.close(); state.tab = 'records'; reload(); };
+            n.modal.querySelector('[data-ok]').onclick = () => { n.close(); state.tab = canReview ? 'pending' : (canStats ? 'stats' : 'import'); reload(); };
           };
         }
         const expCsv = container.querySelector('#exportCsvBtn');

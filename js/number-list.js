@@ -77,10 +77,12 @@
     user: null,
     communityId: (getUrlCid() || sessionStorage.getItem("csp_last_cid") || "").trim() || "default",
     houseNo: "—",
+    subHouseNo: "",
     displayName: "",
     uid: "",
     records: [],
     lastByType: {},
+    periodSubmittedByType: {},
     selectedDetailId: null,
   };
 
@@ -107,13 +109,16 @@
     if (p) out.period = String(p.value || "");
     if (d) out.readDate = String(d.value || "");
     for (const t of Object.keys(METER_TYPES)) {
+      syncPrevBoxesFor(t);
       syncDigitBoxesFor(t);
       const hidden = document.querySelector(`[data-meter-cur-hidden="${CSS.escape(t)}"]`);
       const idEl = document.querySelector(`[data-meter-id="${CSS.escape(t)}"]`);
+      const prevHidden = document.querySelector(`[data-meter-prev-hidden="${CSS.escape(t)}"]`);
       const skipEl = document.querySelector(`[data-meter-skip="${CSS.escape(t)}"]`);
       out.values[t] = {
         cur: hidden && hidden.value !== "" ? String(hidden.value) : "",
         id: idEl ? String(idEl.value || "") : "",
+        prev: prevHidden ? String(prevHidden.value || "") : "",
       };
       out.skips[t] = !!(skipEl && skipEl.checked);
     }
@@ -136,6 +141,12 @@
         const v = values[t];
         if (!v) continue;
         if (typeof v.id === "string") { const idEl = document.querySelector(`[data-meter-id="${CSS.escape(t)}"]`); if (idEl) idEl.value = v.id; }
+        if (typeof v.prev === "string" && v.prev !== "") {
+          const anyPrevInput = document.querySelector(`[data-meter-prev="${CSS.escape(t)}"]`);
+          if (anyPrevInput && !anyPrevInput.hasAttribute("readonly")) {
+            applyPrevValueFromString(t, v.prev);
+          }
+        }
         if (typeof v.cur === "string" && v.cur !== "") {
           applyDigitValueFromString(t, v.cur);
         }
@@ -147,11 +158,31 @@
     if (!state.uid) return;
     lsRemove(draftKey(state.uid, state.communityId, state.houseNo));
   }
+  function computePeriodSubmittedMap(records) {
+    const out = {};
+    const list = Array.isArray(records) ? records : [];
+    for (const r of list) {
+      const t = String(r.meterType || "");
+      const p = String(r.period || "").trim();
+      if (!t || !p) continue;
+      if (!out[t]) out[t] = {};
+      const isVoid = String(r.voidStatus || "") === "voided";
+      if (isVoid) continue;
+      if (!out[t][p]) out[t][p] = { id: String(r.id || ""), status: String(r.validationStatus || "pending"), readingDate: r.readingDate || null };
+    }
+    return out;
+  }
+  function isPeriodSubmitted(typeKey, period) {
+    const map = state.periodSubmittedByType || {};
+    const t = String(typeKey || "");
+    const p = String(period || "").trim();
+    return !!(map[t] && map[t][p]);
+  }
   function saveRecentRecords() {
     if (!state.uid) return;
     try {
       const arr = Array.isArray(state.records) ? state.records.slice(0, LS_MAX_RECORDS) : [];
-      lsSet(recentKey(state.uid, state.communityId, state.houseNo), { records: arr, lastByType: state.lastByType || {}, savedAt: Date.now() });
+      lsSet(recentKey(state.uid, state.communityId, state.houseNo), { records: arr, lastByType: state.lastByType || {}, periodSubmittedByType: state.periodSubmittedByType || {}, savedAt: Date.now() });
     } catch {}
   }
   function loadRecentRecords() {
@@ -161,12 +192,10 @@
       if (!r || typeof r !== "object") return false;
       if (Array.isArray(r.records)) state.records = r.records.slice(0, LS_MAX_RECORDS);
       if (r.lastByType && typeof r.lastByType === "object") state.lastByType = { ...(r.lastByType || {}) };
+      if (r.periodSubmittedByType && typeof r.periodSubmittedByType === "object") state.periodSubmittedByType = { ...(r.periodSubmittedByType || {}) };
+      else state.periodSubmittedByType = computePeriodSubmittedMap(state.records || []);
       return true;
     } catch { return false; }
-  }
-  function clearRecentRecords(uid, cid, hn) {
-    try { lsRemove(recentKey(String(uid || ""), String(cid || ""), String(hn || ""))); } catch {}
-    try { lsRemove(draftKey(String(uid || ""), String(cid || ""), String(hn || ""))); } catch {}
   }
   function resetStateOnUidChanged(newUid) {
     const prevUid = String(state.uid || "");
@@ -174,8 +203,13 @@
     if (prevUid !== nextUid && prevUid) {
       state.records = [];
       state.lastByType = {};
+      state.periodSubmittedByType = {};
       state.selectedDetailId = null;
     }
+  }
+  function clearRecentRecords(uid, cid, hn) {
+    try { lsRemove(recentKey(String(uid || ""), String(cid || ""), String(hn || ""))); } catch {}
+    try { lsRemove(draftKey(String(uid || ""), String(cid || ""), String(hn || ""))); } catch {}
   }
   function formatDateTime(value) {
     const v = Number(value);
@@ -238,6 +272,19 @@
     el.style.fontSize = "13px";
   }
 
+  function updateHeaderTitle() {
+    const titleEl = $("nlTitle");
+    if (!titleEl) return;
+    const houseNo = String(state.houseNo || "").trim();
+    const displayName = String(state.displayName || "").trim();
+    const fullHouseNo = (() => {
+      const sub = String(state.subHouseNo || state.subUnit || "").trim();
+      if (!houseNo) return "";
+      return sub ? `${houseNo}-${sub}` : houseNo;
+    })();
+    titleEl.textContent = `${fullHouseNo || "戶號"} ${displayName || "姓名"}`;
+  }
+
   async function loadUserProfile(user) {
     const auth = firebase.auth();
     const db = firebase.firestore();
@@ -249,6 +296,7 @@
     state.uid = uid;
     state.user = user || null;
     state.displayName = String((user && user.displayName) || "").trim();
+    updateHeaderTitle();
     if (!uid) {
       if (uidBefore) { try { clearRecentRecords(uidBefore, cidBefore, hnBefore); } catch {} }
       return;
@@ -258,8 +306,10 @@
       const d = (snap && snap.exists && snap.data()) || {};
       state.communityId = String(getUrlCid() || d.community || state.communityId || sessionStorage.getItem("csp_last_cid") || "default").trim() || "default";
       state.houseNo = String(d.houseNo || d.unit || state.houseNo || "").trim() || "—";
+      state.subHouseNo = String(d.subHouseNo || d.subUnit || d.sub || state.subHouseNo || "").trim();
       state.displayName = String(d.displayName || d.name || state.displayName || (user && user.displayName) || "").trim();
       try { sessionStorage.setItem("csp_last_cid", state.communityId); } catch {}
+      updateHeaderTitle();
     } catch (e) {
       console.warn("[number-list] loadUserProfile failed", e);
     }
@@ -296,6 +346,7 @@
         if (!prevRd || (rd && Number.isFinite(rd.getTime()) && rd.getTime() >= prevRd.getTime())) last[t] = r;
       }
       state.lastByType = last;
+      state.periodSubmittedByType = computePeriodSubmittedMap(state.records);
       saveRecentRecords();
       setLastEditedAt();
       renderHistoryFilterButtons();
@@ -313,50 +364,102 @@
     const mt = METER_TYPES[typeKey] || METER_TYPES.electric;
     const last = state.lastByType[typeKey] || null;
     const meterId = last && last.meterId ? String(last.meterId) : defaultMeterId(typeKey);
-    const prev = last && Number.isFinite(numOr(last.currentValue)) ? numOr(last.currentValue) : 0;
+    const hasLast = !!(last && Number.isFinite(numOr(last.currentValue)));
+    const prevRaw = hasLast ? numOr(last.currentValue) : 0;
     const digits = Math.max(2, Math.min(8, Number.isFinite(Number(mt.digits)) ? Math.floor(Number(mt.digits)) : 4));
     const color = String(mt.accent || "#1f2937");
+    const periodEl = $("nlPeriod");
+    const period = periodEl ? String(periodEl.value || ym()).trim() : ym();
+    const submitted = isPeriodSubmitted(typeKey, period);
+    const readonlyStyle = 'background:linear-gradient(180deg,#f3f4f6,#e5e7eb); color:#374151; border-color:rgba(17,24,39,.12);';
+    const editableStyle = 'background:linear-gradient(180deg,#fff,#fafafa); color:' + color + ';';
+    const hasPrevReadonly = hasLast || submitted;
+    const digitInputStyle = hasPrevReadonly ? readonlyStyle : editableStyle;
+    const wrapBorderColor = hasPrevReadonly ? 'rgba(17,24,39,.08)' : (color + '55');
+    const readonlyAttr = hasPrevReadonly ? ' readonly tabindex="-1"' : '';
+    const prevArr = String(Math.max(0, Math.min(Math.pow(10, digits) - 1, Math.floor(Number.isFinite(prevRaw) ? prevRaw : 0)))).padStart(digits, '0').split('');
+    const cardFooterHtml = submitted
+      ? `<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px; padding-top:12px; border-top:1px dashed rgba(17,24,39,.12); flex-wrap:wrap;">
+           <div style="display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; background:rgba(46,125,50,0.10); border:1px solid rgba(46,125,50,0.22); color:#15803d; font-size:12px; font-weight:900;">✓ 本期 ${esc(period)} 已送出申報</div>
+           <div style="font-size:11px; color:#6b7280; font-weight:800;">每期僅能申報乙次；需修改請洽管理中心。</div>
+         </div>`
+      : `<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px; padding-top:12px; border-top:1px dashed rgba(17,24,39,.12); flex-wrap:wrap;">
+           <div style="font-size:11px; color:#6b7280; font-weight:800;">每期僅能申報乙次；送出確認後無法修改。</div>
+           <button class="btn btn-primary btn-submit" type="button" data-meter-submit="${esc(typeKey)}" style="min-width:120px;">送出申報</button>
+         </div>`;
     return `
-      <div class="nl-meter-card" data-meter="${esc(typeKey)}">
+      <div class="nl-meter-card" data-meter="${esc(typeKey)}"${submitted ? ' style="opacity:0.96;"' : ''}>
         <div class="nl-meter-head">
           <div class="nl-meter-title">
             <div class="dot" style="background:${esc(color)};"></div>
             <div>${esc(mt.label)}</div>
           </div>
           <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#6b7280; font-weight:800;">
-            <input type="checkbox" data-meter-skip="${esc(typeKey)}" />
-            本期不申報
+            <input type="checkbox" data-meter-skip="${esc(typeKey)}" ${submitted ? 'disabled checked' : ''} />
+            ${submitted ? '本期已申報' : '本期不申報'}
           </label>
         </div>
         <div class="nl-meter-fields">
           <div class="field">
             <label>儀表編號</label>
-            <input type="text" data-meter-id="${esc(typeKey)}" value="${esc(meterId)}" placeholder="${esc(defaultMeterId(typeKey))}" autocomplete="off" />
+            <input type="text" data-meter-id="${esc(typeKey)}" value="${esc(meterId)}" placeholder="${esc(defaultMeterId(typeKey))}" autocomplete="off" ${submitted ? 'readonly style="background:#f3f4f6;color:#374151;"' : ''} />
           </div>
           <div class="field">
             <label>對應門牌號</label>
             <input type="text" value="${esc(state.houseNo)}" readonly style="background:#f3f4f6; color:#374151;" />
           </div>
           <div class="field">
-            <label>上次抄表數值</label>
-            <input type="number" min="0" step="1" data-meter-prev="${esc(typeKey)}" value="${prev}" readonly style="background:#f3f4f6; color:#374151;" />
+            <label>上次抄表數值${submitted ? "（本期已申報）" : (hasLast ? "" : "（首次可輸入）")}（${esc(digits)} 位，每格單獨輸入）</label>
+            <div data-meter-prev-boxes="${esc(typeKey)}" class="nl-digit-grid" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding-top:4px;">
+              ${prevArr.map((ch, i) => `
+                <div class="nl-digit" style="width:48px; height:60px; border:1.5px solid ${esc(wrapBorderColor)}; border-radius:14px; ${hasPrevReadonly ? '' : 'box-shadow:inset 0 -2px 0 rgba(17,24,39,.05);'} position:relative; overflow:hidden;">
+                  <input inputmode="numeric" pattern="[0-9]*" maxlength="1" data-meter-prev="${esc(typeKey)}" data-previdx="${i}" value="${esc(ch)}" aria-label="${esc(mt.short)}上次第${i+1}位" style="width:100%; height:100%; border:0; outline:none; text-align:center; font:900 28px/1 'SF Mono',Consolas,monospace; padding:0; ${digitInputStyle}"${readonlyAttr} />
+                </div>
+              `).join('')}
+              <span class="pill" style="margin-left:4px; background:rgba(17,24,39,.05); border-radius:999px; color:#374151; padding:2px 10px; font-size:11px; font-weight:800;">${esc(digits)}位</span>
+            </div>
+            <input type="hidden" data-meter-prev-hidden="${esc(typeKey)}" value="${esc(prevArr.join(''))}" />
+            <div style="font-size:11px; color:#6b7280; font-weight:700; margin-top:4px;">${submitted ? "※ 本期已完成申報，無法修改。" : (hasLast ? "※ 依上期自動帶入，不得手動修改。" : "※ 首次無上期資料可輸入；輸入後自動跳至下一格，Backspace 空值可回到上一格。")}</div>
           </div>
           <div class="field">
             <label>本次抄表數字（${esc(digits)} 位，每格單獨輸入）</label>
             <div data-meter-cur-boxes="${esc(typeKey)}" class="nl-digit-grid" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding-top:4px;">
               ${Array.from({length: digits}).map((_, i) => `
-                <div class="nl-digit" style="width:48px; height:60px; border:1.5px solid ${esc(color)}55; border-radius:14px; background:linear-gradient(180deg,#fff,#fafafa); box-shadow:inset 0 -2px 0 rgba(17,24,39,.05); position:relative; overflow:hidden;">
-                  <input inputmode="numeric" pattern="[0-9]*" maxlength="1" data-meter-cur="${esc(typeKey)}" data-digidx="${i}" aria-label="${esc(mt.short)}第${i+1}位" style="width:100%; height:100%; background:transparent; border:0; outline:none; text-align:center; font:900 28px/1 'SF Mono',Consolas,monospace; color:${esc(color)}; padding:0;" />
+                <div class="nl-digit" style="width:48px; height:60px; border:1.5px solid ${esc(color)}55; border-radius:14px; ${submitted ? 'background:linear-gradient(180deg,#f3f4f6,#e5e7eb); border-color:rgba(17,24,39,.12);' : 'background:linear-gradient(180deg,#fff,#fafafa); box-shadow:inset 0 -2px 0 rgba(17,24,39,.05);'} position:relative; overflow:hidden;">
+                  <input inputmode="numeric" pattern="[0-9]*" maxlength="1" data-meter-cur="${esc(typeKey)}" data-digidx="${i}" aria-label="${esc(mt.short)}第${i+1}位" style="width:100%; height:100%; background:transparent; border:0; outline:none; text-align:center; font:900 28px/1 'SF Mono',Consolas,monospace; ${submitted ? 'color:#374151;' : 'color:' + color + ';'} padding:0;"${submitted ? ' readonly tabindex="-1"' : ''} />
                 </div>
               `).join('')}
               <span class="pill" style="margin-left:4px; background:rgba(17,24,39,.05); border-radius:999px; color:#374151; padding:2px 10px; font-size:11px; font-weight:800;">${esc(digits)}位</span>
             </div>
             <input type="hidden" data-meter-cur-hidden="${esc(typeKey)}" />
-            <div style="font-size:11px; color:#6b7280; font-weight:700; margin-top:4px;">※ 輸入後自動跳至下一格，Backspace 空值可回到上一格。</div>
+            <div style="font-size:11px; color:#6b7280; font-weight:700; margin-top:4px;">${submitted ? "※ 本期已完成申報，無法修改。" : "※ 輸入後自動跳至下一格，Backspace 空值可回到上一格。"}</div>
           </div>
         </div>
+        ${cardFooterHtml}
       </div>
     `;
+  }
+
+  function syncPrevBoxesFor(typeKey) {
+    const wrap = document.querySelector(`[data-meter-prev-boxes="${CSS.escape(typeKey)}"]`);
+    const hidden = document.querySelector(`[data-meter-prev-hidden="${CSS.escape(typeKey)}"]`);
+    if (!wrap || !hidden) return;
+    const val = Array.from(wrap.querySelectorAll(`input[data-meter-prev="${CSS.escape(typeKey)}"]`)).map(i => (i.value || '').slice(-1)).join('').trim();
+    hidden.value = val || '';
+  }
+
+  function applyPrevValueFromString(typeKey, value, opts) {
+    opts = opts || {};
+    const grid = document.querySelector(`[data-meter-prev-boxes="${CSS.escape(typeKey)}"]`);
+    if (!grid) return;
+    const inputs = Array.from(grid.querySelectorAll(`input[data-meter-prev="${CSS.escape(typeKey)}"]`)).filter(i => i.hasAttribute('data-previdx'));
+    if (!inputs.length) return;
+    const digits = inputs.length;
+    const n = Math.max(0, Math.min(Math.pow(10, digits) - 1, Number.isFinite(Number(value)) ? Math.floor(Number(value)) : 0));
+    const arr = String(n).padStart(digits, '0').split('');
+    inputs.forEach((inp, i) => { inp.value = arr[i] || '0'; });
+    syncPrevBoxesFor(typeKey);
+    if (opts.saveDraft) saveDraftDebounced();
   }
 
   function syncDigitBoxesFor(typeKey) {
@@ -424,6 +527,61 @@
         };
       });
     });
+
+    const prevGrids = document.querySelectorAll("[data-meter-prev-boxes]");
+    prevGrids.forEach((grid) => {
+      const typeKey = String(grid.getAttribute("data-meter-prev-boxes") || "");
+      const inputs = Array.from(grid.querySelectorAll(`input[data-meter-prev="${CSS.escape(typeKey)}"]`)).filter(i => i.hasAttribute('data-previdx'));
+      inputs.forEach((inp, idx, arr) => {
+        inp.oninput = () => {
+          const v = (inp.value || "").replace(/[^0-9]/g, "");
+          const fst = v.charAt(0) || "";
+          const remain = v.slice(1);
+          inp.value = fst;
+          if (remain) {
+            for (let j = 0; j < remain.length; j++) {
+              const next = idx + 1 + j;
+              if (next >= arr.length) break;
+              const n = arr[next];
+              if (n) n.value = remain.charAt(j);
+            }
+            const last = Math.min(arr.length - 1, idx + Math.max(1, remain.length) - 1);
+            arr[last] && arr[last].focus && arr[last].focus();
+            arr[last] && arr[last].setSelectionRange && arr[last].setSelectionRange((arr[last].value || '').length, (arr[last].value || '').length);
+          } else if (fst && idx + 1 < arr.length) {
+            const nxt = arr[idx + 1];
+            nxt && nxt.focus();
+            try { nxt.setSelectionRange((nxt.value || '').length, (nxt.value || '').length); } catch {}
+          }
+          syncPrevBoxesFor(typeKey);
+          saveDraftDebounced();
+        };
+        inp.onkeydown = (e) => {
+          const k = e.key;
+          if (k === 'Backspace' && !(inp.value) && idx > 0) {
+            const prev = arr[idx - 1];
+            if (prev) { prev.value = ''; prev.focus(); e.preventDefault(); }
+            syncPrevBoxesFor(typeKey);
+            saveDraftDebounced();
+          } else if (k === 'ArrowLeft' && idx > 0) {
+            e.preventDefault(); arr[idx-1].focus();
+          } else if (k === 'ArrowRight' && idx < arr.length - 1) {
+            e.preventDefault(); arr[idx+1].focus();
+          }
+        };
+        inp.onpaste = (e) => {
+          e.preventDefault();
+          const txt = (e.clipboardData || window.clipboardData || {}).getData ? (e.clipboardData || window.clipboardData).getData('text') : '';
+          if (!txt) return;
+          const digits = txt.replace(/[^0-9]/g, '').slice(0, Math.max(0, arr.length - idx));
+          for (let j = 0; j < digits.length; j++) { if (arr[idx + j]) arr[idx + j].value = digits.charAt(j); }
+          const lastFocus = Math.min(arr.length - 1, idx + Math.max(1, digits.length || 1) - 1);
+          arr[lastFocus] && arr[lastFocus].focus && arr[lastFocus].focus();
+          syncPrevBoxesFor(typeKey);
+          saveDraftDebounced();
+        };
+      });
+    });
   }
 
   function applyDigitValueFromString(typeKey, value) {
@@ -478,25 +636,27 @@
     window.setTimeout(() => { loadDraftAndApply(); bindDigitBoxEvents(); }, 0);
   }
 
-  function readSubmitForm() {
+  function readSubmitForm(typeKeyOrNull) {
     const period = String($("nlPeriod") && $("nlPeriod").value || ym()).trim() || ym();
     const dateStr = String($("nlReadDate") && $("nlReadDate").value || ymd()).trim() || ymd();
     const readingDate = new Date(`${dateStr}T00:00:00`);
     const out = [];
-    for (const t of Object.keys(METER_TYPES)) {
+    const types = typeKeyOrNull && METER_TYPES[typeKeyOrNull] ? [String(typeKeyOrNull)] : Object.keys(METER_TYPES);
+    for (const t of types) {
       const skip = document.querySelector(`[data-meter-skip="${CSS.escape(t)}"]`);
       if (skip && skip.checked) continue;
+      syncPrevBoxesFor(t);
       syncDigitBoxesFor(t);
       const hidden = document.querySelector(`[data-meter-cur-hidden="${CSS.escape(t)}"]`);
       const curValStr = hidden && hidden.value !== "" ? String(hidden.value) : "";
       const curVal = curValStr === "" ? NaN : numOr(curValStr, NaN);
       if (!Number.isFinite(curVal)) continue;
       const idEl = document.querySelector(`[data-meter-id="${CSS.escape(t)}"]`);
-      const prevEl = document.querySelector(`[data-meter-prev="${CSS.escape(t)}"]`);
+      const prevHidden = document.querySelector(`[data-meter-prev-hidden="${CSS.escape(t)}"]`);
       out.push({
         meterType: t,
         meterId: String(idEl && idEl.value ? idEl.value : defaultMeterId(t)).trim() || defaultMeterId(t),
-        previousValue: numOr(prevEl && prevEl.value, 0),
+        previousValue: numOr(prevHidden && prevHidden.value, 0),
         currentValue: curVal,
         houseNo: String(state.houseNo || "—").trim() || "—",
         period,
@@ -506,6 +666,213 @@
       });
     }
     return out;
+  }
+
+  function setCardSubmitButtonDisabled(typeKey, disabled) {
+    const card = document.querySelector(`[data-meter="${CSS.escape(typeKey)}"]`);
+    if (!card) return;
+    const btn = card.querySelector(`[data-meter-submit="${CSS.escape(typeKey)}"]`);
+    if (!btn) return;
+    btn.disabled = !!disabled;
+    btn.classList.toggle("is-loading", !!disabled);
+    if (disabled) { btn.dataset._orig = btn.textContent || ""; btn.textContent = "申報中…"; }
+    else if (btn.dataset._orig) { btn.textContent = btn.dataset._orig; delete btn.dataset._orig; }
+  }
+
+  function openSubmitConfirm(typeKey) {
+    if (!MR || !MR.createRecord) { toast("抄錶模組尚未載入"); return; }
+    if (!state.uid) { toast("請先登入"); return; }
+    const periodEl = $("nlPeriod");
+    const period = periodEl ? String(periodEl.value || ym()).trim() : ym();
+    if (isPeriodSubmitted(typeKey, period)) { toast(METER_TYPES[typeKey] && METER_TYPES[typeKey].label || typeKey + "本期已申報，每期僅能申報乙次。"); return; }
+    const rows = readSubmitForm(typeKey);
+    if (!rows || !rows.length) { toast("尚未填寫本次抄表數字，無法送出"); return; }
+    const r = rows[0];
+    const mt = METER_TYPES[r.meterType] || METER_TYPES.electric;
+    const u = MR.calcUsage ? MR.calcUsage(r.previousValue, r.currentValue, { meterType: r.meterType }) : Math.max(0, r.currentValue - r.previousValue);
+    const f = MR.calcFee ? MR.calcFee(u, r.meterType) : 0;
+    const ab = MR.detectAbnormal ? MR.detectAbnormal({ ...r, usage: u }, null) || [] : [];
+    const feeText = Number.isFinite(f) ? f.toFixed(2) : "0.00";
+    const rd = r.readingDate ? (r.readingDate instanceof Date ? r.readingDate : new Date(r.readingDate)) : null;
+    const dateText = rd && Number.isFinite(rd.getTime()) ? ymd(rd) : ymd();
+    const modal = $("nlConfirmSubmitModal");
+    const body = $("nlConfirmSubmitBody");
+    const okBtn = $("btnConfirmSubmitOk");
+    const statusEl = $("nlConfirmSubmitStatus");
+    statusEl.hidden = true; statusEl.textContent = "";
+    okBtn.disabled = false;
+    okBtn.classList.remove("is-loading");
+    okBtn.textContent = "確認送出";
+    body.innerHTML = `
+      <div style="display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:14px; background:linear-gradient(180deg,#fff,#fafafa); border:1px solid rgba(17,24,39,.08);">
+        <div style="width:10px;height:10px;border-radius:999px;background:${esc(mt.accent)};"></div>
+        <div style="font-weight:900;font-size:16px;">${esc(mt.label)} 抄表申報</div>
+        <div style="margin-left:auto;font-size:12px;color:#6b7280;font-weight:800;">申報週期 ${esc(r.period || period)}</div>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px;">
+        <div class="field" style="margin:0;">
+          <label>儀表編號</label>
+          <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(r.meterId)}</div>
+        </div>
+        <div class="field" style="margin:0;">
+          <label>對應門牌號</label>
+          <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(r.houseNo)}</div>
+        </div>
+        <div class="field" style="margin:0;">
+          <label>抄見日</label>
+          <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(dateText)}</div>
+        </div>
+        <div class="field" style="margin:0;">
+          <label>申報來源</label>
+          <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">住戶自行申報</div>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px;">
+        <div style="padding:12px 14px; border-radius:14px; background:rgba(243,244,246); border:1px solid rgba(17,24,39,.06);">
+          <div style="font-size:11px; color:#6b7280; font-weight:800;">上次抄表數值</div>
+          <div style="margin-top:6px; font:900 24px/1 'SF Mono',Consolas,monospace; color:#374151;">${esc(String(r.previousValue))}</div>
+        </div>
+        <div style="padding:12px 14px; border-radius:14px; background:rgba(31,41,55); color:#fff; border:1px solid rgba(31,41,55,.3);">
+          <div style="font-size:11px; color:#d1d5db; font-weight:800;">本次抄表數值</div>
+          <div style="margin-top:6px; font:900 24px/1 'SF Mono',Consolas,monospace;">${esc(String(r.currentValue))}</div>
+        </div>
+        <div style="padding:12px 14px; border-radius:14px; background:rgba(194,24,91,0.10); border:1.5px solid rgba(194,24,91,0.22);">
+          <div style="font-size:11px; color:#9f1c1c; font-weight:800;">本期用量（度)</div>
+          <div style="margin-top:6px; font:900 24px/1 'SF Mono',Consolas,monospace; color:#9f1c1c;">${esc(String(u))}</div>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; border-radius:14px; background:#fff; border:1.5px solid rgba(46,125,50,0.25);">
+        <div style="font-size:13px; color:#374151; font-weight:900;">計算費用</div>
+        <div style="font:900 28px/1 'SF Pro Display',-apple-system,BlinkMacSystemFont,sans-serif; color:#9f1c1c;">NT$ ${esc(feeText)}</div>
+      </div>
+      ${ab && ab.length ? `<div style="padding:10px 12px; border-radius:12px; background:rgba(211,47,47,0.08); border:1.5px solid rgba(211,47,47,0.22); color:#9f1c1c; font-size:12px; font-weight:900;">⚠ 異常提醒：${esc(ab.join("、"))}</div>` : ""}
+    `;
+    modal.hidden = false;
+    modal._pendingType = String(typeKey);
+    modal._pendingRow = r;
+  }
+
+  async function submitOneConfirmed() {
+    const modal = $("nlConfirmSubmitModal");
+    if (!modal || modal.hidden) return;
+    const typeKey = String(modal._pendingType || "");
+    const r = modal._pendingRow || null;
+    const okBtn = $("btnConfirmSubmitOk");
+    const statusEl = $("nlConfirmSubmitStatus");
+    if (!typeKey || !r || !METER_TYPES[typeKey] || !MR || !MR.createRecord) { toast("資料遺失，請重新操作"); return; }
+    const period = String(r.period || ym()).trim();
+    if (isPeriodSubmitted(typeKey, period)) {
+      statusBox(statusEl, "本期已申報過，每期僅能申報乙次。", true);
+      return;
+    }
+    okBtn.disabled = true;
+    okBtn.classList.add("is-loading");
+    okBtn.textContent = "申報中…";
+    statusBox(statusEl, "申報中，請稍候...", false);
+    setCardSubmitButtonDisabled(typeKey, true);
+    const db = firebase.firestore();
+    const operatorInfo = {
+      uid: state.uid,
+      name: state.displayName,
+      role: 'resident',
+      houseNo: state.houseNo
+    };
+    let submittedData = null;
+    let submitOk = false;
+    let errText = "";
+    try {
+      try {
+        const dupSnap = await db.collection("meterReadings")
+          .where("communityId", "==", String(state.communityId || ""))
+          .where("houseNo", "==", String(r.houseNo || ""))
+          .where("meterType", "==", String(r.meterType || ""))
+          .where("period", "==", String(r.period || ""))
+          .limit(2)
+          .get();
+        if (dupSnap && !dupSnap.empty) {
+          const validExists = dupSnap.docs.some(ds => {
+            const d = (ds && ds.exists && ds.data()) || null;
+            if (!d) return false;
+            const isVoid = String(d.voidStatus || "") === "voided";
+            if (isVoid) return false;
+            return true;
+          });
+          if (validExists) {
+            state.periodSubmittedByType = computePeriodSubmittedMap(state.records || []);
+            saveRecentRecords();
+            statusBox(statusEl, "本期已申報過，每期僅能申報乙次。", true);
+            okBtn.disabled = false; okBtn.classList.remove("is-loading"); okBtn.textContent = "確認送出";
+            setCardSubmitButtonDisabled(typeKey, false);
+            return;
+          }
+        }
+      } catch (dupErr) {
+        try { console.warn("[number-list] duplicate-check soft failed, continuing submit", dupErr); } catch {}
+      }
+      const patch = {
+        meterId: r.meterId,
+        houseNo: r.houseNo,
+        meterType: r.meterType,
+        previousValue: r.previousValue,
+        currentValue: r.currentValue,
+        readingDate: r.readingDate,
+        period: r.period,
+        operatorId: r.operatorId,
+        residentUid: state.uid,
+        residentName: state.displayName,
+        source: r.source || "resident_app",
+      };
+      try { console.log('[number-list] 單項提交抄表:', r.meterType, 'meterId=', r.meterId, 'prev=', r.previousValue, 'cur=', r.currentValue, 'period=', r.period); } catch {}
+      const res = await MR.createRecord(db, state.communityId, patch, operatorInfo);
+      if (res && res.ok && res.data) {
+        submittedData = res.data;
+        submitOk = true;
+        try { console.log('[number-list] 寫入成功 id=', res.id, 'status=', res.data && res.data.validationStatus); } catch {}
+      } else {
+        errText = (res && res.errors && res.errors.length) ? res.errors.join("；") : "儲存失敗";
+        try { console.error('[number-list] 寫入失敗:', r.meterType, errText, res); } catch {}
+      }
+    } catch (e) {
+      errText = (e && e.message) ? e.message : "儲存失敗";
+      try { console.error('[number-list] 異常錯誤:', r.meterType, e); } catch {}
+    }
+    setLastEditedAt(Date.now());
+    if (submitOk && submittedData) {
+      try {
+        state.records = Array.isArray(state.records) ? state.records : [];
+        const existIds = new Set(state.records.map(x => String(x.id || "")));
+        const nid = String(submittedData.id || "");
+        if (nid && !existIds.has(nid)) state.records.unshift(submittedData);
+        const last = state.lastByType || {};
+        const nr = submittedData;
+        const rd = nr.readingDate ? new Date(nr.readingDate) : null;
+        const prevRd = last[typeKey] && last[typeKey].readingDate ? new Date(last[typeKey].readingDate) : null;
+        if (!prevRd || (rd && Number.isFinite(rd.getTime()) && rd.getTime() >= prevRd.getTime())) last[typeKey] = nr;
+        state.lastByType = last;
+        state.periodSubmittedByType = computePeriodSubmittedMap(state.records);
+        saveRecentRecords();
+      } catch {}
+      // 若草稿中其它儀表仍要保留，只清除當前儀表的 cur 避免再次誤帶入
+      try {
+        const d = lsGet(draftKey(state.uid, state.communityId, state.houseNo), null);
+        if (d && d.values && d.values[typeKey]) { d.values[typeKey].cur = ""; delete d.values[typeKey].prev; lsSet(draftKey(state.uid, state.communityId, state.houseNo), d); }
+      } catch {}
+      statusBox(statusEl, `申報成功：已送交後台管理員審核。每期僅能申報乙次。`, false);
+      toast(`已送出 ${METER_TYPES[typeKey].label || typeKey} 抄表申報`);
+      window.setTimeout(() => {
+        modal.hidden = true;
+        renderMeterArea();
+        renderHistoryList();
+      }, 450);
+    } else {
+      okBtn.disabled = false;
+      okBtn.classList.remove("is-loading");
+      okBtn.textContent = "確認送出";
+      setCardSubmitButtonDisabled(typeKey, false);
+      saveDraftDebounced();
+      statusBox(statusEl, `申報失敗：${errText || "請檢查網路或聯絡管理員"}`, true);
+      toast(`申報失敗，請檢查輸入或聯絡管理員`);
+    }
   }
 
   function setPreviewBox(t, row) {
@@ -716,14 +1083,20 @@
     el.innerHTML = rows.map((r) => renderRecordCard(r)).join("");
     el.querySelectorAll("[data-record-id]").forEach((card) => {
       const id = String(card.getAttribute("data-record-id") || "");
-      card.style.cursor = "pointer";
-      card.addEventListener("click", () => openDetail(id));
+      card.addEventListener("click", (e) => {
+        if (e.target && e.target.closest && e.target.closest("[data-record-action]")) return;
+        openDetail(id);
+      });
+      const delBtn = card.querySelector("[data-record-action='delete']");
+      if (delBtn) delBtn.addEventListener("click", (e) => { e.stopPropagation(); openDeleteConfirm(id); });
     });
   }
 
   function renderRecordCard(r) {
     const mt = METER_TYPES[r.meterType] || METER_TYPES.electric;
+    const isVoid = String(r.voidStatus || "") === "voided";
     const statusBadge = (() => {
+      if (isVoid) return `<span class="tag" style="display:inline-flex; align-items:center; height:24px; padding:0 10px; border-radius:999px; font-size:12px; background:rgba(107,114,128,0.12); color:#4b5563; border:1px solid rgba(107,114,128,0.25);">已作廢</span>`;
       const s = String(r.validationStatus || "pending");
       if (s === "valid" || s === "approved") return `<span class="tag green" style="display:inline-flex; align-items:center; height:24px; padding:0 10px; border-radius:999px; font-size:12px; background:rgba(46,125,50,0.12); color:#15803d; border:1px solid rgba(46,125,50,0.25);">已審核</span>`;
       if (s === "abnormal") return `<span class="tag red" style="display:inline-flex; align-items:center; height:24px; padding:0 10px; border-radius:999px; font-size:12px; background:rgba(211,47,47,0.10); color:#9f1c1c; border:1px solid rgba(211,47,47,0.24);">異常</span>`;
@@ -735,8 +1108,12 @@
     const feeText = Number.isFinite(fee) ? fee.toFixed(2) : "0.00";
     const dt = r.readingDate ? (r.readingDate instanceof Date ? r.readingDate : new Date(r.readingDate)) : null;
     const dateText = dt && Number.isFinite(dt.getTime()) ? ymd(dt) : (r.period || ym());
+    const canDelete = !isVoid;
+    const delBtnHtml = canDelete
+      ? `<button class="btn btn-danger" type="button" data-record-action="delete" style="font-size:12px; padding:4px 10px; border-radius:999px; min-width:64px; font-weight:900;">刪除</button>`
+      : `<span style="font-size:11px; color:#9ca3af; font-weight:800;">刪除作廢完成</span>`;
     return `
-      <div class="parcel-item" data-record-id="${esc(r.id)}">
+      <div class="parcel-item" data-record-id="${esc(r.id)}"${isVoid ? ' style="opacity:0.72; filter:grayscale(.25);"' : ''}>
         <div style="display:grid; gap:6px; min-width:0;">
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
             <div style="display:inline-flex; align-items:center; gap:6px; font-weight:900; min-width:0;">
@@ -751,7 +1128,10 @@
               <div style="font-size:12px; color:#6b7280;">上次 ${esc(String(r.previousValue||0))} → 本次 <b style="color:#111827;">${esc(String(r.currentValue||0))}</b></div>
               <div style="font-size:12px; color:#6b7280;">用量 ${esc(String(numOr(r.usage, 0)))} 度・抄見日 ${esc(dateText)}</div>
             </div>
-            <div style="font-size:18px; font-weight:900; color:#9f1c1c;">NT$ ${esc(feeText)}</div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="font-size:18px; font-weight:900; color:#9f1c1c;">NT$ ${esc(feeText)}</div>
+              ${delBtnHtml}
+            </div>
           </div>
         </div>
         <div style="font-size:12px; color:#6b7280; font-weight:800; text-align:right;">
@@ -786,6 +1166,148 @@
     }
     const m = $("nlDetailModal");
     if (m) m.hidden = false;
+  }
+
+  function openDeleteConfirm(recordId) {
+    const modal = $("nlDeleteConfirmModal");
+    if (!modal) return;
+    const r = state.records.find((x) => String(x.id || "") === String(recordId || ""));
+    if (!r) { toast("找不到此筆抄錶紀錄"); return; }
+    if (String(r.voidStatus || "") === "voided") { toast("此筆抄錶紀錄已作廢"); return; }
+    if (!state.uid) { toast("請先登入"); return; }
+    if (String(r.residentUid || r.operatorId || "") !== String(state.uid || "")) {
+      toast("您無權刪除此筆抄錶紀錄"); return;
+    }
+    const mt = METER_TYPES[r.meterType] || METER_TYPES.electric;
+    const u = MR && MR.calcUsage ? MR.calcUsage(numOr(r.previousValue,0), numOr(r.currentValue,0), { meterType: r.meterType }) : numOr(r.usage, 0);
+    const f = MR && MR.calcFee ? MR.calcFee(u, r.meterType) : 0;
+    const feeText = Number.isFinite(f) ? f.toFixed(2) : "0.00";
+    const rd = r.readingDate ? (r.readingDate instanceof Date ? r.readingDate : new Date(r.readingDate)) : null;
+    const dateText = rd && Number.isFinite(rd.getTime()) ? ymd(rd) : (String(r.period || ym()));
+    const body = $("nlDeleteConfirmBody");
+    const statusEl = $("nlDeleteConfirmStatus");
+    const okBtn = $("btnConfirmDeleteOk");
+    statusEl.hidden = true; statusEl.textContent = "";
+    okBtn.disabled = false;
+    okBtn.classList.remove("is-loading");
+    okBtn.textContent = "確認刪除";
+    body.innerHTML = `
+      <div style="display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:14px; background:linear-gradient(180deg,#fff,#fafafa); border:1px solid rgba(17,24,39,.08);">
+        <div style="width:10px;height:10px;border-radius:999px;background:${esc(mt.accent)};"></div>
+        <div style="font-weight:900;font-size:16px;">${esc(mt.label)} 抄錶紀錄（${esc(String(r.period || ""))}）</div>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px;">
+        <div class="field" style="margin:0;">
+          <label>儀表編號</label>
+          <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(String(r.meterId || ""))}</div>
+        </div>
+        <div class="field" style="margin:0;">
+          <label>對應門牌號</label>
+          <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(String(r.houseNo || ""))}</div>
+        </div>
+        <div class="field" style="margin:0;">
+          <label>抄見日</label>
+          <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(dateText)}</div>
+        </div>
+        <div class="field" style="margin:0;">
+          <label>建立時間</label>
+          <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(formatDateTime(r.createdAt || r.readingDate))}</div>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px;">
+        <div style="padding:12px 14px; border-radius:14px; background:rgba(243,244,246); border:1px solid rgba(17,24,39,.06);">
+          <div style="font-size:11px; color:#6b7280; font-weight:800;">上次抄表數值</div>
+          <div style="margin-top:6px; font:900 24px/1 'SF Mono',Consolas,monospace; color:#374151;">${esc(String(r.previousValue || 0))}</div>
+        </div>
+        <div style="padding:12px 14px; border-radius:14px; background:rgba(31,41,55); color:#fff; border:1px solid rgba(31,41,55,.3);">
+          <div style="font-size:11px; color:#d1d5db; font-weight:800;">本次抄表數值</div>
+          <div style="margin-top:6px; font:900 24px/1 'SF Mono',Consolas,monospace;">${esc(String(r.currentValue || 0))}</div>
+        </div>
+        <div style="padding:12px 14px; border-radius:14px; background:rgba(194,24,91,0.10); border:1.5px solid rgba(194,24,91,0.22);">
+          <div style="font-size:11px; color:#9f1c1c; font-weight:800;">本期用量（度)</div>
+          <div style="margin-top:6px; font:900 24px/1 'SF Mono',Consolas,monospace; color:#9f1c1c;">${esc(String(u))}</div>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; border-radius:14px; background:#fff; border:1.5px solid rgba(46,125,50,0.25);">
+        <div style="font-size:13px; color:#374151; font-weight:900;">計算費用</div>
+        <div style="font:900 28px/1 'SF Pro Display',-apple-system,BlinkMacSystemFont,sans-serif; color:#9f1c1c;">NT$ ${esc(feeText)}</div>
+      </div>
+    `;
+    modal._pendingRecordId = String(recordId || "");
+    modal.hidden = false;
+  }
+
+  async function deleteOneConfirmed() {
+    const modal = $("nlDeleteConfirmModal");
+    if (!modal || modal.hidden) return;
+    const recordId = String(modal._pendingRecordId || "");
+    const okBtn = $("btnConfirmDeleteOk");
+    const statusEl = $("nlDeleteConfirmStatus");
+    if (!recordId || !state.uid || !window.firebase || !firebase.firestore) return;
+    const ridx = (Array.isArray(state.records) ? state.records : []).findIndex(x => String(x.id || "") === recordId);
+    if (ridx < 0) { toast("找不到此筆抄錶紀錄"); return; }
+    const r = state.records[ridx];
+    if (String(r.voidStatus || "") === "voided") { toast("此筆抄錶紀錄已作廢"); return; }
+    if (String(r.residentUid || r.operatorId || "") !== String(state.uid || "")) { toast("您無權刪除此筆抄錶紀錄"); return; }
+    okBtn.disabled = true;
+    okBtn.classList.add("is-loading");
+    okBtn.textContent = "刪除中…";
+    statusBox(statusEl, "刪除中，請稍候...", false);
+    const db = firebase.firestore();
+    let opOk = false;
+    let errText = "";
+    try {
+      const recRef = db.collection("communities").doc(String(state.communityId || "")).collection("meterReadings").doc(recordId);
+      const patch = {
+        voidStatus: "voided",
+        voidReason: "resident_self_delete",
+        voidAt: firebase.firestore.FieldValue.serverTimestamp(),
+        voidByUid: String(state.uid || ""),
+        voidByName: String(state.displayName || ""),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+      await recRef.set(patch, { merge: true });
+      opOk = true;
+    } catch (e) {
+      errText = (e && e.message) ? e.message : "刪除失敗";
+      try { console.error("[number-list] delete failed", recordId, e); } catch {}
+    }
+    if (opOk) {
+      try {
+        const newRecords = (Array.isArray(state.records) ? state.records.slice() : []);
+        if (newRecords[ridx]) {
+          newRecords[ridx] = { ...newRecords[ridx], voidStatus: "voided", voidReason: "resident_self_delete", updatedAt: new Date(), voidAt: new Date(), voidByUid: String(state.uid || ""), voidByName: String(state.displayName || "") };
+        }
+        state.records = newRecords;
+        const last = {};
+        for (const rec of state.records) {
+          const isVoid = String(rec.voidStatus || "") === "voided";
+          if (isVoid) continue;
+          const t = String(rec.meterType || "");
+          if (!t || !METER_TYPES[t]) continue;
+          const rd = rec.readingDate ? new Date(rec.readingDate) : null;
+          const prevRd = last[t] && last[t].readingDate ? new Date(last[t].readingDate) : null;
+          if (!prevRd || (rd && Number.isFinite(rd.getTime()) && rd.getTime() >= prevRd.getTime())) last[t] = rec;
+        }
+        state.lastByType = last;
+        state.periodSubmittedByType = computePeriodSubmittedMap(state.records);
+        saveRecentRecords();
+      } catch {}
+      statusBox(statusEl, "已刪除 / 作廢此筆抄錶紀錄。若本期需重新申報，可回到申報頁籤輸入即可。", false);
+      toast("已刪除抄錶紀錄");
+      window.setTimeout(() => {
+        modal.hidden = true;
+        renderHistoryList();
+        renderMeterArea();
+        renderFeeArea();
+      }, 450);
+    } else {
+      okBtn.disabled = false;
+      okBtn.classList.remove("is-loading");
+      okBtn.textContent = "確認刪除";
+      statusBox(statusEl, `刪除失敗：${errText || "請檢查網路或聯絡管理員"}`, true);
+      toast("刪除失敗，請稍後再試");
+    }
   }
 
   let disputePhotos = [];
@@ -918,7 +1440,7 @@
     if (!el) return;
     if (!state.uid) { el.innerHTML = `<div class="nl-empty">請先登入</div>`; return; }
     const period = String($("nlFeePeriod") && $("nlFeePeriod").value || ym()).trim() || ym();
-    const rows = state.records.filter((r) => String(r.period || "") === period);
+    const rows = state.records.filter((r) => String(r.period || "") === period && String(r.voidStatus || "") !== "voided");
     const byType = {};
     Object.keys(METER_TYPES).forEach((k) => (byType[k] = []));
     rows.forEach((r) => { if (byType[r.meterType]) byType[r.meterType].push(r); });
@@ -974,6 +1496,10 @@
     if (bDetail && !bDetail._bound) { bDetail._bound = true; bDetail.addEventListener("click", openDispute); }
     const bDis = $("btnDisputeSubmit");
     if (bDis && !bDis._bound) { bDis._bound = true; bDis.addEventListener("click", submitDispute); }
+    const bConf = $("btnConfirmSubmitOk");
+    if (bConf && !bConf._bound) { bConf._bound = true; bConf.addEventListener("click", submitOneConfirmed); }
+    const bDel = $("btnConfirmDeleteOk");
+    if (bDel && !bDel._bound) { bDel._bound = true; bDel.addEventListener("click", deleteOneConfirmed); }
   }
 
   function bindMainForm() {
@@ -982,8 +1508,16 @@
     if (date && !date.value) date.value = ymd();
     const fp = $("nlFeePeriod");
     if (fp && !fp.value) fp.value = ym();
-    const s = $("btnSubmitReadings");
-    if (s && !s._bound) { s._bound = true; s.addEventListener("click", submitAll); }
+    if (!document.body._meterSubmitBound) {
+      document.body._meterSubmitBound = true;
+      document.body.addEventListener("click", (e) => {
+        const btn = e.target && e.target.closest && e.target.closest("[data-meter-submit]");
+        if (!btn) return;
+        const t = String(btn.getAttribute("data-meter-submit") || "");
+        if (!t || !METER_TYPES[t]) return;
+        openSubmitConfirm(t);
+      });
+    }
     document.addEventListener("input", (e) => {
       const isMeterInput = e.target && e.target.matches && (e.target.matches("[data-meter-cur], [data-meter-id], [data-meter-skip]"));
       if (isMeterInput || e.target === period || e.target === date) {
@@ -993,11 +1527,12 @@
     document.addEventListener("change", (e) => {
       const chk = e.target && e.target.closest && e.target.closest("[data-meter-skip]");
       if (chk) saveDraftDebounced();
-      if (e.target === period || e.target === date) saveDraftDebounced();
+      if (e.target === period || e.target === date) { saveDraftDebounced(); renderMeterArea(); }
     });
   }
 
   async function boot() {
+    updateHeaderTitle();
     if (!window.firebase || !firebase.auth || !firebase.firestore) {
       const area = $("nlMeterArea");
       if (area) area.innerHTML = `<div class="nl-empty">Firebase 尚未載入，請稍後再試</div>`;
