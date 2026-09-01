@@ -127,7 +127,7 @@
     <div class="parcel-layout">
       <header class="parcel-hd" id="nlHeader">
         <div class="parcel-hd-content">
-          <div class="parcel-title" id="nlTitle">抄錶紀錄申報</div>
+          <div class="parcel-title" id="nlTitle">戶號 姓名</div>
         </div>
       </header>
 
@@ -159,9 +159,6 @@
               <div class="nl-empty">載入中，請稍候...</div>
             </div>
 
-            <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
-              <button class="btn btn-primary btn-submit" type="button" id="btnSubmitReadings">送出申報</button>
-            </div>
             <div class="status" id="nlSubmitStatus" hidden></div>
           </div>
         </div>
@@ -243,12 +240,56 @@
       </div>
     </div>
 
+    <div class="modal" id="nlConfirmSubmitModal" hidden>
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="nlConfirmSubmitTitle" style="width:80vw; max-width:720px;">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="nlConfirmSubmitTitle">確認送出申報</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div id="nlConfirmSubmitBody" style="display:grid; gap:12px;"></div>
+          <div id="nlConfirmSubmitNote" style="margin-top:14px; padding:12px 14px; border-radius:14px; background:rgba(194,24,91,0.08); border:1.5px solid rgba(194,24,91,0.22); color:#9f1c1c; font-size:13px; font-weight:900; line-height:1.6;">
+            ※ 按下「確認送出」後，本期資料即送交後台管理員進行審核，<b>無法再自行修改或刪除</b>。<br/>
+            ※ 若事後發現數值有誤或需要調整，請<b>洽管理中心協助處理</b>。
+          </div>
+          <div class="status" id="nlConfirmSubmitStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+          <button class="btn btn-primary btn-submit" type="button" id="btnConfirmSubmitOk">確認送出</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="nlDeleteConfirmModal" hidden>
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="nlDeleteConfirmTitle" style="width:80vw; max-width:680px;">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="nlDeleteConfirmTitle">確認刪除 / 作廢抄錶紀錄</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div id="nlDeleteConfirmBody" style="display:grid; gap:12px;"></div>
+          <div id="nlDeleteConfirmNote" style="margin-top:14px; padding:12px 14px; border-radius:14px; background:rgba(211,47,47,0.08); border:1.5px solid rgba(211,47,47,0.22); color:#9f1c1c; font-size:13px; font-weight:900; line-height:1.6;">
+            ※ 按下「確認刪除」後，此筆抄錶申報將<b>作廢並移出本期用量 / 費用統計</b>，<b>無法恢復</b>。<br/>
+            ※ 若本期刪除後需要重新申報，可回到「申報」頁籤再次輸入即可。
+          </div>
+          <div class="status" id="nlDeleteConfirmStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+          <button class="btn btn-danger btn-submit" type="button" id="btnConfirmDeleteOk">確認刪除</button>
+        </div>
+      </div>
+    </div>
+
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="js/firebase-config.js"></script>
     <script src="js/meter-reading.js?v=17"></script>
-    <script src="js/number-list.js?v=17"></script>
+    <script src="js/number-list.js?v=22"></script>
     <script src="js/ads-footer.js?v=16"></script>
     <script src="js/pwa.js?v=6"></script>
   </body>
