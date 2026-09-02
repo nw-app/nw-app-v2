@@ -152,6 +152,7 @@
             <button class="btn btn-primary" type="button" id="btnAddResident">新增帳號</button>
           </div>
           <div class="card-bd">
+            <div id="residentFilters" style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:10px;border-bottom:1px dashed rgba(17,24,39,.08);"></div>
             <div class="list" id="residentList"></div>
 
             <div class="modal" id="residentModal" hidden>
@@ -228,6 +229,13 @@
                         <option value="true" selected>啟用</option>
                         <option value="false">停用</option>
                       </select>
+                    </div>
+                    <div class="field" id="field_r_community_permissions">
+                      <label>社區後台個別權限（分頁 / 子分頁）</label>
+                      <div id="communityPermissionsGrid" style="max-height:min(58vh,620px);overflow-y:auto;border:1px solid rgba(17,24,39,0.1);border-radius:14px;padding:12px 12px 8px;background:#f9fafb;"></div>
+                      <div style="font-size:12px;color:#6b7280;margin-top:6px;line-height:1.65;">
+                        勾選「查看」顯示該分頁/子分頁；勾選「編輯」可於該頁面建立/修改/刪除資料。儲存後立即生效。
+                      </div>
                     </div>
                     <div class="status" id="residentModalStatus" hidden></div>
                   </div>
@@ -470,8 +478,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <script src="js/firebase-config.js"></script>
-    <script src="js/system.js?v=22"></script>
-    <script src="js/pwa.js?v=8"></script>
+    <script src="js/system.js?v=28"></script>
+    <script src="js/pwa.js?v=11"></script>
 
     <div class="modal" id="profileModal" hidden>
       <div class="modal-backdrop" data-modal-close="1"></div>

@@ -898,6 +898,11 @@
     if (role === "admin") return true;
     const profileRole = normalizeSessionOrDocRole(state.currentUserProfile && state.currentUserProfile.role);
     if (profileRole === "admin") return true;
+    if (profileRole === "community") {
+      const ap = Array.isArray(state.currentUserProfile && state.currentUserProfile.accessiblePages) ? state.currentUserProfile.accessiblePages : null;
+      if (!ap) return true;
+      return ap.map((x) => String(x || "").trim()).indexOf("resident") !== -1;
+    }
     if (role !== "resident") return false;
     const category = String(
       (state.currentUserProfile && (state.currentUserProfile.category || state.currentUserProfile.residentCategory)) || ""

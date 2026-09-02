@@ -84,7 +84,368 @@
       currentPage: "accounts",
       communityAreaFilter: "住戶",
       accountsRoleView: "resident",
+      categoryFilter: "__all__",
     };
+
+  const COMMUNITY_ADMIN_PERMISSION_CATALOG = [
+    { id: "community-dashboard", label: "總覽", desc: "社區後台首頁總覽卡片", tabs: [] },
+    { id: "parcel", label: "包裹郵件", desc: "登記到貨、通知住戶、領取簽收", tabs: [
+      { id: "pending", label: "待領取" }, { id: "received", label: "已領取" },
+    ] },
+    { id: "visitor", label: "訪客登記", desc: "到訪資訊、車牌、進出時間管理", tabs: [
+      { id: "pending", label: "待審訪客" }, { id: "approved", label: "核准訪客" },
+      { id: "inside", label: "入內訪客" }, { id: "history", label: "歷史訪客" },
+    ] },
+    { id: "residents", label: "住戶造冊", desc: "住戶/承租/車位/聯絡方式彙整", tabs: [
+      { id: "pending", label: "待審帳號" }, { id: "list", label: "住戶造冊" },
+      { id: "points", label: "住戶點數" }, { id: "chatphone", label: "對講機" },
+    ] },
+    { id: "facility", label: "設施預約", desc: "時段控管、名額與審核流程", tabs: [
+      { id: "all", label: "全部預約" }, { id: "recent", label: "近期預約" },
+      { id: "checkedIn", label: "已報到" }, { id: "expired", label: "已逾期" },
+    ] },
+    { id: "bulletin", label: "公告系統", desc: "分類公告、置頂、閱讀回覆", tabs: [
+      { id: "community", label: "社區園地" }, { id: "finance", label: "財務報表" },
+      { id: "meeting", label: "會議紀錄" }, { id: "repair", label: "修繕報告" },
+    ] },
+    { id: "parking", label: "綠色停車", desc: "電動車/節能車位管理與登記", tabs: [
+      { id: "fees", label: "收費管理" }, { id: "bookings", label: "已預約項目" },
+      { id: "history", label: "歷史預約" }, { id: "listings", label: "車位管理" },
+    ] },
+    { id: "clean", label: "清潔通報", desc: "環境髒亂、垃圾清理、消毒時程通報", tabs: [] },
+    { id: "activity", label: "社區活動", desc: "活動行事曆、報名、照片與成果分享", tabs: [
+      { id: "video", label: "影片" }, { id: "photo", label: "相片" },
+    ] },
+    { id: "live-meeting", label: "區大直播", desc: "直播室預約、時段管理與會議記錄", tabs: [
+      { id: "live", label: "直播" }, { id: "history", label: "歷史影片" },
+    ] },
+    { id: "digital-signage", label: "電子看版", desc: "社區公告、活動訊息與即時資訊顯示", tabs: [] },
+    { id: "company-support", label: "公司支援", desc: "回報需求、聯絡紀錄與處理進度", tabs: [] },
+    { id: "meter-reading", label: "抄表紀錄", desc: "水電瓦斯抄表登記、批量匯入、審核核異與統計分析", tabs: [
+      { id: "pending", label: "待處理" }, { id: "create", label: "手動登記" },
+      { id: "import", label: "匯入/匯出" }, { id: "stats", label: "統計分析" },
+    ] },
+    { id: "community-staff", label: "管理帳號", desc: "管理社區後台登入帳號（總幹事／秘書／保全）", tabs: [] },
+    { id: "suite", label: "套房專區", desc: "客製化電費、水費、維護費、其他費用公式計算", tabs: [] },
+    { id: "finance", label: "收支報表", desc: "收入/支出彙總、分類與月份查詢", tabs: [] },
+    { id: "checkin-vote", label: "報到投票", desc: "活動報到、投票與統計結果", tabs: [] },
+    { id: "assignments", label: "交辦事項", desc: "派工、追蹤進度、回報與結案", tabs: [] },
+    { id: "duty", label: "勤務管理", desc: "排班、值勤紀錄與交接", tabs: [] },
+    { id: "care", label: "關懷救護", desc: "緊急聯絡、救護資訊與關懷通報", tabs: [
+      { id: "sos", label: "住戶SOS" }, { id: "72h", label: "72小時" }, { id: "reminder", label: "提醒" },
+    ] },
+    { id: "life", label: "生活服務", desc: "管家/修繕/代收代送與便民服務", tabs: [] },
+  ];
+
+  function getCommunityEnabledModules(communityId) {
+    const cid = String(communityId || "").trim() || "default";
+    const alwaysEnabledIds = new Set(
+      COMMUNITY_ADMIN_PERMISSION_CATALOG
+        .map((page) => String(page.id || ""))
+        .filter((pid) => !catalogCommunityButtons.some((b) => String(b.id || "") === pid))
+    );
+    alwaysEnabledIds.add("community-dashboard");
+    let cfg = null;
+    try {
+      if (state.configByCommunityId && typeof state.configByCommunityId.get === "function") {
+        cfg = state.configByCommunityId.get(cid);
+      }
+    } catch {}
+    if (!cfg || typeof cfg !== "object") {
+      try {
+        if (typeof loadConfig === "function") {
+          const lc = loadConfig(cid);
+          cfg = lc && typeof lc === "object" ? lc : null;
+        }
+      } catch {}
+    }
+    const communityButtons = (cfg && cfg.communityButtons && typeof cfg.communityButtons === "object")
+      ? cfg.communityButtons
+      : Object.fromEntries(catalogCommunityButtons.map((x) => [String(x.id || ""), { enabled: true, url: String(x.defaultUrl || "") }]));
+    const enabled = new Set(Array.from(alwaysEnabledIds));
+    catalogCommunityButtons.forEach((button) => {
+      const bid = String(button.id || "");
+      const entry = communityButtons[bid];
+      const isOn = !entry || entry.enabled !== false;
+      if (isOn) enabled.add(bid);
+    });
+    if (!state.configByCommunityId.has(cid)) {
+      try {
+        if (typeof configDocRef === "function") {
+          const ref = configDocRef(cid);
+          if (ref && typeof ref.get === "function") {
+            ref.get().then((doc) => {
+              if (doc && doc.exists) {
+                state.configByCommunityId.set(cid, doc.data() || {});
+              } else {
+                state.configByCommunityId.set(cid, {});
+              }
+            }).catch(() => {
+              state.configByCommunityId.set(cid, {});
+            });
+          }
+        }
+      } catch {}
+    }
+    return enabled;
+  }
+
+  function defaultCommunityPermissionsFor(category, enabledSet) {
+    const cat = String(category || "").trim();
+    const perms = {
+      pages: {},
+    };
+    const isAdmin = cat === "管理員";
+    const validSet = (enabledSet instanceof Set) ? enabledSet : null;
+    COMMUNITY_ADMIN_PERMISSION_CATALOG.forEach((page) => {
+      const pageOn = !validSet || validSet.has(String(page.id || ""));
+      perms.pages[page.id] = {
+        view: pageOn,
+        tabs: {},
+      };
+      page.tabs.forEach((tab) => {
+        perms.pages[page.id].tabs[tab.id] = { view: pageOn, edit: isAdmin && pageOn };
+      });
+      perms.pages[page.id].edit = isAdmin && pageOn;
+    });
+    if (!isAdmin) {
+      const guardPages = ["community-staff", "suite", "finance", "duty"];
+      const fullEditPages = ["parcel", "visitor", "residents", "clean"];
+      Object.keys(perms.pages).forEach((pid) => {
+        const p = perms.pages[pid];
+        const pageOn = !validSet || validSet.has(pid);
+        if (!pageOn) {
+          p.view = false;
+          p.edit = false;
+          Object.keys(p.tabs || {}).forEach((tid) => {
+            p.tabs[tid] = p.tabs[tid] || {};
+            p.tabs[tid].view = false;
+            p.tabs[tid].edit = false;
+          });
+          return;
+        }
+        if (guardPages.indexOf(pid) !== -1) {
+          p.view = cat === "總幹事" || cat === "秘書";
+          p.edit = cat === "總幹事" || cat === "秘書";
+          Object.keys(p.tabs || {}).forEach((tid) => {
+            p.tabs[tid] = p.tabs[tid] || {};
+            p.tabs[tid].view = p.view;
+            p.tabs[tid].edit = p.edit;
+          });
+          return;
+        }
+        if (fullEditPages.indexOf(pid) !== -1) {
+          p.edit = true;
+          Object.keys(p.tabs || {}).forEach((tid) => {
+            p.tabs[tid] = p.tabs[tid] || {};
+            p.tabs[tid].edit = true;
+          });
+          return;
+        }
+        if (pid === "meter-reading") {
+          p.edit = cat === "總幹事" || cat === "秘書";
+          Object.keys(p.tabs || {}).forEach((tid) => {
+            p.tabs[tid] = p.tabs[tid] || {};
+            if (tid === "pending" || tid === "create") p.tabs[tid].edit = true;
+            else p.tabs[tid].edit = p.edit;
+          });
+          return;
+        }
+        if (pid === "care") {
+          p.edit = cat === "總幹事" || cat === "保全";
+          Object.keys(p.tabs || {}).forEach((tid) => {
+            p.tabs[tid] = p.tabs[tid] || {};
+            if (tid === "sos") p.tabs[tid].edit = true;
+            else p.tabs[tid].edit = p.edit;
+          });
+          return;
+        }
+        if (pid === "bulletin" || pid === "activity" || pid === "live-meeting") {
+          p.edit = cat === "總幹事" || cat === "秘書";
+          Object.keys(p.tabs || {}).forEach((tid) => {
+            p.tabs[tid] = p.tabs[tid] || {};
+            p.tabs[tid].edit = p.edit;
+          });
+        }
+      });
+    }
+    return perms;
+  }
+
+  function normalizeCommunityPermissions(raw, fallbackCategory, enabledSet) {
+    const fallback = defaultCommunityPermissionsFor(fallbackCategory || "", enabledSet);
+    const validSet = (enabledSet instanceof Set) ? enabledSet : null;
+    if (!raw || typeof raw !== "object") return fallback;
+    const pages = (raw && raw.pages && typeof raw.pages === "object") ? raw.pages : {};
+    const out = { pages: {} };
+    COMMUNITY_ADMIN_PERMISSION_CATALOG.forEach((page) => {
+      const pid = String(page.id || "");
+      const pageOn = !validSet || validSet.has(pid);
+      const srcP = pages[pid] || {};
+      const defP = fallback.pages[pid] || {};
+      const pageObj = {
+        view: pageOn && srcP.view !== false,
+        edit: pageOn && Boolean(srcP.edit || defP.edit),
+        tabs: {},
+      };
+      page.tabs.forEach((tab) => {
+        const srcT = (srcP.tabs && srcP.tabs[tab.id]) ? srcP.tabs[tab.id] : {};
+        const defT = (defP.tabs && defP.tabs[tab.id]) ? defP.tabs[tab.id] : {};
+        pageObj.tabs[tab.id] = {
+          view: pageOn && srcT.view !== false,
+          edit: pageOn && Boolean(srcT.edit || defT.edit),
+        };
+      });
+      out.pages[pid] = pageObj;
+    });
+    return out;
+  }
+
+  function cloneCommunityPermissions(p, enabledSet) {
+    const base = normalizeCommunityPermissions(p || null, "管理員", enabledSet);
+    return JSON.parse(JSON.stringify(base));
+  }
+
+  function escapeHtml(s) {
+    const raw = s == null ? "" : String(s);
+    return raw
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function buildCommunityPermissionGridHtml(perms, containerId, gridTitle, enabledSet) {
+    const validSet = (enabledSet instanceof Set) ? enabledSet : null;
+    const P = normalizeCommunityPermissions(perms || null, "管理員", enabledSet);
+    const rows = [];
+    rows.push(`
+      <div style="padding:10px 14px;border:1px solid rgba(17,24,39,0.08);border-radius:16px;background:#f3f4f6;display:grid;grid-template-columns:minmax(0,1fr) 110px 110px;gap:12px;align-items:center;margin-bottom:8px;font-weight:900;font-size:13px;">
+        <div>${escapeHtml(gridTitle || "社區後台分頁 / 子分頁權限")}</div>
+        <div style="text-align:center;">查看</div>
+        <div style="text-align:center;">編輯</div>
+      </div>
+    `);
+    COMMUNITY_ADMIN_PERMISSION_CATALOG.forEach((page, pIdx) => {
+      if (validSet && !validSet.has(String(page.id || ""))) return;
+      const pData = P.pages[page.id] || { view: true, edit: false, tabs: {} };
+      const pId = (containerId ? containerId + "_" : "") + "p_" + String(pIdx);
+      rows.push(`
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) 110px 110px;gap:12px;align-items:center;padding:10px 12px;border:1px solid rgba(17,24,39,0.08);border-radius:14px;background:#fff;margin-bottom:8px;">
+          <div style="display:grid;gap:2px;">
+            <label class="check" style="display:flex;align-items:flex-start;gap:8px;margin:0;font-weight:900;color:#111827;">
+              <input type="checkbox" data-perm-page="${escapeHtml(page.id)}" data-perm-kind="view" ${pData.view ? "checked" : ""} style="margin-top:3px;">
+              <div style="display:grid;gap:2px;min-width:0;">
+                <span>${escapeHtml(page.label)}</span>
+                <small style="color:#6b7280;font-weight:600;">${escapeHtml(page.desc || "")}</small>
+              </div>
+            </label>
+          </div>
+          <div style="text-align:center;">
+            <label class="check-inline" style="justify-content:center;margin:0;">
+              <input type="checkbox" data-perm-page="${escapeHtml(page.id)}" data-perm-kind="view_master" ${pData.view ? "checked" : ""} aria-label="${escapeHtml(page.label)} 查看">
+            </label>
+          </div>
+          <div style="text-align:center;">
+            <label class="check-inline" style="justify-content:center;margin:0;">
+              <input type="checkbox" data-perm-page="${escapeHtml(page.id)}" data-perm-kind="edit" ${pData.edit ? "checked" : ""} aria-label="${escapeHtml(page.label)} 編輯">
+            </label>
+          </div>
+        </div>
+      `);
+      if (page.tabs && page.tabs.length) {
+        const tabRows = page.tabs.map((tab, tIdx) => {
+          const tData = (pData.tabs && pData.tabs[tab.id]) ? pData.tabs[tab.id] : { view: true, edit: false };
+          return `
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 110px 110px;gap:12px;align-items:center;padding:8px 12px 8px 28px;border:1px dashed rgba(17,24,39,0.08);border-radius:12px;background:#fafbfc;margin-top:-4px;margin-bottom:8px;">
+              <div style="font-weight:700;color:#374151;font-size:13px;">
+                <span style="display:inline-block;margin-right:6px;color:#6b7280;">子分頁：</span>${escapeHtml(tab.label)}
+              </div>
+              <div style="text-align:center;">
+                <label class="check-inline" style="justify-content:center;margin:0;">
+                  <input type="checkbox" data-perm-page="${escapeHtml(page.id)}" data-perm-tab="${escapeHtml(tab.id)}" data-perm-kind="view" ${tData.view ? "checked" : ""} aria-label="${escapeHtml(page.label + "-" + tab.label)} 查看">
+                </label>
+              </div>
+              <div style="text-align:center;">
+                <label class="check-inline" style="justify-content:center;margin:0;">
+                  <input type="checkbox" data-perm-page="${escapeHtml(page.id)}" data-perm-tab="${escapeHtml(tab.id)}" data-perm-kind="edit" ${tData.edit ? "checked" : ""} aria-label="${escapeHtml(page.label + "-" + tab.label)} 編輯">
+                </label>
+              </div>
+            </div>
+          `;
+        });
+        rows.push(tabRows.join(""));
+      }
+    });
+    rows.push(`
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px;">
+        <button class="btn btn-sm btn-ghost" type="button" data-perm-action="view-all">全部可視</button>
+        <button class="btn btn-sm btn-ghost" type="button" data-perm-action="edit-all">全部可編輯</button>
+        <button class="btn btn-sm btn-ghost" type="button" data-perm-action="reset">依類別預設</button>
+      </div>
+    `);
+    return rows.join("");
+  }
+
+  function readCommunityPermissionsFromDom(rootEl, fallbackCategory, enabledSet) {
+    const validSet = (enabledSet instanceof Set) ? enabledSet : null;
+    if (!rootEl) return defaultCommunityPermissionsFor(fallbackCategory || "", enabledSet);
+    const P = defaultCommunityPermissionsFor(fallbackCategory || "", enabledSet);
+    rootEl.querySelectorAll("[data-perm-page]").forEach((el) => {
+      const pid = String(el.getAttribute("data-perm-page") || "").trim();
+      const tid = String(el.getAttribute("data-perm-tab") || "").trim();
+      const kind = String(el.getAttribute("data-perm-kind") || "").trim();
+      const checked = !!el.checked;
+      if (!pid || !P.pages[pid]) return;
+      if (validSet && !validSet.has(pid)) return;
+      if (!tid) {
+        if (kind === "view" || kind === "view_master") P.pages[pid].view = checked;
+        if (kind === "edit") P.pages[pid].edit = checked;
+      } else {
+        if (!P.pages[pid].tabs) P.pages[pid].tabs = {};
+        if (!P.pages[pid].tabs[tid]) P.pages[pid].tabs[tid] = { view: true, edit: false };
+        if (kind === "view") P.pages[pid].tabs[tid].view = checked;
+        if (kind === "edit") P.pages[pid].tabs[tid].edit = checked;
+      }
+    });
+    Object.keys(P.pages).forEach((pid) => {
+      const page = P.pages[pid];
+      const pageOn = !validSet || validSet.has(pid);
+      if (!pageOn) {
+        page.view = false;
+        page.edit = false;
+        Object.keys(page.tabs || {}).forEach((tid) => {
+          page.tabs[tid] = page.tabs[tid] || {};
+          page.tabs[tid].view = false;
+          page.tabs[tid].edit = false;
+        });
+        return;
+      }
+      if (!page.view) {
+        page.edit = false;
+        Object.keys(page.tabs || {}).forEach((tid) => {
+          page.tabs[tid] = page.tabs[tid] || {};
+          page.tabs[tid].view = false;
+          page.tabs[tid].edit = false;
+        });
+      } else {
+        Object.keys(page.tabs || {}).forEach((tid) => {
+          const t = page.tabs[tid] = page.tabs[tid] || {};
+          if (!t.view) t.edit = false;
+          if (t.edit) t.view = true;
+        });
+        if (page.edit) {
+          Object.keys(page.tabs || {}).forEach((tid) => {
+            const t = page.tabs[tid] = page.tabs[tid] || {};
+            t.view = true;
+            t.edit = true;
+          });
+        }
+      }
+    });
+    return P;
+  }
 
   try {
     const raw = String(location.hash || "").replace(/^#/, "");
@@ -520,6 +881,10 @@
     const fieldUnit = document.getElementById("field_r_unit");
     const fieldRoles = document.getElementById("field_r_roles");
     const fieldAddress = document.getElementById("field_r_address");
+    const fieldCommunityPermissions = document.getElementById("field_r_community_permissions");
+    const communityPermissionsGridEl = document.getElementById("communityPermissionsGrid");
+    let _communityPermissionsState = defaultCommunityPermissionsFor("管理員");
+    let _communityEnabledSet = null;
     const cancelBtn = document.getElementById("btnCancelResidentModal");
     const closeBtn = document.getElementById("btnCloseResidentModal");
     const backdrop = modal ? modal.querySelector("[data-modal-close]") : null;
@@ -755,6 +1120,7 @@
       const isResident = modalRoleView === "resident";
       const isAdmin = modalRoleView === "admin";
       const isCommunityLike = COMMUNITY_LIKE_ROLE_VIEWS.has(modalRoleView);
+      const showPerms = modalRoleView === "community";
       const setFieldVisible = (el, visible) => {
         if (!el) return;
         el.hidden = !visible;
@@ -765,6 +1131,7 @@
       setFieldVisible(fieldUnit, isResident);
       setFieldVisible(fieldRoles, isResident);
       setFieldVisible(fieldAddress, isResident);
+      setFieldVisible(fieldCommunityPermissions, showPerms);
 
       if (inputCategory) inputCategory.required = !isAdmin;
       if (inputCommunity) inputCommunity.required = Boolean(isResident);
@@ -784,6 +1151,7 @@
             <option value="管理員" selected>管理員</option>
             <option value="總幹事">總幹事</option>
             <option value="秘書">秘書</option>
+            <option value="保全">保全</option>
           `.trim();
         } else if (isCommunityLike) {
           inputCategory.innerHTML = `
@@ -824,6 +1192,7 @@
       const view = normalizeAccountRoleView(state.accountsRoleView) || "resident";
       const activeId = communitySelect.value || "";
       const rList = document.getElementById("residentList");
+      const fEl = document.getElementById("residentFilters");
 
       let list = [];
       if (view === "admin") {
@@ -842,6 +1211,74 @@
       }
 
       const title = getAccountRoleLabel(view);
+      const communityCatOptions = ["__all__", "管理員", "總幹事", "秘書", "保全"];
+      const residentCatOptions = ["__all__", "住戶", "委員"];
+      const showFilterDiv = Boolean(fEl);
+      if (showFilterDiv) {
+        if (view === "community") {
+          const counts = new Map();
+          communityCatOptions.forEach((c) => counts.set(c, 0));
+          list.forEach((r) => {
+            const cat = String(r.category || "").trim();
+            if (communityCatOptions.indexOf(cat) !== -1) counts.set(cat, (counts.get(cat) || 0) + 1);
+          });
+          counts.set("__all__", list.length);
+          const current = String(state.categoryFilter || "__all__").trim();
+          const hasValue = communityCatOptions.indexOf(current) !== -1 ? current : "__all__";
+          state.categoryFilter = hasValue;
+          fEl.style.display = "flex";
+          fEl.innerHTML = communityCatOptions.map((c) => {
+            const label = c === "__all__" ? "全部" : c;
+            const active = hasValue === c;
+            const count = counts.get(c) || 0;
+            return `
+              <button class="btn btn-sm ${active ? "btn-primary" : "btn-ghost"}" type="button" data-cat-filter="${c}" style="display:inline-flex;align-items:center;gap:6px;">
+                ${label}
+                <span style="min-width:20px;height:18px;border-radius:999px;padding:0 6px;background:${active ? "rgba(255,255,255,.25)" : "rgba(17,24,39,.06)"};color:${active ? "#fff" : "#374151"};font-size:11px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;">${count}</span>
+              </button>
+            `.trim();
+          }).join("");
+        } else if (view === "resident") {
+          const counts = new Map();
+          residentCatOptions.forEach((c) => counts.set(c, 0));
+          list.forEach((r) => {
+            const cat = String(r.category || r.residentCategory || "").trim() || "住戶";
+            if (residentCatOptions.indexOf(cat) !== -1) counts.set(cat, (counts.get(cat) || 0) + 1);
+            else counts.set("住戶", (counts.get("住戶") || 0) + 1);
+          });
+          counts.set("__all__", list.length);
+          const current = String(state.categoryFilter || "__all__").trim();
+          const hasValue = residentCatOptions.indexOf(current) !== -1 ? current : "__all__";
+          state.categoryFilter = hasValue;
+          fEl.style.display = "flex";
+          fEl.innerHTML = residentCatOptions.map((c) => {
+            const label = c === "__all__" ? "全部" : c;
+            const active = hasValue === c;
+            const count = counts.get(c) || 0;
+            return `
+              <button class="btn btn-sm ${active ? "btn-primary" : "btn-ghost"}" type="button" data-cat-filter="${c}" style="display:inline-flex;align-items:center;gap:6px;">
+                ${label}
+                <span style="min-width:20px;height:18px;border-radius:999px;padding:0 6px;background:${active ? "rgba(255,255,255,.25)" : "rgba(17,24,39,.06)"};color:${active ? "#fff" : "#374151"};font-size:11px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;">${count}</span>
+              </button>
+            `.trim();
+          }).join("");
+        } else {
+          state.categoryFilter = "__all__";
+          fEl.style.display = "none";
+          fEl.innerHTML = "";
+        }
+      }
+
+      if (showFilterDiv && (view === "community" || view === "resident")) {
+        const catFilter = String(state.categoryFilter || "__all__").trim();
+        if (catFilter !== "__all__") {
+          list = list.filter((r) => {
+            const rc = String(r.category || r.residentCategory || "").trim();
+            if (view === "community") return rc === catFilter;
+            return rc === catFilter || (catFilter === "住戶" && (!rc || rc === "住戶"));
+          });
+        }
+      }
       
       // 建立社区ID到名称的映射
       const communityMap = new Map();
@@ -859,6 +1296,9 @@
         const firstName = firstId ? (communityMap.get(firstId) || "") : "";
         const extraCount = cids.length > 1 ? (cids.length - 1) : 0;
         const communityDisplay = firstName ? `<span class="tag" style="margin-left:8px;">${firstName}${extraCount ? ` +${extraCount}` : ""}</span>` : "";
+        const catRaw = String(r.category || "").trim();
+        const catLabel = view === "community" ? catRaw : (view === "resident" ? catRaw : "");
+        const catTag = catLabel ? `<span class="tag" style="margin-left:8px;">${catLabel}</span>` : "";
         const emailText = String(r.email || "").trim() || "—";
         const phoneText = String(r.phone || "").trim() || "—";
         const pwPlain = String(r.passwordPlain || "").trim();
@@ -884,6 +1324,7 @@
                   <div style="display:flex;align-items:center;">
                     <div class="account-name">${String(r.name || "—")}</div>
                     ${communityDisplay}
+                    ${catTag}
                   </div>
                   ${sub}
                   <div class="account-meta">
@@ -940,7 +1381,16 @@
       rList.querySelectorAll(".account-detail-block").forEach((d) => {
         d.hidden = true;
       });
-      rList.querySelectorAll(".account-item").forEach((it) => {
+      if (fEl) {
+        fEl.querySelectorAll("[data-cat-filter]").forEach((b) => {
+          b.addEventListener("click", () => {
+            const v = String(b.getAttribute("data-cat-filter") || "__all__").trim();
+            state.categoryFilter = v;
+            renderUserList();
+          });
+        });
+      }
+      rList.querySelectorAll("[data-toggle-user]").forEach((input) => {
         it.classList.remove("expanded");
         it.setAttribute("aria-expanded", "false");
       });
@@ -1021,6 +1471,7 @@
             enabled: v.enabled !== false,
             category: String(v.category || v.residentCategory || ""),
             accessiblePages: Array.isArray(v.accessiblePages) ? v.accessiblePages : null,
+            permissions: (v.permissions && typeof v.permissions === "object") ? JSON.parse(JSON.stringify(v.permissions)) : null,
           };
         }).filter(Boolean);
         
@@ -1152,7 +1603,7 @@
               <div class="check-grid" id="pageAccessGrid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:4px;">
                 <label class="check" style="display:flex;align-items:flex-start;padding:12px;border:1px solid rgba(17,24,39,0.1);border-radius:10px;">
                   <input type="checkbox" value="resident" style="margin-top:2px;" />
-                  <div style="display:grid;gap:2px;"><strong style="font-weight:900;">住戶</strong><small style="color:rgba(31,41,55,0.6);font-weight:600;">住戶資料頁面</small></div>
+                  <div style="display:grid;gap:2px;"><strong style="font-weight:900;">住戶前台</strong><small style="color:rgba(31,41,55,0.6);font-weight:600;">住戶資料頁面（首頁、管委會、客服分頁）</small></div>
                 </label>
                 <label class="check" style="display:flex;align-items:flex-start;padding:12px;border:1px solid rgba(17,24,39,0.1);border-radius:10px;">
                   <input type="checkbox" value="board" style="margin-top:2px;" />
@@ -1261,6 +1712,121 @@
       pageAccessModal.hidden = false;
     };
 
+    const bindCommunityPermissionEvents = () => {
+      if (!communityPermissionsGridEl) return;
+      communityPermissionsGridEl.querySelectorAll("button[data-perm-action]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const act = String(btn.getAttribute("data-perm-action") || "").trim();
+          const cat = (inputCategory && inputCategory.value) ? String(inputCategory.value) : "管理員";
+          const enabledSet = _communityEnabledSet;
+          let base = cloneCommunityPermissions(_communityPermissionsState || defaultCommunityPermissionsFor(cat, enabledSet), enabledSet);
+          if (act === "view-all") {
+            Object.keys(base.pages).forEach((pid) => {
+              if (enabledSet && !enabledSet.has(pid)) return;
+              const p = base.pages[pid];
+              p.view = true;
+              Object.keys(p.tabs || {}).forEach((tid) => {
+                p.tabs[tid] = p.tabs[tid] || {};
+                p.tabs[tid].view = true;
+              });
+            });
+          } else if (act === "edit-all") {
+            Object.keys(base.pages).forEach((pid) => {
+              if (enabledSet && !enabledSet.has(pid)) return;
+              const p = base.pages[pid];
+              p.view = true;
+              p.edit = true;
+              Object.keys(p.tabs || {}).forEach((tid) => {
+                p.tabs[tid] = { view: true, edit: true };
+              });
+            });
+          } else if (act === "reset") {
+            base = defaultCommunityPermissionsFor(cat, enabledSet);
+          } else {
+            return;
+          }
+          _communityPermissionsState = base;
+          const suffix = editUserId ? String(editUserId).slice(0, 8) : "newPerms";
+          communityPermissionsGridEl.innerHTML = buildCommunityPermissionGridHtml(_communityPermissionsState, "perm_" + suffix, "社區後台分頁 / 子分頁權限", enabledSet);
+          bindCommunityPermissionEvents();
+        });
+      });
+      communityPermissionsGridEl.querySelectorAll("input[type=\"checkbox\"][data-perm-page]").forEach((cb) => {
+        cb.addEventListener("change", () => {
+          const pid = String(cb.getAttribute("data-perm-page") || "").trim();
+          const tid = String(cb.getAttribute("data-perm-tab") || "").trim();
+          const kind = String(cb.getAttribute("data-perm-kind") || "").trim();
+          const checked = !!cb.checked;
+          if (!pid || !_communityPermissionsState || !_communityPermissionsState.pages || !_communityPermissionsState.pages[pid]) return;
+          if (_communityEnabledSet && !_communityEnabledSet.has(pid)) {
+            cb.checked = false;
+            return;
+          }
+          const page = _communityPermissionsState.pages[pid];
+          const syncViewMaster = (val) => {
+            communityPermissionsGridEl.querySelectorAll(`input[type=\"checkbox\"][data-perm-page=\"${pid}\"][data-perm-kind=\"view_master\"],input[type=\"checkbox\"][data-perm-page=\"${pid}\"][data-perm-kind=\"view\"]:not([data-perm-tab])`).forEach((el) => {
+              if (el !== cb) el.checked = !!val;
+            });
+          };
+          if (!tid) {
+            if (kind === "view" || kind === "view_master") {
+              page.view = checked;
+              syncViewMaster(checked);
+              if (!checked) {
+                page.edit = false;
+                Object.keys(page.tabs || {}).forEach((id) => {
+                  page.tabs[id] = page.tabs[id] || {};
+                  page.tabs[id].view = false;
+                  page.tabs[id].edit = false;
+                });
+                communityPermissionsGridEl.querySelectorAll(`input[type=\"checkbox\"][data-perm-page=\"${pid}\"][data-perm-kind=\"edit\"]:not([data-perm-tab])`).forEach((el) => (el.checked = false));
+                communityPermissionsGridEl.querySelectorAll(`input[type=\"checkbox\"][data-perm-page=\"${pid}\"][data-perm-tab]`).forEach((el) => (el.checked = false));
+              }
+            } else if (kind === "edit") {
+              page.edit = checked;
+              if (checked) {
+                page.view = true;
+                syncViewMaster(true);
+                Object.keys(page.tabs || {}).forEach((id) => {
+                  page.tabs[id] = { view: true, edit: true };
+                });
+                communityPermissionsGridEl.querySelectorAll(`input[type=\"checkbox\"][data-perm-page=\"${pid}\"][data-perm-tab]`).forEach((el) => (el.checked = true));
+              }
+            }
+          } else {
+            if (!page.tabs) page.tabs = {};
+            if (!page.tabs[tid]) page.tabs[tid] = { view: false, edit: false };
+            const tab = page.tabs[tid];
+            if (kind === "view") {
+              tab.view = checked;
+              if (!checked) {
+                tab.edit = false;
+                communityPermissionsGridEl.querySelectorAll(`input[type=\"checkbox\"][data-perm-page=\"${pid}\"][data-perm-tab=\"${tid}\"][data-perm-kind=\"edit\"]`).forEach((el) => (el.checked = false));
+              }
+            } else if (kind === "edit") {
+              tab.edit = checked;
+              if (checked) {
+                tab.view = true;
+                communityPermissionsGridEl.querySelectorAll(`input[type=\"checkbox\"][data-perm-page=\"${pid}\"][data-perm-tab=\"${tid}\"][data-perm-kind=\"view\"]`).forEach((el) => (el.checked = true));
+              }
+            }
+          }
+        });
+      });
+      if (inputCategory && !inputCategory._permBound) {
+        inputCategory._permBound = true;
+        inputCategory.addEventListener("change", () => {
+          if (!fieldCommunityPermissions || fieldCommunityPermissions.hidden || fieldCommunityPermissions.style.display === "none") return;
+          const cat = String(inputCategory.value || "管理員").trim() || "管理員";
+          const enabledSet = _communityEnabledSet;
+          _communityPermissionsState = defaultCommunityPermissionsFor(cat, enabledSet);
+          const suffix = editUserId ? String(editUserId).slice(0, 8) : "newPerms";
+          communityPermissionsGridEl.innerHTML = buildCommunityPermissionGridHtml(_communityPermissionsState, "permCat_" + suffix, "社區後台分頁 / 子分頁權限", enabledSet);
+          bindCommunityPermissionEvents();
+        });
+      }
+    };
+
     const openModal = () => {
       if (!modal) return;
       setOptions();
@@ -1292,6 +1858,23 @@
       if (rolesWrap) rolesWrap.querySelectorAll("input[type=\"checkbox\"]").forEach((el) => (el.checked = false));
       if (roleOtherText) roleOtherText.value = "";
       syncOtherRoleInput();
+      if (modalRoleView === "community" && communityPermissionsGridEl) {
+        const primaryCid = (() => {
+          const sel = getSelectedCommunityIds();
+          if (Array.isArray(sel) && sel.length) return String(sel[0] || "");
+          if (inputCommunity && inputCommunity.value) return String(inputCommunity.value || "");
+          return String(communitySelect.value || "");
+        })();
+        const enabledSet = getCommunityEnabledModules(primaryCid);
+        _communityEnabledSet = enabledSet;
+        const cat = (inputCategory && inputCategory.value) ? String(inputCategory.value) : "管理員";
+        _communityPermissionsState = defaultCommunityPermissionsFor(cat, enabledSet);
+        communityPermissionsGridEl.innerHTML = buildCommunityPermissionGridHtml(_communityPermissionsState, "newPerms", "社區後台分頁 / 子分頁權限", enabledSet);
+        bindCommunityPermissionEvents();
+      } else if (communityPermissionsGridEl) {
+        _communityEnabledSet = null;
+        communityPermissionsGridEl.innerHTML = "";
+      }
       if (inputEnabled) inputEnabled.value = "true";
       clearModalStatus();
       modal.hidden = false;
@@ -1349,6 +1932,25 @@
       if (roleOtherText) roleOtherText.value = normalizeText(user.residentRoleOther || "");
       if (roleOtherChk) roleOtherChk.checked = Boolean(roleOtherText && roleOtherText.value);
       syncOtherRoleInput();
+      if (modalRoleView === "community" && communityPermissionsGridEl) {
+        const primaryCid = (() => {
+          if (user && Array.isArray(user.communityIds) && user.communityIds.length) return String(user.communityIds[0] || "");
+          if (user && user.communityId) return String(user.communityId || "");
+          const sel = getSelectedCommunityIds();
+          if (Array.isArray(sel) && sel.length) return String(sel[0] || "");
+          if (inputCommunity && inputCommunity.value) return String(inputCommunity.value || "");
+          return String(communitySelect.value || "");
+        })();
+        const enabledSet = getCommunityEnabledModules(primaryCid);
+        _communityEnabledSet = enabledSet;
+        const cat = (inputCategory && inputCategory.value) ? String(inputCategory.value) : "管理員";
+        _communityPermissionsState = normalizeCommunityPermissions(user && user.permissions ? user.permissions : null, cat, enabledSet);
+        communityPermissionsGridEl.innerHTML = buildCommunityPermissionGridHtml(_communityPermissionsState, "editPerms_" + String(editUserId || "").slice(0, 8), "社區後台分頁 / 子分頁權限", enabledSet);
+        bindCommunityPermissionEvents();
+      } else if (communityPermissionsGridEl) {
+        _communityEnabledSet = null;
+        communityPermissionsGridEl.innerHTML = "";
+      }
 
       avatarFile = null;
       setAvatarPreview(String(user.avatarDataUrl || ""));
@@ -1523,6 +2125,13 @@
             payload.passwordPlainUpdatedAt = FieldValue.serverTimestamp();
           }
           if (!isEdit) payload.createdAt = FieldValue.serverTimestamp();
+          let resolvedPermissions = null;
+          if (modalRoleView === "community") {
+            const permCat = normalizeText(inputCategory ? inputCategory.value : category) || category || "管理員";
+            const enabledSet = getCommunityEnabledModules(primaryCommunityId);
+            resolvedPermissions = readCommunityPermissionsFromDom(communityPermissionsGridEl, permCat, enabledSet);
+            payload.permissions = resolvedPermissions;
+          }
           await db.collection("users").doc(id).set(payload, { merge: true });
           const c = (state.communities || []).find((x) => String(x && x.id ? x.id : "") === String(payload.community || ""));
           const communityCode = c ? String(c.username || "") : "";
@@ -1533,6 +2142,11 @@
           const resolvedAvatarDataUrl = avatarDataUrl ? avatarDataUrl : String(existing && existing.avatarDataUrl ? existing.avatarDataUrl : "");
           const hasPasswordHashNext = Boolean(passwordHash) || Boolean(existing && existing.hasPasswordHash);
           const passwordPlainNext = isEdit ? (passwordRaw ? String(passwordRaw || "") : String(existing && existing.passwordPlain ? existing.passwordPlain : "")) : String(password || "");
+          const permissionsNext = resolvedPermissions
+            ? JSON.parse(JSON.stringify(resolvedPermissions))
+            : (existing && existing.permissions && typeof existing.permissions === "object"
+              ? JSON.parse(JSON.stringify(existing.permissions))
+              : null);
           const nextItem = {
             id: String(id),
             communityId: String(payload.community || "default"),
@@ -1553,6 +2167,7 @@
             enabled: payload.enabled !== false,
             category: String(payload.category || ""),
             accessiblePages: Array.isArray(existing && existing.accessiblePages) ? existing.accessiblePages.slice() : null,
+            permissions: permissionsNext,
           };
           if (existingIdx >= 0) {
             currentUsers[existingIdx] = { ...(currentUsers[existingIdx] || {}), ...nextItem };
@@ -3327,6 +3942,7 @@
         const v = String(roleBtn.getAttribute("data-accounts-role") || "resident");
         if (v === state.accountsRoleView) return;
         state.accountsRoleView = v;
+        state.categoryFilter = "__all__";
         openPage("accounts");
       }
     });

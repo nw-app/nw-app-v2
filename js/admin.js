@@ -249,6 +249,8 @@
     { id: "digital-signage", name: "電子看版", desc: "社區公告、活動訊息與即時資訊顯示", badge: "看版", page: "#community/digital-signage" },
     { id: "company-support", name: "公司支援", desc: "回報需求、聯絡紀錄與處理進度（示意）", badge: "支援", page: "#community/company-support" },
     { id: "meter-reading", name: "抄表紀錄", desc: "水電瓦斯抄表登記、批量匯入、審核核異與統計分析", badge: "抄表", page: "#community/meter-reading" },
+    { id: "community-staff", name: "管理帳號", desc: "管理社區後台登入帳號（總幹事／秘書／保全）", badge: "人員", page: "#community/community-staff" },
+    { id: "suite", name: "套房專區", desc: "客製化電費、水費、維護費、其他費用公式計算", badge: "套房", page: "#community/suite" },
     { id: "finance", name: "收支報表", desc: "收入/支出彙總、分類與月份查詢（示意）", badge: "財務", page: "#community/finance" },
     { id: "checkin-vote", name: "報到投票", desc: "活動報到、投票與統計結果（示意）", badge: "活動", page: "#community/checkin-vote" },
     { id: "assignments", name: "交辦事項", desc: "派工、追蹤進度、回報與結案（示意）", badge: "待辦", page: "#community/assignments" },
@@ -677,6 +679,8 @@
     if (id === "digital-signage") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 21h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 17v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "company-support") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 3.5V8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 16v4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M3.5 12H8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M16 12h4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "meter-reading") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 20h10a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7"/><path d="M12 10l1.6-1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8.5 16.5h7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
+    if (id === "community-staff") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 11.2a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7"/><path d="M16.5 11a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z" stroke="currentColor" stroke-width="1.7"/><path d="M3 20c1.4-3.3 4.2-5 7-5s5.6 1.7 7 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M14.4 20a5.2 5.2 0 0 1 6.2 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
+    if (id === "suite") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 11 12 4.5 20 11v9.5A1.5 1.5 0 0 1 18.5 22h-13A1.5 1.5 0 0 1 4 20.5V11Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 22v-6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v6" stroke="currentColor" stroke-width="1.7"/><path d="M9 13H8M16 13h-1M10 10H9M15 10h-1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
     if (id === "finance") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 19.5h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M7.2 18.8V11.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 18.8V8.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M16.8 18.8V13.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M7.2 10.3 10 7.8l2.6 2.4L16.8 6.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     if (id === "checkin-vote") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 10.5 10 13.5 17 6.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 4.5h11A2 2 0 0 1 19.5 6.5v11a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`;
     if (id === "assignments") return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 6.5h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8 11h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8 15.5h5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M9.2 4.5h5.6a1 1 0 0 1 1 1V7H8.2V5.5a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7 7h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`;
@@ -715,6 +719,8 @@
           m.id === "parking" ? "停車" :
           m.id === "company-support" ? "支援" :
           m.id === "meter-reading" ? "抄表" :
+          m.id === "community-staff" ? "人員" :
+          m.id === "suite" ? "套房" :
           m.id === "finance" ? "收支" :
           m.id === "checkin-vote" ? "投票" :
           m.id === "assignments" ? "交辦" :
@@ -16449,6 +16455,34 @@
         });
       } else {
         contentEl.innerHTML = `<div style="padding:24px;color:#d00;">抄錶模組尚未載入，請稍後再試。</div>`;
+      }
+      updateFooterActiveNav();
+      return;
+    }
+    if (moduleId === "community-staff") {
+      if (subnavEl) subnavEl.innerHTML = "";
+      const cid = String(resolveActiveCommunityId() || "").trim() || "default";
+      const cidKey = String(state.activeCommunityCode || "").trim();
+      const cname = (state.communities.find((c) => c.id === cid) || {}).name || "";
+      if (typeof window.__nwCommunityStaffCleanup === "function") {
+        try { window.__nwCommunityStaffCleanup(); } catch {}
+      }
+      if (window.NwAdminCommunity && window.NwAdminCommunity.UI) {
+        window.NwAdminCommunity.UI.renderCommunityStaffPage(contentEl, { communityId: cid, communityCode: cidKey, communityName: cname });
+      } else {
+        contentEl.innerHTML = `<div style="padding:24px;color:#d00;">管理帳號模組尚未載入，請稍後再試。</div>`;
+      }
+      updateFooterActiveNav();
+      return;
+    }
+    if (moduleId === "suite") {
+      if (subnavEl) subnavEl.innerHTML = "";
+      const cid = String(resolveActiveCommunityId() || "").trim() || "default";
+      const cname = (state.communities.find((c) => c.id === cid) || {}).name || "";
+      if (window.NwAdminCommunity && window.NwAdminCommunity.UI) {
+        window.NwAdminCommunity.UI.renderSuitePage(contentEl, { communityId: cid, communityName: cname });
+      } else {
+        contentEl.innerHTML = `<div style="padding:24px;color:#d00;">套房專區模組尚未載入，請稍後再試。</div>`;
       }
       updateFooterActiveNav();
       return;
