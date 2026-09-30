@@ -171,23 +171,40 @@
     if (!btn || !modal) return;
 
     const communityNameSub = document.getElementById("communityNameSub");
-    const backdrop = modal.querySelector("[data-modal-close]");
-    const closeBtn = document.getElementById("btnCloseProfileModal");
-    const closeBtnFt = document.getElementById("btnCloseProfileModalFt");
-    const roleEl = document.getElementById("profileRole");
-    const statusEl = document.getElementById("profileStatus");
-    const nameTextEl = document.getElementById("profileNameText");
-    const profileAvatarImg = document.getElementById("profileAvatarImg");
-    const profileAvatar = document.getElementById("profileAvatarFallback");
     const headerAvatar = document.getElementById("userAvatarFallback");
     const headerAvatarImg = document.getElementById("userAvatarImg");
     const greetingEl = document.getElementById("userGreeting");
-    const switchEl = document.getElementById("profileSwitch");
-    const btnEditAvatar = document.getElementById("btnEditAvatar");
-    const avatarFileInput = document.getElementById("profileAvatarFile");
-    const houseNoText = document.getElementById("profileHouseNoText");
-    const houseNoItem = document.getElementById("profileHouseNoItem");
     const defaultProfileQrToken = "A000ADDT";
+
+    let backdrop = modal.querySelector("[data-modal-close]");
+    let closeBtn = document.getElementById("btnCloseProfileModal");
+    let closeBtnFt = document.getElementById("btnCloseProfileModalFt");
+    let roleEl = document.getElementById("profileRole");
+    let statusEl = document.getElementById("profileStatus");
+    let nameTextEl = document.getElementById("profileNameText");
+    let profileAvatarImg = document.getElementById("profileAvatarImg");
+    let profileAvatar = document.getElementById("profileAvatarFallback");
+    let switchEl = document.getElementById("profileSwitch");
+    let btnEditAvatar = document.getElementById("btnEditAvatar");
+    let avatarFileInput = document.getElementById("profileAvatarFile");
+    let houseNoText = document.getElementById("profileHouseNoText");
+    let houseNoItem = document.getElementById("profileHouseNoItem");
+
+    const refreshDoms = () => {
+      backdrop = modal.querySelector("[data-modal-close]");
+      closeBtn = document.getElementById("btnCloseProfileModal");
+      closeBtnFt = document.getElementById("btnCloseProfileModalFt");
+      roleEl = document.getElementById("profileRole");
+      statusEl = document.getElementById("profileStatus");
+      nameTextEl = document.getElementById("profileNameText");
+      profileAvatarImg = document.getElementById("profileAvatarImg");
+      profileAvatar = document.getElementById("profileAvatarFallback");
+      switchEl = document.getElementById("profileSwitch");
+      btnEditAvatar = document.getElementById("btnEditAvatar");
+      avatarFileInput = document.getElementById("profileAvatarFile");
+      houseNoText = document.getElementById("profileHouseNoText");
+      houseNoItem = document.getElementById("profileHouseNoItem");
+    };
 
     const ensureProfileAvatarCrown = () => {
       const container = (profileAvatarImg && profileAvatarImg.closest) ? profileAvatarImg.closest(".profile-avatar") : document.querySelector("#profileModal .profile-avatar");
@@ -1080,22 +1097,49 @@
       await db.collection("users").doc(String(user.uid)).set({ avatarDataUrl: String(dataUrl || "") }, { merge: true });
     };
 
-    if (btnEditAvatar && avatarFileInput && !btnEditAvatar._boundEditAvatar) {
-      btnEditAvatar._boundEditAvatar = true;
-      btnEditAvatar.addEventListener("click", () => {
-        try { avatarFileInput.click(); } catch {}
+    if (!modal._boundProfileDelegated) {
+      modal._boundProfileDelegated = true;
+
+      modal.addEventListener("click", (e) => {
+        const t = e.target;
+        if (!t || !t.closest) return;
+        const backdropEl = t.closest("[data-modal-close]");
+        if (backdropEl) { close(); return; }
+        const close1 = t.closest("#btnCloseProfileModal");
+        const close2 = t.closest("#btnCloseProfileModalFt");
+        if (close1 || close2) { close(); return; }
+        const editAvatar = t.closest("#btnEditAvatar");
+        if (editAvatar) {
+          const av = document.getElementById("profileAvatarFile");
+          if (av) { try { av.click(); } catch {} }
+          return;
+        }
+        const switchTarget = t.closest("[data-profile-switch]");
+        if (switchEl && switchTarget) {
+          const target = String(switchTarget.getAttribute("data-profile-switch") || "").trim();
+          const role = roleForTarget(target);
+          const url = urlForTarget(target);
+          if (!role || !url) return;
+          try { sessionStorage.setItem("csp_role", role); } catch {}
+          location.href = url;
+          return;
+        }
       });
-      avatarFileInput.addEventListener("change", async () => {
+
+      modal.addEventListener("change", async (e) => {
+        const fileInput = e.target && e.target.closest ? e.target.closest("#profileAvatarFile") : null;
+        if (!fileInput) return;
         const fb = window.firebase;
         const user = fb && fb.auth ? fb.auth().currentUser : null;
-        const f = avatarFileInput.files && avatarFileInput.files[0] ? avatarFileInput.files[0] : null;
+        const f = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
         if (!user || !f) return;
         if (!String(f.type || "").startsWith("image/")) {
           notify("請選擇圖片檔案", true);
           return;
         }
+        const editBtn = document.getElementById("btnEditAvatar");
         try {
-          btnEditAvatar.disabled = true;
+          if (editBtn) editBtn.disabled = true;
           notify("上傳中...", false);
           const dataUrl = await new Promise((resolve, reject) => {
             try {
@@ -1103,16 +1147,15 @@
               reader.onerror = () => reject(new Error("讀取失敗"));
               reader.onload = () => resolve(String(reader.result || ""));
               reader.readAsDataURL(f);
-            } catch (e) {
-              reject(e);
+            } catch (e2) {
+              reject(e2);
             }
           });
           await updateAvatarDataUrl(user, dataUrl);
-          if (profileAvatarImg) {
-            profileAvatarImg.src = dataUrl;
-            profileAvatarImg.style.display = "block";
-          }
-          if (profileAvatar) profileAvatar.style.display = "none";
+          const avImg = document.getElementById("profileAvatarImg");
+          const avFb = document.getElementById("profileAvatarFallback");
+          if (avImg) { avImg.src = dataUrl; avImg.style.display = "block"; }
+          if (avFb) avFb.style.display = "none";
           if (headerAvatarImg) {
             headerAvatarImg.src = dataUrl;
             headerAvatarImg.style.display = "block";
@@ -1122,8 +1165,8 @@
         } catch (e) {
           notify("更新失敗，請稍後再試。", true);
         } finally {
-          try { avatarFileInput.value = ""; } catch {}
-          btnEditAvatar.disabled = false;
+          try { fileInput.value = ""; } catch {}
+          if (editBtn) editBtn.disabled = false;
         }
       });
     }
@@ -1140,6 +1183,65 @@
     };
 
     const open = async () => {
+      const modalBody = modal.querySelector(".modal-body");
+      const modalHd = modal.querySelector(".modal-hd");
+      let hdClose = null;
+      if (modalHd) {
+        modalHd.querySelectorAll(":scope > .member-settings-tabs").forEach(old => old.remove());
+        const hdTitle = modalHd.querySelector(":scope > h3#profileModalTitle, :scope > .modal-title");
+        if (hdTitle) hdTitle.remove();
+        hdClose = modalHd.querySelector(":scope > button.modal-close, :scope > #btnCloseProfileModal");
+        if (hdClose) {
+          hdClose.style.setProperty("margin-left", "auto");
+          hdClose.style.setProperty("flex-shrink", "0");
+          if (modalHd.contains(hdClose)) modalHd.appendChild(hdClose);
+        }
+        modalHd.style.setProperty("display", "flex");
+        modalHd.style.setProperty("align-items", "center");
+        modalHd.style.setProperty("gap", "10px");
+        modalHd.style.setProperty("flex-wrap", "wrap");
+      }
+      if (modalBody && typeof window.serviceView === "function") {
+        const fragHtml = window.serviceView("profile");
+        const tmp = document.createElement("div");
+        tmp.innerHTML = fragHtml;
+        const tabsEl = tmp.querySelector(".member-settings-tabs");
+        const root = tmp.querySelector(".member-settings");
+        if (tabsEl && modalHd) {
+          if (root && root === tabsEl.parentNode) root.removeChild(tabsEl);
+          if (hdClose && modalHd.contains(hdClose)) {
+            modalHd.insertBefore(tabsEl, hdClose);
+          } else {
+            modalHd.appendChild(tabsEl);
+          }
+          tabsEl.style.setProperty("flex", "1 1 auto");
+          tabsEl.style.setProperty("min-width", "0");
+          tabsEl.style.setProperty("margin-right", "0");
+          tabsEl.style.setProperty("margin-left", "0");
+        }
+        modalBody.innerHTML = "";
+        while (root && root.parentNode === tmp) {
+          modalBody.appendChild(root);
+          break;
+        }
+        if (!modalBody.firstElementChild) modalBody.innerHTML = tmp.innerHTML;
+      } else if (modalBody && modalHd) {
+        const tabsEl = modalBody.querySelector(".member-settings-tabs");
+        if (tabsEl) {
+          if (hdClose && hdClose.parentNode === modalHd) {
+            modalHd.insertBefore(tabsEl, hdClose);
+          } else {
+            modalHd.appendChild(tabsEl);
+          }
+          tabsEl.style.setProperty("flex", "1 1 auto");
+          tabsEl.style.setProperty("min-width", "0");
+        }
+      }
+      refreshDoms();
+      if (typeof window.bindMemberSettingsListeners === "function") {
+        try { window.bindMemberSettingsListeners(); } catch {}
+      }
+
       modal.hidden = false;
       btn.setAttribute("aria-expanded", "true");
       document.body.style.overflow = "hidden";
@@ -1159,7 +1261,8 @@
       detachKeydown = () => document.removeEventListener("keydown", onKeyDown);
 
       requestAnimationFrame(() => {
-        if (closeBtnFt) closeBtnFt.focus();
+        const newCloseFt = document.getElementById("btnCloseProfileModalFt");
+        if (newCloseFt) newCloseFt.focus();
       });
     };
 
@@ -1170,26 +1273,6 @@
     });
 
     bindCommunityNameSubPicker();
-
-    if (switchEl && !switchEl._boundSwitch) {
-      switchEl._boundSwitch = true;
-      switchEl.addEventListener("click", (e) => {
-        const t = e.target && e.target.closest ? e.target.closest("[data-profile-switch]") : null;
-        if (!t) return;
-        const target = String(t.getAttribute("data-profile-switch") || "").trim();
-        const role = roleForTarget(target);
-        const url = urlForTarget(target);
-        if (!role || !url) return;
-        try {
-          sessionStorage.setItem("csp_role", role);
-        } catch {}
-        location.href = url;
-      });
-    }
-
-    if (backdrop) backdrop.addEventListener("click", close);
-    if (closeBtn) closeBtn.addEventListener("click", close);
-    if (closeBtnFt) closeBtnFt.addEventListener("click", close);
 
     const fb = window.firebase;
     const a = fb && fb.auth ? fb.auth() : null;

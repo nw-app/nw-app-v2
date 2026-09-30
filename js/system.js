@@ -678,7 +678,7 @@
   ];
   const defaultCommitteeButtons = [
     { name: "社區班表", icon: "photo/k01.png", url: "#", openExternal: false },
-    { name: "監視畫面", icon: "photo/k02.png", url: "#", openExternal: false },
+    { name: "社區公約", icon: "photo/k02.png", url: "#", openExternal: false },
     { name: "代辦事項", icon: "photo/k03.png", url: "#", openExternal: false },
     { name: "例行會議", icon: "photo/k04.png", url: "#", openExternal: false },
     { name: "工作日誌", icon: "photo/k05.png", url: "#", openExternal: false },
@@ -1061,7 +1061,7 @@
             return;
           }
           ctx.drawImage(img, sx, sy, side, side, 0, 0, target, target);
-          resolve(canvas.toDataURL("image/jpeg", 0.78));
+          resolve(canvas.toDataURL("image/png"));
         };
         img.src = String(reader.result || "");
       };
@@ -2444,30 +2444,24 @@
         const img = new Image();
         img.onerror = () => reject(new Error("image-decode-failed"));
         img.onload = () => {
-          const targetW = 600;
-          const targetH = 300;
-          const ratio = targetW / targetH;
           const srcW = img.naturalWidth || 0;
           const srcH = img.naturalHeight || 0;
           if (!srcW || !srcH) {
             reject(new Error("bad-image"));
             return;
           }
-
-          let cropW = srcW;
-          let cropH = srcH;
-          let sx = 0;
-          let sy = 0;
-          if (srcW / srcH > ratio) {
-            cropW = Math.round(srcH * ratio);
-            cropH = srcH;
-            sx = Math.round((srcW - cropW) / 2);
-          } else {
-            cropW = srcW;
-            cropH = Math.round(srcW / ratio);
-            sy = Math.round((srcH - cropH) / 2);
+          const isPhotoType = /image\/jpeg/i.test(file && file.type ? String(file.type) : "");
+          const sourceSizeBytes = file && typeof file.size === "number" ? file.size : 0;
+          let maxEdge = 1024;
+          if (sourceSizeBytes > 800 * 1024) maxEdge = 896;
+          if (sourceSizeBytes > 1.2 * 1024 * 1024) maxEdge = 768;
+          let targetW = srcW;
+          let targetH = srcH;
+          if (srcW > maxEdge || srcH > maxEdge) {
+            const scale = Math.min(maxEdge / srcW, maxEdge / srcH);
+            targetW = Math.max(1, Math.round(srcW * scale));
+            targetH = Math.max(1, Math.round(srcH * scale));
           }
-
           const canvas = document.createElement("canvas");
           canvas.width = targetW;
           canvas.height = targetH;
@@ -2476,9 +2470,40 @@
             reject(new Error("no-canvas"));
             return;
           }
-          ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, targetW, targetH);
-          const out = canvas.toDataURL("image/jpeg", 0.78);
-          resolve(out);
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+
+          const MAX_BASE64_BYTES = 860 * 1024;
+          const encodeCandidates = [];
+          if (isPhotoType || sourceSizeBytes >= 250 * 1024) {
+            encodeCandidates.push({ mime: "image/jpeg", quality: 0.85 });
+            encodeCandidates.push({ mime: "image/jpeg", quality: 0.72 });
+            encodeCandidates.push({ mime: "image/jpeg", quality: 0.58 });
+            encodeCandidates.push({ mime: "image/jpeg", quality: 0.45 });
+          } else {
+            encodeCandidates.push({ mime: "image/png" });
+            encodeCandidates.push({ mime: "image/jpeg", quality: 0.82 });
+            encodeCandidates.push({ mime: "image/jpeg", quality: 0.68 });
+            encodeCandidates.push({ mime: "image/jpeg", quality: 0.5 });
+          }
+
+          let best = "";
+          for (const cand of encodeCandidates) {
+            try {
+              const dataUrl = cand.quality !== undefined
+                ? canvas.toDataURL(cand.mime, cand.quality)
+                : canvas.toDataURL(cand.mime);
+              if (dataUrl && typeof dataUrl === "string" && dataUrl.length > 100) {
+                best = dataUrl;
+                const payloadLen = Math.round((Math.max(0, dataUrl.length - (dataUrl.indexOf(",") + 1))) * 3 / 4);
+                if (payloadLen <= MAX_BASE64_BYTES) break;
+              }
+            } catch (_) {}
+          }
+          if (!best) {
+            reject(new Error("encode-failed"));
+            return;
+          }
+          resolve(best);
         };
         img.src = String(reader.result || "");
       };
@@ -2934,7 +2959,7 @@
         const v = images[i] || { url: "", data: "" };
         html += `
           <div class="image-slot" data-slot-index="${i}">
-            <div class="slot-preview" id="slot_preview_${i}" ${v.data ? `data-slot-data="${v.data}"` : ""}>
+            <div class="slot-preview" id="slot_preview_${i}">
               ${v.data || v.url ? `<img src="${v.data || v.url}" />` : "<span>8:3</span>"}
             </div>
             <div class="slot-inputs">
@@ -2950,7 +2975,12 @@
       }
       container.innerHTML = html;
 
-      // Bind events
+      for (let i = 0; i < 8; i++) {
+        const v = images[i] || { url: "", data: "" };
+        const preview = document.getElementById(`slot_preview_${i}`);
+        if (preview && v.data) preview._slotData = v.data;
+      }
+
       container.querySelectorAll("[data-slot-upload]").forEach(btn => {
         btn.addEventListener("click", () => {
           const idx = btn.getAttribute("data-slot-upload");
@@ -2967,7 +2997,8 @@
             const dataUrl = await fileToCompressedDataUrl(file);
             const preview = document.getElementById(`slot_preview_${idx}`);
             preview.innerHTML = `<img src="${dataUrl}" />`;
-            preview.setAttribute("data-slot-data", dataUrl);
+            preview._slotData = dataUrl;
+            preview.removeAttribute("data-slot-data");
           } catch (err) {
             console.error(err);
           }
@@ -2979,6 +3010,7 @@
           const idx = btn.getAttribute("data-slot-clear");
           const preview = document.getElementById(`slot_preview_${idx}`);
           preview.innerHTML = "<span>8:3</span>";
+          delete preview._slotData;
           preview.removeAttribute("data-slot-data");
           container.querySelector(`[data-slot-url="${idx}"]`).value = "";
         });
@@ -2989,7 +3021,7 @@
           const idx = input.getAttribute("data-slot-url");
           const url = input.value.trim();
           const preview = document.getElementById(`slot_preview_${idx}`);
-          const slotData = preview.getAttribute("data-slot-data");
+          const slotData = preview ? (preview._slotData || preview.getAttribute("data-slot-data") || "") : "";
           if (url) {
             preview.innerHTML = `<img src="${url}" />`;
           } else if (slotData) {
@@ -3054,7 +3086,7 @@
         
         html += `
           <div class="button-slot" data-slot-index="${i}" draggable="true">
-            <div class="btn-slot-preview" id="${containerId}_preview_${i}" ${b.data ? `data-slot-data="${b.data}"` : ""}>
+            <div class="btn-slot-preview" id="${containerId}_preview_${i}">
               ${b.data || b.icon ? `<img src="${b.data || b.icon}" />` : "<span>圖</span>"}
             </div>
             <div class="btn-slot-inputs">
@@ -3087,6 +3119,20 @@
         `;
       }
       container.innerHTML = html;
+
+      for (let i = 0; i < buttonCount; i++) {
+        const saved = savedButtons[i];
+        const def = resolveDefaultButton(saved || defaultButtons[i], i);
+        const b = saved ? {
+          ...saved,
+          name: saved.name || def.name,
+          icon: saved.icon || def.icon,
+          url: saved.url || def.url,
+          openExternal: typeof saved.openExternal === "boolean" ? saved.openExternal : Boolean(def.openExternal),
+        } : { ...def };
+        const preview = document.getElementById(`${containerId}_preview_${i}`);
+        if (preview && b && b.data) preview._slotData = b.data;
+      }
 
       // Bind events for internal link select
       container.querySelectorAll("[data-btn-internal]").forEach(select => {
@@ -3122,7 +3168,8 @@
             const dataUrl = await fileToCompressedDataUrl(file);
             const preview = document.getElementById(`${containerId}_preview_${idx}`);
             preview.innerHTML = `<img src="${dataUrl}" />`;
-            preview.setAttribute("data-slot-data", dataUrl);
+            preview._slotData = dataUrl;
+            preview.removeAttribute("data-slot-data");
           } catch (err) {
             console.error(err);
           }
@@ -3140,6 +3187,7 @@
           })();
           const def = resolveDefaultButton(current, parseInt(idx, 10));
           preview.innerHTML = def.icon ? `<img src="${def.icon}" />` : "<span>圖</span>";
+          delete preview._slotData;
           preview.removeAttribute("data-slot-data");
           container.querySelector(`[data-btn-icon="${idx}"]`).value = "";
           container.querySelector(`[data-btn-name="${idx}"]`).value = def.name || "";
@@ -3162,7 +3210,7 @@
           const idx = input.getAttribute("data-btn-icon");
           const url = input.value.trim();
           const preview = document.getElementById(`${containerId}_preview_${idx}`);
-          const slotData = preview.getAttribute("data-slot-data");
+          const slotData = preview ? (preview._slotData || preview.getAttribute("data-slot-data") || "") : "";
           if (url) {
             preview.innerHTML = `<img src="${url}" />`;
           } else if (slotData) {
@@ -3189,7 +3237,7 @@
           const openExternal = container.querySelector(`[data-btn-external="${i}"]`)?.checked || false;
           const iconUrl = container.querySelector(`[data-btn-icon="${i}"]`)?.value || "";
           const preview = document.getElementById(`${containerId}_preview_${i}`);
-          const data = preview?.getAttribute("data-slot-data") || "";
+          const data = (preview && (preview._slotData || preview.getAttribute("data-slot-data"))) || "";
           const previewIcon = !data ? (preview && preview.querySelector ? (preview.querySelector("img")?.getAttribute("src") || "") : "") : "";
           buttons.push({
             name,
@@ -3443,7 +3491,8 @@
       adsDraftPages = {};
       setActiveUnitTab("units");
       clearUnitStatus();
-      if (unitCountEl) unitCountEl.textContent = "總戶數：—";
+      const totalUnitsCountEl = document.getElementById("totalUnitsCount");
+      if (totalUnitsCountEl) totalUnitsCountEl.textContent = "總戶數：0";
     };
 
     const openUnitModal = (community) => {
@@ -3735,7 +3784,8 @@
           const rowAImages = [];
           for (let i = 0; i < 8; i++) {
             const url = document.querySelector(`[data-slot-url="${i}"]`)?.value || "";
-            const data = document.getElementById(`slot_preview_${i}`)?.getAttribute("data-slot-data") || "";
+            const preview = document.getElementById(`slot_preview_${i}`);
+            const data = (preview && (preview._slotData || preview.getAttribute("data-slot-data"))) || "";
             if (url || data) {
               rowAImages.push({ url, data });
             } else {
@@ -3763,7 +3813,7 @@
               const openExternal = container.querySelector(`[data-btn-external="${i}"]`)?.checked || false;
               const iconUrl = container.querySelector(`[data-btn-icon="${i}"]`)?.value || "";
               const preview = document.getElementById(`${containerId}_preview_${i}`);
-              const data = preview?.getAttribute("data-slot-data") || "";
+              const data = (preview && (preview._slotData || preview.getAttribute("data-slot-data"))) || "";
               const previewIcon = !data ? (preview && preview.querySelector ? (preview.querySelector("img")?.getAttribute("src") || "") : "") : "";
               buttons.push({
                 name,
@@ -3783,30 +3833,59 @@
           persistAdsPageFromDom();
           const adsFooter = { pages: adsDraftPages };
 
+          const configPayload = {
+            communityButtons: featureButtons,
+            communityButtonsOrder: featureOrder,
+            rowAImages,
+            rowAInterval,
+            rowDButtons,
+            rowFButtons,
+            committeeButtons,
+            serviceUrl,
+            adsFooter,
+          };
+          const CONFIG_PAYLOAD_SOFT_LIMIT = 960 * 1024;
+          const approxBytes = new Blob([JSON.stringify(configPayload)]).size;
+          if (approxBytes > CONFIG_PAYLOAD_SOFT_LIMIT) {
+            const sizeErr = new Error("payload-too-large");
+            sizeErr.code = "resource-exhausted";
+            sizeErr.approxBytes = approxBytes;
+            throw sizeErr;
+          }
+
           await Promise.all([
             db.collection("communities").doc(id).set(
               { units: uniq, updatedAt: FieldValue.serverTimestamp() },
               { merge: true }
             ),
             configDocRef(id).set(
-              { 
-                communityButtons: featureButtons, 
-                communityButtonsOrder: featureOrder, 
-                rowAImages,
-                rowAInterval,
-                rowDButtons,
-                rowFButtons,
-                committeeButtons,
-                serviceUrl,
-                adsFooter,
-                updatedAt: FieldValue.serverTimestamp() 
-              },
+              Object.assign({}, configPayload, { updatedAt: FieldValue.serverTimestamp() }),
               { merge: true }
             ),
           ]);
-          closeUnitModal();
-        } catch {
-          showUnitError("儲存失敗，請稍後再試。");
+          try {
+            closeUnitModal();
+          } catch (closeErr) {
+            console.warn("closeUnitModal error:", closeErr);
+          }
+        } catch (err) {
+          console.error("unitModal save error:", err);
+          const code = String(err && err.code ? err.code : "");
+          const msg = String(err && err.message ? err.message : "") + " " + (typeof err === "object" ? JSON.stringify(err) : "");
+          if (code.includes("permission-denied")) {
+            showUnitError("沒有權限執行此操作。");
+          } else if (
+            code.includes("resource-exhausted") ||
+            code === "payload-too-large" ||
+            msg.includes("payload-too-large") ||
+            msg.includes("too large") ||
+            msg.includes("MAX_DOCUMENT_SIZE_EXCEEDED") ||
+            msg.includes("Document exceeds the maximum allowed size")
+          ) {
+            showUnitError("圖片過大，請更換較小的圖片再試。");
+          } else {
+            showUnitError("儲存失敗，請稍後再試。");
+          }
         } finally {
           setBusy(false);
         }

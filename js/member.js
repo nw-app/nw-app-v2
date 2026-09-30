@@ -409,6 +409,38 @@
   const STORAGE_CONFIG = "csp_config_v1";
   const STORAGE_ACCOUNTS = "csp_accounts_v1";
   const STORAGE_ACTIVE_COMMUNITY = "csp_active_community_v1";
+  const STORAGE_MEMBER_SETTINGS = "csp_member_settings_v1";
+
+  function memberSettingsKey(communityId, uid) {
+    return `${String(communityId || "default")}::${String(uid || "anon")}`;
+  }
+  function loadMemberSettings(communityId, uid) {
+    const key = memberSettingsKey(communityId, uid);
+    try {
+      const stored = localStorage.getItem(STORAGE_MEMBER_SETTINGS);
+      const map = stored && typeof stored === "string" ? JSON.parse(stored) : {};
+      const obj = map && typeof map === "object" && map[key] && typeof map[key] === "object" ? map[key] : {};
+      return {
+        sosMode: String(obj.sosMode || "default").trim() === "custom" ? "custom" : "default",
+        sosCustomPhone: String(obj.sosCustomPhone || "").trim()
+      };
+    } catch {
+      return { sosMode: "default", sosCustomPhone: "" };
+    }
+  }
+  function saveMemberSettings(communityId, uid, patch) {
+    const key = memberSettingsKey(communityId, uid);
+    let map = {};
+    try {
+      const raw = localStorage.getItem(STORAGE_MEMBER_SETTINGS);
+      map = raw && typeof raw === "string" ? JSON.parse(raw) : {};
+    } catch {}
+    if (!map || typeof map !== "object") map = {};
+    const prev = loadMemberSettings(communityId, uid);
+    map[key] = { ...prev, ...(patch && typeof patch === "object" ? patch : {}) };
+    localStorage.setItem(STORAGE_MEMBER_SETTINGS, JSON.stringify(map));
+    return map[key];
+  }
 
   const legacyRowDButtons = [
     { name: "AI對話", icon: "photo/b01.png", url: "#" },
@@ -463,7 +495,7 @@
   ];
   const defaultCommitteeButtons = [
     { name: "社區班表", icon: "photo/k01.png", url: "#", openExternal: false },
-    { name: "監視畫面", icon: "photo/k02.png", url: "#", openExternal: false },
+    { name: "社區公約", icon: "photo/k02.png", url: "#", openExternal: false },
     { name: "待辦事項", icon: "photo/k03.png", url: "#", openExternal: false },
     { name: "例行會議", icon: "photo/k04.png", url: "#", openExternal: false },
     { name: "每日日誌", icon: "photo/k05.png", url: "#", openExternal: false },
@@ -1013,9 +1045,11 @@
       return;
     }
     if (moduleId === "resident-service") {
-      pageTitleEl.textContent = "客服中心";
-      pageSubtitleEl.textContent = "聯繫社區管理處或系統客服（開發中）";
-      contentEl.innerHTML = "";
+      const cfg = loadConfig();
+      pageTitleEl.textContent = "";
+      pageSubtitleEl.textContent = "";
+      contentEl.innerHTML = homeView();
+      openPageModal(cfg.serviceUrl || "", "客服中心");
       return;
     }
     if (moduleId === "meter-reading") {
@@ -1187,18 +1221,37 @@
       return;
     }
 
-    const cfg = loadConfig();
-    const sosActionMode = String(cfg.sosActionMode || "backend").trim();
-    const sosPhoneNumber = String(cfg.sosPhoneNumber || "").trim();
-    if (sosActionMode === "phone") {
-      if (!sosPhoneNumber) {
-        alert("尚未設定撥打電話號碼");
+    const communityId = String(resolveActiveCommunityId() || "").trim() || "default";
+    const uid = String(user.uid || "").trim();
+    const memberSettings = loadMemberSettings(communityId, uid);
+
+    if (memberSettings.sosMode === "custom") {
+      const customPhone = String(memberSettings.sosCustomPhone || "").trim();
+      if (!customPhone) {
+        alert("尚未設定自訂 SOS 電話號碼，請至「客服 / 系統設定」填寫");
         return;
       }
-      location.href = `tel:${sosPhoneNumber}`;
+      const finalPhone = customPhone;
+      (async () => {
+        try { await recordSosEvent(user, finalPhone, "custom"); } catch {}
+      })();
+      location.href = `tel:${finalPhone}`;
       return;
     }
 
+    const cfg = loadConfig();
+    const backendPhone = String(cfg.sosPhoneNumber || "").trim();
+    const DEFAULT_EMERGENCY_PHONE = "119";
+    const finalPhone = backendPhone || DEFAULT_EMERGENCY_PHONE;
+
+    (async () => {
+      try { await recordSosEvent(user, finalPhone, backendPhone ? "backend" : "default-119"); } catch {}
+    })();
+    location.href = `tel:${finalPhone}`;
+  }
+
+  async function recordSosEvent(user, dialedPhone, dialedFrom) {
+    if (!user) return null;
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -1216,9 +1269,6 @@
     } catch {}
 
     const community = resolveCanonicalCommunityId(udata.community || resolveActiveCommunityId());
-    // #region debug-point A:member-send-sos-payload
-    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"A",location:"member.js:sendSOS:payload",msg:"[DEBUG] member prepared sos payload",data:{uid:String(user.uid||""),email:String(user.email||""),udataCommunity:String(udata.community||""),activeCommunity:String(resolveActiveCommunityId()||""),canonicalCommunity:String(community||""),actionMode:String(sosActionMode||""),createdAtMs:Number(createdAtMs||0)},ts:Date.now()})}).catch(()=>{});
-    // #endregion
     const houseNo = String(udata.houseNo || udata.unit || "").trim() || "—";
     const subHouseNo = String(udata.subHouseNo || udata.subUnit || "").trim();
     const displayName = String(udata.displayName || udata.name || "").trim();
@@ -1237,19 +1287,21 @@
       createdBy: String(user.uid),
       createdByEmail: String(user.email || ""),
       datetimeText,
+      dialedPhone: String(dialedPhone || ""),
+      dialedFrom: String(dialedFrom || ""),
     };
 
     try {
       const ref = await db.collection("sos_alerts").add(payload);
       // #region debug-point A:member-send-sos-success
-      fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"A",location:"member.js:sendSOS:success",msg:"[DEBUG] member sos add success",data:{docId:String((ref&&ref.id)||""),community:String(payload.community||""),createdAtMs:Number(payload.createdAtMs||0)},ts:Date.now()})}).catch(()=>{});
+      fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"A",location:"member.js:recordSosEvent:success",msg:"[DEBUG] member sos add success",data:{docId:String((ref&&ref.id)||""),community:String(payload.community||""),createdAtMs:Number(payload.createdAtMs||0),dialedPhone:String(dialedPhone||""),dialedFrom:String(dialedFrom||"")},ts:Date.now()})}).catch(()=>{});
       // #endregion
-      alert("SOS 通報已送出");
+      console.info("[SOS] record saved:", ref && ref.id, { dialedFrom, dialedPhone });
     } catch (e) {
       // #region debug-point A:member-send-sos-fail
-      fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"A",location:"member.js:sendSOS:error",msg:"[DEBUG] member sos add failed",data:{message:String((e&&e.message)||""),code:String((e&&e.code)||"")},ts:Date.now()})}).catch(()=>{});
+      fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"A",location:"member.js:recordSosEvent:error",msg:"[DEBUG] member sos add failed",data:{message:String((e&&e.message)||""),code:String((e&&e.code)||""),dialedPhone:String(dialedPhone||""),dialedFrom:String(dialedFrom||"")},ts:Date.now()})}).catch(()=>{});
       // #endregion
-      alert("SOS 通報送出失敗，請稍後再試");
+      console.warn("[SOS] record failed:", e && e.message || e);
     }
   }
   
@@ -1310,6 +1362,185 @@
         </section>
       </div>
     `;
+  }
+
+  function serviceView(initialTab) {
+    const profile = state.currentUserProfile || {};
+    const currentUser = (typeof auth !== "undefined" && auth && auth.currentUser) ? auth.currentUser : null;
+    const uid = currentUser ? String(currentUser.uid || "") : "";
+    const communityId = String(resolveActiveCommunityId() || "").trim() || "default";
+    const memberSettings = loadMemberSettings(communityId, uid);
+
+    const displayName = String(profile.displayName || profile.name || (currentUser && currentUser.displayName) || "").trim() || "—";
+    const email = String(profile.email || (currentUser && currentUser.email) || "").trim() || "—";
+    const phone = String(profile.phone || profile.phoneNumber || profile.mobile || (currentUser && currentUser.phoneNumber) || "").trim() || "—";
+    const unit = String(profile.houseNo || profile.unit || profile.address || "").trim() || "—";
+    const communityRec = (state.communities || []).find(x => x && x.id === communityId) || null;
+    const communityName = String((communityRec && (communityRec.name || communityRec.displayName)) || "").trim() || "—";
+
+    const tab = initialTab === "system" ? "system" : "profile";
+    const sosModeCustom = memberSettings.sosMode === "custom";
+    const sosCustomPhone = String(memberSettings.sosCustomPhone || "").trim();
+
+    return `
+      <div class="member-settings">
+        <div class="member-settings-tabs" role="tablist">
+          <button type="button" class="mst-tab ${tab === "profile" ? "active" : ""}" data-mst-tab="profile" role="tab" aria-selected="${tab === "profile" ? "true" : "false"}">個人資訊</button>
+          <button type="button" class="mst-tab ${tab === "system" ? "active" : ""}" data-mst-tab="system" role="tab" aria-selected="${tab === "system" ? "true" : "false"}">系統設定</button>
+        </div>
+
+        <div class="mst-panel ${tab === "profile" ? "active" : ""}" data-mst-panel="profile" role="tabpanel">
+          <div class="profile-row" id="profileCommunityItem" hidden>
+            <div class="profile-value community" id="profileCommunityText">${escapeHtml(communityName)}</div>
+            <div class="profile-value" id="profileRole">—</div>
+          </div>
+          <div class="profile-item">
+            <div class="profile-avatar">
+              <img id="profileAvatarImg" alt="" />
+              <span class="user-avatar-fallback" id="profileAvatarFallback" aria-hidden="true">U</span>
+              <button type="button" class="avatar-edit-btn" id="btnEditAvatar" aria-label="更換大頭照" title="更換大頭照">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 20h9" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <input type="file" id="profileAvatarFile" accept="image/*" hidden />
+            </div>
+          </div>
+          <div class="profile-item">
+            <div class="profile-label">姓名</div>
+            <div class="profile-value" id="profileNameText">${escapeHtml(displayName)}</div>
+          </div>
+          <div class="profile-item" id="profileHouseNoItem">
+            <div class="profile-label">戶號</div>
+            <div class="profile-value" id="profileHouseNoText">${escapeHtml(unit)}</div>
+          </div>
+          <div class="mst-info-grid" style="margin-top:18px;">
+            <div class="mst-info-row">
+              <label>社區</label>
+              <div class="mst-info-value">${escapeHtml(communityName)}</div>
+            </div>
+            <div class="mst-info-row">
+              <label>電子郵件</label>
+              <div class="mst-info-value">${escapeHtml(email)}</div>
+            </div>
+            <div class="mst-info-row">
+              <label>手機</label>
+              <div class="mst-info-value">${escapeHtml(phone)}</div>
+            </div>
+          </div>
+          <div class="status" id="profileStatus" hidden></div>
+        </div>
+
+        <div class="mst-panel ${tab === "system" ? "active" : ""}" data-mst-panel="system" role="tabpanel">
+          <section class="mst-setting-section">
+            <div class="mst-section-title">SOS 按鈕</div>
+            <div class="mst-section-desc">選擇按下 SOS 按鈕時的處理方式。</div>
+            <label class="mst-radio-row">
+              <input type="radio" name="ms_sos_mode" value="default" ${!sosModeCustom ? "checked" : ""} />
+              <span class="mst-radio-label">按下撥出 (預設)</span>
+            </label>
+            <label class="mst-radio-row">
+              <input type="radio" name="ms_sos_mode" value="custom" ${sosModeCustom ? "checked" : ""} />
+              <span class="mst-radio-label">自行設定</span>
+              <input type="tel" class="mst-text ${!sosModeCustom ? "disabled" : ""}" id="ms_sos_phone" placeholder="請輸入電話號碼" value="${escapeHtml(sosCustomPhone)}" ${!sosModeCustom ? "disabled" : ""} />
+            </label>
+            <div class="mst-action-row">
+              <button type="button" class="btn btn-primary" id="ms_sos_save">儲存設定</button>
+              <span class="mst-save-status" id="ms_sos_status" aria-live="polite"></span>
+            </div>
+          </section>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindMemberSettingsListeners() {
+    const tabsEls = document.querySelectorAll(".member-settings-tabs");
+    tabsEls.forEach((tabsEl) => {
+      if (tabsEl._boundMs) return;
+      tabsEl._boundMs = true;
+      tabsEl.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-mst-tab]");
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const tabId = String(btn.dataset.mstTab || "").trim();
+        if (!tabId) return;
+        let root = tabsEl.closest(".member-settings");
+        let scope = root;
+        if (!root) {
+          const modal = tabsEl.closest(".modal") || document.getElementById("profileModal");
+          if (modal) root = modal.querySelector(".member-settings");
+          scope = tabsEl.closest(".modal") || document;
+        } else {
+          const modal = root.closest(".modal") || document.getElementById("profileModal");
+          if (modal) scope = modal;
+        }
+        if (!root) return;
+        scope.querySelectorAll(".mst-tab").forEach(t => {
+          const on = String(t.dataset.mstTab || "") === tabId;
+          t.classList.toggle("active", on);
+          t.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        root.querySelectorAll(".mst-panel").forEach(p => {
+          p.classList.toggle("active", String(p.dataset.mstPanel || "") === tabId);
+        });
+      });
+    });
+
+    const sosRadios = document.querySelectorAll('input[name="ms_sos_mode"]');
+    const sosPhoneInput = document.getElementById("ms_sos_phone");
+    sosRadios.forEach(r => {
+      if (r._boundMs) return;
+      r._boundMs = true;
+      r.addEventListener("change", () => {
+        const isCustom = String(r.value || "") === "custom";
+        if (sosPhoneInput) {
+          sosPhoneInput.disabled = !isCustom;
+          sosPhoneInput.classList.toggle("disabled", !isCustom);
+          if (isCustom) {
+            try { sosPhoneInput.focus(); } catch {}
+          }
+        }
+      });
+    });
+
+    const saveBtn = document.getElementById("ms_sos_save");
+    const statusEl = document.getElementById("ms_sos_status");
+    if (saveBtn && !saveBtn._boundMs) {
+      saveBtn._boundMs = true;
+      saveBtn.addEventListener("click", () => {
+        const checked = document.querySelector('input[name="ms_sos_mode"]:checked');
+        const sosMode = String(checked && checked.value || "default").trim() === "custom" ? "custom" : "default";
+        let sosCustomPhone = sosPhoneInput ? String(sosPhoneInput.value || "").trim() : "";
+        if (sosMode === "custom" && !sosCustomPhone) {
+          if (statusEl) {
+            statusEl.style.color = "#d33";
+            statusEl.textContent = "請輸入自訂電話號碼";
+          }
+          if (sosPhoneInput) {
+            try { sosPhoneInput.focus(); } catch {}
+          }
+          return;
+        }
+        const currentUser = (typeof auth !== "undefined" && auth && auth.currentUser) ? auth.currentUser : null;
+        const uid = currentUser ? String(currentUser.uid || "") : "";
+        const communityId = String(resolveActiveCommunityId() || "").trim() || "default";
+        saveMemberSettings(communityId, uid, { sosMode, sosCustomPhone });
+        if (statusEl) {
+          statusEl.style.color = "#18794e";
+          statusEl.textContent = "已儲存";
+          clearTimeout(statusEl._t);
+          statusEl._t = setTimeout(() => { statusEl.textContent = ""; }, 2000);
+        }
+      });
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    window.serviceView = serviceView;
+    window.bindMemberSettingsListeners = bindMemberSettingsListeners;
   }
 
   function renderRowACarousel() {
