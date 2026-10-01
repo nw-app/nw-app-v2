@@ -1480,16 +1480,16 @@
         </div>
 
         <div class="mst-panel ${tab === "system" ? "active" : ""}" data-mst-panel="system" role="tabpanel">
-          <section class="mst-setting-section">
+          <section class="mst-setting-section" style="text-align:left;">
             <div class="mst-section-title">SOS 按鈕</div>
             <div class="mst-section-desc">選擇按下 SOS 按鈕時的處理方式。</div>
-            <label class="mst-radio-row">
+            <label class="mst-radio-row" style="text-align:left;">
               <input type="radio" name="ms_sos_mode" value="default" ${!sosModeCustom ? "checked" : ""} />
-              <span class="mst-radio-label">按下撥出 (預設)</span>
+              <span class="mst-radio-label" style="text-align:left;">通報社區中心 (預設)</span>
             </label>
-            <label class="mst-radio-row">
+            <label class="mst-radio-row" style="text-align:left;">
               <input type="radio" name="ms_sos_mode" value="custom" ${sosModeCustom ? "checked" : ""} />
-              <span class="mst-radio-label">自行設定</span>
+              <span class="mst-radio-label" style="text-align:left;">自行設定撥出號碼</span>
               <input type="tel" class="mst-text ${!sosModeCustom ? "disabled" : ""}" id="ms_sos_phone" placeholder="請輸入電話號碼" value="${escapeHtml(sosCustomPhone)}" ${!sosModeCustom ? "disabled" : ""} />
             </label>
             <div class="mst-action-row">
@@ -1576,15 +1576,24 @@
         const communityId = String(resolveActiveCommunityId() || "").trim() || "default";
         saveMemberSettings(communityId, uid, { sosMode, sosCustomPhone });
         try {
-          const contentEl = document.getElementById("content");
-          if (contentEl) {
-            const route = typeof parseRoute === "function" ? parseRoute() : { moduleId: "home" };
-            if (!route.moduleId || route.moduleId === "home") {
-              if (typeof homeView === "function") {
-                contentEl.innerHTML = homeView();
-                bindHomeViewEvents && bindHomeViewEvents();
-              }
+          const cfg = loadConfig();
+          const sosButtonText = String(cfg.sosButtonText || "").trim() || "SOS";
+          const btn = document.getElementById("btnSOS");
+          if (btn) {
+            const mm = resolveSosMemberMode();
+            const rawMode = String(cfg.sosActionMode || "").trim();
+            const phone = String(cfg.sosPhoneNumber || "").trim();
+            const isCommunityPhone = rawMode === "phone" && phone.length > 0;
+            let href = "#sos";
+            if (mm.custom && mm.customPhone.length > 0) {
+              href = `tel:${mm.customPhone}`;
+            } else if (isCommunityPhone) {
+              href = `tel:${phone}`;
             }
+            btn.setAttribute("href", href);
+            if (sosButtonText) btn.textContent = sosButtonText;
+            btn.setAttribute("role", "button");
+            btn.setAttribute("aria-label", "SOS");
           }
         } catch {}
         if (statusEl) {
