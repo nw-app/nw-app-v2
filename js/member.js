@@ -1234,21 +1234,12 @@
   function resolveSosMemberMode() {
     const currentUser = (typeof auth !== "undefined" && auth && auth.currentUser) ? auth.currentUser : null;
     const uid = currentUser ? String(currentUser.uid || "").trim() : "";
-    const urlKey = (typeof readUrlCommunityKey === "function") ? String(readUrlCommunityKey() || "").trim() : "";
-    let communityId = urlKey;
-    if (!communityId) {
-      communityId = String(
-        (typeof localStorage !== "undefined" && localStorage)
-          ? String(localStorage.getItem("csp_active_community_v1") || "").trim()
-          : ""
-      ) || (typeof resolveActiveCommunityId === "function" ? String(resolveActiveCommunityId() || "").trim() : "");
-    }
-    communityId = communityId || "default";
+    const communityId = resolveActiveCommunityId() || "default";
     const m = loadMemberSettings(communityId, uid);
     return {
       custom: String(m.sosMode || "default").trim() === "custom",
       customPhone: String(m.sosCustomPhone || "").trim(),
-      debug: { urlKey, storageKey: (typeof localStorage !== "undefined" && localStorage) ? String(localStorage.getItem("csp_active_community_v1") || "").trim() : "", communityId, uid }
+      debug: { communityId, uid }
     };
   }
 
@@ -1435,7 +1426,7 @@
     const communityName = String((communityRec && (communityRec.name || communityRec.displayName)) || "").trim() || "—";
 
     const tab = initialTab === "system" ? "system" : "profile";
-    const sosModeCustom = memberSettings.sosMode === "custom";
+    const sosModeCustom = String(memberSettings.sosMode || "default").trim() === "custom";
     const sosCustomPhone = String(memberSettings.sosCustomPhone || "").trim();
 
     return `
@@ -1584,6 +1575,18 @@
         const uid = currentUser ? String(currentUser.uid || "") : "";
         const communityId = String(resolveActiveCommunityId() || "").trim() || "default";
         saveMemberSettings(communityId, uid, { sosMode, sosCustomPhone });
+        try {
+          const contentEl = document.getElementById("content");
+          if (contentEl) {
+            const route = typeof parseRoute === "function" ? parseRoute() : { moduleId: "home" };
+            if (!route.moduleId || route.moduleId === "home") {
+              if (typeof homeView === "function") {
+                contentEl.innerHTML = homeView();
+                bindHomeViewEvents && bindHomeViewEvents();
+              }
+            }
+          }
+        } catch {}
         if (statusEl) {
           statusEl.style.color = "#18794e";
           statusEl.textContent = "已儲存";
@@ -1605,7 +1608,11 @@
       resolveSosMemberMode,
       loadMemberSettings,
       saveMemberSettings,
-      memberSettingsKey
+      memberSettingsKey,
+      resolveActiveCommunityId,
+      setHeaderCommunityText,
+      resolveHeaderCommunityName,
+      bindHomeViewEvents: (typeof bindHomeViewEvents === "function" ? bindHomeViewEvents : null)
     };
   }
 
