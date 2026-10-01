@@ -550,31 +550,28 @@
   }
 
   function setHeaderCommunityText(text) {
-    updateSosHeaderLabel();
-  }
-
-  function getSosModeLabelText() {
-    try {
-      const cfg = loadConfig() || {};
-      const rawMode = String(cfg.sosActionMode || "").trim();
-      const phone = String(cfg.sosPhoneNumber || "").trim();
-      const isPhone = rawMode === "phone" && phone.length > 0;
-      if (isPhone) return `撥打電話${phone}`;
-      return "後台通報";
-    } catch {
-      return "後台通報";
-    }
-  }
-
-  function updateSosHeaderLabel() {
     const subEl = document.getElementById("communityNameSub");
     if (!subEl) return;
-    const label = getSosModeLabelText();
-    subEl.textContent = label || "";
+    const value = String(text || "").trim();
+    subEl.textContent = value;
     subEl.style.setProperty("text-align", "left");
     try {
-      subEl.setAttribute("title", label || "");
+      if (value) subEl.setAttribute("title", value);
+      else subEl.removeAttribute("title");
     } catch {}
+  }
+
+  function resolveHeaderCommunityName() {
+    try {
+      const accounts = loadAccounts();
+      const cid = resolveActiveCommunityId();
+      const c = (accounts.communities || []).find((x) => x && x.id === cid) || null;
+      const urlC = readUrlCommunityKey();
+      const cname = c ? String(c.name || "").trim() : "";
+      return cname || urlC || String(cid || "").trim() || "";
+    } catch {
+      return "";
+    }
   }
 
   async function ensureUrlCommunityKey(user) {
@@ -743,7 +740,7 @@
     const cname = c ? String(c.name || "").trim() : "";
     const el = document.getElementById("loginInfo");
     if (el) el.textContent = `已登入：${user.email || "（未知）"}｜${cname || urlC || cid}`;
-    updateSosHeaderLabel();
+    setHeaderCommunityText(resolveHeaderCommunityName());
   }
 
   function ensureConfigSubscription() {
@@ -1603,7 +1600,6 @@
     window.__memberDiag = {
       loadConfig,
       homeView,
-      getSosModeLabelText,
       sendSOS,
       recordSosEvent: (typeof recordSosEvent === "function" ? recordSosEvent : null),
       resolveSosMemberMode,
@@ -1707,7 +1703,7 @@
     ensureChatphoneRuntimeState();
     applyChatphoneHeaderVisibility();
     updateMemberIntercomMissedBadgeUI();
-    updateSosHeaderLabel();
+    setHeaderCommunityText(resolveHeaderCommunityName());
   }
 
   const btnGoCommunity = document.getElementById("btnGoCommunity");
