@@ -1128,15 +1128,14 @@
     }
   });
 
-  // SOS 按钮事件委托
+  // SOS 按钮事件委托（a.btn-sos 同步導航 / 後台通報，完全繞過手機系統二次確認）
   document.addEventListener("click", (e) => {
     const sosBtn = e.target.closest(".btn-sos");
     if (!sosBtn) return;
-    
-    e.preventDefault();
     e.stopPropagation();
     sendSOS();
-  });
+    e.preventDefault();
+  }, { capture: true });
 
   function openPageModal(url, name) {
     const modal = document.getElementById("externalPageModal");
@@ -1235,35 +1234,69 @@
     modal.hidden = false;
   }
 
-  async function sendSOS() {
+  function resolveSosMemberMode() {
+    const currentUser = (typeof auth !== "undefined" && auth && auth.currentUser) ? auth.currentUser : null;
+    const uid = currentUser ? String(currentUser.uid || "").trim() : "";
+    const urlKey = (typeof readUrlCommunityKey === "function") ? String(readUrlCommunityKey() || "").trim() : "";
+    let communityId = urlKey;
+    if (!communityId) {
+      communityId = String(
+        (typeof localStorage !== "undefined" && localStorage)
+          ? String(localStorage.getItem("csp_active_community_v1") || "").trim()
+          : ""
+      ) || (typeof resolveActiveCommunityId === "function" ? String(resolveActiveCommunityId() || "").trim() : "");
+    }
+    communityId = communityId || "default";
+    const m = loadMemberSettings(communityId, uid);
+    return {
+      custom: String(m.sosMode || "default").trim() === "custom",
+      customPhone: String(m.sosCustomPhone || "").trim(),
+      debug: { urlKey, storageKey: (typeof localStorage !== "undefined" && localStorage) ? String(localStorage.getItem("csp_active_community_v1") || "").trim() : "", communityId, uid }
+    };
+  }
+
+  function sendSOS() {
     const user = auth.currentUser;
     if (!user) {
       alert("請先登入再送出 SOS");
-      return;
+      return false;
+    }
+
+    const mm = resolveSosMemberMode();
+    const useCustom = mm.custom && mm.customPhone.length > 0;
+    if (useCustom) {
+      location.href = `tel:${mm.customPhone}`;
+      return false;
     }
 
     const cfg = loadConfig();
-    const mode = cfg.sosActionMode === "phone" ? "phone" : "backend";
+    const rawMode = String(cfg.sosActionMode || "").trim();
     const phone = String(cfg.sosPhoneNumber || "").trim();
+    const isPhone = rawMode === "phone" && phone.length > 0;
 
-    if (mode === "backend") {
-      (async () => {
-        try { await recordSosEvent(user, "", "community-backend"); } catch {}
-      })();
-      try {
-        alert("已送出前台通報");
-      } catch {}
-      return;
+    if (isPhone) {
+      try { recordSosEvent(user, phone, "community-phone").catch(() => {}); } catch {}
+      location.href = `tel:${phone}`;
+      return false;
     }
 
-    if (!phone) {
-      alert("社區尚未設定撥話號碼，請聯絡管委會");
-      return;
+    try { recordSosEvent(user, "", "community-backend").catch(() => {}); } catch {}
+    const btn = document.getElementById("btnSOS");
+    const origin = btn ? btn.textContent || "SOS" : "SOS";
+    if (btn) {
+      btn.textContent = "已通報";
+      btn.setAttribute("disabled", "disabled");
+      btn.style.setProperty("opacity", "0.7");
+      try { clearTimeout(window.__sosRestoreT); } catch {}
+      window.__sosRestoreT = setTimeout(() => {
+        const b = document.getElementById("btnSOS");
+        if (!b) return;
+        b.textContent = origin;
+        try { b.removeAttribute("disabled"); } catch {}
+        try { b.style.removeProperty("opacity"); } catch {}
+      }, 1800);
     }
-    (async () => {
-      try { await recordSosEvent(user, phone, "community-phone"); } catch {}
-    })();
-    location.href = `tel:${phone}`;
+    return false;
   }
 
   async function recordSosEvent(user, dialedPhone, dialedFrom) {
@@ -1345,6 +1378,16 @@
   function homeView() {
     const cfg = loadConfig();
     const sosButtonText = String(cfg.sosButtonText || "").trim() || "SOS";
+    const mm = resolveSosMemberMode();
+    let sosHref = "#sos";
+    if (mm.custom && mm.customPhone.length > 0) {
+      sosHref = `tel:${mm.customPhone}`;
+    } else {
+      const rawMode = String(cfg.sosActionMode || "").trim();
+      const phone = String(cfg.sosPhoneNumber || "").trim();
+      const isPhone = rawMode === "phone" && phone.length > 0;
+      if (isPhone) sosHref = `tel:${phone}`;
+    }
     return `
       <div class="home-grid">
         <section class="row-a" id="rowACarousel">
@@ -1354,7 +1397,7 @@
           </div>
         </section>
         <section class="row-b">
-          <button class="btn-sos" type="button" id="btnSOS">${escapeHtml(sosButtonText)}</button>
+          <a class="btn-sos" href="${escapeAttr(sosHref)}" role="button" id="btnSOS" aria-label="SOS">${escapeHtml(sosButtonText)}</a>
         </section>
         <section class="row-c">社區服務</section>
         <section class="row-d">
@@ -1557,6 +1600,17 @@
   if (typeof window !== "undefined") {
     window.serviceView = serviceView;
     window.bindMemberSettingsListeners = bindMemberSettingsListeners;
+    window.__memberDiag = {
+      loadConfig,
+      homeView,
+      getSosModeLabelText,
+      sendSOS,
+      recordSosEvent: (typeof recordSosEvent === "function" ? recordSosEvent : null),
+      resolveSosMemberMode,
+      loadMemberSettings,
+      saveMemberSettings,
+      memberSettingsKey
+    };
   }
 
   function renderRowACarousel() {
@@ -1671,6 +1725,8 @@
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
   }
+
+  function escapeAttr(input) { return escapeHtml(input); }
 
   function ensureModal(id) {
     let modal = document.getElementById(id);
