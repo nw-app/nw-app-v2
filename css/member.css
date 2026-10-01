@@ -343,9 +343,9 @@ a { color: inherit; text-decoration: none; }
   min-width: 0;
 }
 .frame-brand img { width: 48px; height: 48px; display: block; }
-.frame-brand .meta { min-width: 0; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
-.frame-brand .title { font-weight: 900; letter-spacing: 0.2px; font-size: 20px; line-height: 1.05; }
-.frame-brand .sub { color: var(--brand); font-size: 14px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.05; }
+.frame-brand .meta { min-width: 0; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; justify-content: center; text-align: left; }
+.frame-brand .title { font-weight: 900; letter-spacing: 0.2px; font-size: 20px; line-height: 1.05; text-align: left; }
+.frame-brand .sub { color: var(--brand); font-size: 14px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.05; text-align: left; }
 .frame-actions { display: flex; gap: 10px; align-items: center; }
 .header-actions {
   display: flex;

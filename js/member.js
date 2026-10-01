@@ -550,10 +550,31 @@
   }
 
   function setHeaderCommunityText(text) {
+    updateSosHeaderLabel();
+  }
+
+  function getSosModeLabelText() {
+    try {
+      const cfg = loadConfig() || {};
+      const rawMode = String(cfg.sosActionMode || "").trim();
+      const phone = String(cfg.sosPhoneNumber || "").trim();
+      const isPhone = rawMode === "phone" && phone.length > 0;
+      if (isPhone) return `撥打電話${phone}`;
+      return "後台通報";
+    } catch {
+      return "後台通報";
+    }
+  }
+
+  function updateSosHeaderLabel() {
     const subEl = document.getElementById("communityNameSub");
     if (!subEl) return;
-    const t = String(text || "").trim();
-    subEl.textContent = t && t !== "default" ? t : "";
+    const label = getSosModeLabelText();
+    subEl.textContent = label || "";
+    subEl.style.setProperty("text-align", "left");
+    try {
+      subEl.setAttribute("title", label || "");
+    } catch {}
   }
 
   async function ensureUrlCommunityKey(user) {
@@ -722,7 +743,7 @@
     const cname = c ? String(c.name || "").trim() : "";
     const el = document.getElementById("loginInfo");
     if (el) el.textContent = `已登入：${user.email || "（未知）"}｜${cname || urlC || cid}`;
-    setHeaderCommunityText(cname);
+    updateSosHeaderLabel();
   }
 
   function ensureConfigSubscription() {
@@ -1221,33 +1242,28 @@
       return;
     }
 
-    const communityId = String(resolveActiveCommunityId() || "").trim() || "default";
-    const uid = String(user.uid || "").trim();
-    const memberSettings = loadMemberSettings(communityId, uid);
+    const cfg = loadConfig();
+    const mode = cfg.sosActionMode === "phone" ? "phone" : "backend";
+    const phone = String(cfg.sosPhoneNumber || "").trim();
 
-    if (memberSettings.sosMode === "custom") {
-      const customPhone = String(memberSettings.sosCustomPhone || "").trim();
-      if (!customPhone) {
-        alert("尚未設定自訂 SOS 電話號碼，請至「客服 / 系統設定」填寫");
-        return;
-      }
-      const finalPhone = customPhone;
+    if (mode === "backend") {
       (async () => {
-        try { await recordSosEvent(user, finalPhone, "custom"); } catch {}
+        try { await recordSosEvent(user, "", "community-backend"); } catch {}
       })();
-      location.href = `tel:${finalPhone}`;
+      try {
+        alert("已送出前台通報");
+      } catch {}
       return;
     }
 
-    const cfg = loadConfig();
-    const backendPhone = String(cfg.sosPhoneNumber || "").trim();
-    const DEFAULT_EMERGENCY_PHONE = "119";
-    const finalPhone = backendPhone || DEFAULT_EMERGENCY_PHONE;
-
+    if (!phone) {
+      alert("社區尚未設定撥話號碼，請聯絡管委會");
+      return;
+    }
     (async () => {
-      try { await recordSosEvent(user, finalPhone, backendPhone ? "backend" : "default-119"); } catch {}
+      try { await recordSosEvent(user, phone, "community-phone"); } catch {}
     })();
-    location.href = `tel:${finalPhone}`;
+    location.href = `tel:${phone}`;
   }
 
   async function recordSosEvent(user, dialedPhone, dialedFrom) {
@@ -1637,6 +1653,7 @@
     ensureChatphoneRuntimeState();
     applyChatphoneHeaderVisibility();
     updateMemberIntercomMissedBadgeUI();
+    updateSosHeaderLabel();
   }
 
   const btnGoCommunity = document.getElementById("btnGoCommunity");
