@@ -1391,8 +1391,10 @@
         });
       }
       rList.querySelectorAll("[data-toggle-user]").forEach((input) => {
-        it.classList.remove("expanded");
-        it.setAttribute("aria-expanded", "false");
+        const item = input.closest(".account-item");
+        if (!item) return;
+        item.classList.remove("expanded");
+        item.setAttribute("aria-expanded", "false");
       });
 
       rList.querySelectorAll("[data-toggle-user]").forEach((input) => {
@@ -2056,6 +2058,10 @@
           showModalError(isCommunityLike ? "未設定預設密碼時，預設會使用社區代號；請填寫預設密碼或確認社區代號已設定。" : "未設定預設密碼時，預設會使用手機號碼；請填寫手機號碼或預設密碼。");
           return;
         }
+        if (!editUserId && String(password || "").length < 6) {
+          showModalError("預設密碼至少需 6 個字元；未填寫時系統會改用社區代號或手機號碼作為預設密碼。");
+          return;
+        }
         const { roles, extra } = readResidentRoles();
         if (isResident) {
           if (roles.includes("其他") && !extra) {
@@ -2194,13 +2200,38 @@
             statusEl.classList.remove("error");
           }
           closeModal();
-        } catch {
+        } catch (err) {
           if (createdAuth && createdAuth.user && typeof createdAuth.user.delete === "function") {
             try {
               await createdAuth.user.delete();
             } catch {}
           }
-          showModalError((Boolean(editUserId) && !forceCreateUser) ? "更新失敗，請稍後再試。" : "建立失敗，請稍後再試。");
+          try { console.error("[系統後台] 帳號儲存失敗：", err); } catch {}
+          const isEditMode = Boolean(editUserId) && !forceCreateUser;
+          const code = String(err && err.code ? err.code : "");
+          const rawMsg = String(err && err.message ? err.message : "");
+          const action = isEditMode ? "更新" : "建立";
+          let message = `${action}失敗，請稍後再試。`;
+          if (code.includes("permission-denied")) {
+            message = `${action}失敗：目前登入的帳號沒有寫入權限，請改用系統管理員帳號操作。`;
+          } else if (code.includes("email-already-in-use")) {
+            message = "此電子郵件已被註冊過，請改用其他電子郵件。";
+          } else if (code.includes("invalid-email")) {
+            message = "電子郵件格式不正確，請重新確認。";
+          } else if (code.includes("weak-password")) {
+            message = "密碼強度不足（至少 6 個字元），請填寫較長的預設密碼。";
+          } else if (code.includes("operation-not-allowed")) {
+            message = "此專案尚未啟用「電子郵件／密碼」登入方式，請先在 Firebase 主控台開啟。";
+          } else if (code.includes("too-many-requests")) {
+            message = "嘗試次數過多，請稍後再試。";
+          } else if (code.includes("network-request-failed") || code.includes("unavailable")) {
+            message = "網路連線不穩定，請稍後再試。";
+          } else if (code) {
+            message = `${action}失敗：${code}`;
+          } else if (rawMsg) {
+            message = `${action}失敗：${rawMsg}`;
+          }
+          showModalError(message);
         } finally {
           if (createdAuth && createdAuth.auth) {
             try {
