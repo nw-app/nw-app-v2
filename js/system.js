@@ -2395,6 +2395,8 @@
       { id: "parking", name: "綠色停車" },
       { id: "company-support", name: "公司支援" },
       { id: "meter-reading", name: "抄表紀錄" },
+      { id: "community-staff", name: "管理帳號" },
+      { id: "suite", name: "套房專區" },
       { id: "finance", name: "收支報表" },
       { id: "checkin-vote", name: "報到投票" },
       { id: "assignments", name: "交辦事項" },
