@@ -11460,6 +11460,7 @@
           filterBtns.forEach(b => b.classList.remove('btn-primary'));
           btn.classList.add('btn-primary');
           currentFilter = btn.getAttribute('data-filter') || 'pending';
+          if (currentFilter === 'history') ensureHistoryUnitNames();
           renderList();
         };
       });
@@ -11494,6 +11495,16 @@
               ${iconSvg("qr-scan")}
             </button>
           </div>
+          <div class="history-toolbar" id="visitorHistoryToolbar" hidden>
+            <div class="field">
+              <label for="visitorHistoryUnit">戶號</label>
+              <select id="visitorHistoryUnit"></select>
+            </div>
+            <div class="history-toolbar-actions">
+              <button class="btn btn-sm" type="button" id="btnHistoryBrowse">手機版瀏覽</button>
+              <button class="btn btn-sm btn-ghost" type="button" id="btnHistoryExcel">下載 Excel</button>
+            </div>
+          </div>
           <div class="status" id="visitorStatus" hidden></div>
           <div class="visitor-list-container" id="visitorList">
             <div class="visitor-grid"></div>
@@ -11511,6 +11522,10 @@
     const visitorQrBtn = document.getElementById("btnVisitorQr");
     const scanBtn = document.getElementById("btnScanVisitor");
     const addBtn = document.getElementById("btnAddVisitor");
+    const historyToolbarEl = document.getElementById("visitorHistoryToolbar");
+    const historyUnitEl = document.getElementById("visitorHistoryUnit");
+    const historyBrowseBtn = document.getElementById("btnHistoryBrowse");
+    const historyExcelBtn = document.getElementById("btnHistoryExcel");
 
     ensureVisitorsPendingCountSubscription(cid);
 
@@ -11547,6 +11562,13 @@
 
     let visitors = [];
     let currentFilter = 'pending'; // pending, approved, inside, history
+    let historyUnit = "";
+    let historyUnitNames = new Map();
+    const isHistoryVisitor = (v) => {
+      const status = String((v && v.status) || "").toLowerCase();
+      const hasOutTime = v && v.outAt != null;
+      return (status === 'approved' && hasOutTime) || (status !== 'pending' && hasOutTime);
+    };
     const hydrateCreatorLabels = async (list) => {
       const ids = Array.from(
         new Set(
@@ -11592,6 +11614,10 @@
         insideBadge.hidden = insideCount === 0;
       }
 
+      const isHistoryTab = currentFilter === 'history';
+      if (historyToolbarEl) historyToolbarEl.hidden = !isHistoryTab;
+      if (isHistoryTab) refreshHistoryUnitOptions();
+
       const q = String(searchEl ? searchEl.value : "").trim().toLowerCase();
       const dateVal = String(dateEl ? dateEl.value : "").trim();
       
@@ -11610,11 +11636,8 @@
           return status === 'approved' && hasInTime && !hasOutTime;
         });
       } else if (currentFilter === 'history') {
-        filtered = filtered.filter(x => {
-          const status = String(x.status || "").toLowerCase();
-          const hasOutTime = x.outAt != null;
-          return (status === 'approved' && hasOutTime) || (status !== 'pending' && hasOutTime);
-        });
+        filtered = filtered.filter(isHistoryVisitor);
+        if (historyUnit) filtered = filtered.filter((x) => String(x.unit || "").trim() === historyUnit);
       }
       
       // 日期筛选
@@ -11745,6 +11768,176 @@
         .join("");
     };
 
+    const docIdForHistoryUnit = (unit) => {
+      let s = String(unit || "").trim().replace(/\//g, "_");
+      if (!s || s === "." || s === "..") s = `_${s}`;
+      return s;
+    };
+
+    const historyStatusLabel = (raw) => {
+      const k = String(raw || "").toLowerCase();
+      if (k === "approved") return "已核准";
+      if (k === "pending") return "待審核";
+      if (k === "cancelled" || k === "canceled") return "已取消";
+      if (k === "rejected") return "已拒絕";
+      return String(raw || "") || "—";
+    };
+
+    const formatMs = (ms) => {
+      if (ms == null || !Number.isFinite(Number(ms))) return "";
+      const d = new Date(Number(ms));
+      if (!Number.isFinite(d.getTime())) return "";
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    };
+
+    const currentMonthKey = (d) => {
+      const dt = d instanceof Date ? d : new Date();
+      return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}`;
+    };
+
+    const buildHistoryRecords = (unit) => {
+      const u = String(unit || "").trim();
+      return (Array.isArray(visitors) ? visitors : [])
+        .filter((v) => String(v.unit || "").trim() === u && isHistoryVisitor(v))
+        .map((v) => {
+          const inDate = toDate(v.inAt);
+          const outDate = toDate(v.outAt);
+          const createdDate = toDate(v.createdAt);
+          return {
+            id: String(v.id || ""),
+            name: String(v.name || ""),
+            phone: String(v.phone || ""),
+            plate: String(v.plate || ""),
+            purpose: String(v.purpose || ""),
+            partySize: v.partySize != null && Number.isFinite(Number(v.partySize)) && Number(v.partySize) >= 1 ? Math.floor(Number(v.partySize)) : 1,
+            status: String(v.status || ""),
+            inAt: inDate ? inDate.getTime() : null,
+            outAt: outDate ? outDate.getTime() : null,
+            createdAt: createdDate ? createdDate.getTime() : null,
+          };
+        })
+        .sort((a, b) => (b.inAt || b.createdAt || 0) - (a.inAt || a.createdAt || 0));
+    };
+
+    const listHistoryUnits = () => Array.from(new Set(
+      (Array.isArray(visitors) ? visitors : [])
+        .filter(isHistoryVisitor)
+        .map((v) => String(v.unit || "").trim())
+        .filter(Boolean)
+    )).sort((a, b) => String(a).localeCompare(String(b), "zh-Hant"));
+
+    const refreshHistoryUnitOptions = () => {
+      if (!historyUnitEl) return;
+      const unitSet = new Set(listHistoryUnits());
+      (Array.isArray(residentOptions) ? residentOptions : []).forEach((r) => {
+        const id = String(r && r.id ? r.id : "").trim();
+        if (id) unitSet.add(id);
+      });
+      const units = Array.from(unitSet).sort((a, b) => String(a).localeCompare(String(b), "zh-Hant"));
+      const prev = String(historyUnitEl.value || historyUnit || "");
+      historyUnitEl.innerHTML = "";
+      const allOpt = document.createElement("option");
+      allOpt.value = "";
+      allOpt.textContent = units.length ? "全部戶號" : "尚無戶號";
+      historyUnitEl.appendChild(allOpt);
+      units.forEach((u) => {
+        const opt = document.createElement("option");
+        opt.value = u;
+        const nm = String(historyUnitNames.get(u) || "");
+        opt.textContent = nm ? `${u}（${nm}）` : u;
+        historyUnitEl.appendChild(opt);
+      });
+      historyUnitEl.value = units.includes(prev) ? prev : "";
+      historyUnit = String(historyUnitEl.value || "");
+    };
+
+    let historyNamesLoaded = false;
+    const ensureHistoryUnitNames = async () => {
+      if (historyNamesLoaded) return;
+      historyNamesLoaded = true;
+      try {
+        if (!residentOptions.length) residentOptions = await loadResidentOptions();
+        historyUnitNames = new Map(
+          (Array.isArray(residentOptions) ? residentOptions : [])
+            .map((u) => [String(u.id || "").trim(), String(u.name || "").trim()])
+            .filter(([id]) => Boolean(id))
+        );
+        refreshHistoryUnitOptions();
+        renderList();
+      } catch {
+        historyNamesLoaded = false;
+      }
+    };
+
+    const publishUnitHistory = async (unit) => {
+      const u = String(unit || "").trim();
+      if (!u) return false;
+      const records = buildHistoryRecords(u);
+      const docRef = db
+        .collection("communities")
+        .doc(String(visitorCommunitySlug || "default"))
+        .collection("visitor_history")
+        .doc(docIdForHistoryUnit(u));
+      await docRef.set({
+        unit: u,
+        name: String(historyUnitNames.get(u) || ""),
+        count: records.length,
+        updatedAt: new Date(),
+        records,
+      }, { merge: false });
+      return true;
+    };
+
+    const historySheetName = (unit, used) => {
+      let base = String(unit || "戶號").replace(/[\[\]\*\/\\\?:]/g, "_").trim() || "戶號";
+      if (base.length > 28) base = base.slice(0, 28);
+      let name = base;
+      let i = 2;
+      while (used.has(name)) {
+        name = `${base.slice(0, 26)}_${i}`;
+        i += 1;
+      }
+      used.add(name);
+      return name;
+    };
+
+    const exportHistoryExcel = () => {
+      if (!window.XLSX) {
+        toast("Excel 函式庫尚未載入，請稍後再試。");
+        return;
+      }
+      const unitSet = new Set(listHistoryUnits());
+      (Array.isArray(residentOptions) ? residentOptions : []).forEach((r) => {
+        const id = String(r && r.id ? r.id : "").trim();
+        if (id) unitSet.add(id);
+      });
+      const units = Array.from(unitSet).sort((a, b) => String(a).localeCompare(String(b), "zh-Hant"));
+      if (!units.length) {
+        toast("尚無戶號資料。");
+        return;
+      }
+      const wb = XLSX.utils.book_new();
+      const used = new Set();
+      units.forEach((u) => {
+        const rows = buildHistoryRecords(u).map((r) => ({
+          "訪客姓名": r.name,
+          "手機": r.phone,
+          "車牌": r.plate,
+          "到訪事由": r.purpose,
+          "拜訪人數": r.partySize,
+          "狀態": historyStatusLabel(r.status),
+          "來訪時間": formatMs(r.inAt),
+          "離開時間": formatMs(r.outAt),
+          "建立時間": formatMs(r.createdAt),
+        }));
+        const ws = rows.length
+          ? XLSX.utils.json_to_sheet(rows)
+          : XLSX.utils.aoa_to_sheet([["尚無紀錄"]]);
+        XLSX.utils.book_append_sheet(wb, ws, historySheetName(u, used));
+      });
+      XLSX.writeFile(wb, `歷史訪客_${cname || visitorCommunitySlug || "社區"}_${currentMonthKey().replace("-", "")}.xlsx`);
+    };
+
     const applyLocalVisitorPatch = (id, patch) => {
       const idx = visitors.findIndex((x) => String(x.id || "") === String(id || ""));
       if (idx < 0) return;
@@ -11848,9 +12041,31 @@
       };
       add(visitorCommunitySlug);
       add(cid);
+      add(activeCommunity ? activeCommunity.username : "");
       add(urlCommunityKey);
       try { add(sessionStorage.getItem("csp_last_cid")); } catch {}
+
       for (const slug of candidates) {
+        // 戶號來源以 communities/{slug}.units 為準（公開可讀，社區帳號亦可讀取）
+        let unitRows = [];
+        try {
+          const doc = await db.collection("communities").doc(String(slug)).get();
+          if (doc && doc.exists) {
+            const v = doc.data() || {};
+            unitRows = normalizeCommunityUnitRows(v.units);
+          }
+        } catch {}
+        if (!unitRows.length) continue;
+
+        const nameByUnit = new Map();
+        unitRows.forEach((u) => {
+          const uid = String(u.id || "").trim();
+          if (!uid) return;
+          const nm = String(u.ownerName || u.owner || u.name || "").trim();
+          if (nm) nameByUnit.set(uid, nm);
+        });
+
+        // 以住戶名單補齊姓名（權限不足時忽略）
         try {
           const [snapA, snapB] = await Promise.all([
             db.collection("users").where("community", "==", String(slug)).get(),
@@ -11860,24 +12075,31 @@
           [...(snapA && snapA.docs ? snapA.docs : []), ...(snapB && snapB.docs ? snapB.docs : [])].forEach((d) => {
             if (d && d.id) merged.set(String(d.id), d);
           });
-          const rows = Array.from(merged.values())
-            .map((d) => {
-              const v = (d && typeof d.data === "function") ? (d.data() || {}) : {};
-              const houseNo = String(v.houseNo || v.unit || "").trim();
-              const subUnit = String(v.subUnit || "").trim();
-              return {
-                id: [houseNo, subUnit].filter(Boolean).join("-"),
-                name: String(v.displayName || v.name || "").trim(),
-                role: String(v.role || ""),
-                status: String(v.status || ""),
-              };
-            })
-            .filter((x) => x.id && isResidentRole(x.role) && x.status !== "pending");
-          if (rows.length) {
-            rows.sort((a, b) => String(a.id).localeCompare(String(b.id), "zh-Hant"));
-            return rows;
-          }
+          merged.forEach((d) => {
+            const v = (d && typeof d.data === "function") ? (d.data() || {}) : {};
+            const houseNo = String(v.houseNo || v.unit || "").trim();
+            const subUnit = String(v.subUnit || "").trim();
+            const uid = [houseNo, subUnit].filter(Boolean).join("-");
+            if (!uid || nameByUnit.get(uid)) return;
+            if (!isResidentRole(String(v.role || "")) || String(v.status || "") === "pending") return;
+            const nm = String(v.displayName || v.name || "").trim();
+            if (nm) nameByUnit.set(uid, nm);
+          });
         } catch {}
+
+        const rows = unitRows
+          .map((u) => String(u.id || "").trim())
+          .filter(Boolean)
+          .map((uid) => ({
+            id: uid,
+            name: String(nameByUnit.get(uid) || "").trim(),
+            role: "resident",
+            status: "",
+          }));
+        if (rows.length) {
+          rows.sort((a, b) => String(a.id).localeCompare(String(b.id), "zh-Hant"));
+          return rows;
+        }
       }
       return [];
     };
@@ -12230,6 +12452,33 @@
 
     if (searchEl) searchEl.addEventListener("input", renderList);
     if (dateEl) dateEl.addEventListener("change", renderList);
+
+    if (historyUnitEl) {
+      historyUnitEl.addEventListener("change", () => {
+        historyUnit = String(historyUnitEl.value || "");
+        renderList();
+      });
+    }
+    if (historyBrowseBtn) {
+      historyBrowseBtn.addEventListener("click", async () => {
+        if (!historyUnit) {
+          toast("請先選擇戶號。");
+          return;
+        }
+        historyBrowseBtn.disabled = true;
+        try {
+          await publishUnitHistory(historyUnit);
+        } catch (err) {
+          const code = String(err && err.code ? err.code : "");
+          toast(code.includes("permission-denied") ? "公開資料發佈失敗：沒有權限。" : "公開資料發佈失敗，請稍後再試。");
+        } finally {
+          historyBrowseBtn.disabled = false;
+        }
+        const url = `visitor-history.html?c=${encodeURIComponent(String(visitorCommunitySlug || ""))}&u=${encodeURIComponent(historyUnit)}&m=${encodeURIComponent(currentMonthKey())}`;
+        window.open(url, "_blank");
+      });
+    }
+    if (historyExcelBtn) historyExcelBtn.addEventListener("click", exportHistoryExcel);
 
     if (addBtn) addBtn.addEventListener("click", () => openVisitorEditor("create"));
     if (scanBtn) scanBtn.addEventListener("click", () => openVisitorScanModal80({ cid: visitorCommunitySlug, onApplied: applyLocalVisitorPatch }));

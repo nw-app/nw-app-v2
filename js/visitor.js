@@ -171,11 +171,11 @@
       unitList.innerHTML = "";
       communityUnits.forEach((u) => {
         const uid = (typeof u === "object" && u !== null) ? String(u.id || "").trim() : String(u || "").trim();
-        const addr = (typeof u === "object" && u !== null && u.address) ? ` (${u.address})` : "";
+        const owner = (typeof u === "object" && u !== null) ? String(u.ownerName || u.owner || "").trim() : "";
         if (!uid) return;
         const opt = document.createElement("option");
         opt.value = uid;
-        opt.label = addr;
+        opt.label = owner;
         unitList.appendChild(opt);
       });
     };
@@ -192,7 +192,7 @@
       communityUnits.forEach((u) => {
         const uid = (typeof u === "object" && u !== null) ? String(u.id || "").trim() : String(u || "").trim();
         if (!uid) return;
-        const addr = (typeof u === "object" && u !== null && u.address) ? String(u.address).trim() : "";
+        const owner = (typeof u === "object" && u !== null) ? String(u.ownerName || u.owner || "").trim() : "";
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "unit-option";
@@ -200,11 +200,11 @@
         idSpan.className = "unit-id";
         idSpan.textContent = uid;
         btn.appendChild(idSpan);
-        if (addr) {
-          const addrSpan = document.createElement("span");
-          addrSpan.className = "unit-addr";
-          addrSpan.textContent = addr;
-          btn.appendChild(addrSpan);
+        if (owner) {
+          const ownerSpan = document.createElement("span");
+          ownerSpan.className = "unit-name";
+          ownerSpan.textContent = owner;
+          btn.appendChild(ownerSpan);
         }
         btn.addEventListener("click", () => {
           if (unitInput) {
