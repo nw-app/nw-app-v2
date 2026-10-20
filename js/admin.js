@@ -3440,7 +3440,11 @@
                   </svg>
                   <span>有此戶號</span>
                 </span>
+                <button type="button" class="input-suffix-btn" id="btnPickResidentUnit" title="顯示戶號清單" aria-label="顯示戶號清單">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M4 6h.01M4 12h.01M4 18h.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+                </button>
               </div>
+              <div class="unit-picker" id="residentUnitPicker" hidden></div>
             </div>
             <div class="field" id="field_r_sub_unit">
               <label for="modal_r_sub_unit">子戶號 (選填)</label>
@@ -8996,6 +9000,38 @@
     const cname = c ? String(c.name || "").trim() : "";
     let currentPage = "list"; // "list"、"points"、"pending"
 
+    let communityUnits = normalizeCommunityUnitRows(Array.isArray(c && c.units) ? c.units : []);
+
+    const refreshUnitTotals = () => {
+      const el = document.getElementById("unitTotal");
+      if (el) el.textContent = `總戶數：${normalizeResidentUnitList(communityUnits).length}`;
+    };
+
+    // 戶號資料一律以 communities/{cid} 文件為準，依序嘗試候選社區代碼
+    const resolveCommunityUnitRows = async (extraKeys = []) => {
+      const candidates = [];
+      const addCandidate = (v) => {
+        const s = String(v || "").trim();
+        if (!s || candidates.includes(s)) return;
+        candidates.push(s);
+      };
+      (Array.isArray(extraKeys) ? extraKeys : []).forEach(addCandidate);
+      addCandidate(cid);
+      addCandidate(state.currentResidentsCommunityId);
+      addCandidate(resolveActiveCommunityId());
+      try { addCandidate(sessionStorage.getItem("csp_last_cid")); } catch {}
+      for (const slug of candidates) {
+        try {
+          const doc = await db.collection("communities").doc(String(slug)).get();
+          if (!doc || !doc.exists) continue;
+          const v = doc.data() || {};
+          const rows = normalizeCommunityUnitRows(v.units);
+          if (rows.length) return rows;
+        } catch {}
+      }
+      return [];
+    };
+
     // 渲染 subnav 按钮的函数
     const renderSubnav = () => {
       if (!subnavEl) return;
@@ -9174,7 +9210,6 @@
     const addBtn = document.getElementById("btnAddResident");
     const unitsBtn = document.getElementById("btnUnits");
     const residentsSubnavSettingsBtn = document.getElementById("btnResidentsSubnavSettings");
-    const unitTotalEl = document.getElementById("unitTotal");
     const peopleTotalEl = document.getElementById("peopleTotal");
 
     const setStatus = (msg, isError) => {
@@ -9186,19 +9221,10 @@
     };
 
     let residents = [];
-    let communityUnits = normalizeCommunityUnitRows(Array.isArray(c && c.units) ? c.units : []);
+    communityUnits = normalizeCommunityUnitRows(Array.isArray(c && c.units) ? c.units : []);
     state.currentResidents = residents;
     state.currentCommunityUnits = communityUnits;
     state.currentResidentsCommunityId = String(cid || "");
-
-    const normalizeUnitList = (list) => {
-      return normalizeResidentUnitList(list);
-    };
-
-    const refreshUnitTotals = () => {
-      const unitCount = normalizeUnitList(communityUnits).length;
-      if (unitTotalEl) unitTotalEl.textContent = `總戶數：${unitCount}`;
-    };
 
     const renderList = () => {
       const q = String(searchEl ? searchEl.value : "").trim().toLowerCase();
@@ -10580,6 +10606,100 @@
         unitMatchBadge.style.display = ok ? "inline-flex" : "none";
       };
 
+      const unitPicker = modal.querySelector("#residentUnitPicker");
+      const pickUnitBtn = modal.querySelector("#btnPickResidentUnit");
+
+      const closeUnitPicker = () => {
+        if (unitPicker) unitPicker.hidden = true;
+        if (pickUnitBtn) pickUnitBtn.classList.remove("unlocked");
+      };
+
+      const loadUnitsForPicker = async () => {
+        const rows = await resolveCommunityUnitRows([inputCommunity ? inputCommunity.value : "", activeResidentsCid]);
+        if (rows.length) {
+          state.currentCommunityUnits = rows;
+          return rows;
+        }
+        return normalizeCommunityUnitRows(getCommunityUnits());
+      };
+
+      const renderUnitPicker = (rows) => {
+        if (!unitPicker) return;
+        unitPicker.innerHTML = "";
+        let count = 0;
+        (Array.isArray(rows) ? rows : []).forEach((u) => {
+          const uid = String((u && u.id) || "").trim();
+          if (!uid) return;
+          const owner = String((u && (u.ownerName || u.owner || u.ownerText)) || "").trim();
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "unit-option";
+          const idSpan = document.createElement("span");
+          idSpan.className = "unit-id";
+          idSpan.textContent = uid;
+          btn.appendChild(idSpan);
+          if (owner) {
+            const ownerSpan = document.createElement("span");
+            ownerSpan.className = "unit-name";
+            ownerSpan.textContent = owner;
+            btn.appendChild(ownerSpan);
+          }
+          btn.addEventListener("click", () => {
+            if (inputUnit) {
+              inputUnit.value = uid;
+              inputUnit.dispatchEvent(new Event("input", { bubbles: true }));
+              inputUnit.focus();
+            }
+            closeUnitPicker();
+          });
+          unitPicker.appendChild(btn);
+          count += 1;
+        });
+        if (!count) {
+          const empty = document.createElement("div");
+          empty.className = "unit-empty";
+          empty.textContent = "尚無戶號資料";
+          unitPicker.appendChild(empty);
+        }
+      };
+
+      const onToggleUnitPicker = async (e) => {
+        e.preventDefault();
+        if (!unitPicker) return;
+        if (!unitPicker.hidden) {
+          closeUnitPicker();
+          return;
+        }
+        unitPicker.innerHTML = "";
+        const loading = document.createElement("div");
+        loading.className = "unit-empty";
+        loading.textContent = "讀取戶號中...";
+        unitPicker.appendChild(loading);
+        unitPicker.hidden = false;
+        if (pickUnitBtn) pickUnitBtn.classList.add("unlocked");
+        const rows = await loadUnitsForPicker();
+        if (unitPicker.hidden) return;
+        renderUnitPicker(rows);
+      };
+      if (pickUnitBtn) pickUnitBtn.addEventListener("click", onToggleUnitPicker);
+
+      const onDocClickUnitPicker = (e) => {
+        if (!unitPicker || unitPicker.hidden) return;
+        const t = e.target;
+        if (unitPicker.contains(t)) return;
+        if (pickUnitBtn && pickUnitBtn.contains(t)) return;
+        closeUnitPicker();
+      };
+      document.addEventListener("click", onDocClickUnitPicker);
+      closeUnitPicker();
+
+      const prevDetachUnitPicker = detach;
+      detach = () => {
+        prevDetachUnitPicker();
+        document.removeEventListener("click", onDocClickUnitPicker);
+        closeUnitPicker();
+      };
+
       const fileToAvatarDataUrl = (file) => new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = () => reject(new Error("read-failed"));
@@ -11137,13 +11257,9 @@
     renderPage();
     (async () => {
       try {
-        const doc = await db.collection("communities").doc(String(cid || "default")).get();
-        const v = doc && doc.exists ? (doc.data() || {}) : {};
-        communityUnits = normalizeCommunityUnitRows(v.units);
+        communityUnits = await resolveCommunityUnitRows();
         state.currentCommunityUnits = communityUnits;
-        if (currentPage === "list") {
-          refreshUnitTotals();
-        }
+        refreshUnitTotals();
       } catch {}
     })();
     updateFooterActiveNav();
@@ -11179,7 +11295,13 @@
             </div>
             <div class="field">
               <label for="modal_v_unit">拜訪戶號</label>
-              <input id="modal_v_unit" type="text" autocomplete="off" list="visitorUnitOptions" />
+              <div class="input-wrap">
+                <input id="modal_v_unit" type="text" autocomplete="off" list="visitorUnitOptions" class="has-icon" />
+                <button type="button" class="input-icon-btn" id="btnPickVisitorUnit" aria-label="顯示戶號清單" title="顯示戶號清單">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M4 6h.01M4 12h.01M4 18h.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+                </button>
+              </div>
+              <div class="unit-picker" id="visitorUnitPicker" hidden></div>
               <datalist id="visitorUnitOptions"></datalist>
             </div>
             <div class="field">
@@ -11716,8 +11838,8 @@
       }
     };
 
-    let communityUnits = [];
-    const loadCommunityUnits = async () => {
+    let residentOptions = [];
+    const loadResidentOptions = async () => {
       const candidates = [];
       const add = (v) => {
         const s = String(v || "").trim();
@@ -11730,22 +11852,41 @@
       try { add(sessionStorage.getItem("csp_last_cid")); } catch {}
       for (const slug of candidates) {
         try {
-          const doc = await db.collection("communities").doc(String(slug)).get();
-          if (doc && doc.exists) {
-            const v = doc.data() || {};
-            communityUnits = normalizeUnitList(v.units);
-            return;
+          const [snapA, snapB] = await Promise.all([
+            db.collection("users").where("community", "==", String(slug)).get(),
+            db.collection("users").where("communityIds", "array-contains", String(slug)).get(),
+          ]);
+          const merged = new Map();
+          [...(snapA && snapA.docs ? snapA.docs : []), ...(snapB && snapB.docs ? snapB.docs : [])].forEach((d) => {
+            if (d && d.id) merged.set(String(d.id), d);
+          });
+          const rows = Array.from(merged.values())
+            .map((d) => {
+              const v = (d && typeof d.data === "function") ? (d.data() || {}) : {};
+              const houseNo = String(v.houseNo || v.unit || "").trim();
+              const subUnit = String(v.subUnit || "").trim();
+              return {
+                id: [houseNo, subUnit].filter(Boolean).join("-"),
+                name: String(v.displayName || v.name || "").trim(),
+                role: String(v.role || ""),
+                status: String(v.status || ""),
+              };
+            })
+            .filter((x) => x.id && isResidentRole(x.role) && x.status !== "pending");
+          if (rows.length) {
+            rows.sort((a, b) => String(a.id).localeCompare(String(b.id), "zh-Hant"));
+            return rows;
           }
         } catch {}
       }
-      communityUnits = [];
+      return [];
     };
 
     const openVisitorEditor = async (mode, item) => {
-      await loadCommunityUnits();
+      residentOptions = await loadResidentOptions();
       const modal = ensureVisitorModal();
       let detach = () => {};
-      detach = bindModalClose(modal, () => detach());
+      const detachModalClose = bindModalClose(modal, () => detach());
 
       const titleEl = modal.querySelector("#visitorModalTitle");
       const form = modal.querySelector("#visitorModalForm");
@@ -11755,6 +11896,8 @@
       const inputPhone = modal.querySelector("#modal_v_phone");
       const inputUnit = modal.querySelector("#modal_v_unit");
       const unitDatalist = modal.querySelector("#visitorUnitOptions");
+      const unitPicker = modal.querySelector("#visitorUnitPicker");
+      const pickUnitBtn = modal.querySelector("#btnPickVisitorUnit");
       const inputPartySize = modal.querySelector("#modal_v_partySize");
       const inputPlate = modal.querySelector("#modal_v_plate");
       const purposeTypeEl = modal.querySelector("#modal_v_purposeType");
@@ -11821,12 +11964,86 @@
       setModalStatus("", false);
 
       if (unitDatalist) {
-        unitDatalist.innerHTML = communityUnits.map((u) => {
-          const uid = (typeof u === "object" && u !== null) ? String(u.id || "") : String(u || "");
-          const addr = (typeof u === "object" && u !== null && u.address) ? ` (${u.address})` : "";
-          return `<option value="${uid.replace(/"/g, "&quot;")}" label="${addr.replace(/"/g, "&quot;")}"></option>`;
+        unitDatalist.innerHTML = residentOptions.map((u) => {
+          const uid = String(u.id || "");
+          const name = String(u.name || "");
+          return `<option value="${uid.replace(/"/g, "&quot;")}" label="${name.replace(/"/g, "&quot;")}"></option>`;
         }).join("");
       }
+
+      const closeUnitPicker = () => {
+        if (unitPicker) unitPicker.hidden = true;
+        if (pickUnitBtn) pickUnitBtn.classList.remove("active");
+      };
+
+      const renderUnitPicker = () => {
+        if (!unitPicker) return;
+        unitPicker.innerHTML = "";
+        let count = 0;
+        (Array.isArray(residentOptions) ? residentOptions : []).forEach((u) => {
+          const uid = String(u.id || "").trim();
+          if (!uid) return;
+          const name = String(u.name || "").trim();
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "unit-option";
+          const idSpan = document.createElement("span");
+          idSpan.className = "unit-id";
+          idSpan.textContent = uid;
+          btn.appendChild(idSpan);
+          if (name) {
+            const nameSpan = document.createElement("span");
+            nameSpan.className = "unit-name";
+            nameSpan.textContent = name;
+            btn.appendChild(nameSpan);
+          }
+          btn.addEventListener("click", () => {
+            if (inputUnit) {
+              inputUnit.value = uid;
+              inputUnit.dispatchEvent(new Event("input", { bubbles: true }));
+              inputUnit.focus();
+            }
+            closeUnitPicker();
+          });
+          unitPicker.appendChild(btn);
+          count += 1;
+        });
+        if (!count) {
+          const empty = document.createElement("div");
+          empty.className = "unit-empty";
+          empty.textContent = "尚無戶號資料";
+          unitPicker.appendChild(empty);
+        }
+      };
+
+      const onToggleUnitPicker = (e) => {
+        e.preventDefault();
+        if (!unitPicker) return;
+        if (unitPicker.hidden) {
+          renderUnitPicker();
+          unitPicker.hidden = false;
+          if (pickUnitBtn) pickUnitBtn.classList.add("active");
+        } else {
+          closeUnitPicker();
+        }
+      };
+      if (pickUnitBtn) pickUnitBtn.addEventListener("click", onToggleUnitPicker);
+
+      const onDocClickUnitPicker = (e) => {
+        if (!unitPicker || unitPicker.hidden) return;
+        const t = e.target;
+        if (unitPicker.contains(t)) return;
+        if (pickUnitBtn && pickUnitBtn.contains(t)) return;
+        closeUnitPicker();
+      };
+      document.addEventListener("click", onDocClickUnitPicker);
+      closeUnitPicker();
+
+      detach = () => {
+        detachModalClose();
+        document.removeEventListener("click", onDocClickUnitPicker);
+        closeUnitPicker();
+      };
 
       const applyKeepState = () => {
         const keepCert = Boolean(keepCertEl && keepCertEl.checked);

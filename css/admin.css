@@ -1741,6 +1741,7 @@ a { color: inherit; text-decoration: none; }
   background: rgba(17, 24, 39, 0.04);
   color: var(--brand);
 }
+#residentModal .input-suffix-btn svg { width: 18px; height: 18px; display: block; }
 #residentModal .input-suffix-btn.unlocked {
   background: rgba(211, 47, 47, 0.1);
   color: var(--brand);
@@ -1797,6 +1798,71 @@ a { color: inherit; text-decoration: none; }
 
 #visitorModal .check { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; color: rgba(31, 41, 55, 0.85); }
 #visitorModal .check input { width: 18px; height: 18px; accent-color: var(--brand, #d32f2f); }
+
+#visitorModal .input-wrap { position: relative; width: 100%; }
+#visitorModal .input-wrap > input { width: 100%; }
+#visitorModal input.has-icon { padding-right: 48px; }
+#visitorModal .input-icon-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+#visitorModal .input-icon-btn svg { width: 18px; height: 18px; display: block; }
+#visitorModal .input-icon-btn:hover,
+#visitorModal .input-icon-btn.active { background: rgba(211, 47, 47, 0.10); color: var(--brand, #d32f2f); }
+
+/* 戶號挑選清單（住戶 / 訪客共用） */
+.unit-picker {
+  margin-top: 8px;
+  padding: 6px;
+  max-height: 208px;
+  overflow-y: auto;
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(17, 24, 39, 0.10);
+}
+.unit-picker[hidden] { display: none; }
+.unit-picker .unit-option {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 13px;
+  color: #1f2937;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.unit-picker .unit-option:hover { background: rgba(211, 47, 47, 0.08); }
+.unit-picker .unit-id { font-weight: 800; }
+.unit-picker .unit-addr,
+.unit-picker .unit-name { color: var(--muted); font-size: 12px; }
+.unit-picker .unit-empty { padding: 10px; text-align: center; font-size: 13px; color: var(--muted); }
+
+#field_r_unit .input-suffix { right: 46px; }
+#field_r_unit input.has-suffix { padding-right: 148px; }
 
 /* Parcel Modal Styles */
 #parcelModal .field { display: grid; gap: 2px; margin-bottom: 2px; }

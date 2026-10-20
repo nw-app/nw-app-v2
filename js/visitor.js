@@ -161,10 +161,15 @@
     const purposeOtherField = qs("#purposeOtherField");
 
     const unitList = qs("#unitList");
+    const unitPicker = qs("#vUnitPicker");
+    const pickUnitBtn = qs("#btnPickVUnit");
+    const unitInput = qs("#v_unit");
+    let communityUnits = [];
     const fillUnitList = (units) => {
+      communityUnits = Array.isArray(units) ? units : [];
       if (!unitList) return;
       unitList.innerHTML = "";
-      (Array.isArray(units) ? units : []).forEach((u) => {
+      communityUnits.forEach((u) => {
         const uid = (typeof u === "object" && u !== null) ? String(u.id || "").trim() : String(u || "").trim();
         const addr = (typeof u === "object" && u !== null && u.address) ? ` (${u.address})` : "";
         if (!uid) return;
@@ -174,6 +179,72 @@
         unitList.appendChild(opt);
       });
     };
+
+    const closeUnitPicker = () => {
+      if (unitPicker) unitPicker.hidden = true;
+      if (pickUnitBtn) pickUnitBtn.classList.remove("active");
+    };
+
+    const renderUnitPicker = () => {
+      if (!unitPicker) return;
+      unitPicker.innerHTML = "";
+      let count = 0;
+      communityUnits.forEach((u) => {
+        const uid = (typeof u === "object" && u !== null) ? String(u.id || "").trim() : String(u || "").trim();
+        if (!uid) return;
+        const addr = (typeof u === "object" && u !== null && u.address) ? String(u.address).trim() : "";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "unit-option";
+        const idSpan = document.createElement("span");
+        idSpan.className = "unit-id";
+        idSpan.textContent = uid;
+        btn.appendChild(idSpan);
+        if (addr) {
+          const addrSpan = document.createElement("span");
+          addrSpan.className = "unit-addr";
+          addrSpan.textContent = addr;
+          btn.appendChild(addrSpan);
+        }
+        btn.addEventListener("click", () => {
+          if (unitInput) {
+            unitInput.value = uid;
+            unitInput.dispatchEvent(new Event("input", { bubbles: true }));
+            unitInput.focus();
+          }
+          closeUnitPicker();
+        });
+        unitPicker.appendChild(btn);
+        count += 1;
+      });
+      if (!count) {
+        const empty = document.createElement("div");
+        empty.className = "unit-empty";
+        empty.textContent = "尚無戶號資料";
+        unitPicker.appendChild(empty);
+      }
+    };
+
+    if (pickUnitBtn) {
+      pickUnitBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (!unitPicker) return;
+        if (unitPicker.hidden) {
+          renderUnitPicker();
+          unitPicker.hidden = false;
+          pickUnitBtn.classList.add("active");
+        } else {
+          closeUnitPicker();
+        }
+      });
+    }
+    document.addEventListener("click", (e) => {
+      if (!unitPicker || unitPicker.hidden) return;
+      const t = e.target;
+      if (unitPicker.contains(t)) return;
+      if (pickUnitBtn && pickUnitBtn.contains(t)) return;
+      closeUnitPicker();
+    });
 
     setStatus("", false);
     let community = null;

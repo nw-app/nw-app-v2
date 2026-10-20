@@ -10,14 +10,14 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="apple-touch-icon" href="icon-192.png?v=2" />
-    <link rel="stylesheet" href="./css/index.css" />
+    <link rel="stylesheet" href="./css/index.css?v=2" />
     <link rel="stylesheet" href="./css/pwa.css" />
     <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script defer src="./js/firebase-config.js"></script>
     <script defer src="./js/pwa.js?v=6"></script>
-    <script defer src="./js/visitor.js?v=9"></script>
+    <script defer src="./js/visitor.js?v=10"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
       body { background: var(--bg); }
@@ -80,7 +80,13 @@
           <div class="grid2">
             <div class="field">
               <label for="v_unit">拜訪戶號</label>
-              <input id="v_unit" type="text" autocomplete="off" list="unitList" required />
+              <div class="input-wrap">
+                <input id="v_unit" type="text" autocomplete="off" list="unitList" required />
+                <button type="button" class="input-icon-btn" id="btnPickVUnit" aria-label="顯示戶號清單" title="顯示戶號清單">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M4 6h.01M4 12h.01M4 18h.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+                </button>
+              </div>
+              <div class="unit-picker" id="vUnitPicker" hidden></div>
               <datalist id="unitList"></datalist>
             </div>
             <div class="field">
