@@ -1,9 +1,9 @@
-const CACHE_VERSION = "nwapp-v321";
-const PRECACHE = [
+const CACHE_VERSION = "nwapp-v334";
+const PRECACHE = Array.from(new Set([
   "./",
   "./index.html",
   "./system.html",
-  "./admin.html?v=9",
+  "./admin.html?v=11",
   "./member.html?v=12",
   "./parking.html?v=8",
   "./parking-view.html?v=11",
@@ -27,17 +27,18 @@ const PRECACHE = [
   "./css/system.css?v=6",
   "./css/admin.css?v=9",
   "./css/member.css",
-  "./js/index.js?v=7",
-  "./js/system.js?v=20",
-  "./js/admin.js?v=193",
+  "./js/index.js?v=8",
+  "./js/system.js?v=40",
+  "./js/admin.js?v=196",
+  "./js/finance.js?v=11",
   "./js/member.js?v=36",
   "./js/parking.js?v=30",
   "./js/parking-view.js?v=11",
   "./js/facility.js?v=7",
   "./js/parcel.js?v=17",
-  "./js/visitor.js?v=11",
+  "./js/visitor.js?v=12",
   "./js/visitor-history.js?v=1",
-  "./js/visitor-resident.js?v=5",
+  "./js/visitor-resident.js?v=9",
   "./js/ads-footer.js?v=16",
   "./js/bulletin-clean.js?v=1",
   "./js/bulletin-activity.js?v=2",
@@ -56,7 +57,7 @@ const PRECACHE = [
   "./icon-192.png?v=2",
   "./icon-512.png?v=2",
   "./manifest.webmanifest",
-];
+]));
 
 let __nwMessaging = null;
 try {
@@ -157,7 +158,13 @@ self.addEventListener("notificationclick", (event) => {
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_VERSION).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
+    caches.open(CACHE_VERSION).then(async (cache) => {
+      for (const url of PRECACHE) {
+        try {
+          await cache.add(url);
+        } catch {}
+      }
+    }).then(() => self.skipWaiting())
   );
 });
 

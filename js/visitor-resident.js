@@ -731,7 +731,7 @@
     if (vPhoneEl) vPhoneEl.value = "";
     if (vPlateEl) vPlateEl.value = "";
     if (vEmailEl) vEmailEl.value = "";
-    if (vPurposeTypeEl) vPurposeTypeEl.value = "親友拜訪";
+    if (vPurposeTypeEl) vPurposeTypeEl.value = "訪客到訪";
     if (vPurposeOtherEl) vPurposeOtherEl.value = "";
     if (vPurposeOtherFieldEl) vPurposeOtherFieldEl.hidden = true;
     if (vNoteEl) vNoteEl.value = "";
@@ -760,7 +760,7 @@
       const phone = String(vPhoneEl ? vPhoneEl.value || "" : "").trim();
       const plate = String(vPlateEl ? vPlateEl.value || "" : "").trim();
       const email = String(vEmailEl ? vEmailEl.value || "" : "").trim();
-      const purposeType = String(vPurposeTypeEl ? vPurposeTypeEl.value || "" : "").trim() || "親友拜訪";
+      const purposeType = String(vPurposeTypeEl ? vPurposeTypeEl.value || "" : "").trim() || "訪客到訪";
       const purposeOtherRaw = String(vPurposeOtherEl ? vPurposeOtherEl.value || "" : "").trim();
       const note = String(vNoteEl ? vNoteEl.value || "" : "").trim();
       const purposeOther = purposeType === "其他" ? (purposeOtherRaw || "其他") : "";

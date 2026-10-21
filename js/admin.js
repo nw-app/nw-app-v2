@@ -251,7 +251,7 @@
     { id: "meter-reading", name: "抄表紀錄", desc: "水電瓦斯抄表登記、批量匯入、審核核異與統計分析", badge: "抄表", page: "#community/meter-reading" },
     { id: "community-staff", name: "管理帳號", desc: "管理社區後台登入帳號（總幹事／秘書／保全）", badge: "人員", page: "#community/community-staff" },
     { id: "suite", name: "套房專區", desc: "客製化電費、水費、維護費、其他費用公式計算", badge: "套房", page: "#community/suite" },
-    { id: "finance", name: "收支報表", desc: "收入/支出彙總、分類與月份查詢（示意）", badge: "財務", page: "#community/finance" },
+    { id: "finance", name: "收支報表", desc: "收入／支出明細、銀行明細、報表匯出、類別名單與設定", badge: "財務", page: "#community/finance" },
     { id: "checkin-vote", name: "報到投票", desc: "活動報到、投票與統計結果（示意）", badge: "活動", page: "#community/checkin-vote" },
     { id: "assignments", name: "交辦事項", desc: "派工、追蹤進度、回報與結案（示意）", badge: "待辦", page: "#community/assignments" },
     { id: "duty", name: "勤務管理", desc: "排班、值勤紀錄與交接（示意）", badge: "管理", page: "#community/duty" },
@@ -16853,6 +16853,9 @@
     if (moduleId !== "residents") stopResidentsSubscription();
     if (moduleId !== "parcel") stopParcelsSubscription();
     if (moduleId !== "care") stopCheckinListener();
+    if (moduleId !== "finance" && typeof window.__nwFinanceCleanup === "function") {
+      try { window.__nwFinanceCleanup(); } catch {}
+    }
     const gate = getButtonConfig(moduleId);
     if (gate && gate.enabled === false) {
       toast("此功能未開放（示意）");
@@ -16949,6 +16952,32 @@
         window.NwAdminCommunity.UI.renderSuitePage(contentEl, { communityId: cid, communityName: cname });
       } else {
         contentEl.innerHTML = `<div style="padding:24px;color:#d00;">套房專區模組尚未載入，請稍後再試。</div>`;
+      }
+      updateFooterActiveNav();
+      return;
+    }
+    if (moduleId === "finance") {
+      if (subnavEl) subnavEl.innerHTML = "";
+      const cid = String(resolveActiveCommunityId() || "").trim() || "default";
+      const cname = (state.communities.find((c) => c.id === cid) || {}).name || "";
+      const profile = state.currentAdminProfile || state.currentUserProfile || {};
+      const currentUser = (typeof auth !== "undefined" && auth && auth.currentUser) ? auth.currentUser : null;
+      const uidStr = currentUser ? String(currentUser.uid || "") : "";
+      const displayName = String(profile.displayName || profile.name || (currentUser && currentUser.displayName) || "").trim();
+      const roleRaw = String(state.currentUserRole || profile.role || "").trim().toLowerCase();
+      let role = "viewer";
+      if (roleRaw === "admin" || roleRaw === "super_admin" || roleRaw === "community_admin") role = "admin";
+      else if (roleRaw === "community" || roleRaw === "manager" || roleRaw === "management") role = "manager";
+      if (window.NwFinance && window.NwFinance.UI) {
+        window.NwFinance.UI.renderAdminPage(contentEl, {
+          communityId: cid,
+          communityName: cname,
+          role,
+          uid: uidStr,
+          name: displayName,
+        });
+      } else {
+        contentEl.innerHTML = `<div style="padding:24px;color:#d00;">收支報表模組尚未載入，請稍後再試。</div>`;
       }
       updateFooterActiveNav();
       return;

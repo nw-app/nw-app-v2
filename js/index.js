@@ -54,8 +54,10 @@
   const rememberEl = document.getElementById("rememberMe");
   const btnApply = document.getElementById("btnApply");
   const btnTogglePassword = document.getElementById("btnTogglePassword");
+  const isLoginPage = Boolean(loginForm && btnLogin);
 
   function setBusy(isBusy) {
+    if (!btnLogin) return;
     btnLogin.disabled = Boolean(isBusy);
   }
 
@@ -110,6 +112,8 @@
       openApplyResidentModal();
     });
   }
+
+  if (!isLoginPage) return;
 
   function openApplyResidentModal() {
     let modal = document.getElementById("applyResidentModal");

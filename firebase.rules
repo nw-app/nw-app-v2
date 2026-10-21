@@ -426,6 +426,26 @@ service cloud.firestore {
         allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
 
+      match /financeTx/{txId} {
+        allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      match /financeBank/{bankId} {
+        allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      match /financeBooks/{bookId} {
+        allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      match /financeConfig/{configId} {
+        allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
       match /parking_spots/{spotId} {
         allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
         allow write: if request.auth != null && (

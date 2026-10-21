@@ -114,7 +114,7 @@
           if (qs("#v_phone")) qs("#v_phone").value = data.phone || "";
           if (qs("#v_plate")) qs("#v_plate").value = data.plate || "";
           if (qs("#v_email")) qs("#v_email").value = data.email || "";
-          if (qs("#v_purposeType")) qs("#v_purposeType").value = data.purposeType || "親友拜訪";
+          if (qs("#v_purposeType")) qs("#v_purposeType").value = data.purposeType || "訪客到訪";
           if (qs("#v_purposeOther")) qs("#v_purposeOther").value = data.purposeOther || "";
           if (qs("#v_note")) qs("#v_note").value = data.note || "";
         }
@@ -443,7 +443,7 @@
       const plate = String(qs("#v_plate") ? qs("#v_plate").value : "").trim();
       const email = String(qs("#v_email") ? qs("#v_email").value : "").trim();
       const partySize = clampInt(qs("#v_party") ? qs("#v_party").value : "", 1, 20, 1);
-      const purposeType = String(purposeTypeEl ? purposeTypeEl.value : "").trim() || "親友拜訪";
+      const purposeType = String(purposeTypeEl ? purposeTypeEl.value : "").trim() || "訪客到訪";
       const purposeOther = String(qs("#v_purposeOther") ? qs("#v_purposeOther").value : "").trim();
       const note = String(qs("#v_note") ? qs("#v_note").value : "").trim();
       const purpose = purposeType === "其他" ? (purposeOther || "其他") : purposeType;
