@@ -290,6 +290,14 @@
     new MutationObserver(syncPageHeader).observe(contentEl, { childList: true });
   }
 
+  /* 重新渲染前先清掉「頁中上」殘留的舊 .card-hd。
+     因為 .card-hd 會被搬到 #frameMidtop，不會隨 contentEl.innerHTML 一起被銷毀；
+     若不清掉，重複渲染時 document.getElementById 會先找到這顆舊節點（文件順序在 #content 之前），
+     事件就會綁在被稍後丟棄的舊節點上，導致畫面上的按鈕點了沒反應。 */
+  function clearPageHeader() {
+    if (midtopEl && midtopEl.firstElementChild) midtopEl.innerHTML = "";
+  }
+
   function toast(message) {
     if (!toastEl) return;
     toastEl.textContent = message;
@@ -14056,6 +14064,7 @@
   }
 
   function renderDashboard() {
+    clearPageHeader();
     const layoutEl = document.querySelector(".layout");
     if (layoutEl) layoutEl.classList.remove("visitor-main-lock");
     if (subnavEl) subnavEl.innerHTML = "";
@@ -18138,6 +18147,7 @@
   }
 
   function renderModule(moduleId) {
+    clearPageHeader();
     const layoutEl = document.querySelector(".layout");
     if (layoutEl) layoutEl.classList.toggle("visitor-main-lock", moduleId === "visitor");
     if (moduleId !== "visitor") stopVisitorsSubscription();
@@ -18320,6 +18330,7 @@
     if (parts[0] !== "community") return false;
     const moduleId = parts[1] || "community-dashboard";
     if (moduleId === "community-dashboard") return false;
+    clearPageHeader();
     
     // 如果是 bulletin 并且有子页面参数，且当前已经在 bulletin 页面，则不重新渲染整个模块
     // 这样 renderBulletinModule 会根据新的哈希路由来显示正确的子页面

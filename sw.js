@@ -1,4 +1,4 @@
-const CACHE_VERSION = "nwapp-v381";
+const CACHE_VERSION = "nwapp-v382";
 const PRECACHE = Array.from(new Set([
   "./",
   "./index.html",
