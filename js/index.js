@@ -467,27 +467,44 @@
       
       setModalStatus("提交申請中...", false);
       try {
-        // 防止重複申請機制：檢查該社區是否已有相同手機號碼的待審核申請
-        const dupSnap = await db.collection("users")
-          .where("community", "==", data.communityId)
-          .where("phone", "==", data.phone)
-          .where("role", "==", "resident")
-          .where("status", "==", "pending")
-          .get();
-        
-        if (!dupSnap.empty) {
-          setModalStatus("已送審中", true);
+        // 防止重複申請：先以 Firebase Auth 檢查此 Email 是否已有登入帳號
+        try {
+          const methods = await auth.fetchSignInMethodsForEmail(data.email);
+          if (Array.isArray(methods) && methods.length) {
+            setModalStatus("此電子郵件已有帳號，請直接登入或改用其他 Email。", true);
+            return;
+          }
+        } catch {}
+
+        // 再檢查該社區是否已有相同手機號碼的待審核申請（需讀取權限；若無權限則略過，交由核准端把關）
+        try {
+          const dupSnap = await db.collection("users")
+            .where("community", "==", data.communityId)
+            .where("phone", "==", data.phone)
+            .where("role", "==", "resident")
+            .where("status", "==", "pending")
+            .get();
+          if (!dupSnap.empty) {
+            setModalStatus("已送審中", true);
+            return;
+          }
+        } catch {}
+
+        // 申請資料僅儲存密碼雜湊（SHA-256），不儲存明文密碼
+        const passwordHash = await sha256Hex(data.password);
+        if (!passwordHash) {
+          setModalStatus("此瀏覽器不支援密碼加密，請改用其他瀏覽器。", true);
           return;
         }
 
-        // 直接寫入 Firestore
         await db.collection("users").add({
           community: data.communityId,
           houseNo: data.houseNo,
           displayName: data.name,
           email: data.email,
           phone: data.phone,
-          password: data.password, // 儲存密碼
+          passwordHash,
+          passwordHashAlg: "SHA-256",
           avatarDataUrl: data.avatarDataUrl,
           role: "resident",
           enabled: false,
@@ -542,6 +559,15 @@
       if (!input) return;
       input.type = input.type === "password" ? "text" : "password";
     });
+  }
+
+  async function sha256Hex(text) {
+    const cryptoObj = window.crypto || window.msCrypto;
+    if (!cryptoObj || !cryptoObj.subtle) return "";
+    const data = new TextEncoder().encode(String(text || ""));
+    const hashBuf = await cryptoObj.subtle.digest("SHA-256", data);
+    const bytes = Array.from(new Uint8Array(hashBuf));
+    return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
   }
 
   function normalizeRole(input) {

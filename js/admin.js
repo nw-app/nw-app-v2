@@ -997,6 +997,547 @@
     return modal;
   }
 
+  // 通用單欄文字輸入彈窗（Promise 回傳輸入值；取消回傳 null）
+  function promptTextModal80({ id, title, label, hint, defaultValue, okText, type, placeholder, minLength }) {
+    return new Promise((resolve) => {
+      const modal = ensureModal(id || "promptTextModal80", "", "420px");
+      let settled = false;
+      let detach = () => {};
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        try { detach(); } catch {}
+        modal.hidden = true;
+        resolve(value);
+      };
+      detach = bindModalClose(modal, () => finish(null));
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-modal-close="1"></div>
+        <div class="modal-dialog" role="dialog" aria-modal="true">
+          <div class="modal-hd">
+            <h3 class="modal-title">${escapeHtml(title || "")}</h3>
+            <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          </div>
+          <form id="promptTextForm80">
+            <div class="modal-body">
+              <div class="field">
+                <label for="promptTextInput80">${escapeHtml(label || "")}</label>
+                <input id="promptTextInput80" type="${escapeHtml(type || "text")}" value="${escapeHtml(defaultValue || "")}" placeholder="${escapeHtml(placeholder || "")}" autocomplete="off" />
+                ${hint ? `<div class="status" style="margin-top:8px;">${escapeHtml(hint)}</div>` : ""}
+              </div>
+            </div>
+            <div class="modal-ft">
+              <button class="btn" type="button" data-modal-close="1">取消</button>
+              <button class="btn btn-primary" type="submit">${escapeHtml(okText || "確定")}</button>
+            </div>
+          </form>
+        </div>
+      `.trim();
+      const form = modal.querySelector("#promptTextForm80");
+      const input = modal.querySelector("#promptTextInput80");
+      form.onsubmit = (e) => {
+        e.preventDefault();
+        const value = String(input ? input.value : "").trim();
+        if (minLength && value.length < minLength) {
+          toast(`請至少輸入 ${minLength} 個字元`);
+          return;
+        }
+        finish(value);
+      };
+      modal.hidden = false;
+      requestAnimationFrame(() => { if (input) input.focus(); });
+    });
+  }
+
+  // 以 Cloud Function 刪除 Firebase Auth 帳號（需部署 functions；未部署時回傳失敗原因）
+  async function deleteResidentAuthAccount80(uid) {
+    const targetUid = String(uid || "").trim();
+    if (!targetUid) return { ok: false, reason: "no-uid" };
+    const fb = window.firebase;
+    if (!fb || typeof fb.functions !== "function") return { ok: false, reason: "no-functions-sdk" };
+    try {
+      const callable = fb.app().functions().httpsCallable("deleteResidentAuth");
+      const res = await callable({ uid: targetUid });
+      const data = (res && res.data) || {};
+      return { ok: true, deleted: Boolean(data.deleted) };
+    } catch (err) {
+      const code = String(err && err.code ? err.code : "");
+      return { ok: false, reason: code || String((err && err.message) || "call-failed") };
+    }
+  }
+
+  /* ── 住戶造冊：名冊匯出／批次匯入 ── */
+
+  function residentsToExportRows80(list) {
+    return (Array.isArray(list) ? list : []).map((r) => ({
+      "戶號": String(r.houseNo || ""),
+      "子戶號": String(r.subUnit || ""),
+      "姓名": String(r.displayName || ""),
+      "Email": String(r.email || ""),
+      "手機": String(r.phone || ""),
+      "棟別": String(r.building || r.block || ""),
+      "地址": String(r.address || ""),
+      "身分別": String(r.category || ""),
+      "狀態": r.enabled === false ? "停用" : "啟用",
+      "點數": Number(r.points || 0),
+    }));
+  }
+
+  function exportResidentsExcel80(list, communityName) {
+    const XLSX = window.XLSX;
+    if (!XLSX) { toast("Excel 元件尚未載入，請稍後再試"); return false; }
+    const rows = residentsToExportRows80(list);
+    if (!rows.length) { toast("目前沒有住戶資料可匯出"); return false; }
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "住戶名冊");
+    XLSX.writeFile(wb, `${sanitizeFileName80(communityName)}_住戶名冊_${stamp80()}.xlsx`);
+    return true;
+  }
+
+  function downloadResidentImportTemplate80() {
+    const XLSX = window.XLSX;
+    if (!XLSX) { toast("Excel 元件尚未載入，請稍後再試"); return; }
+    const ws = XLSX.utils.json_to_sheet([
+      {
+        "戶號": "A1", "子戶號": "", "姓名": "王小明", "Email": "wang@example.com",
+        "手機": "0912345678", "密碼": "", "棟別": "A棟", "地址": "A1", "身分別": "住戶",
+      },
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "住戶匯入範本");
+    XLSX.writeFile(wb, "住戶批次匯入範本.xlsx");
+  }
+
+  function parseResidentImportRows80(json) {
+    const pick = (row, keys) => {
+      for (let i = 0; i < keys.length; i += 1) {
+        const v = row ? row[keys[i]] : undefined;
+        if (v !== undefined && v !== null && String(v).trim() !== "") return String(v).trim();
+      }
+      return "";
+    };
+    return (Array.isArray(json) ? json : [])
+      .map((row) => {
+        const r = row && typeof row === "object" ? row : {};
+        return {
+          houseNo: pick(r, ["戶號", "戶", "門牌", "houseNo", "unit"]),
+          subUnit: pick(r, ["子戶號", "子號", "分戶", "subUnit"]),
+          displayName: pick(r, ["姓名", "住戶姓名", "所有權人", "name", "displayName"]),
+          email: pick(r, ["Email", "email", "電子郵件", "帳號", "username"]).toLowerCase(),
+          phone: pick(r, ["手機", "手機號碼", "電話", "phone", "mobile"]),
+          password: pick(r, ["密碼", "初始密碼", "password"]),
+          building: pick(r, ["棟別", "區", "building", "block"]),
+          address: pick(r, ["地址", "通訊地址", "address"]),
+          category: pick(r, ["身分別", "類別", "category"]),
+        };
+      })
+      .filter((r) => r.houseNo || r.displayName || r.email || r.phone);
+  }
+
+  function residentImportRowIssues80(row, all) {
+    const issues = [];
+    const pwd = String(row.password || normalizePhoneDigits(row.phone) || "");
+    if (!row.displayName) issues.push("缺姓名");
+    if (!row.email) issues.push("缺 Email");
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) issues.push("Email 格式錯誤");
+    if (pwd.length < 6) issues.push("密碼不足 6 碼");
+    if (row.email && all.filter((x) => x.email === row.email).length > 1) issues.push("檔案內 Email 重複");
+    return issues;
+  }
+
+  function openResidentsBatchImport80({ communityId, onDone }) {
+    const modal = ensureModal("residentsBatchImportModal80", "modal-residents-batch", "min(960px, 96vw)");
+    let detach = () => {};
+    let parsed = [];
+    let busy = false;
+    detach = bindModalClose(modal, () => { if (!busy) detach(); });
+
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-hd">
+          <h3 class="modal-title">批次匯入住戶</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="status" style="margin-bottom:10px;">支援 Excel / CSV。欄位：戶號、子戶號、姓名、Email、手機、密碼（選填，未填以手機號碼為初始密碼）、棟別、地址、身分別。</div>
+          <div class="resident-toolbar" style="margin-bottom:10px;">
+            <button class="btn btn-sm" type="button" id="rbImportTemplate">下載範本</button>
+            <button class="btn btn-warning btn-sm" type="button" id="rbImportPick">選擇檔案</button>
+            <input type="file" id="rbImportFile" accept=".xlsx,.xls,.csv" hidden />
+          </div>
+          <div class="status" id="rbImportStatus" hidden></div>
+          <div id="rbImportPreview"></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+          <button class="btn btn-primary" type="button" id="rbImportRun" disabled>開始匯入</button>
+        </div>
+      </div>
+    `.trim();
+
+    const statusEl = modal.querySelector("#rbImportStatus");
+    const previewEl = modal.querySelector("#rbImportPreview");
+    const runBtn = modal.querySelector("#rbImportRun");
+    const pickBtn = modal.querySelector("#rbImportPick");
+    const fileInput = modal.querySelector("#rbImportFile");
+
+    const setBusyStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    const renderPreview = () => {
+      if (!previewEl) return;
+      if (!parsed.length) {
+        previewEl.innerHTML = `<div class="status">尚未選擇檔案。請先下載範本，填寫後匯入。</div>`;
+        if (runBtn) runBtn.disabled = true;
+        return;
+      }
+      const rowsHtml = parsed.map((r, i) => {
+        const issues = residentImportRowIssues80(r, parsed);
+        const unit = [r.houseNo, r.subUnit].filter(Boolean).join("-");
+        return `<tr>
+          <td>${i + 1}</td>
+          <td>${escapeHtml(unit || "—")}</td>
+          <td>${escapeHtml(r.displayName || "—")}</td>
+          <td>${escapeHtml(r.email || "—")}</td>
+          <td>${escapeHtml(r.phone || "—")}</td>
+          <td>${issues.length
+            ? `<span class="status-chip warning">${escapeHtml(issues.join("、"))}</span>`
+            : `<span class="status-chip success">可匯入</span>`}</td>
+        </tr>`;
+      }).join("");
+      const validCount = parsed.filter((r) => !residentImportRowIssues80(r, parsed).length).length;
+      previewEl.innerHTML = `
+        <div class="status">共 ${parsed.length} 筆，其中 ${validCount} 筆可匯入。</div>
+        <div style="max-height:320px;overflow:auto;margin-top:8px;">
+          <table class="units-table">
+            <thead><tr><th>#</th><th>戶號</th><th>姓名</th><th>Email</th><th>手機</th><th>檢核</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>`;
+      if (runBtn) runBtn.disabled = validCount === 0;
+    };
+
+    const onTemplate = () => downloadResidentImportTemplate80();
+    const onPick = () => { if (fileInput) fileInput.click(); };
+
+    const onFile = (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const XLSX = window.XLSX;
+      if (!XLSX) { setBusyStatus("Excel 元件尚未載入，請稍後再試。", true); return; }
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = new Uint8Array(ev.target.result);
+          const wb = XLSX.read(data, { type: "array" });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(sheet);
+          parsed = parseResidentImportRows80(json);
+          if (!parsed.length) {
+            setBusyStatus("檔案中沒有可辨識的住戶資料。", true);
+          } else {
+            setBusyStatus("", false);
+          }
+          renderPreview();
+        } catch (err) {
+          setBusyStatus("檔案解析失敗，請檢查格式。", true);
+        } finally {
+          if (fileInput) fileInput.value = "";
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    };
+
+    const runImport = async () => {
+      if (busy) return;
+      if (!window.XLSX) { setBusyStatus("Excel 元件尚未載入，請稍後再試。", true); return; }
+      const importable = parsed.filter((r) => !residentImportRowIssues80(r, parsed).length);
+      if (!importable.length) { setBusyStatus("沒有可匯入的資料。", true); return; }
+      const proceed = await (window.nwConfirm ? window.nwConfirm({
+        title: "確認批次匯入",
+        message: `將建立 ${importable.length} 個住戶登入帳號並寫入住戶名冊，是否繼續？`,
+        okText: "開始匯入",
+        cancelText: "取消",
+      }) : Promise.resolve(window.confirm(`將匯入 ${importable.length} 筆，是否繼續？`)));
+      if (!proceed) return;
+
+      busy = true;
+      if (runBtn) runBtn.disabled = true;
+      if (pickBtn) pickBtn.disabled = true;
+
+      let communityCode = "";
+      try {
+        const accounts = loadAccounts();
+        const c = (accounts.communities || []).find((x) => x && String(x.id || "") === String(communityId || "")) || null;
+        communityCode = c ? String(c.username || "") : "";
+      } catch {}
+
+      let success = 0;
+      const failures = [];
+      for (let i = 0; i < importable.length; i += 1) {
+        const r = importable[i];
+        setBusyStatus(`匯入中 ${i + 1}/${importable.length}：${r.displayName || r.email}`, false);
+        let created = null;
+        try {
+          const pwd = String(r.password || normalizePhoneDigits(r.phone) || "");
+          created = await createAuthUser(r.email, pwd);
+          const newUid = created.uid;
+          const phoneNorm = normalizePhoneDigits(r.phone);
+          const payload = {
+            uid: newUid,
+            username: r.email,
+            email: r.email,
+            displayName: r.displayName,
+            phone: phoneNorm || r.phone,
+            phoneNormalized: phoneNorm,
+            community: String(communityId || ""),
+            role: "住戶",
+            houseNo: r.houseNo || "",
+            subUnit: r.subUnit || "",
+            building: r.building || "",
+            address: r.address || "",
+            category: r.category || "住戶",
+            status: "approved",
+            enabled: true,
+            points: 0,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          };
+          if (typeof sha256Hex === "function") {
+            payload.passwordHash = await sha256Hex(pwd);
+            payload.passwordHashAlg = "SHA-256";
+            payload.passwordUpdatedAt = FieldValue.serverTimestamp();
+          }
+          await db.collection("users").doc(newUid).set(payload, { merge: true });
+          if (typeof upsertUserLookup === "function" && phoneNorm) {
+            await upsertUserLookup({
+              phoneNormalized: phoneNorm, email: r.email, phone: r.phone,
+              uid: newUid, community: communityId, communityCode, role: "住戶",
+            });
+          }
+          success += 1;
+        } catch (err) {
+          const code = String(err && err.code ? err.code : "");
+          const msg =
+            code.includes("email-already-in-use") ? "Email 已被使用" :
+            code.includes("weak-password") ? "密碼強度不足" :
+            code.includes("invalid-email") ? "Email 格式錯誤" :
+            (String((err && err.message) || "") || "建立失敗");
+          failures.push(`${r.displayName || r.email}：${msg}`);
+        } finally {
+          if (created && created.auth) {
+            try { await created.auth.signOut(); } catch {}
+          }
+        }
+      }
+
+      busy = false;
+      if (runBtn) runBtn.disabled = false;
+      if (pickBtn) pickBtn.disabled = false;
+      const summary = `完成：成功 ${success} 筆、失敗 ${failures.length} 筆。`;
+      setBusyStatus(failures.length ? `${summary}${failures.join("；")}` : summary, failures.length > 0);
+      if (typeof onDone === "function") onDone();
+    };
+
+    modal.querySelector("#rbImportTemplate").addEventListener("click", onTemplate);
+    if (pickBtn) pickBtn.addEventListener("click", onPick);
+    if (fileInput) fileInput.addEventListener("change", onFile);
+    if (runBtn) runBtn.addEventListener("click", runImport);
+
+    renderPreview();
+    modal.hidden = false;
+  }
+
+  function openResidentsBatchStatus80({ list, onDone }) {
+    const modal = ensureModal("residentsBatchStatusModal80", "modal-residents-batch", "min(760px, 96vw)");
+    let detach = () => {};
+    let busy = false;
+    detach = bindModalClose(modal, () => { if (!busy) detach(); });
+
+    const people = (Array.isArray(list) ? list : []).slice();
+    const selected = new Set();
+
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-hd">
+          <h3 class="modal-title">批次啟用／停用</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="resident-toolbar" style="margin-bottom:10px;">
+            <div class="search resident-search">
+              <input id="rbStatusSearch" type="text" placeholder="搜尋 戶號 / 姓名 / 手機 / Email" autocomplete="off" />
+            </div>
+            <label class="rb-select-all"><input type="checkbox" id="rbStatusAll" /> 全選</label>
+          </div>
+          <div class="status" id="rbStatusInfo" hidden></div>
+          <div class="resident-list" id="rbStatusList" style="max-height:420px;overflow:auto;"></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+          <button class="btn danger" type="button" id="rbStatusDisable">批次停用</button>
+          <button class="btn btn-primary" type="button" id="rbStatusEnable">批次啟用</button>
+        </div>
+      </div>
+    `.trim();
+
+    const listEl = modal.querySelector("#rbStatusList");
+    const searchEl = modal.querySelector("#rbStatusSearch");
+    const allEl = modal.querySelector("#rbStatusAll");
+    const infoEl = modal.querySelector("#rbStatusInfo");
+
+    const setInfo = (msg, isError) => {
+      if (!infoEl) return;
+      const t = String(msg || "").trim();
+      infoEl.textContent = t;
+      infoEl.hidden = !t;
+      infoEl.classList.toggle("error", Boolean(isError));
+    };
+
+    let visibleIds = [];
+
+    const syncAllState = () => {
+      if (!allEl) return;
+      const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
+      allEl.checked = allSelected;
+      allEl.indeterminate = !allSelected && visibleIds.some((id) => selected.has(id));
+      setInfo(selected.size ? `已勾選 ${selected.size} 位` : "", false);
+    };
+
+    const renderList = () => {
+      if (!listEl) return;
+      const q = String(searchEl ? searchEl.value : "").trim().toLowerCase();
+      const rows = people.filter((r) => {
+        if (!q) return true;
+        return [r.houseNo, r.subUnit, r.displayName, r.phone, r.email]
+          .some((v) => String(v || "").toLowerCase().includes(q));
+      });
+      visibleIds = rows.map((r) => String(r.id || ""));
+      if (!rows.length) {
+        listEl.innerHTML = `<div class="status">沒有符合的住戶。</div>`;
+        syncAllState();
+        return;
+      }
+      listEl.innerHTML = rows.map((r) => {
+        const unit = [r.houseNo, r.subUnit].filter(Boolean).join("-");
+        const enabled = r.enabled !== false;
+        const id = String(r.id || "");
+        return `
+          <label class="resident-item" style="cursor:pointer;">
+            <div class="resident-left">
+              <input type="checkbox" data-uid="${escapeHtml(id)}" ${selected.has(id) ? "checked" : ""} />
+              <div class="avatar-sm">${avatarHtml(r)}</div>
+              <div class="resident-text">
+                <div class="resident-name">${escapeHtml(r.displayName || "—")}</div>
+                <div class="resident-sub">${escapeHtml(unit || "—")}｜${escapeHtml(r.phone || r.email || "")}</div>
+              </div>
+            </div>
+            <div><span class="status-chip ${enabled ? "success" : "warning"}">${enabled ? "啟用" : "停用"}</span></div>
+          </label>`;
+      }).join("");
+
+      listEl.querySelectorAll("input[data-uid]").forEach((cb) => {
+        cb.addEventListener("change", () => {
+          const id = cb.getAttribute("data-uid");
+          if (!id) return;
+          if (cb.checked) selected.add(id);
+          else selected.delete(id);
+          syncAllState();
+        });
+      });
+      syncAllState();
+    };
+
+    const apply = async (enabled) => {
+      if (busy) return;
+      const ids = Array.from(selected);
+      if (!ids.length) { setInfo("請先勾選住戶。", true); return; }
+      const proceed = await (window.nwConfirm ? window.nwConfirm({
+        title: enabled ? "批次啟用" : "批次停用",
+        message: `將${enabled ? "啟用" : "停用"} ${ids.length} 位住戶的帳號，是否繼續？`,
+        okText: "確認",
+        cancelText: "取消",
+        danger: !enabled,
+      }) : Promise.resolve(window.confirm(`將${enabled ? "啟用" : "停用"} ${ids.length} 位住戶？`)));
+      if (!proceed) return;
+      busy = true;
+      try {
+        for (let i = 0; i < ids.length; i += 400) {
+          const batch = db.batch();
+          ids.slice(i, i + 400).forEach((id) => {
+            batch.set(db.collection("users").doc(id), { enabled, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+          });
+          await batch.commit();
+        }
+        toast(`已批次${enabled ? "啟用" : "停用"} ${ids.length} 位住戶`);
+        selected.clear();
+        if (typeof onDone === "function") onDone();
+        modal.hidden = true;
+        detach();
+      } catch (err) {
+        setInfo("批次更新失敗，請稍後再試。", true);
+      } finally {
+        busy = false;
+      }
+    };
+
+    if (searchEl) searchEl.addEventListener("input", renderList);
+    if (allEl) {
+      allEl.addEventListener("change", () => {
+        if (allEl.checked) visibleIds.forEach((id) => selected.add(id));
+        else visibleIds.forEach((id) => selected.delete(id));
+        renderList();
+      });
+    }
+    modal.querySelector("#rbStatusEnable").addEventListener("click", () => apply(true));
+    modal.querySelector("#rbStatusDisable").addEventListener("click", () => apply(false));
+
+    renderList();
+    modal.hidden = false;
+  }
+
+  function openResidentsBatchHub80({ communityId, list, onDone }) {
+    const modal = ensureModal("residentsBatchHubModal80", "", "420px");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-hd">
+          <h3 class="modal-title">批次作業</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:grid;gap:10px;">
+            <button class="btn btn-primary" type="button" id="rbHubImport">批次匯入住戶</button>
+            <button class="btn btn-warning" type="button" id="rbHubStatus">批次啟用／停用</button>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    const close = () => { modal.hidden = true; detach(); };
+    modal.querySelector("#rbHubImport").addEventListener("click", () => {
+      close();
+      openResidentsBatchImport80({ communityId, onDone });
+    });
+    modal.querySelector("#rbHubStatus").addEventListener("click", () => {
+      close();
+      openResidentsBatchStatus80({ list, onDone });
+    });
+    modal.hidden = false;
+  }
+
   async function openPendingVisitorsModal80({ communityId, communityName }) {
     const modal = ensureModal("pendingVisitorsModal", "modal-pending-visitors", "80%");
     let detachList = () => {};
@@ -1221,6 +1762,7 @@
   let _unsubResidentsPendingCount = null;
   let _residentsPendingCountCid = null;
   let _lastResidentsPendingCount = 0;
+  let _residentsPendingCountReady = false;
   function stopResidentsPendingCountSubscription() {
     if (_unsubResidentsPendingCount) {
       try { _unsubResidentsPendingCount(); } catch {}
@@ -1228,6 +1770,7 @@
     }
     _residentsPendingCountCid = null;
     _lastResidentsPendingCount = 0;
+    _residentsPendingCountReady = false;
   }
   let _unsubIntercomMissedCount = null;
   let _intercomMissedCountCid = null;
@@ -1330,6 +1873,7 @@
   function updateResidentsPendingBadges(count) {
     const n = Number.isFinite(Number(count)) ? Number(count) : 0;
     _lastResidentsPendingCount = n;
+    _residentsPendingCountReady = true;
     const subnavBadge = document.getElementById("pendingBadge");
     if (subnavBadge) {
       subnavBadge.textContent = String(n);
@@ -12923,6 +13467,7 @@
     };
 
     const renderPage = () => {
+      stopResidentsSubscription();
       stopResidentsOverviewSubscription();
       renderSubnav();
       if (isCurrentCommunityRole()) {
@@ -12986,8 +13531,15 @@
               <div class="search resident-search">
                 <input id="residentSearch" type="text" placeholder="搜尋 戶號 / 姓名 / 手機 / Email / 棟別" autocomplete="off" />
               </div>
+              <select id="residentStatusFilter" aria-label="帳號狀態">
+                <option value="all">全部狀態</option>
+                <option value="enabled">已啟用</option>
+                <option value="disabled">未啟用</option>
+              </select>
               <button class="btn btn-primary btn-sm" type="button" id="btnAddResident">新增帳號</button>
               <button class="btn btn-warning btn-sm" type="button" id="btnUnits">戶號列表</button>
+              <button class="btn btn-sm" type="button" id="btnExportResidents">匯出 Excel</button>
+              <button class="btn btn-sm" type="button" id="btnBatchResidents">批次作業</button>
             </div>
             <div class="status" id="residentStatus" hidden></div>
             <div class="resident-list" id="residentList"></div>
@@ -12998,8 +13550,11 @@
     const listEl = document.getElementById("residentList");
     const statusEl = document.getElementById("residentStatus");
     const searchEl = document.getElementById("residentSearch");
+    const statusFilterEl = document.getElementById("residentStatusFilter");
     const addBtn = document.getElementById("btnAddResident");
     const unitsBtn = document.getElementById("btnUnits");
+    const exportBtn = document.getElementById("btnExportResidents");
+    const batchBtn = document.getElementById("btnBatchResidents");
     const peopleTotalEl = document.getElementById("peopleTotal");
 
     const setStatus = (msg, isError) => {
@@ -13018,22 +13573,33 @@
 
     const renderList = () => {
       const q = String(searchEl ? searchEl.value : "").trim().toLowerCase();
-      const filtered = q
-        ? residents.filter((r) => {
-            const h = String(r.houseNo || "").toLowerCase();
-            const n = String(r.displayName || "").toLowerCase();
-            const p = String(r.phone || "").toLowerCase();
-            const e = String(r.email || "").toLowerCase();
-            const b = String(r.building || r.block || "").toLowerCase();
-            return h.includes(q) || n.includes(q) || p.includes(q) || e.includes(q) || b.includes(q);
-          })
-        : residents;
+      const statusFilter = String(statusFilterEl ? statusFilterEl.value : "all");
+      const filtered = residents
+        .filter((r) => {
+          if (statusFilter === "enabled" && r.enabled === false) return false;
+          if (statusFilter === "disabled" && r.enabled !== false) return false;
+          return true;
+        })
+        .filter((r) => {
+          if (!q) return true;
+          const h = String(r.houseNo || "").toLowerCase();
+          const n = String(r.displayName || "").toLowerCase();
+          const p = String(r.phone || "").toLowerCase();
+          const e = String(r.email || "").toLowerCase();
+          const b = String(r.building || r.block || "").toLowerCase();
+          return h.includes(q) || n.includes(q) || p.includes(q) || e.includes(q) || b.includes(q);
+        });
 
       if (!listEl) return;
       refreshUnitTotals();
-      if (peopleTotalEl) peopleTotalEl.textContent = `總人數：${residents.length}`;
+      const isFiltered = Boolean(q) || statusFilter !== "all";
+      if (peopleTotalEl) {
+        peopleTotalEl.textContent = isFiltered
+          ? `篩選結果：${filtered.length} / ${residents.length}`
+          : `總人數：${residents.length}`;
+      }
       if (!filtered.length) {
-        listEl.innerHTML = `<div class="status">尚無住戶資料。</div>`;
+        listEl.innerHTML = `<div class="status">${isFiltered ? "沒有符合條件的住戶資料。" : "尚無住戶資料。"}</div>`;
         return;
       }
 
@@ -13133,6 +13699,7 @@
                   phoneNormalized: String(v.phoneNormalized || ""),
                   status: String(v.status || ""),
                   qrToken: String(v.qrToken || ""),
+                  points: Number(v.points || 0),
                 };
               })
               .filter((x) => isResidentRole(x.role) && x.status !== "pending");
@@ -13192,8 +13759,15 @@
     };
 
     if (searchEl) searchEl.addEventListener("input", renderList);
+    if (statusFilterEl) statusFilterEl.addEventListener("change", renderList);
     if (addBtn) addBtn.addEventListener("click", () => openResidentEditor("create"));
     if (unitsBtn) unitsBtn.addEventListener("click", openUnitsEditor);
+    if (exportBtn) exportBtn.addEventListener("click", () => exportResidentsExcel80(residents, cname));
+    if (batchBtn) {
+      batchBtn.addEventListener("click", () => {
+        openResidentsBatchHub80({ communityId: cid, list: residents, onDone: loadResidents });
+      });
+    }
 
     if (listEl) {
       listEl.addEventListener("click", async (e) => {
@@ -13259,7 +13833,7 @@
         if (delBtn) {
           const ok = await (window.nwConfirm ? window.nwConfirm({
             title: "確認刪除",
-            message: `確定要刪除住戶「${String(r.displayName || r.email || id)}」？`,
+            message: `確定要刪除住戶「${String(r.displayName || r.email || id)}」？將同時移除其登入帳號與手機查詢索引，刪除後無法復原。`,
             okText: "刪除",
             cancelText: "取消",
             danger: true,
@@ -13267,10 +13841,37 @@
           if (!ok) return;
           delBtn.disabled = true;
           try {
+            const authRes = await deleteResidentAuthAccount80(String(id));
+            if (!authRes.ok) {
+              const code = String(authRes.reason || "");
+              const friendly =
+                code === "no-functions-sdk" || code.includes("not-found") || code.includes("unavailable") || code.includes("internal")
+                  ? "尚未部署「刪除登入帳號」的雲端函式（請執行 firebase deploy --only functions）。"
+                  : `雲端刪除登入帳號失敗（${code || "未知原因"}）。`;
+              const proceed = await (window.nwConfirm ? window.nwConfirm({
+                title: "無法刪除登入帳號",
+                message: `${friendly}\n若仍要繼續，登入帳號會保留，日後同一 Email 可能無法重新新增。是否仍要刪除住戶資料？`,
+                okText: "仍要刪除",
+                cancelText: "取消",
+                danger: true,
+              }) : Promise.resolve(window.confirm("仍要刪除住戶資料？")));
+              if (!proceed) return;
+            }
+            // 同步移除手機查詢索引（僅在索引確實指向此住戶時）
+            const phoneKey = normalizePhoneDigits(String(r.phone || ""));
+            if (phoneKey) {
+              try {
+                const lk = await db.collection("user_lookup").doc(phoneKey).get();
+                if (lk && lk.exists && String((lk.data() || {}).uid || "") === String(id)) {
+                  await db.collection("user_lookup").doc(phoneKey).delete();
+                }
+              } catch {}
+            }
             await db.collection("users").doc(String(id)).delete();
             residents = residents.filter((x) => String(x.id || "") !== String(id || ""));
             state.currentResidents = residents;
             renderList();
+            toast(authRes.ok ? "已刪除住戶與登入帳號" : "已刪除住戶資料（登入帳號未刪除）");
           } catch {
             toast("刪除失敗");
           } finally {
@@ -13318,13 +13919,19 @@
       const val = (v) => (hasData ? String(v) : "—");
       const unit = (u) => (hasData ? u : "");
       const enabledCount = rows.filter((r) => r.enabled !== false).length;
+      const unitKeySet = new Set(normalizeResidentUnitList(communityUnits).map((x) => String(x || "").trim().toLowerCase()).filter(Boolean));
+      const boundCount = rows.filter((r) => {
+        const h = String(r.houseNo || "").trim().toLowerCase();
+        return Boolean(h) && unitKeySet.has(h);
+      }).length;
+      const pendingValue = _residentsPendingCountReady ? String(Number(_lastResidentsPendingCount) || 0) : "—";
       const cards = [
         { label: "總戶號", value: val(normalizeResidentUnitList(communityUnits).length), unit: unit("戶"), sub: "社區戶號總數", tone: "" },
         { label: "總住戶", value: val(rows.length), unit: unit("人"), sub: "已建檔住戶帳號", tone: "info" },
         { label: "已啟用", value: val(enabledCount), unit: unit("人"), sub: "可正常登入", tone: "success" },
         { label: "未啟用", value: val(rows.length - enabledCount), unit: unit("人"), sub: "已停用帳號", tone: "muted" },
-        { label: "已綁戶號", value: val(rows.filter((r) => String(r.houseNo || "").trim()).length), unit: unit("人"), sub: "已填寫戶號", tone: "" },
-        { label: "待審帳號", value: String(Number(_lastResidentsPendingCount) || 0), unit: "筆", sub: "待審核註冊申請", tone: "warning", pending: true },
+        { label: "已綁戶號", value: val(hasData ? boundCount : "—"), unit: unit("人"), sub: "戶號存在於社區戶號清單", tone: "" },
+        { label: "待審帳號", value: pendingValue, unit: "筆", sub: "待審核註冊申請", tone: "warning", pending: true },
       ];
       el.innerHTML = `
         <div class="residents-overview">
@@ -13419,6 +14026,7 @@
                 <input id="pointsSearch" type="text" placeholder="搜尋 戶號 / 姓名 / 手機 / Email" autocomplete="off" />
               </div>
               <button class="btn btn-primary btn-sm" type="button" id="btnPointsSettings">點數設定</button>
+              <button class="btn btn-sm" type="button" id="btnPointsBatch">批次給點</button>
             </div>
             <div class="status" id="pointsStatus" hidden></div>
             <div class="resident-list" id="pointsList"></div>
@@ -13431,6 +14039,7 @@
       const pointsSearchEl = document.getElementById("pointsSearch");
       const pointsTotalEl = document.getElementById("pointsTotal");
       const btnPointsSettings = document.getElementById("btnPointsSettings");
+      const btnPointsBatch = document.getElementById("btnPointsBatch");
 
       const setPointsStatus = (msg, isError) => {
         if (!pointsStatusEl) return;
@@ -13590,18 +14199,32 @@
           return;
         }
 
-        // 如果是共用模式，只顯示主帳號
+        // 共用模式：每戶僅顯示一個代表（優先主帳號；若該戶沒有主帳號，取第一筆子帳號）
         if (pointsSettings.sharePoints) {
-          const processedHouseNos = new Set();
+          const representativeByHouse = new Map();
+          filtered.forEach((r) => {
+            const houseNo = String(r.houseNo || "").trim();
+            const key = houseNo || `__id__:${String(r.id || "")}`;
+            const cur = representativeByHouse.get(key);
+            if (!cur) {
+              representativeByHouse.set(key, r);
+              return;
+            }
+            const curMain = isMainAccount(cur);
+            const rMain = isMainAccount(r);
+            if (rMain && !curMain) {
+              representativeByHouse.set(key, r);
+              return;
+            }
+            if (curMain && !rMain) return;
+            const cs = String(cur.subUnit || "").trim();
+            const rs = String(r.subUnit || "").trim();
+            if (rs && (!cs || rs.localeCompare(cs, "zh-Hant") < 0)) representativeByHouse.set(key, r);
+          });
           filtered = filtered.filter((r) => {
             const houseNo = String(r.houseNo || "").trim();
-            if (!houseNo) return true;
-            if (processedHouseNos.has(houseNo)) return false;
-            if (isMainAccount(r)) {
-              processedHouseNos.add(houseNo);
-              return true;
-            }
-            return false;
+            const key = houseNo || `__id__:${String(r.id || "")}`;
+            return representativeByHouse.get(key) === r;
           });
         }
 
@@ -14013,6 +14636,196 @@
         }
       };
 
+      // 批次給點：勾選多位住戶後統一增減點數
+      const openResidentsBatchPoints80 = () => {
+        const modal = ensureModal("residentsBatchPointsModal80", "modal-residents-batch", "min(800px, 96vw)");
+        let detach = () => {};
+        let busy = false;
+        detach = bindModalClose(modal, () => { if (!busy) detach(); });
+
+        const people = pointsResidents.slice();
+        const selected = new Set();
+        let visibleIds = [];
+
+        modal.innerHTML = `
+          <div class="modal-backdrop" data-modal-close="1"></div>
+          <div class="modal-dialog" role="dialog" aria-modal="true">
+            <div class="modal-hd">
+              <h3 class="modal-title">批次給點</h3>
+              <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+            </div>
+            <div class="modal-body">
+              <div class="resident-toolbar" style="margin-bottom:10px;">
+                <div class="search resident-search">
+                  <input id="rbPointsSearch" type="text" placeholder="搜尋 戶號 / 姓名 / 手機 / Email" autocomplete="off" />
+                </div>
+                <label class="rb-select-all"><input type="checkbox" id="rbPointsAll" /> 全選</label>
+              </div>
+              <div class="resident-list" id="rbPointsList" style="max-height:320px;overflow:auto;"></div>
+              <div class="field" style="margin-top:12px;">
+                <label for="rbPointsAmount">增減點數（正數增加、負數扣除）</label>
+                <input id="rbPointsAmount" type="number" placeholder="例如：5 或 -3" />
+              </div>
+              <div class="field" style="margin-top:8px;">
+                <label for="rbPointsReason">事由</label>
+                <input id="rbPointsReason" type="text" placeholder="請輸入事由" />
+              </div>
+              <div class="status" id="rbPointsInfo" hidden></div>
+            </div>
+            <div class="modal-ft">
+              <button class="btn" type="button" data-modal-close="1">關閉</button>
+              <button class="btn btn-primary" type="button" id="rbPointsApply">套用</button>
+            </div>
+          </div>
+        `.trim();
+
+        const listEl = modal.querySelector("#rbPointsList");
+        const searchEl = modal.querySelector("#rbPointsSearch");
+        const allEl = modal.querySelector("#rbPointsAll");
+        const amountEl = modal.querySelector("#rbPointsAmount");
+        const reasonEl = modal.querySelector("#rbPointsReason");
+        const infoEl = modal.querySelector("#rbPointsInfo");
+        const applyBtn = modal.querySelector("#rbPointsApply");
+
+        const setInfo = (msg, isError) => {
+          if (!infoEl) return;
+          const t = String(msg || "").trim();
+          infoEl.textContent = t;
+          infoEl.hidden = !t;
+          infoEl.classList.toggle("error", Boolean(isError));
+        };
+
+        const syncAllState = () => {
+          if (!allEl) return;
+          const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
+          allEl.checked = allSelected;
+          allEl.indeterminate = !allSelected && visibleIds.some((id) => selected.has(id));
+          setInfo(selected.size ? `已勾選 ${selected.size} 位` : "", false);
+        };
+
+        const renderList = () => {
+          if (!listEl) return;
+          const q = String(searchEl ? searchEl.value : "").trim().toLowerCase();
+          const rows = people.filter((r) => {
+            if (!q) return true;
+            return [r.houseNo, r.subUnit, r.displayName, r.phone, r.email]
+              .some((v) => String(v || "").toLowerCase().includes(q));
+          });
+          visibleIds = rows.map((r) => String(r.id || ""));
+          if (!rows.length) {
+            listEl.innerHTML = `<div class="status">沒有符合的住戶。</div>`;
+            syncAllState();
+            return;
+          }
+          listEl.innerHTML = rows.map((r) => {
+            const unit = [r.houseNo, r.subUnit].filter(Boolean).join("-");
+            const id = String(r.id || "");
+            const points = Number(r.points || 0);
+            return `
+              <label class="resident-item" style="cursor:pointer;">
+                <div class="resident-left">
+                  <input type="checkbox" data-uid="${escapeHtml(id)}" ${selected.has(id) ? "checked" : ""} />
+                  <div class="avatar-sm">${avatarHtml(r)}</div>
+                  <div class="resident-text">
+                    <div class="resident-name">${escapeHtml(r.displayName || "—")}</div>
+                    <div class="resident-sub">${escapeHtml(unit || "—")}｜${escapeHtml(r.phone || r.email || "")}</div>
+                  </div>
+                </div>
+                <div style="font-weight:900;color:var(--primary);white-space:nowrap;">${points} 點</div>
+              </label>`;
+          }).join("");
+
+          listEl.querySelectorAll("input[data-uid]").forEach((cb) => {
+            cb.addEventListener("change", () => {
+              const id = cb.getAttribute("data-uid");
+              if (!id) return;
+              if (cb.checked) selected.add(id);
+              else selected.delete(id);
+              syncAllState();
+            });
+          });
+          syncAllState();
+        };
+
+        const apply = async () => {
+          if (busy) return;
+          const change = parseInt(amountEl ? amountEl.value : "", 10);
+          if (!Number.isFinite(change) || change === 0) { setInfo("請輸入不為 0 的點數增減值。", true); return; }
+          const reason = String(reasonEl ? reasonEl.value : "").trim();
+          if (!reason) { setInfo("請輸入事由。", true); return; }
+          const ids = Array.from(selected);
+          if (!ids.length) { setInfo("請先勾選住戶。", true); return; }
+          const proceed = await (window.nwConfirm ? window.nwConfirm({
+            title: "確認批次給點",
+            message: `將對 ${ids.length} 位住戶${change > 0 ? `增加 ${change}` : `扣除 ${Math.abs(change)}`} 點，是否繼續？`,
+            okText: "確認",
+            cancelText: "取消",
+          }) : Promise.resolve(window.confirm(`將對 ${ids.length} 位住戶調整 ${change} 點？`)));
+          if (!proceed) return;
+
+          busy = true;
+          if (applyBtn) applyBtn.disabled = true;
+          const currentUser = auth.currentUser;
+          const operatorName = currentUser ? (currentUser.displayName || currentUser.email || "管理員") : "管理員";
+          const operatorUid = currentUser ? currentUser.uid : "";
+          let success = 0;
+          const failures = [];
+
+          for (let i = 0; i < ids.length; i += 1) {
+            const id = ids[i];
+            setInfo(`套用中 ${i + 1}/${ids.length}`, false);
+            try {
+              const doc = await db.collection("users").doc(id).get();
+              const oldPoints = Number((doc.data() || {}).points || 0);
+              const newPoints = Math.max(0, oldPoints + change);
+              await db.collection("users").doc(id).set(
+                { points: newPoints, updatedAt: FieldValue.serverTimestamp() },
+                { merge: true }
+              );
+              await db.collection("pointsHistory").add({
+                userId: id,
+                communityId: String(cid || "default"),
+                oldPoints,
+                newPoints,
+                pointsChange: newPoints - oldPoints,
+                reason,
+                operatorName,
+                operatorUid,
+                createdAt: FieldValue.serverTimestamp(),
+              });
+              const local = pointsResidents.find((x) => String(x.id || "") === id);
+              if (local) local.points = newPoints;
+              success += 1;
+            } catch (err) {
+              failures.push(id);
+            }
+          }
+
+          busy = false;
+          if (applyBtn) applyBtn.disabled = false;
+          try { await saveHousePointsTotals(pointsResidents); } catch {}
+          renderPointsList();
+          const summary = `完成：成功 ${success} 筆${failures.length ? `、失敗 ${failures.length} 筆` : ""}。`;
+          setInfo(summary, failures.length > 0);
+          if (success) toast(`已批次調整 ${success} 位住戶點數`);
+        };
+
+        if (searchEl) searchEl.addEventListener("input", renderList);
+        if (allEl) {
+          allEl.addEventListener("change", () => {
+            if (allEl.checked) visibleIds.forEach((id) => selected.add(id));
+            else visibleIds.forEach((id) => selected.delete(id));
+            renderList();
+          });
+        }
+        if (applyBtn) applyBtn.addEventListener("click", apply);
+
+        renderList();
+        modal.hidden = false;
+      };
+
+      if (btnPointsBatch) btnPointsBatch.onclick = openResidentsBatchPoints80;
+
       // 加载住户数据（包含点数字段）
       const loadPointsResidents = async () => {
         setPointsStatus("讀取中...", false);
@@ -14176,14 +14989,24 @@
             }) : Promise.resolve(confirm("是否核准？")));
             
             if (ok) {
+              const defaultPwd = normalizePhoneDigits(r.phone);
+              const password = await promptTextModal80({
+                id: "approveResidentPwdModal80",
+                title: "設定初始登入密碼",
+                label: `「${String(r.displayName || r.email || "")}」的登入密碼`,
+                hint: "申請資料只保留密碼雜湊、無法還原。請輸入申請人提供的密碼（或直接以手機號碼作為初始密碼）。此密碼僅用於建立登入帳號，不會儲存到資料庫。",
+                defaultValue: defaultPwd,
+                okText: "核准並建立",
+                type: "text",
+                minLength: 6
+              });
+              if (!password) return;
               let createdAuth = null;
               try {
                 toast("正在建立帳號...");
                 const email = String(r.email || "").trim().toLowerCase();
                 const phone = normalizePhoneDigits(r.phone);
-                // 密碼優先使用申請時填寫的，若無則用手機號碼
-                const password = String(r.password || phone).trim();
-                
+
                 if (!email || !password) throw new Error("缺少必要的 Email 或密碼資訊");
 
                 // 1. 在 Firebase Auth 建立帳號
@@ -14201,6 +15024,8 @@
                   updatedAt: FieldValue.serverTimestamp()
                 };
                 delete payload.password; // 不在 Firestore 儲存明文密碼
+                delete payload.passwordHash; // 舊申請的雜湊不沿用，稍後以新密碼重算
+                delete payload.passwordPlain;
 
                 // 密碼 Hash 處理
                 if (typeof sha256Hex === "function") {
@@ -14700,6 +15525,14 @@
         }
         if (!unit) {
           setModalStatus("請填寫戶號。", true);
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+
+        // 戶號驗證：若社區已建立戶號清單，住戶戶號必須存在於清單中
+        const knownUnits = normalizeResidentUnitList(getCommunityUnits());
+        if (knownUnits.length && !knownUnits.some((x) => String(x || "").trim().toLowerCase() === unit.toLowerCase())) {
+          setModalStatus(`戶號「${unit}」不在社區戶號清單中，請先至「戶號列表」新增，或改用清單中的戶號。`, true);
           if (submitBtn) submitBtn.disabled = false;
           return;
         }
