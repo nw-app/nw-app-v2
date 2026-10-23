@@ -75,6 +75,10 @@
     return { deep, qr };
   };
 
+  const buildQrFallbackUrl = (deep, size = 240) => {
+    return `https://quickchart.io/qr?size=${size}&text=${encodeURIComponent(deep)}`;
+  };
+
   const main = async () => {
     const cKey = getParam("c");
     if (!cKey) {
@@ -192,7 +196,6 @@
       communityUnits.forEach((u) => {
         const uid = (typeof u === "object" && u !== null) ? String(u.id || "").trim() : String(u || "").trim();
         if (!uid) return;
-        const owner = (typeof u === "object" && u !== null) ? String(u.ownerName || u.owner || "").trim() : "";
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "unit-option";
@@ -200,12 +203,6 @@
         idSpan.className = "unit-id";
         idSpan.textContent = uid;
         btn.appendChild(idSpan);
-        if (owner) {
-          const ownerSpan = document.createElement("span");
-          ownerSpan.className = "unit-name";
-          ownerSpan.textContent = owner;
-          btn.appendChild(ownerSpan);
-        }
         btn.addEventListener("click", () => {
           if (unitInput) {
             unitInput.value = uid;
@@ -287,7 +284,15 @@
       const img = qs("#passQrImg");
       const hint = qs("#passHint");
       const urlEl = qs("#passUrl");
-      if (img) img.src = qr;
+      if (img) {
+        const onError = () => {
+          img.removeEventListener("error", onError);
+          const fallback = buildQrFallbackUrl(deep);
+          if (img.src !== fallback) img.src = fallback;
+        };
+        img.addEventListener("error", onError);
+        img.src = qr || buildQrFallbackUrl(deep);
+      }
       if (hint) hint.textContent = "請出示此 QR code 作為訪客證。";
       if (urlEl) urlEl.textContent = deep;
       show(passBox, true);
@@ -296,6 +301,23 @@
       localStorage.setItem(PASS_CACHE_KEY, JSON.stringify({
         deep, qr, vid: current.vid, cid: current.cid, timestamp: Date.now()
       }));
+    };
+
+    // 已授權時自動顯示訪客證（不需再手動點按）
+    const revealPass = () => {
+      if (!current.vid) return;
+      if (current.shownPassVid === current.vid) return;
+      current.shownPassVid = current.vid;
+      const pass = buildPassPayload({ cid: current.cid, vid: current.vid });
+      show(form, false);
+      if (btnFooterSubmit) show(btnFooterSubmit, false);
+      show(resultBox, true);
+      showPass(pass);
+    };
+
+    const hidePass = () => {
+      current.shownPassVid = "";
+      show(passBox, false);
     };
 
     const setPassReady = (ready) => {
@@ -311,6 +333,7 @@
       docRef: null,
       unsub: null,
       passAuthorized: false,
+      shownPassVid: "",
     };
 
     const detachDoc = () => {
@@ -328,14 +351,13 @@
           current.passAuthorized = authorized;
           setPassReady(authorized);
           if (resultMsg) {
-            resultMsg.textContent = authorized ? "已授權，可查看訪客證。" : "已送出登記，等待授權。";
+            resultMsg.textContent = authorized ? "已授權，已顯示訪客證。" : "已送出登記，等待授權。";
           }
-          // 如果已授權，自動更新暫存
           if (authorized && current.vid) {
-            const pass = buildPassPayload({ cid: current.cid, vid: current.vid });
-            localStorage.setItem(PASS_CACHE_KEY, JSON.stringify({
-              ...pass, vid: current.vid, cid: current.cid, timestamp: Date.now()
-            }));
+            // 如果已授權，自動顯示訪客證並更新暫存
+            revealPass();
+          } else if (!authorized) {
+            hidePass();
           }
         },
         () => {
@@ -351,19 +373,19 @@
         if (cached) {
           const data = JSON.parse(cached);
           // 檢查是否為同一社區
-          if (data.cid === cid) {
+          if (data.cid === cid && data.vid) {
             current.vid = data.vid;
-            current.passAuthorized = true;
-            setPassReady(true);
-            
+            // 先用暫存內容顯示訪客證，避免因網路或權限問題而看不到
+            if (data.deep) {
+              show(form, false);
+              if (btnFooterSubmit) show(btnFooterSubmit, false);
+              show(resultBox, true);
+              current.shownPassVid = data.vid;
+              showPass({ deep: data.deep, qr: data.qr || "" });
+            }
             // 重新掛載監聽以確保狀態同步
             const docRef = db.collection("communities").doc(cid).collection("visitors").doc(data.vid);
             attachDoc(docRef);
-
-            // 如果已經是在結果畫面，顯示訪客證
-            if (resultBox && !resultBox.hidden) {
-              showPass(data);
-            }
           }
         }
       } catch (e) { console.error("Restore pass failed", e); }
@@ -371,7 +393,7 @@
 
     tryRestorePass();
 
-    setPassReady(false);
+    if (!current.vid) setPassReady(false);
 
     if (btnFooterPass) {
       btnFooterPass.addEventListener("click", async () => {
@@ -432,28 +454,32 @@
       });
     }
 
+    // 避免連續點擊造成多筆重複登記
+    let isSubmitting = false;
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (isSubmitting) return;
       setStatus("", false);
-      if (btnFooterSubmit) btnFooterSubmit.disabled = true;
 
       const name = String(qs("#v_name") ? qs("#v_name").value : "").trim();
       const unit = String(qs("#v_unit") ? qs("#v_unit").value : "").trim();
       const phone = String(qs("#v_phone") ? qs("#v_phone").value : "").trim();
       const plate = String(qs("#v_plate") ? qs("#v_plate").value : "").trim();
       const email = String(qs("#v_email") ? qs("#v_email").value : "").trim();
-      const partySize = clampInt(qs("#v_party") ? qs("#v_party").value : "", 1, 20, 1);
+      const partyRaw = String(qs("#v_party") ? qs("#v_party").value : "").trim();
+      const partySize = clampInt(partyRaw, 1, 20, 1);
       const purposeType = String(purposeTypeEl ? purposeTypeEl.value : "").trim() || "訪客到訪";
       const purposeOther = String(qs("#v_purposeOther") ? qs("#v_purposeOther").value : "").trim();
       const note = String(qs("#v_note") ? qs("#v_note").value : "").trim();
       const purpose = purposeType === "其他" ? (purposeOther || "其他") : purposeType;
 
-      if (!name || !unit) {
-        setStatus("請填寫訪客姓名與拜訪戶號。", true);
-        if (btnFooterSubmit) btnFooterSubmit.disabled = false;
+      if (!name || !unit || !phone || !partyRaw) {
+        setStatus("請填寫訪客姓名、拜訪人數、拜訪戶號與手機。", true);
         return;
       }
-      
+
+      isSubmitting = true;
+      if (btnFooterSubmit) btnFooterSubmit.disabled = true;
       setStatus("正在提交...", false);
 
       const docRef = db.collection("communities").doc(cid).collection("visitors").doc();
@@ -492,18 +518,20 @@
         
         current.vid = vid;
         current.passAuthorized = false;
+        current.shownPassVid = "";
         setPassReady(false);
         attachDoc(docRef);
         show(form, false);
         if (btnFooterSubmit) show(btnFooterSubmit, false);
         show(resultBox, true);
-        show(passBox, false);
+        hidePass();
         if (resultMsg) resultMsg.textContent = "已送出登記，等待授權。";
         setStatus("", false);
       } catch (err) {
         const code = String(err && err.code ? err.code : "");
         setStatus(code.includes("permission-denied") ? "沒有權限送出，請聯繫管理員。": "送出失敗，請稍後再試。", true);
       } finally {
+        isSubmitting = false;
         if (btnFooterSubmit) btnFooterSubmit.disabled = false;
       }
     });

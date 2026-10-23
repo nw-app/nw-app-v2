@@ -127,7 +127,7 @@
     ] },
     { id: "community-staff", label: "管理帳號", desc: "管理社區後台登入帳號（總幹事／秘書／保全）", tabs: [] },
     { id: "suite", label: "套房專區", desc: "客製化電費、水費、維護費、其他費用公式計算", tabs: [] },
-    { id: "finance", label: "收支報表", desc: "總覽、收入／支出明細、銀行明細、管理費、報表匯出、類別名單與設定", tabs: [
+    { id: "finance", label: "財報系統", desc: "總覽、收入／支出明細、銀行明細、管理費、報表匯出、類別名單與設定", tabs: [
       { id: "overview", label: "總覽" },
       { id: "income", label: "收入明細" }, { id: "expense", label: "支出明細" },
       { id: "bank", label: "銀行明細" }, { id: "fees", label: "管理費" }, { id: "report", label: "報表匯出" },
@@ -2434,7 +2434,7 @@
       { id: "meter-reading", name: "抄表紀錄" },
       { id: "community-staff", name: "管理帳號" },
       { id: "suite", name: "套房專區" },
-      { id: "finance", name: "收支報表" },
+      { id: "finance", name: "財報系統" },
       { id: "checkin-vote", name: "報到投票" },
       { id: "assignments", name: "交辦事項" },
       { id: "duty", name: "勤務管理" },

@@ -4,11 +4,13 @@
   const titleEl = document.getElementById('viewerTitle');
   const statusEl = document.getElementById('viewerStatus');
   const pagesEl = document.getElementById('pdfPages');
+  const btnShare = document.getElementById('btnSharePdf');
   const btnDownload = document.getElementById('btnDownloadPdf');
   const btnClose = document.getElementById('btnClosePdfViewer');
   let sourceUrl = './';
   let currentBlobUrl = '';
   let currentFilename = '附件.pdf';
+  let currentShareUrl = '';
 
   function isLineBrowser() {
     const ua = String(navigator.userAgent || '').toLowerCase();
@@ -45,6 +47,22 @@
     }
   }
 
+  function getQuerySource() {
+    try {
+      const params = new URLSearchParams(location.search);
+      const file = String(params.get('file') || params.get('src') || '').trim();
+      if (!file) return null;
+      const rawName = String(params.get('name') || '').trim();
+      const fallback = String(file.split('/').pop() || '附件.pdf').trim() || '附件.pdf';
+      return {
+        file,
+        filename: rawName || fallback,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   function dataUrlToUint8Array(dataUrl) {
     const raw = String(dataUrl || '').trim();
     const comma = raw.indexOf(',');
@@ -56,6 +74,41 @@
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
     return bytes;
+  }
+
+  async function fetchPdfBytes(url) {
+    const res = await fetch(String(url || '').trim(), { credentials: 'same-origin' });
+    if (!res.ok) throw new Error('pdf-fetch-failed');
+    const buf = await res.arrayBuffer();
+    return new Uint8Array(buf);
+  }
+
+  function buildShareUrl(querySource, filename) {
+    if (!querySource || !querySource.file) return '';
+    try {
+      const url = new URL('./pdf-viewer.html', location.href);
+      url.searchParams.set('file', String(querySource.file || '').trim());
+      url.searchParams.set('name', String(filename || querySource.filename || '附件.pdf').trim() || '附件.pdf');
+      return url.toString();
+    } catch {
+      return '';
+    }
+  }
+
+  function shareToLine() {
+    if (!currentShareUrl) {
+      setStatus('這份 PDF 目前沒有可分享的公開網址。', true);
+      return;
+    }
+    const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(currentShareUrl)}`;
+    try {
+      const win = window.open(lineUrl, '_blank', 'noopener');
+      if (!win) {
+        location.href = lineUrl;
+      }
+    } catch {
+      location.href = lineUrl;
+    }
   }
 
   async function renderPdf(bytes, filename) {
@@ -116,18 +169,30 @@
 
   async function init() {
     const payload = getPayload();
-    if (!payload || !payload.dataUrl) {
+    const querySource = getQuerySource();
+    if ((!payload || !payload.dataUrl) && !querySource) {
       setStatus('找不到 PDF 資料，請回上一頁重新點選。', true);
       return;
     }
 
-    const filename = String(payload.filename || '附件.pdf').trim() || '附件.pdf';
-    currentFilename = filename;
-    sourceUrl = String(payload.sourceUrl || './').trim() || './';
-    if (titleEl) titleEl.textContent = filename;
-
     try {
-      const bytes = dataUrlToUint8Array(payload.dataUrl);
+      let bytes;
+      let filename = '附件.pdf';
+      if (payload && payload.dataUrl) {
+        filename = String(payload.filename || '附件.pdf').trim() || '附件.pdf';
+        sourceUrl = String(payload.sourceUrl || './').trim() || './';
+        bytes = dataUrlToUint8Array(payload.dataUrl);
+        currentShareUrl = '';
+      } else {
+        filename = String((querySource && querySource.filename) || '附件.pdf').trim() || '附件.pdf';
+        sourceUrl = String(document.referrer || './').trim() || './';
+        bytes = await fetchPdfBytes(querySource.file);
+        currentShareUrl = buildShareUrl(querySource, filename);
+      }
+      currentFilename = filename;
+      if (titleEl) titleEl.textContent = filename;
+      if (btnShare) btnShare.disabled = !currentShareUrl;
+
       const headTxt = String.fromCharCode(...bytes.slice(0, 5));
       if (headTxt !== '%PDF-') {
         setStatus('PDF 檔案內容異常，可能檔案已損毀或格式錯誤。', true);
@@ -178,6 +243,10 @@
       } catch {}
       location.href = './';
     });
+  }
+
+  if (btnShare) {
+    btnShare.addEventListener('click', shareToLine);
   }
 
   init();

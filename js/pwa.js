@@ -109,10 +109,20 @@
   }
 
   function shouldInterceptInstallPrompt() {
+    if (shouldSuppressInstallBanner()) return false;
     if (isStandalone()) return false;
     if (isIOSSafari()) return false;
     if (!isPhoneLike()) return false;
     return shouldShow();
+  }
+
+  function shouldSuppressInstallBanner() {
+    try {
+      const path = String(location.pathname || "").toLowerCase();
+      return path.endsWith("/visitor.html") || path === "/visitor.html" || path === "visitor.html";
+    } catch {
+      return false;
+    }
   }
 
   function dismiss() {
@@ -122,6 +132,7 @@
   }
 
   function ensureBanner() {
+    if (shouldSuppressInstallBanner()) return null;
     let el = document.getElementById("pwaInstallBanner");
     if (el) return el;
 
@@ -475,6 +486,11 @@
             <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
           </div>
           <div class="modal-body">
+            <div class="community-picker-filters" id="communityPickerFilters" aria-label="社區區域篩選">
+              <button type="button" class="community-picker-filter-btn" data-community-area="台北">台北</button>
+              <button type="button" class="community-picker-filter-btn" data-community-area="新北">新北</button>
+              <button type="button" class="community-picker-filter-btn" data-community-area="桃園">桃園</button>
+            </div>
             <div class="community-picker-list" id="communityPickerList">
               <div class="status">讀取中...</div>
             </div>
@@ -491,9 +507,11 @@
     const openCommunityPicker = async (db, targetPage, activeCodeOrId, allowedKeys) => {
       const modal = ensureCommunityPickerModal();
       const listEl = document.getElementById("communityPickerList");
+      const filtersEl = document.getElementById("communityPickerFilters");
       modal.hidden = false;
       document.body.style.overflow = "hidden";
       if (listEl) listEl.innerHTML = `<div class="status">讀取中...</div>`;
+      if (filtersEl) filtersEl.querySelectorAll("[data-community-area]").forEach((btn) => btn.classList.remove("active"));
 
       const close = () => {
         modal.hidden = true;
@@ -525,6 +543,15 @@
           };
         }).filter((x) => x && x.name);
 
+        const normalizeArea = (raw) => {
+          const text = String(raw || "").trim();
+          if (!text) return "";
+          if (text.includes("新北")) return "新北";
+          if (text.includes("台北") || text.includes("臺北")) return "台北";
+          if (text.includes("桃園")) return "桃園";
+          return "";
+        };
+
         const allowed = Array.isArray(allowedKeys) ? allowedKeys.map((x) => String(x || "").trim()).filter(Boolean) : [];
         if (allowed.length) {
           const set = new Set(allowed.map((x) => x.toLowerCase()));
@@ -546,62 +573,87 @@
         });
 
         if (!listEl) return;
-        if (!list.length) {
-          listEl.innerHTML = `<div class="status">尚無社區資料</div>`;
-          return;
-        }
 
         const activeKey = String(activeCodeOrId || "").trim().toLowerCase();
-        listEl.innerHTML = list.map((c) => {
-          const key = String(c.username || c.id || "").trim();
-          const isActive = activeKey && (key.toLowerCase() === activeKey || String(c.id || "").toLowerCase() === activeKey);
-          const cls = isActive ? "community-picker-btn active" : "community-picker-btn";
-          return `
-            <div class="community-picker-item">
-              <button type="button" class="${cls}" data-community-key="${encodeURIComponent(key)}">
-                <span class="community-picker-name">${c.name}</span>
-                <span class="community-picker-code">${key}</span>
-              </button>
-            </div>
-          `.trim();
-        }).join("");
+        const allCommunities = list.map((c) => ({ ...c, areaLabel: normalizeArea(c.area) }));
+        let activeArea = "";
 
-        listEl.querySelectorAll("[data-community-key]").forEach((b) => {
-          b.addEventListener("click", () => {
-            const key = decodeURIComponent(String(b.getAttribute("data-community-key") || "").trim());
-            if (!key) return;
-            try { sessionStorage.setItem("csp_last_cid", key); } catch {}
-            const target = String(targetPage || "").trim().toLowerCase();
-            const cPart = `?c=${encodeURIComponent(key)}`;
-            if (target === "admin") {
+        const bindCommunityItems = () => {
+          listEl.querySelectorAll("[data-community-key]").forEach((b) => {
+            b.addEventListener("click", () => {
+              const key = decodeURIComponent(String(b.getAttribute("data-community-key") || "").trim());
+              if (!key) return;
+              try { sessionStorage.setItem("csp_last_cid", key); } catch {}
+              const target = String(targetPage || "").trim().toLowerCase();
+              const cPart = `?c=${encodeURIComponent(key)}`;
+              if (target === "admin") {
+                try { sessionStorage.setItem("csp_role", "community"); } catch {}
+                location.href = `admin.html${cPart}#community/community-dashboard`;
+                return;
+              }
+              if (target === "member") {
+                try { sessionStorage.setItem("csp_role", "resident"); } catch {}
+                location.href = `member.html${cPart}`;
+                return;
+              }
+              if (target === "board") {
+                try { sessionStorage.setItem("csp_role", "board"); } catch {}
+                location.href = `ead.html${cPart}`;
+                return;
+              }
+              if (target === "table") {
+                try { sessionStorage.setItem("csp_role", "table"); } catch {}
+                location.href = `tad.html${cPart}`;
+                return;
+              }
+              if (target === "shop") {
+                try { sessionStorage.setItem("csp_role", "shop"); } catch {}
+                location.href = `shop.html${cPart}`;
+                return;
+              }
               try { sessionStorage.setItem("csp_role", "community"); } catch {}
               location.href = `admin.html${cPart}#community/community-dashboard`;
-              return;
-            }
-            if (target === "member") {
-              try { sessionStorage.setItem("csp_role", "resident"); } catch {}
-              location.href = `member.html${cPart}`;
-              return;
-            }
-            if (target === "board") {
-              try { sessionStorage.setItem("csp_role", "board"); } catch {}
-              location.href = `ead.html${cPart}`;
-              return;
-            }
-            if (target === "table") {
-              try { sessionStorage.setItem("csp_role", "table"); } catch {}
-              location.href = `tad.html${cPart}`;
-              return;
-            }
-            if (target === "shop") {
-              try { sessionStorage.setItem("csp_role", "shop"); } catch {}
-              location.href = `shop.html${cPart}`;
-              return;
-            }
-            try { sessionStorage.setItem("csp_role", "community"); } catch {}
-            location.href = `admin.html${cPart}#community/community-dashboard`;
+            });
           });
-        });
+        };
+
+        const renderCommunityList = () => {
+          const filtered = activeArea ? allCommunities.filter((c) => c.areaLabel === activeArea) : allCommunities.slice();
+          if (!filtered.length) {
+            listEl.innerHTML = `<div class="status">${activeArea ? `目前沒有「${activeArea}」可切換的社區` : "尚無社區資料"}</div>`;
+            return;
+          }
+          listEl.innerHTML = filtered.map((c) => {
+            const key = String(c.username || c.id || "").trim();
+            const isActive = activeKey && (key.toLowerCase() === activeKey || String(c.id || "").toLowerCase() === activeKey);
+            const cls = isActive ? "community-picker-btn active" : "community-picker-btn";
+            return `
+              <div class="community-picker-item">
+                <button type="button" class="${cls}" data-community-key="${encodeURIComponent(key)}">
+                  <span class="community-picker-name">${c.name}</span>
+                  <span class="community-picker-code">${key}</span>
+                </button>
+              </div>
+            `.trim();
+          }).join("");
+          bindCommunityItems();
+        };
+
+        if (filtersEl) {
+          filtersEl.querySelectorAll("[data-community-area]").forEach((btn) => {
+            btn.onclick = () => {
+              const nextArea = String(btn.getAttribute("data-community-area") || "").trim();
+              activeArea = activeArea === nextArea ? "" : nextArea;
+              filtersEl.querySelectorAll("[data-community-area]").forEach((el) => {
+                const isActive = String(el.getAttribute("data-community-area") || "").trim() === activeArea;
+                el.classList.toggle("active", isActive);
+              });
+              renderCommunityList();
+            };
+          });
+        }
+
+        renderCommunityList();
       } catch (e) {
         if (listEl) listEl.innerHTML = `<div class="status error">讀取社區清單失敗</div>`;
       }
@@ -1340,7 +1392,14 @@
     if (msgEl) msgEl.textContent = message;
     if (okBtn) okBtn.textContent = okText;
     if (cancelBtn) cancelBtn.textContent = cancelText;
-    if (okBtn) okBtn.classList.toggle("btn-danger", Boolean(danger));
+    if (okBtn) {
+      okBtn.classList.remove("btn-danger", "btn-success");
+      okBtn.classList.add(danger ? "btn-danger" : "btn-success");
+    }
+    if (cancelBtn) {
+      cancelBtn.classList.remove("btn-danger", "btn-success");
+      if (!danger) cancelBtn.classList.add("btn-danger");
+    }
 
     return new Promise((resolve) => {
       let detachKeydown = () => {};
@@ -1383,9 +1442,11 @@
   }
 
   function showBanner(onInstall) {
+    if (shouldSuppressInstallBanner()) return;
     if (isStandalone()) return;
     if (!shouldShow()) return;
     const banner = ensureBanner();
+    if (!banner) return;
     
     // 根据设备显示不同的内容
     const androidButtons = banner.querySelector("#androidInstallButtons");
@@ -1437,6 +1498,7 @@
   
   // 为 iOS 设备显示 PWA 安装提示（iOS 不支持 beforeinstallprompt 事件）
   function showIOSInstallPrompt() {
+    if (shouldSuppressInstallBanner()) return;
     if (!isIOSSafari()) return;
     if (isStandalone()) return;
     if (!shouldShow()) return;

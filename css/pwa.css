@@ -1628,6 +1628,34 @@ html.force-portrait-rotate .pwa-install {
 .profile-avatar { display: flex; align-items: center; }
 .profile-avatar .user-avatar-fallback { width: 56px; height: 56px; font-size: 18px; }
 #communityNameSub.clickable { cursor: pointer; text-decoration: none; }
+.community-picker-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.community-picker-filter-btn {
+  min-width: 72px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: #fff;
+  color: rgba(17, 24, 39, 0.9);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.community-picker-filter-btn:hover {
+  background: rgba(17, 24, 39, 0.03);
+}
+.community-picker-filter-btn.active {
+  background: rgba(211, 47, 47, 0.1);
+  border-color: rgba(211, 47, 47, 0.24);
+  color: #9f1c1c;
+}
 .community-picker-list { display: grid; gap: 10px; width: 100%; }
 .community-picker-item {
   width: 100%;
@@ -1706,6 +1734,19 @@ html.force-portrait-rotate .pwa-install {
   height: 48px;
   border-radius: 16px;
   width: 100%;
+}
+@media (max-width: 480px) {
+  .community-picker-filters {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .community-picker-filter-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 34px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
 }
 #profileModal .modal-body { align-items: center; text-align: center; }
 #profileModal .profile-item { justify-items: center; width: 100%; }

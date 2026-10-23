@@ -220,6 +220,8 @@
     config: null,
     unsubConfig: null,
     unsubVisitors: null,
+    unsubVisitorElevatorCards: null,
+    unsubVisitorElevatorCardConfig: null,
     unsubResidents: null,
     unsubPendingBadge: null,
     creatorLabelByUid: new Map(),
@@ -251,7 +253,7 @@
     { id: "meter-reading", name: "抄表紀錄", desc: "水電瓦斯抄表登記、批量匯入、審核核異與統計分析", badge: "抄表", page: "#community/meter-reading" },
     { id: "community-staff", name: "管理帳號", desc: "管理社區後台登入帳號（總幹事／秘書／保全）", badge: "人員", page: "#community/community-staff" },
     { id: "suite", name: "套房專區", desc: "客製化電費、水費、維護費、其他費用公式計算", badge: "套房", page: "#community/suite" },
-    { id: "finance", name: "收支報表", desc: "收入／支出明細、銀行明細、報表匯出、類別名單與設定", badge: "財務", page: "#community/finance" },
+    { id: "finance", name: "財報系統", desc: "收入／支出明細、銀行明細、報表匯出、類別名單與設定", badge: "財務", page: "#community/finance" },
     { id: "checkin-vote", name: "報到投票", desc: "活動報到、投票與統計結果（示意）", badge: "活動", page: "#community/checkin-vote" },
     { id: "assignments", name: "交辦事項", desc: "派工、追蹤進度、回報與結案（示意）", badge: "待辦", page: "#community/assignments" },
     { id: "duty", name: "勤務管理", desc: "排班、值勤紀錄與交接（示意）", badge: "管理", page: "#community/duty" },
@@ -266,6 +268,27 @@
   const btnSignOut = document.getElementById("btnSignOut");
   const globalSearchEl = document.getElementById("globalSearch");
   const loginInfoEl = document.getElementById("loginInfo");
+  const midtopEl = document.getElementById("frameMidtop");
+
+  /* 將各分頁（項目）內容的標題列 .card-hd 搬移至「頁中上」區塊顯示 */
+  function syncPageHeader() {
+    if (!midtopEl || !contentEl) return;
+    const host = contentEl.firstElementChild;
+    const hd = host && host.classList.contains("card") ? host.querySelector(":scope > .card-hd") : null;
+    if (!hd) {
+      if (midtopEl.firstElementChild) midtopEl.innerHTML = "";
+      return;
+    }
+    if (midtopEl.firstElementChild !== hd) {
+      midtopEl.innerHTML = "";
+      midtopEl.appendChild(hd);
+    }
+    host.classList.add("card-hd-moved");
+  }
+
+  if (contentEl) {
+    new MutationObserver(syncPageHeader).observe(contentEl, { childList: true });
+  }
 
   function toast(message) {
     if (!toastEl) return;
@@ -721,7 +744,7 @@
           m.id === "meter-reading" ? "抄表" :
           m.id === "community-staff" ? "人員" :
           m.id === "suite" ? "套房" :
-          m.id === "finance" ? "收支" :
+          m.id === "finance" ? "財報" :
           m.id === "checkin-vote" ? "投票" :
           m.id === "assignments" ? "交辦" :
           m.id === "duty" ? "勤務" :
@@ -897,12 +920,23 @@
     }
   }
 
-  function formatKeepText80(keep) {
+  function formatKeepText80(keep, outAt) {
     const k = keep && typeof keep === "object" ? keep : {};
     const cert = k.certificate && typeof k.certificate === "object" ? k.certificate : {};
     const cash = k.cash && typeof k.cash === "object" ? k.cash : {};
+    const elevatorCard = k.elevatorCard && typeof k.elevatorCard === "object" ? k.elevatorCard : {};
+    const departed = Boolean(outAt);
+    const returnTag = (item) => (departed && item ? (item.returned === true ? "（已歸還）" : "（未歸還）") : "");
     const parts = [];
-    if (cert.enabled) parts.push(String(cert.type || "證件").trim() || "證件");
+    if (cert.enabled) parts.push(`${String(cert.type || "證件").trim() || "證件"}${returnTag(cert)}`);
+    if (elevatorCard.enabled) {
+      const cardName = String(elevatorCard.name || "").trim();
+      const cardCode = String(elevatorCard.code || "").trim();
+      if (cardName && cardCode) parts.push(`電梯感應卡(${cardName}／${cardCode})${returnTag(elevatorCard)}`);
+      else if (cardName) parts.push(`電梯感應卡(${cardName})${returnTag(elevatorCard)}`);
+      else if (cardCode) parts.push(`電梯感應卡(${cardCode})${returnTag(elevatorCard)}`);
+      else parts.push(`電梯感應卡${returnTag(elevatorCard)}`);
+    }
     if (k.businessCard) parts.push("名片");
     if (cash.enabled) {
       const amt = Number(cash.amount);
@@ -926,6 +960,18 @@
     if (state.unsubVisitors) {
       try { state.unsubVisitors(); } catch {}
       state.unsubVisitors = null;
+    }
+  }
+  function stopVisitorElevatorCardsSubscription() {
+    if (state.unsubVisitorElevatorCards) {
+      try { state.unsubVisitorElevatorCards(); } catch {}
+      state.unsubVisitorElevatorCards = null;
+    }
+  }
+  function stopVisitorElevatorCardConfigSubscription() {
+    if (state.unsubVisitorElevatorCardConfig) {
+      try { state.unsubVisitorElevatorCardConfig(); } catch {}
+      state.unsubVisitorElevatorCardConfig = null;
     }
   }
 
@@ -2499,7 +2545,7 @@
       `.trim();
     }
     const party = Number.isFinite(Number(partySize)) && Number(partySize) >= 1 ? String(Math.floor(Number(partySize))) : "1";
-    const keepText = formatKeepText80(keep);
+    const keepText = formatKeepText80(keep, outAt);
     const rows = [
       ["訪客姓名", name || "—"],
       ["拜訪戶號", unit || "—"],
@@ -2747,6 +2793,52 @@
     }
   }
 
+  let elevatorCardNameOptions = [];
+  let visitorKeepCertTypeOptions = [];
+  let elevatorCards = [];
+  const normalizeOptionTextList = (list) => {
+    const seen = new Set();
+    return (Array.isArray(list) ? list : [])
+      .map((x) => normalizeText(x))
+      .filter((x) => {
+        if (!x || seen.has(x)) return false;
+        seen.add(x);
+        return true;
+      });
+  };
+  const getElevatorCardNameSelectOptions = (extraValue) => {
+    return normalizeOptionTextList(
+      extraValue ? elevatorCardNameOptions.concat([extraValue]) : elevatorCardNameOptions
+    );
+  };
+  const renderElevatorCardNameSelect = (selectEl, selectedValue) => {
+    if (!selectEl) return;
+    const cur = String(selectedValue || "");
+    const options = getElevatorCardNameSelectOptions(cur);
+    const placeholder = '<option value="">' + (options.length ? "請選擇名稱" : "請先按右上設定建立名稱") + '</option>';
+    selectEl.innerHTML = placeholder + options.map((name) => (
+      '<option value="' + escapeHtml(name) + '"' + (name === cur ? " selected" : "") + '>' + escapeHtml(name) + "</option>"
+    )).join("");
+    selectEl.value = cur && options.includes(cur) ? cur : "";
+  };
+  const getVisitorKeepCertTypeOptions = (extraValue) => {
+    const merged = extraValue ? visitorKeepCertTypeOptions.concat([extraValue]) : visitorKeepCertTypeOptions;
+    const fallback = ["身分證", "健保卡", "駕照"];
+    return normalizeOptionTextList(merged.length ? merged : fallback);
+  };
+  const getDefaultVisitorKeepCertType = () => {
+    return getVisitorKeepCertTypeOptions()[0] || "身分證";
+  };
+  const renderVisitorKeepCertTypeSelect = (selectEl, selectedValue) => {
+    if (!selectEl) return;
+    const cur = String(selectedValue || "");
+    const options = getVisitorKeepCertTypeOptions(cur);
+    selectEl.innerHTML = options.map((name) => (
+      '<option value="' + escapeHtml(name) + '"' + (name === cur ? " selected" : "") + '>' + escapeHtml(name) + "</option>"
+    )).join("");
+    selectEl.value = cur && options.includes(cur) ? cur : getDefaultVisitorKeepCertType();
+  };
+
   function ensureVisitorScanModal() {
     let modal = document.getElementById("visitorScanModal");
     if (modal) return modal;
@@ -2764,7 +2856,7 @@
         <form id="visitorScanModalForm">
           <div class="modal-body">
             <div class="scan-stage">
-              <video id="visitorScanVideo" class="scan-video" playsinline></video>
+              <video id="visitorScanVideo" class="scan-video" playsinline muted autoplay></video>
               <div class="scan-overlay" aria-hidden="true">
                 <div class="scan-frame"></div>
               </div>
@@ -2817,6 +2909,491 @@
     `.trim();
     document.body.appendChild(modal);
     return modal;
+  }
+
+  function ensureVisitorScanKeepModal() {
+    let modal = document.getElementById("visitorScanKeepModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "visitorScanKeepModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="visitorScanKeepModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="visitorScanKeepModalTitle">來訪留存設定</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="visitorScanKeepForm">
+          <div class="modal-body">
+            <div class="scan-keep-summary" id="visitorScanKeepSummary"></div>
+            <div class="field scan-keep-field">
+              <label for="visitorScanElevatorCardEnabled">是否提供電梯感應卡</label>
+              <select id="visitorScanElevatorCardEnabled">
+                <option value="no">否</option>
+                <option value="yes">是</option>
+              </select>
+            </div>
+            <div class="field scan-keep-field" id="visitorScanElevatorCardPickField" hidden>
+              <label for="visitorScanElevatorCardPick">電梯卡（名稱／編號）</label>
+              <select id="visitorScanElevatorCardPick"></select>
+              <div class="scan-hint" id="visitorScanElevatorCardPickHint" style="margin-top:6px;"></div>
+            </div>
+            <div class="field scan-keep-field">
+              <label for="visitorScanKeepCertEnabled">是否質押證件</label>
+              <select id="visitorScanKeepCertEnabled">
+                <option value="no">否</option>
+                <option value="yes">是</option>
+              </select>
+            </div>
+            <div class="field scan-keep-field">
+              <label for="visitorScanKeepCertType">證件類別</label>
+              <select id="visitorScanKeepCertType"></select>
+            </div>
+            <div class="status" id="visitorScanKeepStatus" hidden></div>
+            <div class="scan-hint" id="visitorScanKeepHint">請確認是否提供電梯感應卡，以及現場留存的證件類別。</div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" id="btnSkipVisitorScanKeep">略過</button>
+            <button class="btn btn-primary" type="submit" id="btnSaveVisitorScanKeep">儲存</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openVisitorScanKeepModal80({ cid, visitorId, visitorName, inTimeText, keep, onApplied, keepCertTypeOptions, defaultKeepCertType }) {
+    const modal = ensureVisitorScanKeepModal();
+    let detach = () => {};
+    const detachModalClose = bindModalClose(modal, () => detach());
+    const summaryEl = modal.querySelector("#visitorScanKeepSummary");
+    const elevatorCardEl = modal.querySelector("#visitorScanElevatorCardEnabled");
+    const elevatorCardPickField = modal.querySelector("#visitorScanElevatorCardPickField");
+    const elevatorCardPickEl = modal.querySelector("#visitorScanElevatorCardPick");
+    const elevatorCardPickHint = modal.querySelector("#visitorScanElevatorCardPickHint");
+    const keepCertEnabledEl = modal.querySelector("#visitorScanKeepCertEnabled");
+    const keepCertTypeEl = modal.querySelector("#visitorScanKeepCertType");
+    const statusEl = modal.querySelector("#visitorScanKeepStatus");
+    const skipBtn = modal.querySelector("#btnSkipVisitorScanKeep");
+    const saveBtn = modal.querySelector("#btnSaveVisitorScanKeep");
+    const form = modal.querySelector("#visitorScanKeepForm");
+    const currentKeep = keep && typeof keep === "object" ? keep : {};
+    const currentCert = currentKeep.certificate && typeof currentKeep.certificate === "object" ? currentKeep.certificate : {};
+    const currentElevatorCard = currentKeep.elevatorCard && typeof currentKeep.elevatorCard === "object" ? currentKeep.elevatorCard : {};
+    const certOptions = Array.isArray(keepCertTypeOptions) && keepCertTypeOptions.length ? keepCertTypeOptions : [String(defaultKeepCertType || "身分證")];
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+    const renderCertTypeOptions = (selectedValue) => {
+      if (!keepCertTypeEl) return;
+      const cur = String(selectedValue || defaultKeepCertType || "身分證");
+      keepCertTypeEl.innerHTML = certOptions.map((name) => (
+        '<option value="' + escapeHtml(name) + '"' + (name === cur ? " selected" : "") + '>' + escapeHtml(name) + "</option>"
+      )).join("");
+      keepCertTypeEl.value = certOptions.includes(cur) ? cur : String(certOptions[0] || defaultKeepCertType || "身分證");
+    };
+    const listElevatorCardsForPick = () => {
+      const list = Array.isArray(elevatorCards) ? elevatorCards.slice() : [];
+      const orderOf = (c) => {
+        const explicit = Number(c && c.sortAtMs);
+        if (Number.isFinite(explicit) && explicit > 0) return explicit;
+        const upd = c && c.updatedAt && typeof c.updatedAt.toDate === "function" ? c.updatedAt.toDate().getTime() : 0;
+        const cre = c && c.createdAt && typeof c.createdAt.toDate === "function" ? c.createdAt.toDate().getTime() : 0;
+        return upd || cre || 0;
+      };
+      return list.sort((a, b) => {
+        const ao = orderOf(a);
+        const bo = orderOf(b);
+        if (ao !== bo) return ao - bo;
+        return String(a && a.name ? a.name : "").localeCompare(String(b && b.name ? b.name : ""), "zh-Hant");
+      });
+    };
+    const elevatorCardLabel = (c) => {
+      const name = String(c && c.name ? c.name : "").trim();
+      const code = String(c && c.code ? c.code : "").trim();
+      if (name && code) return `${name}（${code}）`;
+      return name || code || "（未命名）";
+    };
+    const findElevatorCardForPick = () => {
+      const list = listElevatorCardsForPick();
+      const wantId = String(currentElevatorCard.cardId || "").trim();
+      const wantName = String(currentElevatorCard.name || "").trim();
+      if (wantId) {
+        const byId = list.find((c) => String(c.id || "") === wantId);
+        if (byId) return byId;
+      }
+      if (wantName) {
+        const byName = list.find((c) => String(c.name || "").trim() === wantName);
+        if (byName) return byName;
+      }
+      return null;
+    };
+    const renderElevatorCardPickOptions = () => {
+      if (!elevatorCardPickEl) return;
+      const list = listElevatorCardsForPick();
+      if (!list.length) {
+        elevatorCardPickEl.innerHTML = '<option value="">（尚無電梯卡）</option>';
+        elevatorCardPickEl.disabled = true;
+        if (elevatorCardPickHint) elevatorCardPickHint.textContent = "尚無電梯卡，請先到「設定」子分頁新增。";
+        return;
+      }
+      const picked = findElevatorCardForPick();
+      const pickedId = picked ? String(picked.id || "") : "";
+      elevatorCardPickEl.innerHTML = list.map((c) => {
+        const id = String(c.id || "");
+        return '<option value="' + escapeHtml(id) + '"' + (id === pickedId ? " selected" : "") + '>' + escapeHtml(elevatorCardLabel(c)) + "</option>";
+      }).join("");
+      elevatorCardPickEl.disabled = false;
+      if (elevatorCardPickHint) elevatorCardPickHint.textContent = "請選擇本次提供的電梯感應卡。";
+    };
+    const syncState = () => {
+      const certEnabled = Boolean(keepCertEnabledEl && keepCertEnabledEl.value === "yes");
+      if (keepCertTypeEl) keepCertTypeEl.disabled = !certEnabled;
+      const cardEnabled = Boolean(elevatorCardEl && elevatorCardEl.value === "yes");
+      if (elevatorCardPickField) elevatorCardPickField.hidden = !cardEnabled;
+      if (elevatorCardPickEl && !cardEnabled) elevatorCardPickEl.disabled = true;
+      if (elevatorCardPickEl && cardEnabled && listElevatorCardsForPick().length) elevatorCardPickEl.disabled = false;
+    };
+    const closeModal = (e) => {
+      if (e) e.preventDefault();
+      modal.hidden = true;
+      detach();
+    };
+
+    if (summaryEl) {
+      const parts = [];
+      if (visitorName) parts.push(`訪客：${escapeHtml(visitorName)}`);
+      if (inTimeText) parts.push(`來訪：${escapeHtml(inTimeText)}`);
+      summaryEl.innerHTML = parts.length ? parts.join("｜") : "請確認本次來訪的留存資料。";
+    }
+    if (elevatorCardEl) elevatorCardEl.value = currentElevatorCard.enabled ? "yes" : "no";
+    if (keepCertEnabledEl) keepCertEnabledEl.value = currentCert.enabled ? "yes" : "no";
+    renderCertTypeOptions(String(currentCert.type || defaultKeepCertType || "身分證"));
+    renderElevatorCardPickOptions();
+    syncState();
+    setStatus("", false);
+
+    const onSubmit = async (e) => {
+      e.preventDefault();
+      const id = String(visitorId || "").trim();
+      const communityId = String(cid || "default").trim() || "default";
+      if (!id) return;
+      const cardEnabled = Boolean(elevatorCardEl && elevatorCardEl.value === "yes");
+      const pickedCardId = String(elevatorCardPickEl ? elevatorCardPickEl.value : "").trim();
+      const pickedCard = cardEnabled
+        ? (listElevatorCardsForPick().find((c) => String(c.id || "") === pickedCardId) || null)
+        : null;
+      const nextKeep = {
+        ...currentKeep,
+        certificate: {
+          ...(currentKeep.certificate && typeof currentKeep.certificate === "object" ? currentKeep.certificate : {}),
+          enabled: Boolean(keepCertEnabledEl && keepCertEnabledEl.value === "yes"),
+          type: String(keepCertTypeEl ? keepCertTypeEl.value : defaultKeepCertType || "身分證"),
+        },
+        elevatorCard: {
+          ...(currentKeep.elevatorCard && typeof currentKeep.elevatorCard === "object" ? currentKeep.elevatorCard : {}),
+          enabled: cardEnabled,
+          cardId: pickedCard ? String(pickedCard.id || "") : "",
+          name: pickedCard ? String(pickedCard.name || "") : "",
+          code: pickedCard ? String(pickedCard.code || "") : "",
+        },
+      };
+      if (saveBtn) saveBtn.disabled = true;
+      setStatus("儲存中...", false);
+      try {
+        await db.collection("communities").doc(communityId).collection("visitors").doc(id).set({
+          keep: nextKeep,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        const lendCardId = cardEnabled && pickedCard ? String(pickedCard.id || "").trim() : "";
+        if (lendCardId && String(pickedCard.status || "").trim() !== "disabled") {
+          await db.collection("communities").doc(communityId).collection("visitor_elevator_cards").doc(lendCardId).set({
+            status: "borrowed",
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+        if (typeof onApplied === "function") onApplied(id, { keep: nextKeep });
+        closeModal();
+      } catch (err) {
+        const code = String(err && err.code ? err.code : "");
+        setStatus(code.includes("permission-denied") ? "沒有權限執行此操作。" : "儲存失敗，請稍後再試。", true);
+      } finally {
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    };
+
+    if (form && form._visitorScanKeepSubmit) {
+      try { form.removeEventListener("submit", form._visitorScanKeepSubmit); } catch {}
+      form._visitorScanKeepSubmit = null;
+    }
+    if (keepCertEnabledEl && keepCertEnabledEl._visitorScanKeepSync) {
+      try { keepCertEnabledEl.removeEventListener("change", keepCertEnabledEl._visitorScanKeepSync); } catch {}
+      keepCertEnabledEl._visitorScanKeepSync = null;
+    }
+    if (elevatorCardEl && elevatorCardEl._visitorScanKeepCardSync) {
+      try { elevatorCardEl.removeEventListener("change", elevatorCardEl._visitorScanKeepCardSync); } catch {}
+      elevatorCardEl._visitorScanKeepCardSync = null;
+    }
+    if (skipBtn && skipBtn._visitorScanKeepSkip) {
+      try { skipBtn.removeEventListener("click", skipBtn._visitorScanKeepSkip); } catch {}
+      skipBtn._visitorScanKeepSkip = null;
+    }
+
+    const onKeepCertEnabledChange = () => syncState();
+    if (keepCertEnabledEl) {
+      keepCertEnabledEl._visitorScanKeepSync = onKeepCertEnabledChange;
+      keepCertEnabledEl.addEventListener("change", onKeepCertEnabledChange);
+    }
+    const onElevatorCardEnabledChange = () => syncState();
+    if (elevatorCardEl) {
+      elevatorCardEl._visitorScanKeepCardSync = onElevatorCardEnabledChange;
+      elevatorCardEl.addEventListener("change", onElevatorCardEnabledChange);
+    }
+    if (form) {
+      form._visitorScanKeepSubmit = onSubmit;
+      form.addEventListener("submit", onSubmit);
+    }
+    if (skipBtn) {
+      skipBtn._visitorScanKeepSkip = closeModal;
+      skipBtn.addEventListener("click", closeModal);
+    }
+
+    detach = () => {
+      try {
+        if (form && form._visitorScanKeepSubmit) {
+          form.removeEventListener("submit", form._visitorScanKeepSubmit);
+          form._visitorScanKeepSubmit = null;
+        }
+      } catch {}
+      try {
+        if (keepCertEnabledEl && keepCertEnabledEl._visitorScanKeepSync) {
+          keepCertEnabledEl.removeEventListener("change", keepCertEnabledEl._visitorScanKeepSync);
+          keepCertEnabledEl._visitorScanKeepSync = null;
+        }
+      } catch {}
+      try {
+        if (elevatorCardEl && elevatorCardEl._visitorScanKeepCardSync) {
+          elevatorCardEl.removeEventListener("change", elevatorCardEl._visitorScanKeepCardSync);
+          elevatorCardEl._visitorScanKeepCardSync = null;
+        }
+      } catch {}
+      try {
+        if (skipBtn && skipBtn._visitorScanKeepSkip) {
+          skipBtn.removeEventListener("click", skipBtn._visitorScanKeepSkip);
+          skipBtn._visitorScanKeepSkip = null;
+        }
+      } catch {}
+      detachModalClose();
+    };
+
+    modal.hidden = false;
+    requestAnimationFrame(() => {
+      if (elevatorCardEl) elevatorCardEl.focus();
+    });
+  }
+
+  function getVisitorPledgeSummary80(keep) {
+    const k = keep && typeof keep === "object" ? keep : {};
+    const cert = k.certificate && typeof k.certificate === "object" ? k.certificate : {};
+    const card = k.elevatorCard && typeof k.elevatorCard === "object" ? k.elevatorCard : {};
+    const hasCard = Boolean(card.enabled);
+    const hasCert = Boolean(cert.enabled);
+    const cardName = String(card.name || "").trim();
+    const cardCode = String(card.code || "").trim();
+    const cardLabel = cardName && cardCode ? `${cardName}（${cardCode}）` : (cardName || cardCode || "電梯感應卡");
+    return {
+      hasAny: hasCard || hasCert,
+      hasCard,
+      hasCert,
+      cardId: String(card.cardId || "").trim(),
+      cardLabel,
+      certType: String(cert.type || "證件").trim() || "證件",
+    };
+  }
+
+  function ensureVisitorScanReturnModal() {
+    let modal = document.getElementById("visitorScanReturnModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "visitorScanReturnModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="visitorScanReturnModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="visitorScanReturnModalTitle">歸還確認</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="visitorScanReturnForm">
+          <div class="modal-body">
+            <div class="scan-keep-summary" id="visitorScanReturnSummary"></div>
+            <div class="field scan-keep-field" id="visitorScanReturnCardField" hidden>
+              <label for="visitorScanReturnCardState" id="visitorScanReturnCardLabel">電梯感應卡</label>
+              <select id="visitorScanReturnCardState">
+                <option value="returned">已歸還</option>
+                <option value="pending">尚未歸還</option>
+              </select>
+            </div>
+            <div class="field scan-keep-field" id="visitorScanReturnCertField" hidden>
+              <label for="visitorScanReturnCertState" id="visitorScanReturnCertLabel">質押證件</label>
+              <select id="visitorScanReturnCertState">
+                <option value="returned">已歸還</option>
+                <option value="pending">尚未歸還</option>
+              </select>
+            </div>
+            <div class="status" id="visitorScanReturnStatus" hidden></div>
+            <div class="scan-hint" id="visitorScanReturnHint">請確認抵達時留存的物品是否已歸還訪客。</div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" id="btnSkipVisitorScanReturn">略過</button>
+            <button class="btn btn-success" type="submit" id="btnSaveVisitorScanReturn">確認歸還</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openVisitorScanReturnModal80({ cid, visitorId, visitorName, outTimeText, keep, onApplied }) {
+    const modal = ensureVisitorScanReturnModal();
+    let detach = () => {};
+    const detachModalClose = bindModalClose(modal, () => detach());
+    const summaryEl = modal.querySelector("#visitorScanReturnSummary");
+    const cardField = modal.querySelector("#visitorScanReturnCardField");
+    const cardLabelEl = modal.querySelector("#visitorScanReturnCardLabel");
+    const cardStateEl = modal.querySelector("#visitorScanReturnCardState");
+    const certField = modal.querySelector("#visitorScanReturnCertField");
+    const certLabelEl = modal.querySelector("#visitorScanReturnCertLabel");
+    const certStateEl = modal.querySelector("#visitorScanReturnCertState");
+    const statusEl = modal.querySelector("#visitorScanReturnStatus");
+    const skipBtn = modal.querySelector("#btnSkipVisitorScanReturn");
+    const saveBtn = modal.querySelector("#btnSaveVisitorScanReturn");
+    const form = modal.querySelector("#visitorScanReturnForm");
+
+    const currentKeep = keep && typeof keep === "object" ? keep : {};
+    const currentCert = currentKeep.certificate && typeof currentKeep.certificate === "object" ? currentKeep.certificate : {};
+    const currentCard = currentKeep.elevatorCard && typeof currentKeep.elevatorCard === "object" ? currentKeep.elevatorCard : {};
+    const pledge = getVisitorPledgeSummary80(currentKeep);
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+    const closeModal = (e) => {
+      if (e) e.preventDefault();
+      modal.hidden = true;
+      detach();
+    };
+
+    if (summaryEl) {
+      const parts = [];
+      if (visitorName) parts.push(`訪客：${escapeHtml(visitorName)}`);
+      if (outTimeText) parts.push(`離開：${escapeHtml(outTimeText)}`);
+      summaryEl.innerHTML = parts.length ? parts.join("｜") : "請確認本次離開的歸還資料。";
+    }
+    if (cardField) cardField.hidden = !pledge.hasCard;
+    if (cardLabelEl && pledge.hasCard) cardLabelEl.textContent = `電梯感應卡（${pledge.cardLabel}）`;
+    if (cardStateEl) cardStateEl.value = "returned";
+    if (certField) certField.hidden = !pledge.hasCert;
+    if (certLabelEl && pledge.hasCert) certLabelEl.textContent = `質押證件（${pledge.certType}）`;
+    if (certStateEl) certStateEl.value = "returned";
+    setStatus("", false);
+
+    const onSubmit = async (e) => {
+      e.preventDefault();
+      const id = String(visitorId || "").trim();
+      const communityId = String(cid || "default").trim() || "default";
+      if (!id) return;
+      const cardActive = Boolean(pledge.hasCard);
+      const certActive = Boolean(pledge.hasCert);
+      const cardReturned = cardActive && String(cardStateEl ? cardStateEl.value : "") === "returned";
+      const certReturned = certActive && String(certStateEl ? certStateEl.value : "") === "returned";
+      const ts = FieldValue.serverTimestamp();
+      const nextCert = { ...currentCert };
+      if (certActive) {
+        nextCert.returned = certReturned;
+        nextCert.returnedAt = certReturned ? ts : null;
+      }
+      const nextCard = { ...currentCard };
+      if (cardActive) {
+        nextCard.returned = cardReturned;
+        nextCard.returnedAt = cardReturned ? ts : null;
+      }
+      const nextKeep = { ...currentKeep, certificate: nextCert, elevatorCard: nextCard };
+      if (saveBtn) saveBtn.disabled = true;
+      setStatus("儲存中...", false);
+      try {
+        await db.collection("communities").doc(communityId).collection("visitors").doc(id).set({
+          keep: nextKeep,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        if (cardReturned && pledge.cardId) {
+          await db.collection("communities").doc(communityId).collection("visitor_elevator_cards").doc(pledge.cardId).set({
+            status: "available",
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+        if (typeof onApplied === "function") onApplied(id, { keep: nextKeep });
+        closeModal();
+      } catch (err) {
+        const code = String(err && err.code ? err.code : "");
+        setStatus(code.includes("permission-denied") ? "沒有權限執行此操作。" : "儲存失敗，請稍後再試。", true);
+      } finally {
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    };
+
+    if (form && form._visitorScanReturnSubmit) {
+      try { form.removeEventListener("submit", form._visitorScanReturnSubmit); } catch {}
+      form._visitorScanReturnSubmit = null;
+    }
+    if (skipBtn && skipBtn._visitorScanReturnSkip) {
+      try { skipBtn.removeEventListener("click", skipBtn._visitorScanReturnSkip); } catch {}
+      skipBtn._visitorScanReturnSkip = null;
+    }
+    if (form) {
+      form._visitorScanReturnSubmit = onSubmit;
+      form.addEventListener("submit", onSubmit);
+    }
+    if (skipBtn) {
+      skipBtn._visitorScanReturnSkip = closeModal;
+      skipBtn.addEventListener("click", closeModal);
+    }
+
+    detach = () => {
+      try {
+        if (form && form._visitorScanReturnSubmit) {
+          form.removeEventListener("submit", form._visitorScanReturnSubmit);
+          form._visitorScanReturnSubmit = null;
+        }
+      } catch {}
+      try {
+        if (skipBtn && skipBtn._visitorScanReturnSkip) {
+          skipBtn.removeEventListener("click", skipBtn._visitorScanReturnSkip);
+          skipBtn._visitorScanReturnSkip = null;
+        }
+      } catch {}
+      detachModalClose();
+    };
+
+    modal.hidden = false;
+    requestAnimationFrame(() => {
+      if (pledge.hasCard && cardStateEl) cardStateEl.focus();
+      else if (pledge.hasCert && certStateEl) certStateEl.focus();
+    });
   }
 
   function openVisitorTimeModal80({ cid, visitorId, kind, initialDate, onApplied, onUpdatedText }) {
@@ -3085,7 +3662,12 @@
               },
               { merge: true }
             );
-            return { kind: "in", inAt };
+            return {
+              kind: "in",
+              inAt,
+              keep: data.keep && typeof data.keep === "object" ? data.keep : {},
+              visitorName: String(data.name || ""),
+            };
           }
 
           const outAt = Timestamp.fromDate(nowDate);
@@ -3099,7 +3681,12 @@
             },
             { merge: true }
           );
-          return { kind: "out", outAt };
+          return {
+            kind: "out",
+            outAt,
+            keep: data.keep && typeof data.keep === "object" ? data.keep : {},
+            visitorName: String(data.name || ""),
+          };
         });
 
         if (res.kind === "missing") {
@@ -3117,11 +3704,22 @@
         if (res.kind === "in") {
           stop();
           if (stageEl) stageEl.hidden = true;
-          if (typeof onApplied === "function") onApplied(vid, { inAt: res.inAt });
+          if (typeof onApplied === "function") onApplied(vid, { inAt: res.inAt, keep: res.keep || {} });
           const tt = formatYmdHms(nowDate);
-          showScanResult("in", tt);
           speak("訪客登記成功，歡迎光臨");
-          if (hintEl) hintEl.textContent = "已完成來訪登記。離開時請再次按「掃碼登記」並掃描同一張訪客證。";
+          toast("已完成來訪登記，請確認留存資料。");
+          modal.hidden = true;
+          detach();
+          openVisitorScanKeepModal80({
+            cid,
+            visitorId: vid,
+            visitorName: String(res.visitorName || ""),
+            inTimeText: tt,
+            keep: res.keep || {},
+            onApplied,
+            keepCertTypeOptions: getVisitorKeepCertTypeOptions(),
+            defaultKeepCertType: getDefaultVisitorKeepCertType(),
+          });
           return;
         }
         if (res.kind === "out") {
@@ -3129,9 +3727,23 @@
           if (stageEl) stageEl.hidden = true;
           if (typeof onApplied === "function") onApplied(vid, { outAt: res.outAt, qrInvalidated: true });
           const tt = formatYmdHms(nowDate);
+          const pledge = getVisitorPledgeSummary80(res.keep);
           showScanResult("out", tt);
           speak("訪客登記成功，期待您再次光臨");
           if (hintEl) hintEl.textContent = "已完成離開登記。此 QR code 已失效。";
+          if (pledge.hasAny) {
+            toast("已完成離開登記，請確認歸還資料。");
+            modal.hidden = true;
+            detach();
+            openVisitorScanReturnModal80({
+              cid,
+              visitorId: vid,
+              visitorName: String(res.visitorName || ""),
+              outTimeText: tt,
+              keep: res.keep || {},
+              onApplied,
+            });
+          }
           return;
         }
       } catch (err) {
@@ -3150,6 +3762,64 @@
       const schedule = (fn) => {
         loopTimer = window.setTimeout(fn, 180);
       };
+      const buildCameraErrorMessage = (err) => {
+        const name = String(err && err.name ? err.name : "");
+        const msg = String(err && err.message ? err.message : err || "");
+        if (!window.isSecureContext) return "相機功能僅能在安全連線（HTTPS 或 localhost）下使用。";
+        if (name === "NotAllowedError" || name === "PermissionDeniedError") return "相機權限被拒絕，請在瀏覽器網址列允許相機後再試。";
+        if (name === "NotFoundError" || name === "DevicesNotFoundError") return "找不到可用相機。";
+        if (name === "NotReadableError" || name === "TrackStartError") return "相機可能被其他程式或分頁佔用，請先關閉後再試。";
+        if (name === "OverconstrainedError" || name === "ConstraintNotSatisfiedError") return "目前鏡頭規格不符合要求，已改用其他鏡頭仍失敗。";
+        return msg ? `無法開啟相機：${msg}` : "無法開啟相機，請確認已允許相機權限。";
+      };
+      const waitVideoReady = () => new Promise((resolve) => {
+        if (!video) return resolve();
+        if ((video.readyState || 0) >= 2) return resolve();
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          try { video.removeEventListener("loadedmetadata", finish); } catch {}
+          try { video.removeEventListener("canplay", finish); } catch {}
+          resolve();
+        };
+        try { video.addEventListener("loadedmetadata", finish, { once: true }); } catch {}
+        try { video.addEventListener("canplay", finish, { once: true }); } catch {}
+        window.setTimeout(finish, 1200);
+      });
+      const getDeviceStreams = async () => {
+        const list = [];
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          devices
+            .filter((d) => String(d.kind || "") === "videoinput")
+            .forEach((d) => {
+              const id = String(d.deviceId || "").trim();
+              if (id) list.push({ video: { deviceId: { exact: id } }, audio: false });
+            });
+        } catch {}
+        return list;
+      };
+      const openCameraStream = async () => {
+        const base = [
+          { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+          { video: { facingMode: "environment" }, audio: false },
+          { video: { facingMode: "user" }, audio: false },
+          { video: true, audio: false },
+        ];
+        const deviceFallbacks = await getDeviceStreams();
+        const tries = base.concat(deviceFallbacks);
+        let lastErr = null;
+        for (const constraints of tries) {
+          try {
+            const s = await navigator.mediaDevices.getUserMedia(constraints);
+            if (s) return s;
+          } catch (err) {
+            lastErr = err;
+          }
+        }
+        throw lastErr || new Error("camera-unavailable");
+      };
 
       if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
         if (stageEl) stageEl.hidden = true;
@@ -3158,18 +3828,20 @@
       }
 
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
-        });
+        stream = await openCameraStream();
         if (!running) return;
         if (video) {
+          video.muted = true;
+          video.autoplay = true;
+          try { video.setAttribute("muted", ""); } catch {}
+          try { video.setAttribute("autoplay", ""); } catch {}
           video.srcObject = stream;
+          await waitVideoReady();
           try { await video.play(); } catch {}
         }
-      } catch {
+      } catch (err) {
         if (stageEl) stageEl.hidden = true;
-        setStatus("無法開啟相機，可使用掃碼槍輸入。", false);
+        setStatus(buildCameraErrorMessage(err), true);
         return;
       }
 
@@ -4032,9 +4704,7 @@
             </div>
             <button class="btn btn-sm" type="button" id="btnParcelFilterClear">清除</button>
             <button class="btn btn-sm danger" type="button" id="btnRegisterParcel">登記包裹</button>
-            <button class="btn btn-sm btn-ghost" type="button" id="btnScanResidentParcel" aria-label="掃描住戶 QR Code" title="掃描住戶 QR Code">
-              ${iconSvg("qr-scan")}
-            </button>
+            <button class="btn btn-sm btn-success" type="button" id="btnScanResidentParcel" aria-label="掃描住戶 QR Code" title="掃描住戶 QR Code">掃描 QR code</button>
           </div>
           <div class="parcel-list-container" id="parcelList">
             <div class="status">讀取中...</div>
@@ -8984,7 +9654,7 @@
                 <p>讀取社區資料中...</p>
               </div>
             </div>
-            <span class="tag red">資料</span>
+            <a class="tag red manual-btn" data-manual="residents" href="${manualViewerHref("residents", "住戶造冊")}" target="_blank" rel="noopener" title="開啟 住戶造冊 操作手冊" aria-label="開啟 住戶造冊 操作手冊">手冊</a>
           </div>
           <div class="card-bd">
             <div class="status">讀取中...</div>
@@ -11346,11 +12016,7 @@
                   <input type="checkbox" id="modal_v_keep_cert" />
                   <span>證件</span>
                 </label>
-                <select id="modal_v_keep_cert_type" disabled>
-                  <option value="身分證">身分證</option>
-                  <option value="健保卡">健保卡</option>
-                  <option value="駕照">駕照</option>
-                </select>
+                <select id="modal_v_keep_cert_type" disabled></select>
 
                 <label class="check">
                   <input type="checkbox" id="modal_v_keep_card" />
@@ -11387,6 +12053,8 @@
   function renderVisitorModule() {
     if (subnavEl) subnavEl.innerHTML = "";
     stopVisitorsSubscription();
+    stopVisitorElevatorCardsSubscription();
+    stopVisitorElevatorCardConfigSubscription();
     if (!Array.isArray(state.communities) || state.communities.length === 0) {
       contentEl.innerHTML = `
         <section class="card">
@@ -11398,7 +12066,7 @@
                 <p>讀取社區資料中...</p>
               </div>
             </div>
-            <span class="tag red">安全</span>
+            <a class="tag red manual-btn" data-manual="visitor" href="${manualViewerHref("visitor", "訪客登記")}" target="_blank" rel="noopener" title="開啟 訪客登記 操作手冊" aria-label="開啟 訪客登記 操作手冊">手冊</a>
           </div>
           <div class="card-bd">
             <div class="status">讀取中...</div>
@@ -11452,6 +12120,9 @@
         <button class="btn btn-sm" type="button" id="btnHistoryVisitors" data-filter="history">
           歷史訪客
         </button>
+        <button class="btn btn-sm" type="button" id="btnVisitorSettings" data-filter="settings">
+          設定
+        </button>
       `.trim();
       
       const filterBtns = subnavEl.querySelectorAll('[data-filter]');
@@ -11481,7 +12152,7 @@
           </button>
         </div>
         <div class="card-bd" id="visitorPanel">
-          <div class="visitor-toolbar">
+          <div class="visitor-toolbar" id="visitorToolbar">
             <div class="field">
               <label for="visitorDate">日期</label>
               <input id="visitorDate" type="date" />
@@ -11491,8 +12162,8 @@
               <input id="visitorSearch" type="text" placeholder="搜尋 姓名 / 手機 / 車牌 / 事由" autocomplete="off" />
             </div>
             <button class="btn btn-sm danger" type="button" id="btnAddVisitor">新增訪客</button>
-          <button class="btn btn-sm btn-ghost" type="button" id="btnScanVisitor" aria-label="掃碼登記" title="掃碼登記">
-              ${iconSvg("qr-scan")}
+          <button class="btn btn-sm btn-success" type="button" id="btnScanVisitor" aria-label="掃描QR code" title="掃描QR code">
+              掃描QR code
             </button>
           </div>
           <div class="history-toolbar" id="visitorHistoryToolbar" hidden>
@@ -11503,6 +12174,14 @@
             <div class="history-toolbar-actions">
               <button class="btn btn-sm" type="button" id="btnHistoryBrowse">手機版瀏覽</button>
               <button class="btn btn-sm btn-ghost" type="button" id="btnHistoryExcel">下載 Excel</button>
+            </div>
+          </div>
+          <div class="history-toolbar" id="visitorSettingsToolbar" hidden>
+            <div class="history-toolbar-actions">
+              <button class="btn btn-sm btn-success" type="button" id="btnAddElevatorCard">新增電梯卡</button>
+              <button class="btn btn-sm btn-ghost" type="button" id="btnOpenElevatorCardNameSettings" aria-label="設定" title="設定">
+                ${iconSvg("settings")}
+              </button>
             </div>
           </div>
           <div class="status" id="visitorStatus" hidden></div>
@@ -11517,15 +12196,19 @@
     const listContainerEl = document.getElementById("visitorList");
     const listEl = listContainerEl.querySelector(".visitor-grid");
     const statusEl = document.getElementById("visitorStatus");
+    const visitorToolbarEl = document.getElementById("visitorToolbar");
     const searchEl = document.getElementById("visitorSearch");
     const dateEl = document.getElementById("visitorDate");
     const visitorQrBtn = document.getElementById("btnVisitorQr");
     const scanBtn = document.getElementById("btnScanVisitor");
     const addBtn = document.getElementById("btnAddVisitor");
     const historyToolbarEl = document.getElementById("visitorHistoryToolbar");
+    const settingsToolbarEl = document.getElementById("visitorSettingsToolbar");
     const historyUnitEl = document.getElementById("visitorHistoryUnit");
     const historyBrowseBtn = document.getElementById("btnHistoryBrowse");
     const historyExcelBtn = document.getElementById("btnHistoryExcel");
+    const addElevatorCardBtn = document.getElementById("btnAddElevatorCard");
+    const openElevatorCardNameSettingsBtn = document.getElementById("btnOpenElevatorCardNameSettings");
 
     ensureVisitorsPendingCountSubscription(cid);
 
@@ -11561,9 +12244,78 @@
     };
 
     let visitors = [];
-    let currentFilter = 'pending'; // pending, approved, inside, history
+    let currentFilter = 'pending'; // pending, approved, inside, history, settings
     let historyUnit = "";
     let historyUnitNames = new Map();
+    const elevatorCardStatusMeta = (raw) => {
+      const k = String(raw || "").trim().toLowerCase();
+      if (k === "borrowed") return { label: "已借出", cls: "warning" };
+      if (k === "disabled") return { label: "停用", cls: "" };
+      return { label: "可租借", cls: "success" };
+    };
+    const elevatorCardOrderValue = (item) => {
+      const explicit = Number(item && item.sortAtMs);
+      if (Number.isFinite(explicit) && explicit > 0) return explicit;
+      const updated = toDate(item && item.updatedAt);
+      if (updated) return updated.getTime();
+      const created = toDate(item && item.createdAt);
+      if (created) return created.getTime();
+      return 0;
+    };
+    const sortElevatorCards = (list) => {
+      return [...(Array.isArray(list) ? list : [])].sort((a, b) => {
+        const ao = elevatorCardOrderValue(a);
+        const bo = elevatorCardOrderValue(b);
+        if (ao !== bo) return ao - bo;
+        const an = String(a && a.name ? a.name : "");
+        const bn = String(b && b.name ? b.name : "");
+        const byName = an.localeCompare(bn, "zh-Hant");
+        if (byName !== 0) return byName;
+        return String(a && a.code ? a.code : "").localeCompare(String(b && b.code ? b.code : ""), "zh-Hant");
+      });
+    };
+    const renderElevatorCards = () => {
+      if (!listEl) return;
+      const orderedCards = sortElevatorCards(elevatorCards);
+      if (!orderedCards.length) {
+        listEl.innerHTML = `<div class="status">尚未建立電梯卡。</div>`;
+        return;
+      }
+      listEl.innerHTML = `
+        <div class="units-table-container" style="max-height: 560px; overflow-y: auto;">
+          <table class="units-table">
+            <thead>
+              <tr>
+                <th style="width:72px;">序號</th>
+                <th>名稱</th>
+                <th>編號</th>
+                <th style="width:120px;">狀態</th>
+                <th style="width:150px;">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${orderedCards.map((card, idx) => {
+                const st = elevatorCardStatusMeta(card.status);
+                return `
+                  <tr data-card-id="${escapeHtml(String(card.id || ""))}">
+                    <td>${idx + 1}</td>
+                    <td>${escapeHtml(String(card.name || "—"))}</td>
+                    <td>${escapeHtml(String(card.code || "—"))}</td>
+                    <td><span class="status-chip ${st.cls}">${st.label}</span></td>
+                    <td>
+                      <div style="display:flex; gap:8px; align-items:center;">
+                        <button class="btn btn-sm" type="button" data-card-edit="${escapeHtml(String(card.id || ""))}">編輯</button>
+                        <button class="btn btn-sm danger" type="button" data-card-delete="${escapeHtml(String(card.id || ""))}">刪除</button>
+                      </div>
+                    </td>
+                  </tr>
+                `.trim();
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      `.trim();
+    };
     const isHistoryVisitor = (v) => {
       const status = String((v && v.status) || "").toLowerCase();
       const hasOutTime = v && v.outAt != null;
@@ -11615,8 +12367,15 @@
       }
 
       const isHistoryTab = currentFilter === 'history';
+      const isSettingsTab = currentFilter === 'settings';
       if (historyToolbarEl) historyToolbarEl.hidden = !isHistoryTab;
+      if (settingsToolbarEl) settingsToolbarEl.hidden = !isSettingsTab;
+      if (visitorToolbarEl) visitorToolbarEl.hidden = isSettingsTab;
       if (isHistoryTab) refreshHistoryUnitOptions();
+      if (isSettingsTab) {
+        renderElevatorCards();
+        return;
+      }
 
       const q = String(searchEl ? searchEl.value : "").trim().toLowerCase();
       const dateVal = String(dateEl ? dateEl.value : "").trim();
@@ -11688,7 +12447,7 @@
           const purpose = String(v.purpose || "").trim();
           const email = String(v.email || "").trim();
           const party = v.partySize != null && Number.isFinite(Number(v.partySize)) && Number(v.partySize) >= 1 ? String(Math.floor(Number(v.partySize))) : "1";
-          const keepText = formatKeepText80(v.keep);
+          const keepText = formatKeepText80(v.keep, v.outAt);
           const plateText = plate || "—";
           const inText = formatDt(v.inAt);
           const outText = formatDt(v.outAt);
@@ -11963,6 +12722,62 @@
     };
 
     const collRef = () => db.collection("communities").doc(String(visitorCommunitySlug || "default")).collection("visitors");
+    const elevatorCardCollRef = () => db.collection("communities").doc(String(visitorCommunitySlug || "default")).collection("visitor_elevator_cards");
+    const elevatorCardConfigRef = () => db.collection("communities").doc(String(visitorCommunitySlug || "default")).collection("settings").doc("visitor_elevator_card_config");
+    const subscribeElevatorCards = () => {
+      stopVisitorElevatorCardsSubscription();
+      try {
+        state.unsubVisitorElevatorCards = elevatorCardCollRef().onSnapshot((snap) => {
+          elevatorCards = (snap && snap.docs ? snap.docs : []).map((d) => {
+            const v = d.data() || {};
+            return {
+              id: d.id,
+              name: String(v.name || ""),
+              code: String(v.code || ""),
+              status: String(v.status || "available"),
+              sortAtMs: Number(v.sortAtMs || 0) || 0,
+              createdAt: v.createdAt || null,
+              updatedAt: v.updatedAt || null,
+            };
+          });
+          renderList();
+        }, () => {
+          elevatorCards = [];
+          renderList();
+        });
+      } catch {
+        elevatorCards = [];
+      }
+    };
+    const subscribeElevatorCardConfig = () => {
+      stopVisitorElevatorCardConfigSubscription();
+      try {
+        state.unsubVisitorElevatorCardConfig = elevatorCardConfigRef().onSnapshot((snap) => {
+          const v = snap && snap.exists ? (snap.data() || {}) : {};
+          elevatorCardNameOptions = normalizeOptionTextList(v.cardNameOptions);
+          visitorKeepCertTypeOptions = normalizeOptionTextList(v.certTypeOptions);
+          const liveSelect = document.getElementById("visitorElevatorCardName");
+          if (liveSelect && String(liveSelect.tagName || "").toUpperCase() === "SELECT") {
+            const currentValue = String(liveSelect.value || liveSelect.getAttribute("data-current-value") || "");
+            renderElevatorCardNameSelect(liveSelect, currentValue);
+          }
+          const keepCertSelect = document.getElementById("modal_v_keep_cert_type");
+          if (keepCertSelect && String(keepCertSelect.tagName || "").toUpperCase() === "SELECT") {
+            renderVisitorKeepCertTypeSelect(keepCertSelect, String(keepCertSelect.value || keepCertSelect.getAttribute("data-current-value") || ""));
+          }
+          const scanKeepCertSelect = document.getElementById("visitorScanKeepCertType");
+          if (scanKeepCertSelect && String(scanKeepCertSelect.tagName || "").toUpperCase() === "SELECT") {
+            renderVisitorKeepCertTypeSelect(scanKeepCertSelect, String(scanKeepCertSelect.value || scanKeepCertSelect.getAttribute("data-current-value") || ""));
+          }
+        }, () => {
+          elevatorCardNameOptions = [];
+          visitorKeepCertTypeOptions = [];
+        });
+      } catch {
+        elevatorCardNameOptions = [];
+        visitorKeepCertTypeOptions = [];
+      }
+    };
 
     const subscribeVisitors = () => {
       setStatus("讀取中...", false);
@@ -11971,6 +12786,8 @@
         const startAt = (slug) => {
           stopVisitorsSubscription();
           visitorCommunitySlug = String(slug || "").trim() || visitorCommunitySlug || "default";
+          subscribeElevatorCards();
+          subscribeElevatorCardConfig();
           state.unsubVisitors = collRef()
             .orderBy("createdAt", "desc")
             .onSnapshot(
@@ -12102,6 +12919,407 @@
         }
       }
       return [];
+    };
+
+    const ensureVisitorElevatorCardModal = () => {
+      let modal = document.getElementById("visitorElevatorCardModal");
+      if (modal) return modal;
+      modal = document.createElement("div");
+      modal.className = "modal";
+      modal.id = "visitorElevatorCardModal";
+      modal.hidden = true;
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-modal-close="1"></div>
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="visitorElevatorCardModalTitle">
+          <div class="modal-hd">
+            <h3 class="modal-title" id="visitorElevatorCardModalTitle">新增電梯卡</h3>
+            <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          </div>
+          <form id="visitorElevatorCardForm">
+            <div class="modal-body">
+              <div class="field">
+                <label for="visitorElevatorCardName">名稱</label>
+                <select id="visitorElevatorCardName"></select>
+              </div>
+              <div class="field">
+                <label for="visitorElevatorCardCode">編號</label>
+                <input id="visitorElevatorCardCode" type="text" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label for="visitorElevatorCardStatus">狀態</label>
+                <select id="visitorElevatorCardStatus">
+                  <option value="available">可租借</option>
+                  <option value="borrowed">已借出</option>
+                  <option value="disabled">停用</option>
+                </select>
+              </div>
+              <div class="status" id="visitorElevatorCardStatusBox" hidden></div>
+            </div>
+            <div class="modal-ft">
+              <button class="btn" type="button" id="btnCloseVisitorElevatorCardModal">取消</button>
+              <button class="btn btn-primary" type="submit" id="btnSubmitVisitorElevatorCardModal">儲存</button>
+            </div>
+          </form>
+        </div>
+      `.trim();
+      document.body.appendChild(modal);
+      return modal;
+    };
+
+    const ensureVisitorElevatorCardNameSettingsModal = () => {
+      let modal = document.getElementById("visitorElevatorCardNameSettingsModal");
+      if (modal) return modal;
+      modal = document.createElement("div");
+      modal.className = "modal";
+      modal.id = "visitorElevatorCardNameSettingsModal";
+      modal.hidden = true;
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-modal-close="1"></div>
+          <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="visitorElevatorCardNameSettingsTitle">
+          <div class="modal-hd">
+              <h3 class="modal-title" id="visitorElevatorCardNameSettingsTitle">電梯卡與證件類別設定</h3>
+            <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          </div>
+          <div class="modal-body">
+            <div class="field">
+              <label for="visitorElevatorCardOptionKind">新增 / 編輯選項</label>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <select id="visitorElevatorCardOptionKind" style="flex:0 0 160px;">
+                  <option value="card">電梯卡名稱</option>
+                  <option value="cert">質押證件類別</option>
+                </select>
+                <input id="visitorElevatorCardOptionInput" type="text" autocomplete="off" style="flex:1 1 220px;" />
+                <button class="btn btn-sm btn-success" type="button" id="btnSaveVisitorElevatorCardOption">新增</button>
+              </div>
+              <div class="muted" style="margin-top:6px;">可切換維護「電梯卡名稱」與「質押證件類別」兩種選項。</div>
+            </div>
+            <div class="status" id="visitorElevatorCardOptionStatus" hidden></div>
+            <div class="units-table-container" style="max-height: 420px; overflow-y: auto;">
+              <table class="units-table">
+                <thead>
+                  <tr>
+                    <th style="width:72px;">序號</th>
+                    <th style="width:140px;">類型</th>
+                    <th>名稱</th>
+                    <th style="width:150px;">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="visitorElevatorCardOptionRows"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" id="btnCloseVisitorElevatorCardNameSettingsModal">關閉</button>
+          </div>
+        </div>
+      `.trim();
+      document.body.appendChild(modal);
+      return modal;
+    };
+
+    const openElevatorCardNameSettings = () => {
+      const modal = ensureVisitorElevatorCardNameSettingsModal();
+      let detach = () => {};
+      const detachModalClose = bindModalClose(modal, () => detach());
+      const kindEl = modal.querySelector("#visitorElevatorCardOptionKind");
+      const inputEl = modal.querySelector("#visitorElevatorCardOptionInput");
+      const saveBtn = modal.querySelector("#btnSaveVisitorElevatorCardOption");
+      const closeBtn = modal.querySelector("#btnCloseVisitorElevatorCardNameSettingsModal");
+      const rowsEl = modal.querySelector("#visitorElevatorCardOptionRows");
+      const statusEl = modal.querySelector("#visitorElevatorCardOptionStatus");
+      let draftCardNames = normalizeOptionTextList(elevatorCardNameOptions);
+      let draftCertTypes = normalizeOptionTextList(visitorKeepCertTypeOptions.length ? visitorKeepCertTypeOptions : ["身分證", "健保卡", "駕照"]);
+      let editingType = "card";
+      let editingIndex = -1;
+
+      const setStatus = (msg, isError) => {
+        if (!statusEl) return;
+        const t = String(msg || "").trim();
+        statusEl.textContent = t;
+        statusEl.hidden = !t;
+        statusEl.classList.toggle("error", Boolean(isError));
+      };
+      const getOptionKind = () => (kindEl && String(kindEl.value || "") === "cert" ? "cert" : "card");
+      const syncEditorUi = () => {
+        if (kindEl) kindEl.value = editingType === "cert" ? "cert" : "card";
+        if (inputEl) inputEl.placeholder = editingType === "cert" ? "請輸入證件類別" : "請輸入電梯卡名稱";
+        if (saveBtn) {
+          if (editingIndex >= 0) saveBtn.textContent = editingType === "cert" ? "更新證件類別" : "更新名稱";
+          else saveBtn.textContent = editingType === "cert" ? "新增證件類別" : "新增名稱";
+        }
+      };
+      const resetEditor = () => {
+        editingIndex = -1;
+        editingType = getOptionKind();
+        if (inputEl) inputEl.value = "";
+        syncEditorUi();
+        setStatus("", false);
+      };
+      const getDraftList = (type) => type === "cert" ? draftCertTypes : draftCardNames;
+      const renderRows = () => {
+        if (!rowsEl) return;
+        const cardRows = draftCardNames.map((name, idx) => `
+          <tr data-option-index="${idx}" data-option-kind="card">
+            <td>${idx + 1}</td>
+            <td>電梯卡名稱</td>
+            <td>${escapeHtml(name)}</td>
+            <td>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn btn-sm" type="button" data-option-edit="card:${idx}">編輯</button>
+                <button class="btn btn-sm danger" type="button" data-option-delete="card:${idx}">刪除</button>
+              </div>
+            </td>
+          </tr>
+        `);
+        const certRows = draftCertTypes.map((name, idx) => `
+          <tr data-option-index="${idx}" data-option-kind="cert">
+            <td>${idx + 1}</td>
+            <td>質押證件類別</td>
+            <td>${escapeHtml(name)}</td>
+            <td>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn btn-sm" type="button" data-option-edit="cert:${idx}">編輯</button>
+                <button class="btn btn-sm danger" type="button" data-option-delete="cert:${idx}">刪除</button>
+              </div>
+            </td>
+          </tr>
+        `);
+        const allRows = cardRows.concat(certRows);
+        if (!allRows.length) {
+          rowsEl.innerHTML = '<tr><td colspan="4"><div class="status">尚未建立選項。</div></td></tr>';
+          return;
+        }
+        rowsEl.innerHTML = allRows.join("");
+      };
+      const persistOptions = async (nextCardList, nextCertList, successText) => {
+        const normalizedCards = normalizeOptionTextList(nextCardList);
+        const normalizedCerts = normalizeOptionTextList(nextCertList);
+        if (saveBtn) saveBtn.disabled = true;
+        setStatus("儲存中...", false);
+        try {
+          await elevatorCardConfigRef().set({
+            cardNameOptions: normalizedCards,
+            certTypeOptions: normalizedCerts,
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+          elevatorCardNameOptions = normalizedCards;
+          visitorKeepCertTypeOptions = normalizedCerts;
+          draftCardNames = normalizedCards.slice();
+          draftCertTypes = normalizedCerts.slice();
+          renderRows();
+          resetEditor();
+          toast(successText);
+        } catch (err) {
+          const codeText = String(err && err.code ? err.code : "");
+          setStatus(codeText.includes("permission-denied") ? "沒有權限執行此操作。" : "儲存失敗，請稍後再試。", true);
+        } finally {
+          if (saveBtn) saveBtn.disabled = false;
+        }
+      };
+      const onSave = async () => {
+        const value = normalizeText(inputEl ? inputEl.value : "");
+        if (!value) {
+          setStatus("請輸入名稱。", true);
+          return;
+        }
+        const targetType = editingIndex >= 0 ? editingType : getOptionKind();
+        const activeList = getDraftList(targetType);
+        const duplicateIndex = activeList.findIndex((x, idx) => x === value && idx !== editingIndex);
+        if (duplicateIndex >= 0) {
+          setStatus("名稱不可重複。", true);
+          return;
+        }
+        const nextCardList = draftCardNames.slice();
+        const nextCertList = draftCertTypes.slice();
+        const targetList = targetType === "cert" ? nextCertList : nextCardList;
+        if (editingIndex >= 0) targetList[editingIndex] = value;
+        else targetList.push(value);
+        await persistOptions(nextCardList, nextCertList, editingIndex >= 0 ? "已更新設定選項" : "已新增設定選項");
+      };
+      const onKindChange = () => {
+        editingType = getOptionKind();
+        if (editingIndex >= 0) {
+          editingIndex = -1;
+          if (inputEl) inputEl.value = "";
+        }
+        syncEditorUi();
+        setStatus("", false);
+        if (inputEl) inputEl.focus();
+      };
+      const onRowsClick = async (e) => {
+        const editBtn = e.target && e.target.closest ? e.target.closest("[data-option-edit]") : null;
+        if (editBtn) {
+          const token = String(editBtn.getAttribute("data-option-edit") || "");
+          const parts = token.split(":");
+          const type = parts[0] === "cert" ? "cert" : "card";
+          const idx = Number(parts[1]);
+          const activeList = getDraftList(type);
+          if (!Number.isInteger(idx) || idx < 0 || idx >= activeList.length) return;
+          editingType = type;
+          editingIndex = idx;
+          if (inputEl) inputEl.value = String(activeList[idx] || "");
+          syncEditorUi();
+          setStatus("", false);
+          if (inputEl) inputEl.focus();
+          return;
+        }
+        const delBtn = e.target && e.target.closest ? e.target.closest("[data-option-delete]") : null;
+        if (!delBtn) return;
+        const token = String(delBtn.getAttribute("data-option-delete") || "");
+        const parts = token.split(":");
+        const type = parts[0] === "cert" ? "cert" : "card";
+        const idx = Number(parts[1]);
+        const activeList = getDraftList(type);
+        if (!Number.isInteger(idx) || idx < 0 || idx >= activeList.length) return;
+        const targetName = String(activeList[idx] || "");
+        const ok = await (window.nwConfirm ? window.nwConfirm({
+          title: "確認刪除",
+          message: `確定要刪除選項「${targetName}」？`,
+          okText: "刪除",
+          cancelText: "取消",
+          danger: true,
+        }) : Promise.resolve(window.confirm("確定要刪除？")));
+        if (!ok) return;
+        const nextCardList = draftCardNames.slice();
+        const nextCertList = draftCertTypes.slice();
+        const targetList = type === "cert" ? nextCertList : nextCardList;
+        targetList.splice(idx, 1);
+        await persistOptions(nextCardList, nextCertList, "已刪除設定選項");
+      };
+      const onInputKeydown = (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        onSave().catch(() => {});
+      };
+      const onSaveClick = (e) => {
+        e.preventDefault();
+        onSave().catch(() => {});
+      };
+      const onClose = (e) => {
+        if (e) e.preventDefault();
+        modal.hidden = true;
+        detach();
+      };
+
+      renderRows();
+      resetEditor();
+      if (kindEl) kindEl.addEventListener("change", onKindChange);
+      if (rowsEl) rowsEl.addEventListener("click", onRowsClick);
+      if (saveBtn) saveBtn.addEventListener("click", onSaveClick);
+      if (inputEl) inputEl.addEventListener("keydown", onInputKeydown);
+      if (closeBtn) closeBtn.addEventListener("click", onClose);
+      detach = () => {
+        try { if (kindEl) kindEl.removeEventListener("change", onKindChange); } catch {}
+        try { if (rowsEl) rowsEl.removeEventListener("click", onRowsClick); } catch {}
+        try { if (saveBtn) saveBtn.removeEventListener("click", onSaveClick); } catch {}
+        try { if (inputEl) inputEl.removeEventListener("keydown", onInputKeydown); } catch {}
+        try { if (closeBtn) closeBtn.removeEventListener("click", onClose); } catch {}
+        detachModalClose();
+      };
+      modal.hidden = false;
+      requestAnimationFrame(() => {
+        if (inputEl) inputEl.focus();
+      });
+    };
+
+    const openElevatorCardEditor = (mode, item) => {
+      const modal = ensureVisitorElevatorCardModal();
+      let detach = () => {};
+      const detachModalClose = bindModalClose(modal, () => detach());
+      const isEdit = mode === "edit";
+      const data = item || {};
+      const titleEl = modal.querySelector("#visitorElevatorCardModalTitle");
+      const form = modal.querySelector("#visitorElevatorCardForm");
+      const inputName = modal.querySelector("#visitorElevatorCardName");
+      const inputCode = modal.querySelector("#visitorElevatorCardCode");
+      const inputStatus = modal.querySelector("#visitorElevatorCardStatus");
+      const statusEl = modal.querySelector("#visitorElevatorCardStatusBox");
+      const closeBtn = modal.querySelector("#btnCloseVisitorElevatorCardModal");
+      const submitBtn = modal.querySelector("#btnSubmitVisitorElevatorCardModal");
+      const setModalStatus = (msg, isError) => {
+        if (!statusEl) return;
+        const t = String(msg || "").trim();
+        statusEl.textContent = t;
+        statusEl.hidden = !t;
+        statusEl.classList.toggle("error", Boolean(isError));
+      };
+      if (titleEl) titleEl.textContent = isEdit ? "編輯電梯卡" : "新增電梯卡";
+      if (submitBtn) submitBtn.textContent = isEdit ? "更新" : "儲存";
+      renderElevatorCardNameSelect(inputName, isEdit ? String(data.name || "") : "");
+      if (inputName) inputName.setAttribute("data-current-value", isEdit ? String(data.name || "") : "");
+      if (inputCode) inputCode.value = isEdit ? String(data.code || "") : "";
+      if (inputStatus) inputStatus.value = isEdit ? String(data.status || "available") : "available";
+      setModalStatus("", false);
+
+      const onCancel = (e) => {
+        if (e) e.preventDefault();
+        modal.hidden = true;
+        detach();
+      };
+      if (closeBtn) closeBtn.addEventListener("click", onCancel);
+      const onSubmit = async (e) => {
+        e.preventDefault();
+        if (submitBtn) submitBtn.disabled = true;
+        setModalStatus("儲存中...", false);
+        const name = normalizeText(inputName ? inputName.value : "");
+        const code = normalizeText(inputCode ? inputCode.value : "");
+        const status = normalizeText(inputStatus ? inputStatus.value : "available") || "available";
+        if (!name) {
+          setModalStatus("請填寫名稱。", true);
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+        if (!code) {
+          setModalStatus("請填寫編號。", true);
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+        const docRef = isEdit ? elevatorCardCollRef().doc(String(data.id || "")) : elevatorCardCollRef().doc();
+        const id = String(docRef.id || "");
+        const payload = {
+          name,
+          code,
+          status,
+          sortAtMs: Date.now(),
+          updatedAt: FieldValue.serverTimestamp(),
+        };
+        if (!isEdit) payload.createdAt = FieldValue.serverTimestamp();
+        try {
+          await docRef.set(payload, { merge: true });
+          const sortAtMs = Number(payload.sortAtMs || Date.now()) || Date.now();
+          const next = {
+            id,
+            name,
+            code,
+            status,
+            sortAtMs,
+            createdAt: !isEdit ? new Date() : (data.createdAt || null),
+            updatedAt: new Date(),
+          };
+          const idx = elevatorCards.findIndex((x) => String(x.id || "") === id);
+          if (idx >= 0) elevatorCards[idx] = { ...(elevatorCards[idx] || {}), ...next };
+          else elevatorCards.push(next);
+          modal.hidden = true;
+          detach();
+          renderList();
+          toast(isEdit ? "已更新" : "已新增");
+        } catch (err) {
+          const codeText = String(err && err.code ? err.code : "");
+          setModalStatus(codeText.includes("permission-denied") ? "沒有權限執行此操作。" : "儲存失敗，請稍後再試。", true);
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      };
+      form.addEventListener("submit", onSubmit);
+      detach = () => {
+        try { form.removeEventListener("submit", onSubmit); } catch {}
+        try { if (closeBtn) closeBtn.removeEventListener("click", onCancel); } catch {}
+        detachModalClose();
+      };
+      modal.hidden = false;
+      requestAnimationFrame(() => {
+        if (inputName) inputName.focus();
+      });
     };
 
     const openVisitorEditor = async (mode, item) => {
@@ -12272,7 +13490,7 @@
         const keepCash = Boolean(keepCashEl && keepCashEl.checked);
         if (keepCertTypeEl) keepCertTypeEl.disabled = !keepCert;
         if (keepCashAmountEl) keepCashAmountEl.disabled = !keepCash;
-        if (!keepCert && keepCertTypeEl) keepCertTypeEl.value = "身分證";
+        if (!keepCert && keepCertTypeEl) keepCertTypeEl.value = getDefaultVisitorKeepCertType();
         if (!keepCash && keepCashAmountEl) keepCashAmountEl.value = "";
       };
 
@@ -12281,7 +13499,11 @@
         const cert = keep && keep.certificate ? keep.certificate : {};
         const cash = keep && keep.cash ? keep.cash : {};
         if (keepCertEl) keepCertEl.checked = Boolean(cert && cert.enabled);
-        if (keepCertTypeEl) keepCertTypeEl.value = String((cert && cert.type) || "身分證");
+        if (keepCertTypeEl) {
+          const keepCertType = String((cert && cert.type) || getDefaultVisitorKeepCertType());
+          renderVisitorKeepCertTypeSelect(keepCertTypeEl, keepCertType);
+          keepCertTypeEl.setAttribute("data-current-value", keepCertType);
+        }
         if (keepCardEl) keepCardEl.checked = Boolean(keep && keep.businessCard);
         if (keepCashEl) keepCashEl.checked = Boolean(cash && cash.enabled);
         if (keepCashAmountEl) keepCashAmountEl.value = cash && cash.amount != null ? String(cash.amount) : "";
@@ -12334,7 +13556,7 @@
         const keep = {
           certificate: {
             enabled: Boolean(keepCertEl && keepCertEl.checked),
-            type: String(keepCertTypeEl ? keepCertTypeEl.value : "身分證"),
+            type: String(keepCertTypeEl ? keepCertTypeEl.value : getDefaultVisitorKeepCertType()),
           },
           businessCard: Boolean(keepCardEl && keepCardEl.checked),
           cash: {
@@ -12342,6 +13564,7 @@
             amount: keepCashEl && keepCashEl.checked ? Number(keepCashAmountEl ? keepCashAmountEl.value : "") : null,
           },
           key: Boolean(keepKeyEl && keepKeyEl.checked),
+          elevatorCard: data && data.keep && data.keep.elevatorCard ? data.keep.elevatorCard : { enabled: false },
         };
         if (!Number.isFinite(keep.cash.amount)) keep.cash.amount = null;
 
@@ -12481,8 +13704,47 @@
     if (historyExcelBtn) historyExcelBtn.addEventListener("click", exportHistoryExcel);
 
     if (addBtn) addBtn.addEventListener("click", () => openVisitorEditor("create"));
+    if (addElevatorCardBtn) addElevatorCardBtn.addEventListener("click", () => openElevatorCardEditor("create"));
+    if (openElevatorCardNameSettingsBtn) openElevatorCardNameSettingsBtn.addEventListener("click", openElevatorCardNameSettings);
     if (scanBtn) scanBtn.addEventListener("click", () => openVisitorScanModal80({ cid: visitorCommunitySlug, onApplied: applyLocalVisitorPatch }));
     if (visitorQrBtn) visitorQrBtn.addEventListener("click", () => openVisitorQrModal80({ communityId: cid, communityName: cname }));
+
+    if (listEl) {
+      listEl.addEventListener("click", async (e) => {
+        const editBtn = e.target && e.target.closest ? e.target.closest("[data-card-edit]") : null;
+        if (editBtn) {
+          const id = String(editBtn.getAttribute("data-card-edit") || "").trim();
+          const item = elevatorCards.find((x) => String(x.id || "") === id) || null;
+          if (item) openElevatorCardEditor("edit", item);
+          return;
+        }
+        const delBtn = e.target && e.target.closest ? e.target.closest("[data-card-delete]") : null;
+        if (!delBtn) return;
+        const id = String(delBtn.getAttribute("data-card-delete") || "").trim();
+        const item = elevatorCards.find((x) => String(x.id || "") === id) || null;
+        if (!item) return;
+        const ok = await (window.nwConfirm ? window.nwConfirm({
+          title: "確認刪除",
+          message: `確定要刪除電梯卡「${String(item.name || id)}」？`,
+          okText: "刪除",
+          cancelText: "取消",
+          danger: true,
+        }) : Promise.resolve(window.confirm("確定要刪除？")));
+        if (!ok) return;
+        delBtn.disabled = true;
+        try {
+          await elevatorCardCollRef().doc(id).delete();
+          elevatorCards = elevatorCards.filter((x) => String(x.id || "") !== id);
+          renderList();
+          toast("已刪除");
+        } catch (err) {
+          const codeText = String(err && err.code ? err.code : "");
+          toast(codeText.includes("permission-denied") ? "沒有權限刪除。" : "刪除失敗");
+        } finally {
+          delBtn.disabled = false;
+        }
+      });
+    }
 
     if (listEl && !listEl._timePillBound) {
       listEl._timePillBound = true;
@@ -12774,6 +14036,25 @@
     }, true);
   }
 
+  /* 總覽卡片說明文字：全部以跑馬燈顯示，依距離換算等速捲動秒數 */
+  let moduleDescResizeHandler = null;
+
+  function applyModuleDescMarquee() {
+    const grid = document.getElementById("moduleGrid");
+    if (!grid) return;
+    grid.querySelectorAll("p.module-desc > span").forEach((span) => {
+      const dist = span.scrollWidth;
+      if (!dist) return;
+      span.style.setProperty("--marquee-dur", Math.max(8, Math.round(dist / 45)) + "s");
+    });
+  }
+
+  function manualViewerHref(id, name) {
+    const file = `manual/${encodeURIComponent(String(id || "").trim())}.pdf`;
+    const filename = `${String(name || "").trim() || "手冊"}操作手冊.pdf`;
+    return `pdf-viewer.html?file=${file}&name=${encodeURIComponent(filename)}`;
+  }
+
   function renderDashboard() {
     const layoutEl = document.querySelector(".layout");
     if (layoutEl) layoutEl.classList.remove("visitor-main-lock");
@@ -12791,12 +14072,12 @@
           <div class="card-hd">
             <div class="left">
               <div class="chip" aria-hidden="true">${iconSvg(m.id)}</div>
-              <div style="min-width:0;">
+              <div class="module-copy">
                 <h2>${m.name}</h2>
-                <p>${m.desc}</p>
+                <p class="module-desc"><span>${m.desc}</span></p>
               </div>
             </div>
-            <span class="tag ${disabled ? "" : "red"}">${disabled ? "停用" : m.badge}</span>
+            <a class="tag red manual-btn" data-manual="${m.id}" href="${manualViewerHref(m.id, m.name)}" target="_blank" rel="noopener" title="開啟 ${m.name} 操作手冊" aria-label="開啟 ${m.name} 操作手冊">手冊</a>
           </div>
           <div class="card-bd">
             <div class="row">
@@ -12822,11 +14103,13 @@
       const disabled = card.getAttribute("aria-disabled") === "true";
       card.addEventListener("click", (e) => {
         if (didDrag) { didDrag = false; return; }
+        if (e.target.closest("[data-manual]")) return;
         if (disabled) return;
         if (e.target.closest("[data-open]")) return;
         openModule(id);
       });
       card.addEventListener("keydown", (e) => {
+        if (e.target.closest("[data-manual]")) return;
         if (disabled) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -12845,6 +14128,14 @@
     });
     updateFooterActiveNav();
     setupDashboardReorder(grid);
+    applyModuleDescMarquee();
+    if (moduleDescResizeHandler) window.removeEventListener("resize", moduleDescResizeHandler);
+    let marqueeResizeTimer = 0;
+    moduleDescResizeHandler = () => {
+      window.clearTimeout(marqueeResizeTimer);
+      marqueeResizeTimer = window.setTimeout(applyModuleDescMarquee, 150);
+    };
+    window.addEventListener("resize", moduleDescResizeHandler);
   }
 
   let sosUnsub = null;
@@ -15914,7 +17205,7 @@
               <p>社區公告、活動訊息與即時資訊顯示</p>
             </div>
           </div>
-          <span class="tag red">${m?.badge || "看版"}</span>
+          <a class="tag red manual-btn" data-manual="digital-signage" href="${manualViewerHref("digital-signage", "電子看版")}" target="_blank" rel="noopener" title="開啟 電子看版 操作手冊" aria-label="開啟 電子看版 操作手冊">手冊</a>
         </div>
         <div class="card-bd">
           <div class="row">
@@ -16099,7 +17390,7 @@
               </svg>
             </button>
             <a class="btn btn-sm" target="_blank" rel="noopener noreferrer" href="parking.html?c=${encodeURIComponent(communityKey)}&role=community&v=7">另開視窗</a>
-            <span class="tag red">綠能</span>
+            <a class="tag red manual-btn" data-manual="parking" href="${manualViewerHref("parking", "綠色停車")}" target="_blank" rel="noopener" title="開啟 綠色停車 操作手冊" aria-label="開啟 綠色停車 操作手冊">手冊</a>
           </div>
         </div>
         <div class="card-bd">
@@ -16850,6 +18141,8 @@
     const layoutEl = document.querySelector(".layout");
     if (layoutEl) layoutEl.classList.toggle("visitor-main-lock", moduleId === "visitor");
     if (moduleId !== "visitor") stopVisitorsSubscription();
+    if (moduleId !== "visitor") stopVisitorElevatorCardsSubscription();
+    if (moduleId !== "visitor") stopVisitorElevatorCardConfigSubscription();
     if (moduleId !== "residents") stopResidentsSubscription();
     if (moduleId !== "parcel") stopParcelsSubscription();
     if (moduleId !== "care") stopCheckinListener();
@@ -16968,6 +18261,7 @@
       let role = "viewer";
       if (roleRaw === "admin" || roleRaw === "super_admin" || roleRaw === "community_admin") role = "admin";
       else if (roleRaw === "community" || roleRaw === "manager" || roleRaw === "management") role = "manager";
+      else if (roleRaw === "finance" || roleRaw === "財務" || roleRaw === "財務人員") role = "finance";
       if (window.NwFinance && window.NwFinance.UI) {
         window.NwFinance.UI.renderAdminPage(contentEl, {
           communityId: cid,
@@ -16977,7 +18271,7 @@
           name: displayName,
         });
       } else {
-        contentEl.innerHTML = `<div style="padding:24px;color:#d00;">收支報表模組尚未載入，請稍後再試。</div>`;
+        contentEl.innerHTML = `<div style="padding:24px;color:#d00;">財報系統模組尚未載入，請稍後再試。</div>`;
       }
       updateFooterActiveNav();
       return;
@@ -17001,7 +18295,7 @@
               <p>${m.desc}</p>
             </div>
           </div>
-          <span class="tag red">${m.badge || ""}</span>
+          <a class="tag red manual-btn" data-manual="${m.id}" href="${manualViewerHref(m.id, m.name)}" target="_blank" rel="noopener" title="開啟 ${m.name} 操作手冊" aria-label="開啟 ${m.name} 操作手冊">手冊</a>
         </div>
         <div class="card-bd">
           <div class="row">
@@ -17639,7 +18933,7 @@
                 </svg>
               </button>
               <a class="btn btn-sm" target="_blank" rel="noopener noreferrer" href="bulletin-activity.html?c=${encodeURIComponent(communityKey)}&v=2">另開視窗（前台）</a>
-              <span class="tag red">活動</span>
+              <a class="tag red manual-btn" data-manual="activity" href="${manualViewerHref("activity", "社區活動")}" target="_blank" rel="noopener" title="開啟 社區活動 操作手冊" aria-label="開啟 社區活動 操作手冊">手冊</a>
             </div>
           </div>
           <div class="card-bd">
