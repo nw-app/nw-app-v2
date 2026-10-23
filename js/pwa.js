@@ -1564,24 +1564,36 @@
     }, 1500);
 
     if (!("serviceWorker" in navigator)) return;
+    if (isLocalhost()) {
+      navigator.serviceWorker.getRegistrations()
+        .then((regs) => Promise.all((regs || []).map((reg) => reg.unregister().catch(() => false))))
+        .catch(() => {});
+      try {
+        caches.keys()
+          .then((keys) => Promise.all((keys || [])
+            .filter((key) => /^nwapp-v/i.test(String(key || "")))
+            .map((key) => caches.delete(key))))
+          .catch(() => {});
+      } catch {}
+      return;
+    }
     navigator.serviceWorker.register("./sw.js").then((reg) => {
-        const isLocal = isLocalhost();
-        if (!isLocal) reg.update().catch(() => {});
+      reg.update().catch(() => {});
 
-        if (!isLocal && reg.waiting) {
-          reg.waiting.postMessage({ type: "SKIP_WAITING" });
-        }
+      if (reg.waiting) {
+        reg.waiting.postMessage({ type: "SKIP_WAITING" });
+      }
 
-        reg.addEventListener("updatefound", () => {
-          const worker = reg.installing;
-          if (!worker) return;
-          worker.addEventListener("statechange", () => {
-            if (worker.state === "installed" && navigator.serviceWorker.controller) {
-              if (!isLocalhost() && reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
-            }
-          });
+      reg.addEventListener("updatefound", () => {
+        const worker = reg.installing;
+        if (!worker) return;
+        worker.addEventListener("statechange", () => {
+          if (worker.state === "installed" && navigator.serviceWorker.controller && reg.waiting) {
+            reg.waiting.postMessage({ type: "SKIP_WAITING" });
+          }
         });
-      }).catch(() => {});
+      });
+    }).catch(() => {});
   });
 
   // 多個事件監聽確保方向鎖定

@@ -4,13 +4,41 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>社區｜社區APP後台</title>
-    <link rel="icon" type="image/svg+xml" href="logo.svg?v=4" />
+    <link rel="icon" type="image/svg+xml" href="logo.svg?v=5" />
     <link rel="manifest" href="manifest.webmanifest" />
     <meta name="theme-color" content="#d32f2f" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="apple-touch-icon" href="icon-192.png?v=2" />
+    <script>
+      (function () {
+        try {
+          var host = String(location.hostname || "").trim().toLowerCase();
+          if (host !== "localhost" && host !== "127.0.0.1") return;
+          if (!("serviceWorker" in navigator)) return;
+          if (sessionStorage.getItem("nw_local_sw_reset_done") === "1") return;
+          sessionStorage.setItem("nw_local_sw_reset_done", "1");
+          navigator.serviceWorker.getRegistrations()
+            .then(function (regs) {
+              return Promise.all((regs || []).map(function (reg) {
+                try { return reg.unregister(); } catch (e) { return false; }
+              }));
+            })
+            .catch(function () {})
+            .then(function () {
+              if (!window.caches || !caches.keys) return [];
+              return caches.keys().then(function (keys) {
+                return Promise.all((keys || []).map(function (key) {
+                  return /^nwapp-v/i.test(String(key || "")) ? caches.delete(key) : false;
+                }));
+              });
+            })
+            .catch(function () {})
+            .then(function () { location.replace(location.pathname + location.search + location.hash); });
+        } catch (e) {}
+      })();
+    </script>
     <link rel="stylesheet" href="css/admin.css?v=22" />
     <link rel="stylesheet" href="css/parcel.css?v=3" />
     <link rel="stylesheet" href="css/pwa.css?v=3" />
@@ -22,7 +50,7 @@
         <div class="frame-hd-row">
           <div class="brand">
             <a href="https://qailifeweb-h9keujwr.manus.space/" target="_blank" rel="noopener noreferrer">
-              <img src="logo.svg?v=4" alt="" style="cursor: pointer;" />
+              <img src="logo.svg?v=5" alt="" style="cursor: pointer;" />
             </a>
             <div class="meta">
               <div class="title">生活網</div>

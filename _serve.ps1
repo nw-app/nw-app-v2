@@ -38,6 +38,12 @@ while ($listener.IsListening) {
                 '.ico'  { $mime = 'image/x-icon' }
             }
             $resp.ContentType = $mime
+            $resp.Headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            $resp.Headers['Pragma'] = 'no-cache'
+            $resp.Headers['Expires'] = '0'
+            if ($trimmed -eq 'sw.js') {
+                $resp.Headers['Service-Worker-Allowed'] = '/'
+            }
             $resp.ContentLength64 = $content.Length
             $resp.OutputStream.Write($content, 0, $content.Length)
             $resp.Close()
@@ -47,6 +53,9 @@ while ($listener.IsListening) {
             $body = "Not Found: $rawPath`nTried: $file"
             $buffer = [System.Text.Encoding]::UTF8.GetBytes($body)
             $resp.ContentType = 'text/plain; charset=utf-8'
+            $resp.Headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            $resp.Headers['Pragma'] = 'no-cache'
+            $resp.Headers['Expires'] = '0'
             $resp.ContentLength64 = $buffer.Length
             $resp.OutputStream.Write($buffer, 0, $buffer.Length)
             $resp.Close()

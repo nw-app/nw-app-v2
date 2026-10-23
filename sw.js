@@ -1,9 +1,10 @@
-const CACHE_VERSION = "nwapp-v382";
+const CACHE_VERSION = "nwapp-v383";
+const IS_LOCALHOST = ["localhost", "127.0.0.1"].includes(String(self.location && self.location.hostname || "").trim().toLowerCase());
 const PRECACHE = Array.from(new Set([
   "./",
   "./index.html",
   "./system.html",
-  "./admin.html?v=18",
+  "./admin.html",
   "./member.html?v=12",
   "./parking.html?v=8",
   "./parking-view.html?v=11",
@@ -17,7 +18,7 @@ const PRECACHE = Array.from(new Set([
   "./bulletin-repair.html?v=8",
   "./bulletin-clean.html?v=8",
   "./bulletin-activity.html?v=8",
-  "./visitor.html?v=2",
+  "./visitor.html",
   "./visitor-history.html?v=1",
   "./fee-notice.html?v=1",
   "./visitor-resident.html?v=8",
@@ -30,7 +31,7 @@ const PRECACHE = Array.from(new Set([
   "./css/member.css",
   "./js/index.js?v=8",
   "./js/system.js?v=41",
-  "./js/admin.js?v=213",
+  "./js/admin.js?v=215",
   "./js/finance.js?v=32",
   "./js/fee-notice.js?v=3",
   "./js/member.js?v=36",
@@ -38,7 +39,7 @@ const PRECACHE = Array.from(new Set([
   "./js/parking-view.js?v=11",
   "./js/facility.js?v=7",
   "./js/parcel.js?v=17",
-  "./js/visitor.js?v=14",
+  "./js/visitor.js?v=15",
   "./js/visitor-history.js?v=1",
   "./js/visitor-resident.js?v=9",
   "./js/ads-footer.js?v=16",
@@ -70,6 +71,10 @@ try {
   try { firebase.initializeApp(self.FIREBASE_CONFIG || {}); } catch {}
   try { __nwMessaging = firebase.messaging(); } catch {}
 } catch {}
+
+function offlineResponse(status = 504, statusText = "Gateway Timeout") {
+  return new Response("", { status, statusText });
+}
 
 function resolveAppUrl(raw) {
   const v = String(raw || "").trim() || "./";
@@ -161,19 +166,27 @@ self.addEventListener("notificationclick", (event) => {
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_VERSION).then(async (cache) => {
-      for (const url of PRECACHE) {
-        try {
-          await cache.add(url);
-        } catch {}
-      }
-    }).then(() => self.skipWaiting())
+    (IS_LOCALHOST
+      ? Promise.resolve()
+      : caches.open(CACHE_VERSION).then(async (cache) => {
+          for (const url of PRECACHE) {
+            try {
+              await cache.add(url);
+            } catch {}
+          }
+        }))
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.map((k) => (k === CACHE_VERSION ? null : caches.delete(k))))).then(() => self.clients.claim())
+    caches.keys()
+      .then((keys) => Promise.all(keys.map((k) => {
+        if (IS_LOCALHOST) return caches.delete(k);
+        return k === CACHE_VERSION ? null : caches.delete(k);
+      })))
+      .then(() => self.clients.claim())
   );
 });
 
@@ -194,6 +207,16 @@ self.addEventListener("fetch", (event) => {
   const isHtml = req.mode === "navigate" || accept.includes("text/html");
   const path = url.pathname || "";
   const cleanPath = (path || "/").replace(/\/+$/, "") || "/";
+  if (IS_LOCALHOST) {
+    event.respondWith(
+      fetch(req).catch(() => caches.match(req).then((cached) => {
+        if (cached) return cached;
+        if (isHtml) return caches.match("./index.html").then((html) => html || offlineResponse());
+        return offlineResponse();
+      }))
+    );
+    return;
+  }
   if (req.mode === "navigate") {
     if (cleanPath === "/admin" || cleanPath === "/community") {
       const to = new URL("./admin.html", url);
@@ -223,7 +246,7 @@ self.addEventListener("fetch", (event) => {
             caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy)).catch(() => {});
             return res;
           })
-          .catch(() => caches.match(req).then((cached) => cached || caches.match("./index.html")))
+          .catch(() => caches.match(req).then((cached) => cached || caches.match("./index.html").then((html) => html || offlineResponse())))
       : (isJs || isCss)
         ? caches.match(req).then((cached) => {
             const update = fetch(req)
@@ -238,7 +261,7 @@ self.addEventListener("fetch", (event) => {
               event.waitUntil(update);
               return cached;
             }
-            return update.then((res) => res || new Response("", { status: 504 }));
+            return update.then((res) => res || offlineResponse());
           })
         : caches.match(req).then((cached) => {
             if (cached) return cached;
@@ -248,7 +271,8 @@ self.addEventListener("fetch", (event) => {
                 caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy)).catch(() => {});
                 return res;
               })
-              .catch(() => null);
+              .catch(() => null)
+              .then((res) => res || offlineResponse());
           }))
   );
 });

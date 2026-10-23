@@ -26,18 +26,37 @@ const server = http.createServer((req, res) => {
   };
 
   const contentType = mimeTypes[extname] || 'application/octet-stream';
+  const headers = {
+    'Content-Type': contentType,
+    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  };
+  if (String(filePath).endsWith('/sw.js') || String(filePath).endsWith('\\sw.js') || filePath === './sw.js') {
+    headers['Service-Worker-Allowed'] = '/';
+  }
 
   fs.readFile(filePath, (error, content) => {
     if (error) {
       if(error.code == 'ENOENT') {
-        res.writeHead(404);
+        res.writeHead(404, {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        });
         res.end('File not found');
       } else {
-        res.writeHead(500);
+        res.writeHead(500, {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        });
         res.end('Error: ' + error.code);
       }
     } else {
-      res.writeHead(200, { 'Content-Type': contentType });
+      res.writeHead(200, headers);
       res.end(content, 'utf-8');
     }
   });
