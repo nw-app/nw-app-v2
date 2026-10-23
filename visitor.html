@@ -16,8 +16,8 @@
     <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script defer src="./js/firebase-config.js"></script>
-    <script defer src="./js/pwa.js?v=6"></script>
-    <script defer src="./js/visitor.js?v=12"></script>
+    <script defer src="./js/pwa.js?v=8"></script>
+    <script defer src="./js/visitor.js?v=15"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
       body { background: var(--bg); }
@@ -28,7 +28,7 @@
       .v-brand { display: flex; align-items: center; gap: 10px; font-weight: 900; }
       .v-brand img { width: 28px; height: 28px; display: block; }
       .v-title { font-size: 14px; font-weight: 900; color: rgba(31, 41, 55, 0.92); }
-      .v-main { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 16px; overflow-y: auto; overflow-x: hidden; }
+      .v-main { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 16px; overflow-y: auto; overflow-x: hidden; min-height: 0; -webkit-overflow-scrolling: touch; }
       .v-card { width: 100%; max-width: 520px; background: var(--panel); border-radius: 24px; border: 1px solid rgba(17, 24, 39, 0.08); box-shadow: 0 14px 36px rgba(17, 24, 39, 0.10); padding: clamp(16px, 4vw, 24px); display: grid; gap: 16px; overflow: hidden; min-width: 0; }
       .v-card *, .v-card *::before, .v-card *::after { box-sizing: border-box; }
       .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; min-width: 0; }
@@ -40,6 +40,7 @@
       .qr-box { display: grid; justify-items: center; gap: 12px; padding: 20px; border-radius: 20px; background: rgba(17, 24, 39, 0.03); border: 1px dashed rgba(17, 24, 39, 0.22); }
       .qr-box img { width: 100%; max-width: 240px; height: auto; aspect-ratio: 1/1; }
       .hint { color: var(--muted); font-size: 13px; line-height: 1.6; text-align: center; word-break: break-all; }
+      .field label .req { color: #d32f2f; font-weight: 900; margin-left: 2px; }
       .pill { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 12px; background: rgba(211, 47, 47, 0.10); color: #b91c1c; border: 1px solid rgba(211, 47, 47, 0.22); white-space: nowrap; justify-self: end; }
       .v-ft { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 12px; align-content: center; border-top: 1px solid rgba(17, 24, 39, 0.08); background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(10px); }
       .v-ft .btn { height: 52px; border-radius: 16px; }
@@ -68,18 +69,18 @@
             <form class="form" id="visitorForm">
           <div class="grid2">
             <div class="field">
-              <label for="v_name">訪客姓名</label>
+              <label for="v_name">訪客姓名<span class="req">*</span></label>
               <input id="v_name" type="text" autocomplete="name" required />
             </div>
             <div class="field">
-              <label for="v_party">拜訪人數</label>
-              <input id="v_party" type="text" inputmode="numeric" autocomplete="off" value="1" />
+              <label for="v_party">拜訪人數<span class="req">*</span></label>
+              <input id="v_party" type="text" inputmode="numeric" autocomplete="off" value="1" required />
             </div>
           </div>
 
           <div class="grid2">
             <div class="field">
-              <label for="v_unit">拜訪戶號</label>
+              <label for="v_unit">拜訪戶號<span class="req">*</span></label>
               <div class="input-wrap">
                 <input id="v_unit" type="text" autocomplete="off" list="unitList" required />
                 <button type="button" class="input-icon-btn" id="btnPickVUnit" aria-label="顯示戶號清單" title="顯示戶號清單">
@@ -90,8 +91,8 @@
               <datalist id="unitList"></datalist>
             </div>
             <div class="field">
-              <label for="v_phone">手機</label>
-              <input id="v_phone" type="text" inputmode="tel" autocomplete="tel" />
+              <label for="v_phone">手機<span class="req">*</span></label>
+              <input id="v_phone" type="text" inputmode="tel" autocomplete="tel" required />
             </div>
           </div>
 

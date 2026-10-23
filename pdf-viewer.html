@@ -63,6 +63,10 @@
         font-weight: 800;
         cursor: pointer;
       }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
       .btn-primary {
         background: var(--brand);
         color: #fff;
@@ -107,6 +111,7 @@
     <header class="viewer-hd">
       <div class="viewer-title" id="viewerTitle">PDF 檔案</div>
       <div class="viewer-actions">
+        <button class="btn" id="btnSharePdf" type="button">分享</button>
         <a class="btn" id="btnDownloadPdf" href="#" download="附件.pdf">下載</a>
         <button class="btn btn-primary" type="button" id="btnClosePdfViewer">關閉</button>
       </div>
@@ -116,6 +121,6 @@
       <div class="pdf-pages" id="pdfPages"></div>
     </main>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="js/pdf-viewer.js?v=3"></script>
+    <script src="js/pdf-viewer.js?v=5"></script>
   </body>
 </html>
