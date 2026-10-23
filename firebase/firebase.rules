@@ -342,14 +342,15 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if (request.auth != null && (
+      // 讀取：本人 / 管理方；待審申請文件僅限已登入者（不得匿名列舉、避免外洩聯絡資料）
+      allow read: if request.auth != null && (
         request.auth.uid == uid ||
         isAdmin() ||
-        (isCommunityStaff() && userCanAccessUserCommunity(resource.data.community))
-      )) || (
-        resource.data.status == "pending" && resource.data.role == "resident"
+        (isCommunityStaff() && userCanAccessUserCommunity(resource.data.community)) ||
+        (resource.data.status == "pending" && resource.data.role == "resident")
       );
 
+      // 建立：管理方；或匿名送出待審申請（禁止夾帶特權欄位與明文密碼）
       allow create: if (request.auth != null && (
         isAdmin() ||
         (isCommunityStaff() && userCanAccessUserCommunity(request.resource.data.community))
@@ -361,15 +362,29 @@ service cloud.firestore {
         request.resource.data.displayName is string &&
         request.resource.data.email is string &&
         request.resource.data.phone is string &&
+        request.resource.data.get('points', 0) == 0 &&
+        request.resource.data.get('password', null) == null &&
+        request.resource.data.get('passwordPlain', null) == null &&
+        request.resource.data.get('residentRoles', []) == [] &&
+        request.resource.data.get('category', '') == '' &&
         (request.resource.data.houseNo == null || request.resource.data.houseNo is string) &&
-        (request.resource.data.password == null || request.resource.data.password is string) &&
+        (request.resource.data.subUnit == null || request.resource.data.subUnit == "") &&
+        (request.resource.data.passwordHash == null || request.resource.data.passwordHash is string) &&
         (request.resource.data.avatarDataUrl == null || request.resource.data.avatarDataUrl is string)
       );
 
+      // 更新：管理方可全改；本人僅能改非特權欄位（不可提權 / 自灌點數 / 自行啟用 / 改戶號）
       allow update: if request.auth != null && (
-        request.auth.uid == uid ||
         isAdmin() ||
         (isCommunityStaff() && userCanAccessUserCommunity(resource.data.community))
+      ) || (
+        request.auth.uid == uid
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+             "role", "points", "enabled", "houseNo", "subUnit", "unit", "community",
+             "communityIds", "status", "uid", "permissions", "allowedModules", "isAdmin",
+             "residentRoles", "residentRoleOther", "category", "password", "passwordPlain",
+             "createdAt", "email"
+           ])
       );
 
       allow delete: if request.auth != null && (
@@ -386,8 +401,15 @@ service cloud.firestore {
     }
 
     match /user_lookup/{phone} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      // 單筆查詢用於「手機號碼 → Email」登入解析，維持可用
+      allow get: if true;
+      // 禁止未登入者或住戶列舉全部手機↔Email 對照
+      allow list: if request.auth != null && isCommunityStaff();
+      allow create: if request.auth != null && (
+        isAdmin() ||
+        (isCommunityStaff() && userCanAccessUserCommunity(request.resource.data.community))
+      );
+      allow update, delete: if request.auth != null && (isAdmin() || isCommunityStaff());
     }
 
     match /communities/{slug} {
@@ -496,13 +518,63 @@ service cloud.firestore {
       }
 
       match /reservations/{resId} {
-        allow read: if request.auth != null;
-        allow create: if request.auth != null;
-        allow update, delete: if request.auth != null && (
+        // 讀取：僅限本社區（管理方或該社區住戶），避免跨社區讀取住戶姓名／戶號
+        allow read: if request.auth != null && (
+          isAdmin() ||
+          userCanAccessCommunitySlug(slug)
+        );
+        // 建立：狀態僅允許 pending/approved；住戶只能以自己的 uid 建立、且戶號須與自身相符
+        allow create: if request.auth != null
+          && request.resource.data.get('status', 'pending') in ["pending", "approved"]
+          && request.resource.data.get('createdBy', '') != ''
+          && (
+            isAdmin() ||
+            (isCommunityStaff() && userCanAccessCommunitySlug(slug)) ||
+            (
+              request.resource.data.get('createdBy', '') == request.auth.uid
+              && request.resource.data.get('unit', '') != ''
+              && request.resource.data.get('unit', '') in userUnitKeys()
+            )
+          );
+        // 更新：管理方可改狀態；住戶僅能取消自己建立、且尚未報到的預約
+        allow update: if request.auth != null && (
           isAdmin() ||
           (isCommunityStaff() && userCanAccessCommunitySlug(slug)) ||
-          resource.data.createdBy == request.auth.uid
+          (
+            resource.data.get('createdBy', '') == request.auth.uid
+            && request.resource.data.get('status', '') == "canceled"
+            && resource.data.get('checkedIn', false) != true
+          )
         );
+        // 刪除：僅管理方
+        allow delete: if request.auth != null && (
+          isAdmin() ||
+          (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+        );
+      }
+
+      // 時段名額鎖（以交易寫入，避免併發超賣）
+      match /slotLocks/{lockId} {
+        allow read: if request.auth != null && (
+          isAdmin() ||
+          userCanAccessCommunitySlug(slug)
+        );
+        allow create, update: if request.auth != null && (
+          isAdmin() ||
+          userCanAccessCommunitySlug(slug)
+        );
+        allow delete: if isAdmin();
+      }
+
+      // 預約稽核軌跡（僅新增與查詢，不可修改或刪除）
+      match /reservationAudit/{auditId} {
+        allow read: if request.auth != null && (
+          isAdmin() ||
+          (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+        );
+        allow create: if request.auth != null
+          && request.resource.data.get('actorUid', '') == request.auth.uid;
+        allow update, delete: if false;
       }
 
       match /mails/{mailId} {
@@ -524,6 +596,19 @@ service cloud.firestore {
           (resource.data.unit in userUnitKeys()) ||
           (resource.data.houseNo in userUnitKeys())
         );
+      }
+
+      match /tempItems/{itemId} {
+        allow read, write: if request.auth != null && (
+          isAdmin() ||
+          (isCommunityStaff() && userCanAccessCommunitySlug(slug)) ||
+          (resource.data.unit in userUnitKeys())
+        );
+      }
+
+      match /parcelAudit/{auditId} {
+        allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
 
       match /visitors/{visitorId} {
