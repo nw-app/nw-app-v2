@@ -774,11 +774,17 @@ service cloud.firestore {
     }
 
     match /pointsHistory/{historyId} {
-      allow read, write: if request.auth != null && (
+      // 讀取：管理方或本人；寫入僅限管理方（避免住戶偽造點數歷程）
+      allow read: if request.auth != null && (
         isAdmin() ||
         (isCommunityStaff() && userCanAccessUserCommunity(resource.data.communityId)) ||
         resource.data.userId == request.auth.uid
       );
+      allow create: if request.auth != null && (
+        isAdmin() ||
+        (isCommunityStaff() && userCanAccessUserCommunity(request.resource.data.communityId))
+      );
+      allow update, delete: if isAdmin();
     }
 
     function callExists(callId) {
