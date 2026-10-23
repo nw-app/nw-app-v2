@@ -103,3 +103,46 @@ exports.onCallCreated = functions.firestore.document("calls/{callId}").onCreate(
 
   return null;
 });
+
+// 刪除住戶時同步移除 Firebase Auth 帳號（限系統管理員或該社區管理方呼叫）
+exports.deleteResidentAuth = functions.https.onCall(async (data, context) => {
+  const callerUid = context && context.auth && context.auth.uid ? String(context.auth.uid) : "";
+  if (!callerUid) {
+    throw new functions.https.HttpsError("unauthenticated", "請先登入。");
+  }
+
+  const targetUid = toStr(data && data.uid);
+  if (!targetUid) {
+    throw new functions.https.HttpsError("invalid-argument", "缺少 uid。");
+  }
+
+  const callerSnap = await db.collection("users").doc(callerUid).get();
+  const caller = callerSnap.exists ? (callerSnap.data() || {}) : {};
+  const callerRole = toStr(caller.role);
+  const callerEmail = toStr(context.auth.token && context.auth.token.email);
+  const isAdmin =
+    callerEmail === "nwapp.eason@gmail.com" ||
+    ["admin", "系統管理員", "系統管理者", "系統"].includes(callerRole);
+
+  if (!isAdmin) {
+    const targetSnap = await db.collection("users").doc(targetUid).get();
+    const target = targetSnap.exists ? (targetSnap.data() || {}) : {};
+    const targetCommunity = toStr(target.community);
+    const callerCommunities = [
+      toStr(caller.community),
+      ...(Array.isArray(caller.communityIds) ? caller.communityIds.map(toStr) : []),
+    ].filter(Boolean);
+    const isStaff = callerRole && !["住戶", "resident", "停用"].includes(callerRole);
+    if (!isStaff || !targetCommunity || !callerCommunities.includes(targetCommunity)) {
+      throw new functions.https.HttpsError("permission-denied", "沒有權限刪除此帳號。");
+    }
+  }
+
+  try {
+    await admin.auth().deleteUser(targetUid);
+    return { deleted: true };
+  } catch (err) {
+    if (err && err.code === "auth/user-not-found") return { deleted: false };
+    throw new functions.https.HttpsError("internal", String((err && err.message) || "刪除失敗"));
+  }
+});
