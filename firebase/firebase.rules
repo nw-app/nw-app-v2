@@ -426,6 +426,46 @@ service cloud.firestore {
         allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
 
+      match /financeTx/{txId} {
+        allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      match /financeBank/{bankId} {
+        allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      match /financeBooks/{bookId} {
+        allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      match /financeConfig/{configId} {
+        allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      match /financeFee/{feeId} {
+        allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      match /financeBudgets/{budgetId} {
+        allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      match /financeNotices/{noticeId} {
+        allow read: if true;
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      match /financeAudit/{auditId} {
+        allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
       match /parking_spots/{spotId} {
         allow read: if request.auth != null && (isAdmin() || userCanAccessCommunitySlug(slug));
         allow write: if request.auth != null && (
@@ -494,8 +534,7 @@ service cloud.firestore {
             || isVisitorHouseholdGet(slug)
             || (userCanAccessCommunitySlug(slug) && resource.data.get('createdBy', '') == request.auth.uid)
           )) || (
-            request.auth == null
-            && resource.data.get('source', '') == "self"
+            resource.data.get('source', '') == "self"
             && resource.data.get('createdBy', '') == "public"
           );
         allow list: if request.auth != null && (
@@ -525,6 +564,18 @@ service cloud.firestore {
         allow delete: if request.auth != null && (
           isAdmin()
           || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+        );
+      }
+
+      match /visitor_history/{unitKey} {
+        allow read: if true;
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      match /visitor_elevator_cards/{cardId} {
+        allow read, write: if request.auth != null && (
+          isAdmin() ||
+          (isCommunityStaff() && userCanAccessCommunitySlug(slug))
         );
       }
 
