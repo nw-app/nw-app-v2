@@ -17,7 +17,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script defer src="./js/firebase-config.js"></script>
     <script defer src="./js/pwa.js?v=12"></script>
-    <script defer src="./js/visitor.js?v=15"></script>
+    <script defer src="./js/visitor.js?v=16"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
       body { background: var(--bg); }
@@ -29,7 +29,7 @@
       .v-brand img { width: 28px; height: 28px; display: block; }
       .v-title { font-size: 14px; font-weight: 900; color: rgba(31, 41, 55, 0.92); }
       .v-main { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 16px; overflow-y: auto; overflow-x: hidden; min-height: 0; -webkit-overflow-scrolling: touch; }
-      .v-card { width: 100%; max-width: 520px; background: var(--panel); border-radius: 24px; border: 1px solid rgba(17, 24, 39, 0.08); box-shadow: 0 14px 36px rgba(17, 24, 39, 0.10); padding: clamp(16px, 4vw, 24px); display: grid; gap: 16px; overflow: hidden; min-width: 0; }
+      .v-card { width: 100%; max-width: 520px; flex: 0 0 auto; background: var(--panel); border-radius: 24px; border: 1px solid rgba(17, 24, 39, 0.08); box-shadow: 0 14px 36px rgba(17, 24, 39, 0.10); padding: clamp(16px, 4vw, 24px); display: grid; gap: 16px; overflow: hidden; min-width: 0; }
       .v-card *, .v-card *::before, .v-card *::after { box-sizing: border-box; }
       .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; min-width: 0; }
       .grid2 > .field { min-width: 0; }
@@ -92,7 +92,7 @@
             </div>
             <div class="field">
               <label for="v_phone">手機<span class="req">*</span></label>
-              <input id="v_phone" type="text" inputmode="tel" autocomplete="tel" required />
+              <input id="v_phone" type="text" inputmode="tel" autocomplete="tel" maxlength="10" placeholder="09xxxxxxxx" required />
             </div>
           </div>
 
