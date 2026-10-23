@@ -174,16 +174,16 @@
       ".fin-page .card-bd{gap:14px;}",
       ".fin-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;}",
       ".fin-toolbar .field{margin:0;min-width:120px;}",
-      ".fin-toolbar .field > label{font-size:11px;font-weight:800;color:#6b7280;}",
+      ".fin-toolbar .field > label{font-size:calc(11px * var(--fs, 1));font-weight:800;color:#6b7280;}",
       ".fin-toolbar input,.fin-toolbar select{padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);font-weight:700;width:100%;}",
       ".fin-stat-grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));}",
       ".fin-stat{padding:12px 14px;border-radius:16px;background:#fff;border:1px solid rgba(17,24,39,.10);box-shadow:0 8px 22px rgba(17,24,39,.05);}",
-      ".fin-stat .k{font-size:11px;font-weight:800;color:#6b7280;}",
-      ".fin-stat .v{margin-top:4px;font-size:20px;font-weight:900;letter-spacing:.3px;}",
+      ".fin-stat .k{font-size:calc(11px * var(--fs, 1));font-weight:800;color:#6b7280;}",
+      ".fin-stat .v{margin-top:4px;font-size:calc(20px * var(--fs, 1));font-weight:900;letter-spacing:.3px;}",
       ".fin-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:14px;border:1px solid rgba(17,24,39,.10);background:#fff;}",
       ".fin-table{width:100%;border-collapse:collapse;min-width:640px;}",
-      ".fin-table th,.fin-table td{padding:10px 12px;font-size:13px;text-align:left;border-bottom:1px solid rgba(17,24,39,.08);white-space:nowrap;}",
-      ".fin-table th{background:#f9fafb;font-weight:900;color:#374151;font-size:12px;}",
+      ".fin-table th,.fin-table td{padding:10px 12px;font-size:calc(13px * var(--fs, 1));text-align:left;border-bottom:1px solid rgba(17,24,39,.08);white-space:nowrap;}",
+      ".fin-table th{background:#f9fafb;font-weight:900;color:#374151;font-size:calc(12px * var(--fs, 1));}",
       ".fin-table tbody tr:last-child td{border-bottom:none;}",
       ".fin-table td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:800;}",
       ".fin-table .ops{display:flex;gap:6px;flex-wrap:wrap;}",
@@ -191,23 +191,23 @@
       ".fin-btn-notice:hover{box-shadow:0 12px 26px rgba(180,83,9,.32);}",
       ".btn-line{background:#06C755;border-color:rgba(0,0,0,0);color:#fff;}",
       ".btn-line:hover{filter:brightness(.96);}",
-      ".fin-tag{display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:900;}",
+      ".fin-tag{display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:999px;font-size:calc(12px * var(--fs, 1));font-weight:900;}",
       ".fin-empty{padding:26px;text-align:center;color:#6b7280;font-weight:700;}",
       ".fin-cfg-block{border:1px solid rgba(17,24,39,.10);border-radius:16px;background:#fff;padding:12px 14px;display:grid;gap:10px;box-shadow:0 8px 22px rgba(17,24,39,.04);}",
       ".fin-cfg-hd{display:flex;align-items:center;justify-content:space-between;gap:8px;}",
-      ".fin-cfg-title{font-size:13px;font-weight:900;color:#374151;}",
+      ".fin-cfg-title{font-size:calc(13px * var(--fs, 1));font-weight:900;color:#374151;}",
       ".fin-chips{display:flex;flex-wrap:wrap;gap:8px;}",
-      ".fin-chip{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 6px 0 12px;border-radius:999px;background:#f3f4f6;border:1px solid rgba(17,24,39,.10);font-size:12px;font-weight:800;color:#374151;}",
-      ".fin-chip-x{width:20px;height:20px;border:0;padding:0;border-radius:50%;background:rgba(220,38,38,.12);color:#b91c1c;font-size:14px;line-height:1;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}",
+      ".fin-chip{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 6px 0 12px;border-radius:999px;background:#f3f4f6;border:1px solid rgba(17,24,39,.10);font-size:calc(12px * var(--fs, 1));font-weight:800;color:#374151;}",
+      ".fin-chip-x{width:20px;height:20px;border:0;padding:0;border-radius:50%;background:rgba(220,38,38,.12);color:#b91c1c;font-size:calc(14px * var(--fs, 1));line-height:1;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}",
       ".fin-chip-x:hover{background:rgba(220,38,38,.24);}",
       ".fin-cfg-add{display:flex;gap:8px;align-items:center;}",
       ".fin-cfg-add input{flex:1 1 auto;min-width:0;padding:9px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);font-weight:700;}",
-      ".fin-hint{font-size:12px;color:#6b7280;font-weight:700;line-height:1.75;}",
+      ".fin-hint{font-size:calc(12px * var(--fs, 1));color:#6b7280;font-weight:700;line-height:1.75;}",
       ".fin-table td .ops .btn[disabled]{opacity:.35;pointer-events:none;}",
       "@media (max-width:768px){",
       ".fin-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr));}",
       ".fin-toolbar .field{flex:1 1 140px;}",
-      ".fin-table th,.fin-table td{padding:9px 10px;font-size:12px;}",
+      ".fin-table th,.fin-table td{padding:9px 10px;font-size:calc(12px * var(--fs, 1));}",
       "}",
       /* 行動版：支援卡片化的表格改為「每筆一張卡」呈現，免橫向捲動 */
       "@media (max-width:640px){",
@@ -218,7 +218,7 @@
       ".fin-cards .fin-table tr{display:block;margin:0 0 10px;padding:4px 12px 8px;border:1px solid rgba(17,24,39,.10);border-radius:14px;background:#fff;box-shadow:0 6px 18px rgba(17,24,39,.05);}",
       ".fin-cards .fin-table td{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:8px 0;border-bottom:1px dashed rgba(17,24,39,.08);white-space:normal;text-align:right;}",
       ".fin-cards .fin-table td:last-child{border-bottom:0;}",
-      ".fin-cards .fin-table td::before{content:attr(data-label);flex:0 0 auto;font-size:11px;font-weight:900;color:#6b7280;text-align:left;}",
+      ".fin-cards .fin-table td::before{content:attr(data-label);flex:0 0 auto;font-size:calc(11px * var(--fs, 1));font-weight:900;color:#6b7280;text-align:left;}",
       ".fin-cards .fin-table td[data-label=\"\"]::before,.fin-cards .fin-table td:not([data-label])::before{content:none;}",
       ".fin-cards .fin-table td.fin-empty{display:block;text-align:center;}",
       ".fin-cards .fin-table td.fin-empty::before{content:none;}",
@@ -290,7 +290,7 @@
         width: "min(88vw, 460px)",
         bodyHtml:
           '<div style="display:grid;gap:12px;">' +
-          '<div style="padding:12px 14px;border-radius:14px;background:rgba(220,38,38,.08);border:1.5px solid rgba(220,38,38,.22);color:#991b1b;font-weight:800;font-size:13px;line-height:1.7;">' +
+          '<div style="padding:12px 14px;border-radius:14px;background:rgba(220,38,38,.08);border:1.5px solid rgba(220,38,38,.22);color:#991b1b;font-weight:800;font-size:calc(13px * var(--fs, 1));line-height:1.7;">' +
           esc(cfg.message || "確定要執行此操作嗎？") + "</div></div>",
         footerHtml:
           '<button class="btn btn-ghost" type="button" id="finConfirmCancel">取消</button>' +
@@ -2409,7 +2409,7 @@
           '<label>關鍵字</label>' +
           '<input type="search" data-fin-filter="' + kind + '" data-fin-key="q" value="' + esc(f.q) + '" placeholder="類別 / 對象 / 單據 / 備註"/>' +
           "</div>" +
-          '<label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:800;color:#374151;padding:8px 2px;cursor:pointer;">' +
+          '<label style="display:flex;align-items:center;gap:6px;font-size:calc(13px * var(--fs, 1));font-weight:800;color:#374151;padding:8px 2px;cursor:pointer;">' +
           '<input type="checkbox" data-fin-filter="' + kind + '" data-fin-key="noBook"' + (f.noBook ? " checked" : "") + "/>只看未指定帳本</label>" +
           '<button class="btn btn-ghost" type="button" data-fin-clear="' + kind + '">清除</button>' +
           (canWrite ? '<button class="btn btn-primary" type="button" data-fin-add="' + kind + '">＋ 新增' + esc(meta.label) + "</button>" : "") +
@@ -2447,7 +2447,7 @@
               "</td>" +
               '<td data-label="備註">' + esc(t.note || "—") +
               (t.updatedBy || t.createdBy
-                ? '<div style="margin-top:2px;font-size:11px;font-weight:700;color:#9ca3af;">最後修改：' +
+                ? '<div style="margin-top:2px;font-size:calc(11px * var(--fs, 1));font-weight:700;color:#9ca3af;">最後修改：' +
                   esc(t.updatedBy || t.createdBy) + " " + esc(String(t.updatedAt || t.createdAt || "").slice(0, 16)) + "</div>"
                 : "") +
               "</td>" +
@@ -2455,7 +2455,7 @@
               (canWrite ? '<button class="btn btn-sm" type="button" data-fin-edit="' + esc(t.id) + '">編輯</button>' : "") +
               '<button class="btn btn-sm btn-ghost" type="button" data-fin-log="' + esc(t.id) + '">軌跡</button>' +
               (canDelete ? '<button class="btn btn-sm btn-danger" type="button" data-fin-del="' + esc(t.id) + '">刪除</button>' : "") +
-              (!canWrite && !canDelete ? '<span style="color:#9ca3af;font-size:12px;">唯讀</span>' : "") +
+              (!canWrite && !canDelete ? '<span style="color:#9ca3af;font-size:calc(12px * var(--fs, 1));">唯讀</span>' : "") +
               "</div></td>" +
               "</tr>";
           }).join("") +
@@ -2560,7 +2560,7 @@
               '<button class="btn btn-sm btn-primary" type="button" data-fin-book-open="' + esc(bk.id) + '">檢視明細</button>' +
               (canWrite ? '<button class="btn btn-sm" type="button" data-fin-book-edit="' + esc(bk.id) + '">編輯</button>' : "") +
               (canDelete ? '<button class="btn btn-sm btn-danger" type="button" data-fin-book-del="' + esc(bk.id) + '">刪除</button>' : "") +
-              (!canWrite && !canDelete ? '<span style="color:#9ca3af;font-size:12px;">唯讀</span>' : "") +
+              (!canWrite && !canDelete ? '<span style="color:#9ca3af;font-size:calc(12px * var(--fs, 1));">唯讀</span>' : "") +
               "</div></td>" +
               "</tr>";
           }).join("") +
@@ -2628,7 +2628,7 @@
               '<td class="num" data-label="提出" style="color:#b91c1c;">' + (toNum(b.withdraw, 0) ? fmtMoney(b.withdraw) : "—") + "</td>" +
               '<td class="num" data-label="餘額">' + fmtMoney(b.balance) + "</td>" +
               '<td data-label="備註">' + esc(b.note || "—") + "</td>" +
-              '<td data-label="操作"><div class="ops">' + (inner || '<span style="color:#9ca3af;font-size:12px;">唯讀</span>') + "</div></td>" +
+              '<td data-label="操作"><div class="ops">' + (inner || '<span style="color:#9ca3af;font-size:calc(12px * var(--fs, 1));">唯讀</span>') + "</div></td>" +
               "</tr>";
           }).join("") +
           "</tbody></table></div>";
@@ -2693,7 +2693,7 @@
           "</div>" +
           '<div class="fin-hint">當月帳本存入 <b>' + fmtMoney(bankMonthIn) + "</b>、提出 <b>" + fmtMoney(bankMonthOut) +
           "</b>；管理費以「管理費」子分頁設定的住戶金額為應收，並比對收入明細中對象為該住戶的紀錄（有填沖銷月份時以沖銷月份為準）。</div>" +
-          "<h3 style=\"margin:6px 0 0;font-size:14px;\">欠繳看板（" + board.length + " 戶，合計 " + fmtMoney(boardOwe) + "）</h3>" +
+          "<h3 style=\"margin:6px 0 0;font-size:calc(14px * var(--fs, 1));\">欠繳看板（" + board.length + " 戶，合計 " + fmtMoney(boardOwe) + "）</h3>" +
           '<div class="fin-hint" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">排序：' +
           sortBtn("owe", "欠繳總額") + sortBtn("streak", "連續欠繳月數") + sortBtn("months", "欠繳期數") + sortBtn("unit", "戶號") + "</div>" +
           '<div class="fin-table-wrap fin-cards"><table class="fin-table"><thead><tr>' +
@@ -2749,7 +2749,7 @@
             ? '<button class="btn btn-sm btn-primary" type="button" data-fin-fee-edit="' + esc(x.id) + '">' +
               (x.amount > 0 ? "編輯" : "設定") + "</button>" +
               (x.amount > 0 && canDelete ? '<button class="btn btn-sm btn-danger" type="button" data-fin-fee-del="' + esc(x.id) + '">清除</button>' : "")
-            : '<span style="color:#9ca3af;font-size:12px;">唯讀</span>') + noticeBtn + notifiedTag;
+            : '<span style="color:#9ca3af;font-size:calc(12px * var(--fs, 1));">唯讀</span>') + noticeBtn + notifiedTag;
           return "<tr>" +
             '<td data-label="戶號">' + esc(x.unit || "—") + "</td>" +
             '<td data-label="姓名">' + esc(x.name || "—") +
@@ -2802,12 +2802,12 @@
           width: "min(92vw, 480px)",
           bodyHtml:
             '<div style="display:grid;gap:12px;">' +
-            '<div style="padding:10px 12px;border-radius:12px;background:rgba(17,24,39,.04);font-weight:800;font-size:13px;">' +
+            '<div style="padding:10px 12px;border-radius:12px;background:rgba(17,24,39,.04);font-weight:800;font-size:calc(13px * var(--fs, 1));">' +
             esc((r.unit || "未填戶號") + "　" + (r.name || "未命名住戶")) + "</div>" +
             field("每月管理費金額 *", '<input type="number" min="0" step="1" id="fin_fee_amount" value="' + esc(cur.amount) + '" style="' + inputStyle + '"/>') +
             field("開始月份（起算月份）", '<input type="month" id="fin_fee_start" value="' + esc(startDefault) + '" style="' + inputStyle + '"/>') +
             field("備註", '<input id="fin_fee_note" value="' + esc(cur.note) + '" style="' + inputStyle + '" placeholder="例如：含車位清潔費"/>') +
-            '<div id="fin_fee_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
+            '<div id="fin_fee_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
             "</div>",
           footerHtml:
             '<button class="btn btn-ghost" type="button" id="fin_fee_cancel">取消</button>' +
@@ -2913,7 +2913,7 @@
             "</div>" +
             '<div id="fin_fee_batch_summary" class="fin-stat-grid"></div>' +
             '<div id="fin_fee_batch_list"></div>' +
-            '<div id="fin_fee_batch_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
+            '<div id="fin_fee_batch_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
             "</div>",
           footerHtml:
             '<button class="btn btn-ghost" type="button" id="fin_fee_batch_cancel">關閉</button>' +
@@ -3054,7 +3054,7 @@
             "</div>" +
             "</div>" +
             '<div id="fin_rec_list"></div>' +
-            '<div id="fin_rec_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
+            '<div id="fin_rec_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
             "</div>",
           footerHtml:
             '<button class="btn btn-ghost" type="button" id="fin_rec_close">關閉</button>' +
@@ -3095,7 +3095,7 @@
                 ? '<button class="btn btn-sm" type="button" data-rec-edit="' + idx + '">編輯</button>' +
                   '<button class="btn btn-sm" type="button" data-rec-toggle="' + idx + '">' + (it.active === false ? "啟用" : "停用") + "</button>" +
                   '<button class="btn btn-sm btn-danger" type="button" data-rec-del="' + idx + '">刪除</button>'
-                : '<span style="color:#9ca3af;font-size:12px;">唯讀</span>');
+                : '<span style="color:#9ca3af;font-size:calc(12px * var(--fs, 1));">唯讀</span>');
               return "<tr>" +
                 '<td><span class="fin-tag" style="' + tagColor + '">' + (isExpense ? "支出" : "收入") + "</span></td>" +
                 "<td>" + esc(it.category || "—") + "</td>" +
@@ -3298,7 +3298,7 @@
               '" placeholder="住戶手機號碼" style="' + inputStyle + '"/>') +
             "</div>" +
             '<div class="fin-hint" id="fin_notice_sent"></div>' +
-            '<div id="fin_notice_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
+            '<div id="fin_notice_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
             "</div>",
           footerHtml:
             '<button class="btn btn-ghost" type="button" id="fin_notice_close">關閉</button>' +
@@ -3494,7 +3494,7 @@
                 "</tr>";
             }).join("") +
             "</tbody></table></div>" +
-            '<div id="fin_nb_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
+            '<div id="fin_nb_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
             "</div>",
           footerHtml:
             '<button class="btn btn-ghost" type="button" id="fin_nb_close">關閉</button>' +
@@ -3710,10 +3710,10 @@
             ? '<div class="fin-hint">「應收收入（管理費收入）」＝期間內各住戶「管理費」子分頁設定的應收總額；「應付支出」＝期間支出明細合計' +
               (r.preset === "month" ? "；「管理費達成率」＝管理費實收 " + fmtMoney(feeReceived) + " ÷ 應收 " + fmtMoney(feeDue) : "") + "。</div>"
             : "") +
-          "<h3 style=\"margin:6px 0 0;font-size:14px;\">分類統計</h3>" +
+          "<h3 style=\"margin:6px 0 0;font-size:calc(14px * var(--fs, 1));\">分類統計</h3>" +
           '<div class="fin-table-wrap"><table class="fin-table"><thead><tr><th>類型</th><th>類別</th><th>金額</th><th>佔比</th></tr></thead>' +
           "<tbody>" + (catRows.length ? catRows.join("") : '<tr><td colspan="4" class="fin-empty">無資料</td></tr>') + "</tbody></table></div>" +
-          "<h3 style=\"margin:6px 0 0;font-size:14px;\">月報表</h3>" +
+          "<h3 style=\"margin:6px 0 0;font-size:calc(14px * var(--fs, 1));\">月報表</h3>" +
           '<div class="fin-table-wrap"><table class="fin-table"><thead><tr><th>月份</th><th>收入</th><th>支出</th><th>淨額</th></tr></thead>' +
           "<tbody>" + (monthRows.length ? monthRows.join("") : '<tr><td colspan="4" class="fin-empty">無資料</td></tr>') + "</tbody></table></div>";
       };
@@ -3894,7 +3894,7 @@
           bodyHtml:
             '<div style="display:grid;gap:12px;">' +
             '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
-            '<label for="fin_budget_year" style="font-weight:800;font-size:13px;color:#374151;">預算年度</label>' +
+            '<label for="fin_budget_year" style="font-weight:800;font-size:calc(13px * var(--fs, 1));color:#374151;">預算年度</label>' +
             '<select id="fin_budget_year" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(17,24,39,.14);font-weight:800;background:#fff;">' +
             budgetYearOptions().map(function (y) {
               return '<option value="' + y + '"' + (y === year ? " selected" : "") + ">" + y + " 年</option>";
@@ -3906,9 +3906,9 @@
             '<div id="fin_budget_totals" class="fin-stat-grid">' + budgetTotalsHtml(rows) + "</div>" +
             '<div class="fin-table-wrap"><table class="fin-table"><thead><tr><th>類型</th><th>科目</th><th>預算金額</th></tr></thead>' +
             "<tbody>" + (rows.length ? rows.map(rowHtml).join("") : '<tr><td colspan="3" class="fin-empty">尚未設定任何科目</td></tr>') + "</tbody></table></div>" +
-            '<div style="font-weight:800;font-size:13px;color:#374151;margin-top:2px;">預算 vs 實際（' + esc(year) + " 年度，實際值取自已登錄明細）</div>" +
+            '<div style="font-weight:800;font-size:calc(13px * var(--fs, 1));color:#374151;margin-top:2px;">預算 vs 實際（' + esc(year) + " 年度，實際值取自已登錄明細）</div>" +
             '<div class="fin-table-wrap" id="fin_budget_cmp">' + budgetCompareHtml(year, rows) + "</div>" +
-            '<div id="fin_budget_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
+            '<div id="fin_budget_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
             "</div>",
           footerHtml:
             '<button class="btn btn-ghost" type="button" id="fin_budget_close">關閉</button>' +
@@ -4073,14 +4073,14 @@
             : "background:rgba(17,24,39,.06);color:#6b7280;";
           let ops = "";
           if (row.auto) {
-            ops = '<span style="color:#9ca3af;font-size:12px;">住戶帳號</span>';
+            ops = '<span style="color:#9ca3af;font-size:calc(12px * var(--fs, 1));">住戶帳號</span>';
           } else if (canWrite) {
             ops = '<button class="btn btn-sm" type="button" data-fin-tgt-up="' + esc(kind) + '" data-fin-tgt-idx="' + row.idx + '"' + (row.idx === 0 ? " disabled" : "") + ">↑</button>" +
               '<button class="btn btn-sm" type="button" data-fin-tgt-down="' + esc(kind) + '" data-fin-tgt-idx="' + row.idx + '"' + (row.idx === manual.length - 1 ? " disabled" : "") + ">↓</button>" +
               '<button class="btn btn-sm" type="button" data-fin-tgt-rename="' + esc(kind) + '" data-fin-tgt-idx="' + row.idx + '">改名</button>' +
               '<button class="btn btn-sm btn-danger" type="button" data-fin-tgt-del="' + esc(kind) + '" data-fin-tgt-idx="' + row.idx + '">刪除</button>';
           } else {
-            ops = '<span style="color:#9ca3af;font-size:12px;">唯讀</span>';
+            ops = '<span style="color:#9ca3af;font-size:calc(12px * var(--fs, 1));">唯讀</span>';
           }
           return "<tr>" +
             '<td><span class="fin-tag" style="' + tagColor + '">' + esc(row.tag) + "</span> " + esc(row.label) + "</td>" +
@@ -4101,7 +4101,7 @@
             '<td class="num">' + pct.toFixed(2) + "%</td>" +
             '<td><div class="ops">' +
             (canWrite ? '<button class="btn btn-sm btn-primary" type="button" data-fin-tgt-addname="' + esc(kind) + '" data-fin-tgt-name="' + esc(v) + '">加入名單</button>'
-              : '<span style="color:#9ca3af;font-size:12px;">唯讀</span>') +
+              : '<span style="color:#9ca3af;font-size:calc(12px * var(--fs, 1));">唯讀</span>') +
             "</div></td>" +
             "</tr>";
         };
@@ -4600,7 +4600,7 @@
             '<div style="display:grid;gap:10px;">' +
             field("對象名稱", '<input id="fin_cfg_rename" value="' + esc(cur) + '" style="' + inputStyle + '"/>') +
             '<div class="fin-hint">既有紀錄的對象名稱不會被同步修改。</div>' +
-            '<div id="fin_cfg_rename_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
+            '<div id="fin_cfg_rename_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
             "</div>",
           footerHtml:
             '<button class="btn btn-ghost" type="button" id="fin_cfg_rename_cancel">取消</button>' +
@@ -4690,7 +4690,7 @@
               (kind === "income" ? "例如：A-12-3 王先生" : "例如：大大清潔公司") + '"/>' +
               '<datalist id="fin_target_list">' + targets.map(function (v) { return '<option value="' + esc(v) + '"></option>'; }).join("") + "</datalist>") +
             '<div class="field" style="gap:6px;margin:0;">' +
-            '<label style="font-size:11px;font-weight:800;color:#6b7280;">沖銷月份（可單選或複選）</label>' +
+            '<label style="font-size:calc(11px * var(--fs, 1));font-weight:800;color:#6b7280;">沖銷月份（可單選或複選）</label>' +
             '<div style="display:flex;gap:8px;align-items:center;">' +
             '<input type="month" id="fin_tx_month_pick" style="' + inputStyle + '"/>' +
             '<button class="btn btn-sm" type="button" id="fin_tx_month_add" style="white-space:nowrap;">加入</button>' +
@@ -4699,7 +4699,7 @@
             "</div>" +
             field("單據編號", '<input id="fin_tx_receipt" value="' + esc(cur.receiptNo) + '" style="' + inputStyle + '"/>') +
             '<div class="field" style="gap:6px;margin:0;">' +
-            '<label style="font-size:11px;font-weight:800;color:#6b7280;">單據附件（照片，自動壓縮後存入資料庫）</label>' +
+            '<label style="font-size:calc(11px * var(--fs, 1));font-weight:800;color:#6b7280;">單據附件（照片，自動壓縮後存入資料庫）</label>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
             '<button class="btn btn-sm" type="button" id="fin_tx_img_pick">上傳圖片</button>' +
             '<button class="btn btn-sm" type="button" id="fin_tx_img_cam">拍照</button>' +
@@ -4711,7 +4711,7 @@
             '<div class="fin-hint" id="fin_tx_img_msg"></div>' +
             "</div>" +
             field("備註", '<textarea id="fin_tx_note" rows="3" style="' + inputStyle + 'resize:vertical;">' + esc(cur.note) + "</textarea>") +
-            '<div id="fin_tx_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
+            '<div id="fin_tx_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
             "</div>",
           footerHtml:
             '<button class="btn btn-ghost" type="button" id="fin_tx_cancel">取消</button>' +
@@ -4733,7 +4733,7 @@
         const renderMonthChips = function () {
           if (!chipsEl) return;
           if (!months.length) {
-            chipsEl.innerHTML = '<span style="color:#9ca3af;font-size:12px;font-weight:800;">尚未選擇</span>';
+            chipsEl.innerHTML = '<span style="color:#9ca3af;font-size:calc(12px * var(--fs, 1));font-weight:800;">尚未選擇</span>';
             return;
           }
           chipsEl.innerHTML = months.map(function (mm, i) {
@@ -4884,7 +4884,7 @@
             field("期初餘額", '<input type="number" step="1" id="fin_book_opening" value="' + esc(isEdit ? cur.openingBalance : "") + '" style="' + inputStyle + '" placeholder="0"/>') +
             field("備註", '<textarea id="fin_book_note" rows="3" style="' + inputStyle + 'resize:vertical;">' + esc(cur.note) + "</textarea>") +
             '<div class="fin-hint">目前餘額＝期初餘額＋存入－提出；期初餘額請填本帳本開始記錄前的餘額。</div>' +
-            '<div id="fin_book_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
+            '<div id="fin_book_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
             "</div>",
           footerHtml:
             '<button class="btn btn-ghost" type="button" id="fin_book_cancel">取消</button>' +
@@ -4947,7 +4947,7 @@
             field("提出", '<input type="number" min="0" step="1" id="fin_bk_withdraw" value="' + esc(isEdit ? cur.withdraw : "") + '" style="' + inputStyle + '"/>') +
             "</div>" +
             field("備註", '<textarea id="fin_bk_note" rows="3" style="' + inputStyle + 'resize:vertical;">' + esc(cur.note) + "</textarea>") +
-            '<div id="fin_bk_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
+            '<div id="fin_bk_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
             "</div>",
           footerHtml:
             '<button class="btn btn-ghost" type="button" id="fin_bk_cancel">取消</button>' +
@@ -5041,7 +5041,7 @@
             statCard("最後修改人", row.updatedBy || meName, "#1d4ed8") +
             statCard("最後修改時間", row.updatedAt || "—", "#1d4ed8") +
             "</div>" +
-            "<h3 style=\"margin:2px 0 0;font-size:14px;\">異動歷程（新→舊）</h3>" +
+            "<h3 style=\"margin:2px 0 0;font-size:calc(14px * var(--fs, 1));\">異動歷程（新→舊）</h3>" +
             '<div class="fin-table-wrap"><table class="fin-table"><thead><tr><th>動作</th><th>人員</th><th>時間</th></tr></thead>' +
             "<tbody>" + (hist.length
               ? hist.map(function (h) {
@@ -5142,14 +5142,14 @@
             width: "min(92vw, 520px)",
             bodyHtml:
               '<div style="display:grid;gap:12px;">' +
-              '<div style="padding:12px 14px;border-radius:14px;background:rgba(220,38,38,.08);border:1.5px solid rgba(220,38,38,.22);color:#991b1b;font-weight:800;font-size:13px;line-height:1.7;">' +
+              '<div style="padding:12px 14px;border-radius:14px;background:rgba(220,38,38,.08);border:1.5px solid rgba(220,38,38,.22);color:#991b1b;font-weight:800;font-size:calc(13px * var(--fs, 1));line-height:1.7;">' +
               "即將刪除「" + esc((KIND[row.kind] || {}).label || "") + "｜" + esc(row.category || "未分類") + "｜NT$ " +
               fmtMoney(row.amount) + "（" + esc(row.date) + "）」。此操作無法復原。" +
               "</div>" +
               field("刪除原因 *", '<textarea id="fin_del_reason" rows="3" placeholder="例如：重複登錄、金額誤 key、附件錯誤…" style="' +
                 inputStyle + 'resize:vertical;"></textarea>') +
               '<div class="fin-hint">為避免誤刪與舞弊風險，請簡述刪除原因（至少 2 個字），紀錄與原資料將保存於「稽核紀錄」。</div>' +
-              '<div id="fin_del_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
+              '<div id="fin_del_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
               "</div>",
             footerHtml:
               '<button class="btn btn-ghost" type="button" id="fin_del_cancel">取消</button>' +
@@ -5314,7 +5314,7 @@
                 : '<div class="fin-hint" style="color:#b45309;font-weight:800;">差額 ' + fmtMoney(diff) +
                   '（對帳單 − 系統）。請確認是否有未登錄、重複登錄或日期不符的款項；下方列出基準日之後才登錄的紀錄供核對。</div>')) +
             (after.length
-              ? "<h3 style=\"margin:6px 0 0;font-size:14px;\">基準日之後的已登錄紀錄（" + after.length + " 筆）</h3>" +
+              ? "<h3 style=\"margin:6px 0 0;font-size:calc(14px * var(--fs, 1));\">基準日之後的已登錄紀錄（" + after.length + " 筆）</h3>" +
                 '<div class="fin-table-wrap"><table class="fin-table"><thead><tr>' +
                 "<th>日期</th><th>摘要</th><th>存入</th><th>提出</th></tr></thead><tbody>" +
                 afterRows + "</tbody></table></div>"
@@ -5402,7 +5402,7 @@
             "</div>" +
             '<div id="fin_imp_summary" class="fin-stat-grid"></div>' +
             '<div id="fin_imp_list"></div>' +
-            '<div id="fin_imp_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
+            '<div id="fin_imp_err" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;background:rgba(211,47,47,.08);color:#9f1c1c;border:1px solid rgba(211,47,47,.22);"></div>' +
             "</div>",
           footerHtml:
             '<button class="btn btn-ghost" type="button" id="fin_imp_close">關閉</button>' +
@@ -5624,7 +5624,7 @@
   const inputStyle = "padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:700;";
 
   function field(label, controlHtml) {
-    return '<div class="field" style="gap:2px;margin:0;"><label style="font-size:11px;font-weight:800;color:#6b7280;">' +
+    return '<div class="field" style="gap:2px;margin:0;"><label style="font-size:calc(11px * var(--fs, 1));font-weight:800;color:#6b7280;">' +
       esc(label) + "</label>" + controlHtml + "</div>";
   }
 

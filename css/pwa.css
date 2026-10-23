@@ -135,7 +135,7 @@ html, body {
 .pwa-install .logo img { width: 44px; height: 44px; display: block; }
 .pwa-install .meta { min-width: 0; }
 .pwa-install .title { font-weight: 900; letter-spacing: 0.2px; }
-.pwa-install .sub { font-size: 12px; color: rgba(31, 41, 55, 0.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pwa-install .sub { font-size: calc(12px * var(--fs, 1)); color: rgba(31, 41, 55, 0.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pwa-install .row2 {
   display: flex;
   gap: 10px;
@@ -184,13 +184,13 @@ html, body {
   display: grid;
   place-items: center;
   font-weight: 900;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs, 1));
   flex-shrink: 0;
 }
 
 .ios-step-content {
   flex: 1;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs, 1));
   color: rgba(31, 41, 55, 0.9);
 }
 
@@ -321,7 +321,7 @@ html.force-portrait-rotate .pwa-install {
   grid-column: 1;
   width: 100%;
   height: 35px;
-  font-size: 18px;
+  font-size: calc(18px * var(--fs, 1));
   grid-row: 3;
 }
 
@@ -337,7 +337,7 @@ html.force-portrait-rotate .pwa-install {
   width: 100%;
   height: 35px;
   border-radius: 16px;
-  font-size: 18px;
+  font-size: calc(18px * var(--fs, 1));
   font-weight: 800;
   box-shadow: none;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -362,7 +362,7 @@ html.force-portrait-rotate .pwa-install {
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.95);
   color: #9f1c1c;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs, 1));
   font-weight: 900;
   line-height: 1;
 }
@@ -399,7 +399,7 @@ html.force-portrait-rotate .pwa-install {
     grid-row: 2;
     width: 90px;
     height: 90px;
-    font-size: 20px;
+    font-size: calc(20px * var(--fs, 1));
     background: #d32f2f;
     color: #fff;
     box-shadow: none;
@@ -445,7 +445,7 @@ html.force-portrait-rotate .pwa-install {
     grid-row: 1 !important;
     width: 100px !important;
     height: 100px !important;
-    font-size: 22px;
+    font-size: calc(22px * var(--fs, 1));
     background: #d32f2f;
     color: #fff;
     box-shadow: none;
@@ -471,7 +471,7 @@ html.force-portrait-rotate .pwa-install {
 
 .user-greet {
   font-weight: 900;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs, 1));
   letter-spacing: 0.2px;
   color: rgba(31, 41, 55, 0.9);
   max-width: min(180px, 40vw);
@@ -517,7 +517,7 @@ html.force-portrait-rotate .pwa-install {
 }
 
 .user-menu .user-meta {
-  font-size: 12px;
+  font-size: calc(12px * var(--fs, 1));
   color: rgba(31, 41, 55, 0.7);
   white-space: nowrap;
   overflow: hidden;
@@ -587,7 +587,7 @@ html.force-portrait-rotate .pwa-install {
 }
 .modal-dialog.modal-sm .modal-body { overflow: visible; }
 .modal-dialog.modal-sm .modal-ft { justify-content: flex-end; }
-.confirm-message { color: rgba(31, 41, 55, 0.8); font-size: 14px; line-height: 1.5; }
+.confirm-message { color: rgba(31, 41, 55, 0.8); font-size: calc(14px * var(--fs, 1)); line-height: 1.5; }
 .btn-danger {
   background: #d32f2f;
   color: #fff;
@@ -613,7 +613,7 @@ html.force-portrait-rotate .pwa-install {
   display: grid;
   place-items: center;
   color: #fff;
-  font-size: 30px;
+  font-size: calc(30px * var(--fs, 1));
   font-weight: 900;
   box-shadow: 0 10px 24px rgba(211, 47, 47, 0.18);
 }
@@ -627,7 +627,7 @@ html.force-portrait-rotate .pwa-install {
 
 .chatcall-name {
   margin: 0;
-  font-size: 22px;
+  font-size: calc(22px * var(--fs, 1));
   font-weight: 900;
   color: #111827;
 }
@@ -635,14 +635,14 @@ html.force-portrait-rotate .pwa-install {
 .chatcall-sub {
   margin-top: 6px;
   color: rgba(31, 41, 55, 0.65);
-  font-size: 14px;
+  font-size: calc(14px * var(--fs, 1));
   font-weight: 700;
 }
 
 .chatcall-status {
   margin-top: 18px;
   color: #374151;
-  font-size: 15px;
+  font-size: calc(15px * var(--fs, 1));
   font-weight: 800;
 }
 
@@ -653,7 +653,7 @@ html.force-portrait-rotate .pwa-install {
 .chatcall-timer {
   margin-top: 8px;
   color: var(--brand, #d32f2f);
-  font-size: 15px;
+  font-size: calc(15px * var(--fs, 1));
   font-weight: 900;
   letter-spacing: 1px;
 }
@@ -661,7 +661,7 @@ html.force-portrait-rotate .pwa-install {
 .chatcall-help {
   margin-top: 10px;
   color: rgba(31, 41, 55, 0.65);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs, 1));
   line-height: 1.45;
 }
 
@@ -685,7 +685,7 @@ html.force-portrait-rotate .pwa-install {
   border-radius: 999px;
   background: #d32f2f;
   color: #fff;
-  font-size: 16px;
+  font-size: calc(16px * var(--fs, 1));
   font-weight: 900;
   cursor: pointer;
 }
@@ -693,7 +693,7 @@ html.force-portrait-rotate .pwa-install {
 .chatcall-btn.small {
   min-height: 44px;
   min-width: 96px;
-  font-size: 15px;
+  font-size: calc(15px * var(--fs, 1));
 }
 
 .chatcall-btn.danger {
@@ -773,7 +773,7 @@ html.force-portrait-rotate .pwa-install {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs, 1));
   font-weight: 800;
   letter-spacing: 1px;
 }
@@ -864,7 +864,7 @@ html.force-portrait-rotate .pwa-install {
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.12);
   color: rgba(255, 255, 255, 0.9);
-  font-size: 13px;
+  font-size: calc(13px * var(--fs, 1));
   line-height: 1.6;
   text-align: left;
   max-width: min(92vw, 420px);
@@ -884,7 +884,7 @@ html.force-portrait-rotate .pwa-install {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.14);
   color: rgba(255, 255, 255, 0.96);
-  font-size: 13px;
+  font-size: calc(13px * var(--fs, 1));
   font-weight: 900;
   letter-spacing: 0.6px;
 }
@@ -970,7 +970,7 @@ html.force-portrait-rotate .pwa-install {
 }
 
 .intercom-btn span {
-  font-size: 18px;
+  font-size: calc(18px * var(--fs, 1));
   letter-spacing: 0.5px;
 }
 
@@ -1010,7 +1010,7 @@ html.force-portrait-rotate .pwa-install {
   visibility: hidden;
 }
 .modal-hd .community-name {
-  font-size: 16px;
+  font-size: calc(16px * var(--fs, 1));
   color: var(--brand);
   font-weight: 900;
   letter-spacing: 0.2px;
@@ -1018,7 +1018,7 @@ html.force-portrait-rotate .pwa-install {
 }
 .modal-title {
   margin: 0;
-  font-size: 16px;
+  font-size: calc(16px * var(--fs, 1));
   font-weight: 900;
   letter-spacing: 0.2px;
   text-align: center;
@@ -1061,13 +1061,13 @@ html.force-portrait-rotate .pwa-install {
 }
 
 .booking-community-name {
-  font-size: 18px;
+  font-size: calc(18px * var(--fs, 1));
   font-weight: 900;
   color: rgba(255, 255, 255, 0.85);
 }
 
 .booking-facility-name {
-  font-size: 18px;
+  font-size: calc(18px * var(--fs, 1));
   font-weight: 900;
   color: #fff;
 }
@@ -1086,7 +1086,7 @@ html.force-portrait-rotate .pwa-install {
   justify-content: center;
   gap: 12px;
   padding: 12px 16px;
-  font-size: 16px;
+  font-size: calc(16px * var(--fs, 1));
   font-weight: 700;
   color: #1f2937;
   border-bottom: 1px solid rgba(17, 24, 39, 0.1);
@@ -1156,7 +1156,7 @@ html.force-portrait-rotate .pwa-install {
 }
 
 .date-picker-header h3 {
-  font-size: 18px;
+  font-size: calc(18px * var(--fs, 1));
   font-weight: 900;
   color: #fff;
   margin: 0;
@@ -1173,7 +1173,7 @@ html.force-portrait-rotate .pwa-install {
 
 .date-picker-info p {
   margin: 4px 0;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs, 1));
   color: #6b7280;
 }
 
@@ -1191,7 +1191,7 @@ html.force-portrait-rotate .pwa-install {
   width: 100%;
   max-width: 280px;
   padding: 12px 16px;
-  font-size: 16px;
+  font-size: calc(16px * var(--fs, 1));
   border: 1px solid rgba(17, 24, 39, 0.2);
   border-radius: 8px;
   text-align: center;
@@ -1256,7 +1256,7 @@ html.force-portrait-rotate .pwa-install {
 }
 
 .booking-confirm-header h3 {
-  font-size: 18px;
+  font-size: calc(18px * var(--fs, 1));
   font-weight: 900;
   color: #fff;
   margin: 0;
@@ -1288,14 +1288,14 @@ html.force-portrait-rotate .pwa-install {
 }
 
 .booking-confirm-label {
-  font-size: 14px;
+  font-size: calc(14px * var(--fs, 1));
   font-weight: 700;
   color: #6b7280;
   flex-shrink: 0;
 }
 
 .booking-confirm-value {
-  font-size: 16px;
+  font-size: calc(16px * var(--fs, 1));
   font-weight: 900;
   color: #1f2937;
   text-align: right;
@@ -1329,7 +1329,7 @@ html.force-portrait-rotate .pwa-install {
   border: 2px solid rgba(17, 24, 39, 0.1);
   border-radius: 12px;
   background: #fff;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs, 1));
   font-weight: 700;
   color: #1f2937;
   cursor: pointer;
@@ -1345,19 +1345,19 @@ html.force-portrait-rotate .pwa-install {
 }
 
 .booking-status-text {
-  font-size: 12px;
+  font-size: calc(12px * var(--fs, 1));
   font-weight: 600;
   opacity: 0.9;
 }
 
 .booking-approval-text {
-  font-size: 10px;
+  font-size: calc(10px * var(--fs, 1));
   font-weight: 500;
   opacity: 0.8;
 }
 
 .booking-checkin-text {
-  font-size: 10px;
+  font-size: calc(10px * var(--fs, 1));
   font-weight: 600;
 }
 
@@ -1512,7 +1512,7 @@ html.force-portrait-rotate .pwa-install {
   border: 0;
   background: transparent;
   color: rgba(31, 41, 55, 0.85);
-  font-size: 22px;
+  font-size: calc(22px * var(--fs, 1));
   line-height: 1;
   display: grid;
   place-items: center;
@@ -1579,7 +1579,7 @@ html.force-portrait-rotate .pwa-install {
 #profileModal #btnSignOut { grid-column: 3; justify-self: end; }
 #profileModal .modal-ft .btn { white-space: nowrap; }
 .profile-item { display: grid; gap: 6px; }
-.profile-label { font-size: 12px; color: rgba(31, 41, 55, 0.65); font-weight: 800; }
+.profile-label { font-size: calc(12px * var(--fs, 1)); color: rgba(31, 41, 55, 0.65); font-weight: 800; }
 .profile-value { font-weight: 900; color: rgba(31, 41, 55, 0.9); }
 .profile-row {
   display: flex;
@@ -1626,7 +1626,7 @@ html.force-portrait-rotate .pwa-install {
   box-shadow: 0 14px 28px rgba(17, 24, 39, 0.12);
 }
 .profile-avatar { display: flex; align-items: center; }
-.profile-avatar .user-avatar-fallback { width: 56px; height: 56px; font-size: 18px; }
+.profile-avatar .user-avatar-fallback { width: 56px; height: 56px; font-size: calc(18px * var(--fs, 1)); }
 #communityNameSub.clickable { cursor: pointer; text-decoration: none; }
 .community-picker-filters {
   display: flex;
@@ -1642,7 +1642,7 @@ html.force-portrait-rotate .pwa-install {
   border: 1px solid rgba(17, 24, 39, 0.12);
   background: #fff;
   color: rgba(17, 24, 39, 0.9);
-  font-size: 13px;
+  font-size: calc(13px * var(--fs, 1));
   font-weight: 900;
   cursor: pointer;
   -webkit-user-select: none;
@@ -1714,7 +1714,7 @@ html.force-portrait-rotate .pwa-install {
 
 .community-picker-code {
   flex: 0 0 auto;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs, 1));
   font-weight: 950;
   letter-spacing: 0.3px;
   padding: 6px 10px;
@@ -1745,7 +1745,7 @@ html.force-portrait-rotate .pwa-install {
     min-width: 0;
     height: 34px;
     padding: 0 10px;
-    font-size: 12px;
+    font-size: calc(12px * var(--fs, 1));
   }
 }
 #profileModal .modal-body { align-items: center; text-align: center; }
@@ -1792,7 +1792,7 @@ html.force-portrait-rotate .pwa-install {
 }
 #profileModal .avatar-edit-btn:hover { background: #fff; }
 #profileModal .avatar-edit-btn svg { width: 18px; height: 18px; }
-#profileModal .profile-avatar .user-avatar-fallback { width: 120px; height: 120px; font-size: 34px; }
+#profileModal .profile-avatar .user-avatar-fallback { width: 120px; height: 120px; font-size: calc(34px * var(--fs, 1)); }
 .modal-body input[type="text"] {
   height: 44px;
   padding: 0 12px;

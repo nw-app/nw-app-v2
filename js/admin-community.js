@@ -271,8 +271,8 @@
               <div style="font-weight:900;">${esc(item.name || k)}</div>
               <div style="font-family:'SF Mono',Consolas,monospace; font-weight:900; color:#9f1c1c;">${result == null ? "公式錯誤" : ("NT$ " + Number(result).toFixed(2))}</div>
             </div>
-            <div style="margin-top:6px; font-size:12px; color:#374151; font-weight:700;">公式：<code style="background:#f3f4f6; padding:2px 6px; border-radius:6px;">${esc(item.formula || "")}</code></div>
-            <div style="margin-top:4px; font-size:11px; color:#6b7280;">樣本(${varsStr})</div>
+            <div style="margin-top:6px; font-size:calc(12px * var(--fs, 1)); color:#374151; font-weight:700;">公式：<code style="background:#f3f4f6; padding:2px 6px; border-radius:6px;">${esc(item.formula || "")}</code></div>
+            <div style="margin-top:4px; font-size:calc(11px * var(--fs, 1)); color:#6b7280;">樣本(${varsStr})</div>
           </div>
         `);
       });
@@ -323,7 +323,7 @@
                   <div class="left">
                     <div class="chip" aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:12px;background:rgba(37,99,235,.12);color:#2563eb;font-weight:900;">👥</div>
                     <div style="min-width:0;">
-                      <h2>管理帳號${cName ? `｜${esc(cName)}` : ""}</h2>
+                      <h2>管理帳號</h2>
                       <p>管理社區後台登入帳號（總幹事／秘書／保全），不包含管理員類別。</p>
                     </div>
                   </div>
@@ -367,18 +367,18 @@
                     <div style="width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#eef2ff,#faf5ff);display:flex;align-items:center;justify-content:center;font-weight:900;color:#4338ca;">${esc(String(u.name || "U").trim().slice(0, 1).toUpperCase())}</div>
                     <div style="min-width:0;">
                       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                        <div style="font-weight:900; font-size:16px;">${esc(u.name || "—")}</div>
-                        <span class="tag" style="${catTagColor} border-radius:999px; padding:0 10px; height:22px; font-size:12px; display:inline-flex; align-items:center;">${esc(u.category || "—")}</span>
-                        ${u.enabled === false ? `<span class="tag" style="background:rgba(107,114,128,.12);color:#4b5563;border-radius:999px;padding:0 10px;height:22px;font-size:12px;">停用</span>` : ""}
-                        ${isMe ? `<span class="tag" style="background:rgba(16,185,129,.12);color:#065f46;border-radius:999px;padding:0 10px;height:22px;font-size:12px;">本人</span>` : ""}
+                        <div style="font-weight:900; font-size:calc(16px * var(--fs, 1));">${esc(u.name || "—")}</div>
+                        <span class="tag" style="${catTagColor} border-radius:999px; padding:0 10px; height:22px; font-size:calc(12px * var(--fs, 1)); display:inline-flex; align-items:center;">${esc(u.category || "—")}</span>
+                        ${u.enabled === false ? `<span class="tag" style="background:rgba(107,114,128,.12);color:#4b5563;border-radius:999px;padding:0 10px;height:22px;font-size:calc(12px * var(--fs, 1));">停用</span>` : ""}
+                        ${isMe ? `<span class="tag" style="background:rgba(16,185,129,.12);color:#065f46;border-radius:999px;padding:0 10px;height:22px;font-size:calc(12px * var(--fs, 1));">本人</span>` : ""}
                       </div>
-                      <div style="margin-top:4px;font-size:12px;color:#6b7280;">帳號：${esc(u.username || "—")} ｜ Email：${esc(u.email || "—")} ｜ 手機：${esc(u.phone || "—")}</div>
-                      ${u.passwordPlain ? `<div style="margin-top:4px;font-size:11px;color:#6b7280;">密碼：<b style="color:#111827;">${esc(u.passwordPlain)}</b></div>` : ""}
+                      <div style="margin-top:4px;font-size:calc(12px * var(--fs, 1));color:#6b7280;">帳號：${esc(u.username || "—")} ｜ Email：${esc(u.email || "—")} ｜ 手機：${esc(u.phone || "—")}</div>
+                      ${u.passwordPlain ? `<div style="margin-top:4px;font-size:calc(11px * var(--fs, 1));color:#6b7280;">密碼：<b style="color:#111827;">${esc(u.passwordPlain)}</b></div>` : ""}
                     </div>
                   </div>
                   <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
                     <button class="btn btn-sm" type="button" data-acm-edit="${esc(u.id)}">編輯</button>
-                    ${!isMe ? `<button class="btn btn-sm btn-danger" type="button" data-acm-delete="${esc(u.id)}">刪除</button>` : `<span style="font-size:11px; color:#9ca3af; font-weight:800; align-self:center;">本帳號無法自刪</span>`}
+                    ${!isMe ? `<button class="btn btn-sm btn-danger" type="button" data-acm-delete="${esc(u.id)}">刪除</button>` : `<span style="font-size:calc(11px * var(--fs, 1)); color:#9ca3af; font-weight:800; align-self:center;">本帳號無法自刪</span>`}
                   </div>
                 </div>
               </div>
@@ -426,28 +426,28 @@
               width: "min(80vw, 720px)",
               bodyHtml: `
                 <div style="display:grid;gap:12px;">
-                  <div class="field" style="gap:2px;margin:0;"><label style="font-size:11px;">類別（僅限非管理員）</label>
+                  <div class="field" style="gap:2px;margin:0;"><label style="font-size:calc(11px * var(--fs, 1));">類別（僅限非管理員）</label>
                     <select id="acm_category" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;">
                       ${COMMUNITY_STAFF_CATEGORIES.map((c) => `<option value="${esc(c)}" ${c === cat ? "selected" : ""}>${esc(c)}</option>`).join("")}
                     </select>
                   </div>
                   <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
-                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:11px;">姓名 *</label><input id="acm_name" type="text" value="${esc(isEdit ? (user.name || "") : "")}" placeholder="真實姓名" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"/></div>
-                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:11px;">登入帳號 *</label><input id="acm_username" type="text" value="${esc(isEdit ? (user.username || "") : "")}" placeholder="例如：sec01" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"/></div>
+                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:calc(11px * var(--fs, 1));">姓名 *</label><input id="acm_name" type="text" value="${esc(isEdit ? (user.name || "") : "")}" placeholder="真實姓名" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"/></div>
+                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:calc(11px * var(--fs, 1));">登入帳號 *</label><input id="acm_username" type="text" value="${esc(isEdit ? (user.username || "") : "")}" placeholder="例如：sec01" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"/></div>
                   </div>
                   <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
-                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:11px;">Email *（Auth 登入）</label><input id="acm_email" type="email" value="${esc(isEdit ? (user.email || "") : "")}" placeholder="name@example.com" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"/></div>
-                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:11px;">手機</label><input id="acm_phone" type="tel" value="${esc(isEdit ? (user.phone || "") : "")}" placeholder="09xxxxxxxx" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"/></div>
+                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:calc(11px * var(--fs, 1));">Email *（Auth 登入）</label><input id="acm_email" type="email" value="${esc(isEdit ? (user.email || "") : "")}" placeholder="name@example.com" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"/></div>
+                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:calc(11px * var(--fs, 1));">手機</label><input id="acm_phone" type="tel" value="${esc(isEdit ? (user.phone || "") : "")}" placeholder="09xxxxxxxx" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"/></div>
                   </div>
-                  <div class="field" style="gap:2px;margin:0;"><label style="font-size:11px;">密碼${isEdit ? "（留空則不修改）" : " *"}</label>
+                  <div class="field" style="gap:2px;margin:0;"><label style="font-size:calc(11px * var(--fs, 1));">密碼${isEdit ? "（留空則不修改）" : " *"}</label>
                     <input id="acm_password" type="text" value="" placeholder="${isEdit ? "留空=不修改" : "至少 6 碼"}" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"/>
                   </div>
                   ${isEdit ? `
                     <div style="padding:12px 14px;border-radius:14px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.2);">
-                      <div style="font-weight:900;font-size:13px;color:#1e3a8a;">帳號資訊</div>
-                      <div style="margin-top:6px;font-size:12px;color:#374151;line-height:1.7;">使用者ID：<code style="background:#fff;padding:2px 6px;border-radius:6px;">${esc(user.id || "")}</code><br/>建立/更新時間：${esc(user._updatedAt || "—")}</div>
+                      <div style="font-weight:900;font-size:calc(13px * var(--fs, 1));color:#1e3a8a;">帳號資訊</div>
+                      <div style="margin-top:6px;font-size:calc(12px * var(--fs, 1));color:#374151;line-height:1.7;">使用者ID：<code style="background:#fff;padding:2px 6px;border-radius:6px;">${esc(user.id || "")}</code><br/>建立/更新時間：${esc(user._updatedAt || "—")}</div>
                     </div>` : ""}
-                  <div id="acm_status" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;"></div>
+                  <div id="acm_status" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;"></div>
                 </div>
               `,
               footerHtml: `<button class="btn btn-ghost" type="button" id="acm_cancel">取消</button><button class="btn btn-primary" type="button" id="acm_save">${isEdit ? "儲存" : "建立"}</button>`
@@ -497,16 +497,16 @@
               width: "min(80vw, 680px)",
               bodyHtml: `
                 <div style="display:grid;gap:12px;">
-                  <div style="padding:12px 14px;border-radius:14px;background:rgba(220,38,38,.08);border:1.5px solid rgba(220,38,38,.22);color:#991b1b;font-weight:900;font-size:13px;line-height:1.6;">
+                  <div style="padding:12px 14px;border-radius:14px;background:rgba(220,38,38,.08);border:1.5px solid rgba(220,38,38,.22);color:#991b1b;font-weight:900;font-size:calc(13px * var(--fs, 1));line-height:1.6;">
                     確認刪除後，<b>此帳號將永久從使用者清單移除（連同 Auth 紀錄）</b>，若該人員需回聘請重新建立。<br/>※ 僅刪除 Firestore 紀錄，若有系統後台 Auth 手動清理需求請洽系統管理員。
                   </div>
                   <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
-                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:11px;">類別</label><div style="padding:10px 12px;border-radius:12px;background:#f9fafb;border:1px solid rgba(17,24,39,.08);font-weight:800;">${esc(u.category || "—")}</div></div>
-                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:11px;">姓名</label><div style="padding:10px 12px;border-radius:12px;background:#f9fafb;border:1px solid rgba(17,24,39,.08);font-weight:800;">${esc(u.name || "—")}</div></div>
-                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:11px;">登入帳號</label><div style="padding:10px 12px;border-radius:12px;background:#f9fafb;border:1px solid rgba(17,24,39,.08);font-weight:800;">${esc(u.username || "—")}</div></div>
-                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:11px;">Email</label><div style="padding:10px 12px;border-radius:12px;background:#f9fafb;border:1px solid rgba(17,24,39,.08);font-weight:800;">${esc(u.email || "—")}</div></div>
+                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:calc(11px * var(--fs, 1));">類別</label><div style="padding:10px 12px;border-radius:12px;background:#f9fafb;border:1px solid rgba(17,24,39,.08);font-weight:800;">${esc(u.category || "—")}</div></div>
+                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:calc(11px * var(--fs, 1));">姓名</label><div style="padding:10px 12px;border-radius:12px;background:#f9fafb;border:1px solid rgba(17,24,39,.08);font-weight:800;">${esc(u.name || "—")}</div></div>
+                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:calc(11px * var(--fs, 1));">登入帳號</label><div style="padding:10px 12px;border-radius:12px;background:#f9fafb;border:1px solid rgba(17,24,39,.08);font-weight:800;">${esc(u.username || "—")}</div></div>
+                    <div class="field" style="gap:2px;margin:0;"><label style="font-size:calc(11px * var(--fs, 1));">Email</label><div style="padding:10px 12px;border-radius:12px;background:#f9fafb;border:1px solid rgba(17,24,39,.08);font-weight:800;">${esc(u.email || "—")}</div></div>
                   </div>
-                  <div id="acm_delStatus" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;"></div>
+                  <div id="acm_delStatus" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;"></div>
                 </div>
               `,
               footerHtml: `<button class="btn btn-ghost" type="button" id="acm_delCancel">取消</button><button class="btn btn-danger" type="button" id="acm_delOk">確認刪除</button>`
@@ -613,7 +613,7 @@
                   <div class="left">
                     <div class="chip" aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:12px;background:rgba(16,185,129,.12);color:#047857;font-weight:900;">🛖</div>
                     <div style="min-width:0;">
-                      <h2>套房專區${cName ? `｜${esc(cName)}` : ""}</h2>
+                      <h2>套房專區</h2>
                       <p>客製化電費、水費、維護費、其他費用的計算公式；可使用 usage / unitPrice / baseFee / days / count 等變數。</p>
                     </div>
                   </div>
@@ -624,7 +624,7 @@
                   </div>
                 </div>
                 <div class="card-bd" style="display:grid; gap:14px;">
-                  <div style="padding:12px 14px;border-radius:14px;background:rgba(37,99,235,.06);border:1px solid rgba(37,99,235,.15);font-size:12px;color:#1e3a8a;font-weight:700;line-height:1.7;">
+                  <div style="padding:12px 14px;border-radius:14px;background:rgba(37,99,235,.06);border:1px solid rgba(37,99,235,.15);font-size:calc(12px * var(--fs, 1));color:#1e3a8a;font-weight:700;line-height:1.7;">
                     變數說明：<code style="background:#fff;padding:2px 6px;border-radius:6px;">usage</code> 本期用量（度數／度數／坪數等）、
                     <code style="background:#fff;padding:2px 6px;border-radius:6px;">unitPrice</code> 項目單價、
                     <code style="background:#fff;padding:2px 6px;border-radius:6px;">baseFee</code> 基本費、
@@ -645,7 +645,7 @@
                       ${renderSuitePreview(state.cfg)}
                     </div>
                   ` : ""}
-                  <div id="suiteStatus" style="display:none;padding:10px 12px;border-radius:12px;font-size:12px;font-weight:800;"></div>
+                  <div id="suiteStatus" style="display:none;padding:10px 12px;border-radius:12px;font-size:calc(12px * var(--fs, 1));font-weight:800;"></div>
                 </div>
               </section>
             `;
@@ -670,26 +670,26 @@
                     </label>
                   </div>
                   <div class="field" style="gap:2px;margin:0;min-width:200px;max-width:40%;">
-                    <label style="font-size:11px;">顯示名稱</label>
+                    <label style="font-size:calc(11px * var(--fs, 1));">顯示名稱</label>
                     <input type="text" data-suite-name="${esc(it.key)}" value="${esc(name)}" ${enabled ? "" : "disabled"} style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"/>
                   </div>
                 </div>
                 <div class="field" style="gap:2px;margin:0;">
-                  <label style="font-size:11px;">計算公式（JavaScript 運算式）</label>
+                  <label style="font-size:calc(11px * var(--fs, 1));">計算公式（JavaScript 運算式）</label>
                   <input type="text" data-suite-formula="${esc(it.key)}" value="${esc(formula)}" ${enabled ? "" : "disabled"} placeholder="例如：usage * unitPrice + baseFee" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);font-family:'SF Mono',Consolas,monospace;font-weight:800;"/>
                 </div>
                 <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
                   <div class="field" style="gap:2px;margin:0;">
-                    <label style="font-size:11px;">unitPrice（單價）</label>
+                    <label style="font-size:calc(11px * var(--fs, 1));">unitPrice（單價）</label>
                     <input type="number" step="0.01" data-suite-unit="${esc(it.key)}" value="${Number(unitPrice).toFixed(2)}" ${enabled ? "" : "disabled"} style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"/>
                   </div>
                   <div class="field" style="gap:2px;margin:0;">
-                    <label style="font-size:11px;">baseFee（基本費）</label>
+                    <label style="font-size:calc(11px * var(--fs, 1));">baseFee（基本費）</label>
                     <input type="number" step="0.01" data-suite-base="${esc(it.key)}" value="${Number(baseFee).toFixed(2)}" ${enabled ? "" : "disabled"} style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"/>
                   </div>
                 </div>
                 <div class="field" style="gap:2px;margin:0;">
-                  <label style="font-size:11px;">備註（內部說明）</label>
+                  <label style="font-size:calc(11px * var(--fs, 1));">備註（內部說明）</label>
                   <input type="text" data-suite-remark="${esc(it.key)}" value="${esc(remark)}" ${enabled ? "" : "disabled"} placeholder="例如：夏季單價另計，請洽總幹事" style="width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);"/>
                 </div>
               </div>

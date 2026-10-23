@@ -1045,43 +1045,43 @@
             <div style="display:flex;gap:10px;align-items:flex-start;min-width:0;">
               ${meterTag(r.meterType)}
               <div style="min-width:0;">
-                <div style="font-weight:800;font-size:14px;">戶號 ${esc(r.houseNo || '—')}</div>
-                <div class="muted" style="font-size:12px;margin-top:2px;">儀表編號 ${esc(r.meterId || '—')} · 週期 ${esc(periodStr || '—')}</div>
+                <div style="font-weight:800;font-size:calc(14px * var(--fs, 1));">戶號 ${esc(r.houseNo || '—')}</div>
+                <div class="muted" style="font-size:calc(12px * var(--fs, 1));margin-top:2px;">儀表編號 ${esc(r.meterId || '—')} · 週期 ${esc(periodStr || '—')}</div>
               </div>
             </div>
-            ${isVoid ? `<span class="tag" style="display:inline-flex; align-items:center; height:24px; padding:0 10px; border-radius:999px; font-size:12px; background:rgba(107,114,128,0.12); color:#4b5563; border:1px solid rgba(107,114,128,0.25);">已作廢</span>` : statusBadge(r.validationStatus)}
+            ${isVoid ? `<span class="tag" style="display:inline-flex; align-items:center; height:24px; padding:0 10px; border-radius:999px; font-size:calc(12px * var(--fs, 1)); background:rgba(107,114,128,0.12); color:#4b5563; border:1px solid rgba(107,114,128,0.25);">已作廢</span>` : statusBadge(r.validationStatus)}
           </div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px 12px;">
             <div class="field" style="gap:2px;margin:0;">
-              <label style="font-size:11px;">上期數值</label>
-              <div style="font-size:13px;font-weight:700;">${esc(r.previousValue ?? '—')}</div>
+              <label style="font-size:calc(11px * var(--fs, 1));">上期數值</label>
+              <div style="font-size:calc(13px * var(--fs, 1));font-weight:700;">${esc(r.previousValue ?? '—')}</div>
             </div>
             <div class="field" style="gap:2px;margin:0;">
-              <label style="font-size:11px;">本期數值</label>
-              <div style="font-size:13px;font-weight:900;">${esc(r.currentValue ?? '—')}</div>
+              <label style="font-size:calc(11px * var(--fs, 1));">本期數值</label>
+              <div style="font-size:calc(13px * var(--fs, 1));font-weight:900;">${esc(r.currentValue ?? '—')}</div>
             </div>
             <div class="field" style="gap:2px;margin:0;">
-              <label style="font-size:11px;">本期用量</label>
-              <div style="font-size:13px;font-weight:700;${usage < 0 ? 'color:#dc2626;' : ''}">${usage.toFixed(2)} ${unit}</div>
+              <label style="font-size:calc(11px * var(--fs, 1));">本期用量</label>
+              <div style="font-size:calc(13px * var(--fs, 1));font-weight:700;${usage < 0 ? 'color:#dc2626;' : ''}">${usage.toFixed(2)} ${unit}</div>
             </div>
             <div class="field" style="gap:2px;margin:0;">
-              <label style="font-size:11px;">應繳費用</label>
-              <div style="font-size:13px;font-weight:900;color:var(--brand,#d32f2f);">NT$ ${fee.toFixed(2)}</div>
+              <label style="font-size:calc(11px * var(--fs, 1));">應繳費用</label>
+              <div style="font-size:calc(13px * var(--fs, 1));font-weight:900;color:var(--brand,#d32f2f);">NT$ ${fee.toFixed(2)}</div>
             </div>
             <div class="field" style="gap:2px;margin:0;">
-              <label style="font-size:11px;">抄表日期</label>
-              <div style="font-size:13px;">${rdStr}</div>
+              <label style="font-size:calc(11px * var(--fs, 1));">抄表日期</label>
+              <div style="font-size:calc(13px * var(--fs, 1));">${rdStr}</div>
             </div>
             <div class="field" style="gap:2px;margin:0;">
-              <label style="font-size:11px;">抄表員</label>
-              <div style="font-size:13px;">${esc(r.operatorId || r.source || '—')}</div>
+              <label style="font-size:calc(11px * var(--fs, 1));">抄表員</label>
+              <div style="font-size:calc(13px * var(--fs, 1));">${esc(r.operatorId || r.source || '—')}</div>
             </div>
           </div>
           ${abnormalReasons.length || dispute ? `
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            ${abnormalReasons.map(rr => `<div class="tag red" style="font-size:11px;">⚠ ${esc(rr)}</div>`).join('')}
-            ${dispute && dispute.status === 'pending' ? `<div class="tag yellow" style="font-size:11px;background:rgba(139,92,246,0.1);color:#8b5cf6;border-color:rgba(139,92,246,0.2);">✉ 住戶已提核異</div>` : ''}
-            ${dispute && dispute.reply ? `<div class="tag" style="font-size:11px;background:rgba(99,102,241,0.1);color:#6366f1;border-color:rgba(99,102,241,0.2);">↩ ${esc(dispute.reply)}</div>` : ''}
+            ${abnormalReasons.map(rr => `<div class="tag red" style="font-size:calc(11px * var(--fs, 1));">⚠ ${esc(rr)}</div>`).join('')}
+            ${dispute && dispute.status === 'pending' ? `<div class="tag yellow" style="font-size:calc(11px * var(--fs, 1));background:rgba(139,92,246,0.1);color:#8b5cf6;border-color:rgba(139,92,246,0.2);">✉ 住戶已提核異</div>` : ''}
+            ${dispute && dispute.reply ? `<div class="tag" style="font-size:calc(11px * var(--fs, 1));background:rgba(99,102,241,0.1);color:#6366f1;border-color:rgba(99,102,241,0.2);">↩ ${esc(dispute.reply)}</div>` : ''}
           </div>` : ''}
           <div class="row" style="justify-content:flex-end;gap:6px;margin-top:2px;">
             ${options.showDetail ? `<button class="btn btn-sm btn-ghost" data-action="detail">明細</button>` : ''}
@@ -1090,7 +1090,7 @@
             ${options.showEdit && !isVoid ? `<button class="btn btn-sm" data-action="edit">修正</button>` : ''}
             ${options.showResolve ? `<button class="btn btn-sm btn-primary" data-action="resolve">處理核異</button>` : ''}
             ${options.showDelete && !isVoid ? `<button class="btn btn-sm btn-danger" data-action="delete">刪除</button>` : ''}
-            ${isVoid ? `<span style="font-size:11px; color:#9ca3af; font-weight:800; align-self:center;">刪除作廢完成</span>` : ''}
+            ${isVoid ? `<span style="font-size:calc(11px * var(--fs, 1)); color:#9ca3af; font-weight:800; align-self:center;">刪除作廢完成</span>` : ''}
           </div>
         </div>
       `;
@@ -1221,9 +1221,9 @@
               <div class="mr-type-chips">
                 ${types.map(t => `<button class="mr-chip ${t.id} ${state.filterType === t.id ? 'active' : ''}" data-type="${esc(t.id)}">${esc(t.label)}</button>`).join('')}
               </div>
-              <label for="mrDateFrom" style="font-size:12px;">起始月</label>
+              <label for="mrDateFrom" style="font-size:calc(12px * var(--fs, 1));">起始月</label>
               <input type="month" id="mrDateFrom" value="${esc(state.dateFrom)}" />
-              <label for="mrDateTo" style="font-size:12px;">結束月</label>
+              <label for="mrDateTo" style="font-size:calc(12px * var(--fs, 1));">結束月</label>
               <input type="month" id="mrDateTo" value="${esc(state.dateTo)}" />
               <button class="mr-btn small ghost" id="mrResetFilter">重置</button>
             </div>
@@ -1313,7 +1313,7 @@
                           <td>${new Date(mh.at).toLocaleString('zh-TW')}</td>
                           <td>${esc((mh.by && mh.by.name) ? mh.by.name : (mh.by && mh.by.id ? mh.by.id : '系統'))}</td>
                           <td>${esc(mh.reason || '—')}</td>
-                          <td style="font-size:12px;">${Object.keys(mh.after || {}).map(k => `${k}: ${JSON.stringify(mh.before[k])} → ${JSON.stringify(mh.after[k])}`).join('<br/>')}</td>
+                          <td style="font-size:calc(12px * var(--fs, 1));">${Object.keys(mh.after || {}).map(k => `${k}: ${JSON.stringify(mh.before[k])} → ${JSON.stringify(mh.after[k])}`).join('<br/>')}</td>
                         </tr>
                       `).join('')}
                     </tbody>
@@ -1573,7 +1573,7 @@
               <div class="left">
                 <div class="chip" aria-hidden="true">${iconSvgFn('meter-reading')}</div>
                 <div style="min-width:0;">
-                  <h2>抄表紀錄${communityName ? `｜${esc(communityName)}` : ''}</h2>
+                  <h2>抄表紀錄</h2>
                   <p>抄錶登記、數據審核、用量統計、費用計算</p>
                 </div>
               </div>
@@ -1646,7 +1646,7 @@
               <div class="card-hd" style="padding:12px 14px;">
                 <div class="left">
                   <div class="chip" style="width:36px;height:36px;">📝</div>
-                  <div style="min-width:0;"><h2 style="font-size:15px;margin:0;">住戶申報待審核</h2><p style="margin:0;">共 ${__filterRecords(state.pendingRecords).length} 筆新申報待管理員審核</p></div>
+                  <div style="min-width:0;"><h2 style="font-size:calc(15px * var(--fs, 1));margin:0;">住戶申報待審核</h2><p style="margin:0;">共 ${__filterRecords(state.pendingRecords).length} 筆新申報待管理員審核</p></div>
                 </div>
                 <div class="tag yellow">${__filterRecords(state.pendingRecords).length}</div>
               </div>
@@ -1658,7 +1658,7 @@
               <div class="card-hd" style="padding:12px 14px;">
                 <div class="left">
                   <div class="chip" style="width:36px;height:36px;">🔔</div>
-                  <div style="min-width:0;"><h2 style="font-size:15px;margin:0;">住戶核異申請</h2><p style="margin:0;">共 ${__filterRecords(state.disputes).length} 筆待處理</p></div>
+                  <div style="min-width:0;"><h2 style="font-size:calc(15px * var(--fs, 1));margin:0;">住戶核異申請</h2><p style="margin:0;">共 ${__filterRecords(state.disputes).length} 筆待處理</p></div>
                 </div>
                 <div class="tag yellow">${__filterRecords(state.disputes).length}</div>
               </div>
@@ -1670,7 +1670,7 @@
               <div class="card-hd" style="padding:12px 14px;">
                 <div class="left">
                   <div class="chip" style="width:36px;height:36px;">⚠</div>
-                  <div style="min-width:0;"><h2 style="font-size:15px;margin:0;">系統偵測異常</h2><p style="margin:0;">共 ${__filterRecords(state.abnormalRecords).length} 筆</p></div>
+                  <div style="min-width:0;"><h2 style="font-size:calc(15px * var(--fs, 1));margin:0;">系統偵測異常</h2><p style="margin:0;">共 ${__filterRecords(state.abnormalRecords).length} 筆</p></div>
                 </div>
                 <div class="tag red">${__filterRecords(state.abnormalRecords).length}</div>
               </div>
@@ -1691,7 +1691,7 @@
               <div class="card-bd">
                 <div class="row" style="gap:10px;align-items:flex-start;">
                   <div class="tag" style="background:rgba(37,99,235,0.1);color:#2563eb;border-color:rgba(37,99,235,0.2);">ℹ</div>
-                  <div style="flex:1;font-size:13px;">單筆抄表登記：系統會自動帶入上期數值、計算用量與費用，並偵測是否有異常。每個位數獨立輸入框，便於抄表員核對。</div>
+                  <div style="flex:1;font-size:calc(13px * var(--fs, 1));">單筆抄表登記：系統會自動帶入上期數值、計算用量與費用，並偵測是否有異常。每個位數獨立輸入框，便於抄表員核對。</div>
                 </div>
               </div>
             </section>
@@ -1720,11 +1720,11 @@
                     <input id="crPrev" type="number" min="0" step="1" placeholder="留空自動查詢上期" />
                   </div>
                   <div class="field" style="flex:1.5;min-width:260px;">
-                    <label>本期抄錶數字 *<span class="muted" style="font-weight:500;font-size:11px;margin-left:6px;">（每位數單獨輸入，自動跳轉）</span></label>
+                    <label>本期抄錶數字 *<span class="muted" style="font-weight:500;font-size:calc(11px * var(--fs, 1));margin-left:6px;">（每位數單獨輸入，自動跳轉）</span></label>
                     <div style="display:flex;flex-direction:column;gap:8px;">
                       <div id="crCurrDigitBoxes" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;"></div>
                       <input id="crCurr" type="hidden" />
-                      <div id="crCurrHint" class="muted" style="font-size:12px;">請先選擇儀表類型，位數會自動帶入社區設定。</div>
+                      <div id="crCurrHint" class="muted" style="font-size:calc(12px * var(--fs, 1));">請先選擇儀表類型，位數會自動帶入社區設定。</div>
                     </div>
                   </div>
                   <div class="field" style="flex:1;min-width:160px;">
@@ -1741,8 +1741,8 @@
                   </div>
                 </div>
                 <div id="crFeePreview" style="display:none;"></div>
-                <div id="crErrors" style="display:none;padding:10px 12px;border-radius:12px;background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.18);color:#b91c1c;font-size:13px;"></div>
-                <div id="crWarnings" style="display:none;padding:10px 12px;border-radius:12px;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.2);color:#a16207;font-size:13px;"></div>
+                <div id="crErrors" style="display:none;padding:10px 12px;border-radius:12px;background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.18);color:#b91c1c;font-size:calc(13px * var(--fs, 1));"></div>
+                <div id="crWarnings" style="display:none;padding:10px 12px;border-radius:12px;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.2);color:#a16207;font-size:calc(13px * var(--fs, 1));"></div>
                 <div class="row" style="justify-content:flex-end;gap:8px;margin-top:4px;">
                   <button type="button" class="btn btn-ghost" id="crPreviewBtn">預覽計算</button>
                   <button type="submit" class="btn btn-primary">建立紀錄</button>
@@ -1760,18 +1760,18 @@
               <div class="card-hd" style="padding:12px 14px;">
                 <div class="left">
                   <div class="chip" style="width:36px;height:36px;">📤</div>
-                  <div style="min-width:0;"><h2 style="font-size:15px;margin:0;">匯入抄錶資料</h2><p style="margin:0;">支援 CSV 或 Excel 格式</p></div>
+                  <div style="min-width:0;"><h2 style="font-size:calc(15px * var(--fs, 1));margin:0;">匯入抄錶資料</h2><p style="margin:0;">支援 CSV 或 Excel 格式</p></div>
                 </div>
               </div>
               <div class="card-bd" style="display:grid;gap:12px;">
                 <div class="row" style="gap:10px;align-items:flex-start;">
                   <div class="tag" style="background:rgba(37,99,235,0.1);color:#2563eb;border-color:rgba(37,99,235,0.2);">ℹ</div>
-                  <div style="flex:1;font-size:13px;">欄位格式：<strong>儀表編號,門牌號,儀表類型,上期數值,本期數值,抄表日期,抄表員,繳費週期</strong>。儀表類型請填「電/電錶/electric」、「水/自來水/water」或「瓦斯/天然氣/gas」。</div>
+                  <div style="flex:1;font-size:calc(13px * var(--fs, 1));">欄位格式：<strong>儀表編號,門牌號,儀表類型,上期數值,本期數值,抄表日期,抄表員,繳費週期</strong>。儀表類型請填「電/電錶/electric」、「水/自來水/water」或「瓦斯/天然氣/gas」。</div>
                 </div>
                 <div id="importUploader" style="padding:36px;border:2px dashed var(--brand,#d32f2f);border-radius:var(--radius,18px);background:rgba(211,47,47,0.03);text-align:center;cursor:pointer;transition:all 0.15s;">
-                  <div style="font-size:36px;margin-bottom:6px;">📂</div>
-                  <div style="font-size:14px;font-weight:700;">點擊選擇 .csv / .xlsx / .xls 檔案</div>
-                  <div class="muted" style="font-size:12px;margin-top:4px;">或直接拖曳檔案到這裡</div>
+                  <div style="font-size:calc(36px * var(--fs, 1));margin-bottom:6px;">📂</div>
+                  <div style="font-size:calc(14px * var(--fs, 1));font-weight:700;">點擊選擇 .csv / .xlsx / .xls 檔案</div>
+                  <div class="muted" style="font-size:calc(12px * var(--fs, 1));margin-top:4px;">或直接拖曳檔案到這裡</div>
                   <input type="file" id="importInput" accept=".csv,.xlsx,.xls" hidden />
                 </div>
                 <div id="importPreview"></div>
@@ -1785,7 +1785,7 @@
               <div class="card-hd" style="padding:12px 14px;">
                 <div class="left">
                   <div class="chip" style="width:36px;height:36px;">📥</div>
-                  <div style="min-width:0;"><h2 style="font-size:15px;margin:0;">匯出抄錶報表</h2><p style="margin:0;">依目前篩選條件匯出</p></div>
+                  <div style="min-width:0;"><h2 style="font-size:calc(15px * var(--fs, 1));margin:0;">匯出抄錶報表</h2><p style="margin:0;">依目前篩選條件匯出</p></div>
                 </div>
               </div>
               <div class="card-bd">
@@ -1821,11 +1821,11 @@
                 <section class="card" style="box-shadow:none;border:1px solid rgba(17,24,39,0.08);margin:0;">
                   <div class="card-bd" style="display:grid;gap:4px;">
                     <div class="row" style="justify-content:space-between;align-items:center;">
-                      <div class="muted" style="font-size:12px;">${c.label}</div>
-                      ${c.tag ? `<div class="tag ${c.tag}" style="font-size:11px;">${c.tag === 'green' ? '正常' : c.tag === 'red' ? '異常' : '處理中'}</div>` : ''}
+                      <div class="muted" style="font-size:calc(12px * var(--fs, 1));">${c.label}</div>
+                      ${c.tag ? `<div class="tag ${c.tag}" style="font-size:calc(11px * var(--fs, 1));">${c.tag === 'green' ? '正常' : c.tag === 'red' ? '異常' : '處理中'}</div>` : ''}
                     </div>
-                    <div style="font-size:26px;font-weight:900;letter-spacing:-0.5px;${c.tag === 'red' ? 'color:#dc2626;' : c.tag === 'yellow' ? 'color:#a16207;' : ''}">${esc(c.value)}</div>
-                    <div class="muted" style="font-size:11px;">${c.sub}</div>
+                    <div style="font-size:calc(26px * var(--fs, 1));font-weight:900;letter-spacing:-0.5px;${c.tag === 'red' ? 'color:#dc2626;' : c.tag === 'yellow' ? 'color:#a16207;' : ''}">${esc(c.value)}</div>
+                    <div class="muted" style="font-size:calc(11px * var(--fs, 1));">${c.sub}</div>
                   </div>
                 </section>
               `).join('')}
@@ -1839,30 +1839,30 @@
                   <div class="card-hd" style="padding:12px 14px;">
                     <div class="left">
                       <div class="chip" style="width:36px;height:36px;">${meta.icon || '📊'}</div>
-                      <div style="min-width:0;"><h2 style="font-size:15px;margin:0;">${tc.name} 統計</h2><p style="margin:0;">共 ${t.count || 0} 筆</p></div>
+                      <div style="min-width:0;"><h2 style="font-size:calc(15px * var(--fs, 1));margin:0;">${tc.name} 統計</h2><p style="margin:0;">共 ${t.count || 0} 筆</p></div>
                     </div>
                   </div>
                   <div class="card-bd" style="display:grid;gap:10px;">
                     <div class="row" style="align-items:center;gap:12px;">
-                      <div style="width:70px;flex-shrink:0;font-size:12px;" class="muted">總用量</div>
+                      <div style="width:70px;flex-shrink:0;font-size:calc(12px * var(--fs, 1));" class="muted">總用量</div>
                       <div style="flex:1;height:10px;border-radius:999px;background:rgba(17,24,39,0.06);overflow:hidden;">
                         <div style="height:100%;width:${Math.min(100, (t.totalUsage / maxUsageForBar) * 100).toFixed(1)}%;background:#2563eb;border-radius:999px;"></div>
                       </div>
-                      <div style="width:90px;text-align:right;font-size:13px;font-weight:800;">${t.totalUsage.toFixed(0)}${meta.unit || ''}</div>
+                      <div style="width:90px;text-align:right;font-size:calc(13px * var(--fs, 1));font-weight:800;">${t.totalUsage.toFixed(0)}${meta.unit || ''}</div>
                     </div>
                     <div class="row" style="align-items:center;gap:12px;">
-                      <div style="width:70px;flex-shrink:0;font-size:12px;" class="muted">戶均用量</div>
+                      <div style="width:70px;flex-shrink:0;font-size:calc(12px * var(--fs, 1));" class="muted">戶均用量</div>
                       <div style="flex:1;height:10px;border-radius:999px;background:rgba(17,24,39,0.06);overflow:hidden;">
                         <div style="height:100%;width:${Math.min(100, (t.avgPerHouse / Math.max(1, (t.totalUsage / Math.max(1, s.houseCount || 1)))) * 100).toFixed(1)}%;background:#0891b2;border-radius:999px;opacity:0.85;"></div>
                       </div>
-                      <div style="width:90px;text-align:right;font-size:13px;font-weight:700;">${t.avgPerHouse.toFixed(2)}${meta.unit || ''}</div>
+                      <div style="width:90px;text-align:right;font-size:calc(13px * var(--fs, 1));font-weight:700;">${t.avgPerHouse.toFixed(2)}${meta.unit || ''}</div>
                     </div>
                     <div class="row" style="align-items:center;gap:12px;">
-                      <div style="width:70px;flex-shrink:0;font-size:12px;" class="muted">總費用</div>
+                      <div style="width:70px;flex-shrink:0;font-size:calc(12px * var(--fs, 1));" class="muted">總費用</div>
                       <div style="flex:1;height:10px;border-radius:999px;background:rgba(17,24,39,0.06);overflow:hidden;">
                         <div style="height:100%;width:100%;background:linear-gradient(90deg,#d32f2f,#f97316);border-radius:999px;opacity:0.75;"></div>
                       </div>
-                      <div style="width:90px;text-align:right;font-size:13px;font-weight:900;color:var(--brand,#d32f2f);">NT$ ${t.totalFee.toFixed(2)}</div>
+                      <div style="width:90px;text-align:right;font-size:calc(13px * var(--fs, 1));font-weight:900;color:var(--brand,#d32f2f);">NT$ ${t.totalFee.toFixed(2)}</div>
                     </div>
                   </div>
                 </section>
@@ -1872,7 +1872,7 @@
               <div class="card-hd" style="padding:12px 14px;">
                 <div class="left">
                   <div class="chip" style="width:36px;height:36px;">📅</div>
-                  <div style="min-width:0;"><h2 style="font-size:15px;margin:0;">最近 12 期用量趨勢</h2><p style="margin:0;">總用量走勢</p></div>
+                  <div style="min-width:0;"><h2 style="font-size:calc(15px * var(--fs, 1));margin:0;">最近 12 期用量趨勢</h2><p style="margin:0;">總用量走勢</p></div>
                 </div>
               </div>
               <div class="card-bd" style="display:grid;gap:8px;">
@@ -1880,11 +1880,11 @@
                   const v = safeParseNumber(s.byPeriod[k].totalUsage) || 0;
                   return `
                     <div class="row" style="align-items:center;gap:12px;">
-                      <div style="width:70px;flex-shrink:0;font-size:12px;font-weight:700;">${esc(k)}</div>
+                      <div style="width:70px;flex-shrink:0;font-size:calc(12px * var(--fs, 1));font-weight:700;">${esc(k)}</div>
                       <div style="flex:1;height:14px;border-radius:999px;background:rgba(17,24,39,0.06);overflow:hidden;">
                         <div style="height:100%;width:${(v / maxPeriodUsage * 100).toFixed(1)}%;background:linear-gradient(90deg,var(--brand,#d32f2f),#f97316);border-radius:999px;"></div>
                       </div>
-                      <div style="width:60px;text-align:right;font-size:13px;font-weight:800;">${v.toFixed(0)}</div>
+                      <div style="width:60px;text-align:right;font-size:calc(13px * var(--fs, 1));font-weight:800;">${v.toFixed(0)}</div>
                     </div>
                   `;
                 }).join('')}
@@ -1894,10 +1894,10 @@
               <div class="card-bd">
                 <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
                   <div>
-                    <div class="muted" style="font-size:12px;">整體費用合計</div>
-                    <div style="font-size:13px;margin-top:2px;">目前篩選條件內全部紀錄應收總額</div>
+                    <div class="muted" style="font-size:calc(12px * var(--fs, 1));">整體費用合計</div>
+                    <div style="font-size:calc(13px * var(--fs, 1));margin-top:2px;">目前篩選條件內全部紀錄應收總額</div>
                   </div>
-                  <div class="tag red" style="font-size:28px;font-weight:900;padding:10px 18px;border-radius:14px;letter-spacing:-0.5px;">NT$ ${(s.totalFee || 0).toFixed(2)}</div>
+                  <div class="tag red" style="font-size:calc(28px * var(--fs, 1));font-weight:900;padding:10px 18px;border-radius:14px;letter-spacing:-0.5px;">NT$ ${(s.totalFee || 0).toFixed(2)}</div>
                 </div>
               </div>
             </section>
@@ -2041,45 +2041,45 @@
           <div style="display:grid; gap:12px;">
             <div style="display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:14px; background:linear-gradient(180deg,#fff,#fafafa); border:1px solid rgba(17,24,39,.08);">
               <div style="width:10px;height:10px;border-radius:999px;background:${t && t.color ? t.color : 'var(--brand,#2563eb)'};"></div>
-              <div style="font-weight:900;font-size:16px;">${t ? (t.icon + ' ' + t.name) : '抄錶'} 刪除／作廢（${esc(periodStr || '—')}）</div>
+              <div style="font-weight:900;font-size:calc(16px * var(--fs, 1));">${t ? (t.icon + ' ' + t.name) : '抄錶'} 刪除／作廢（${esc(periodStr || '—')}）</div>
             </div>
             <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px;">
               <div class="field" style="gap:2px;margin:0;">
-                <label style="font-size:11px;">戶號</label>
+                <label style="font-size:calc(11px * var(--fs, 1));">戶號</label>
                 <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(r.houseNo || '—')}</div>
               </div>
               <div class="field" style="gap:2px;margin:0;">
-                <label style="font-size:11px;">儀表編號</label>
+                <label style="font-size:calc(11px * var(--fs, 1));">儀表編號</label>
                 <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(r.meterId || '—')}</div>
               </div>
               <div class="field" style="gap:2px;margin:0;">
-                <label style="font-size:11px;">抄見日</label>
+                <label style="font-size:calc(11px * var(--fs, 1));">抄見日</label>
                 <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(rd ? formatDateFull(rd) : '—')}</div>
               </div>
               <div class="field" style="gap:2px;margin:0;">
-                <label style="font-size:11px;">建立時間</label>
+                <label style="font-size:calc(11px * var(--fs, 1));">建立時間</label>
                 <div style="padding:10px 12px; border-radius:12px; background:#f9fafb; border:1px solid rgba(17,24,39,.08); font-weight:800; color:#111827;">${esc(r.createdAt ? (new Date(r.createdAt).toLocaleString('zh-TW')) : '—')}</div>
               </div>
             </div>
             <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px;">
               <div style="padding:12px 14px; border-radius:14px; background:rgba(243,244,246); border:1px solid rgba(17,24,39,.06);">
-                <div style="font-size:11px; color:#6b7280; font-weight:800;">上期數值</div>
+                <div style="font-size:calc(11px * var(--fs, 1)); color:#6b7280; font-weight:800;">上期數值</div>
                 <div style="margin-top:6px; font:900 24px/1 'SF Mono',Consolas,monospace; color:#374151;">${esc(String(r.previousValue ?? '—'))}</div>
               </div>
               <div style="padding:12px 14px; border-radius:14px; background:rgba(31,41,55); color:#fff; border:1px solid rgba(31,41,55,.3);">
-                <div style="font-size:11px; color:#d1d5db; font-weight:800;">本期數值</div>
+                <div style="font-size:calc(11px * var(--fs, 1)); color:#d1d5db; font-weight:800;">本期數值</div>
                 <div style="margin-top:6px; font:900 24px/1 'SF Mono',Consolas,monospace;">${esc(String(r.currentValue ?? '—'))}</div>
               </div>
               <div style="padding:12px 14px; border-radius:14px; background:rgba(194,24,91,0.10); border:1.5px solid rgba(194,24,91,0.22);">
-                <div style="font-size:11px; color:#9f1c1c; font-weight:800;">本期用量（${esc(unit)}）</div>
+                <div style="font-size:calc(11px * var(--fs, 1)); color:#9f1c1c; font-weight:800;">本期用量（${esc(unit)}）</div>
                 <div style="margin-top:6px; font:900 24px/1 'SF Mono',Consolas,monospace; color:#9f1c1c;">${usage.toFixed(2)}</div>
               </div>
             </div>
             <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; border-radius:14px; background:#fff; border:1.5px solid rgba(46,125,50,0.25);">
-              <div style="font-size:13px; color:#374151; font-weight:900;">計算費用</div>
+              <div style="font-size:calc(13px * var(--fs, 1)); color:#374151; font-weight:900;">計算費用</div>
               <div style="font:900 28px/1 'SF Pro Display',-apple-system,BlinkMacSystemFont,sans-serif; color:#9f1c1c;">NT$ ${fee.toFixed(2)}</div>
             </div>
-            <div style="padding:12px 14px; border-radius:14px; background:rgba(211,47,47,0.08); border:1.5px solid rgba(211,47,47,0.22); color:#9f1c1c; font-size:13px; font-weight:900; line-height:1.6;">
+            <div style="padding:12px 14px; border-radius:14px; background:rgba(211,47,47,0.08); border:1.5px solid rgba(211,47,47,0.22); color:#9f1c1c; font-size:calc(13px * var(--fs, 1)); font-weight:900; line-height:1.6;">
               ※ 按下「確認刪除」後，此筆抄錶紀錄將<b>作廢並移出本期用量／費用統計</b>，<b>無法恢復</b>。<br/>
               ※ 作廢僅影響後續統計，原始資料仍保留可於後台查詢；若有疑慮請先聯繫管理中心。
             </div>
@@ -2157,13 +2157,13 @@
         const feeStyle = 'padding:14px;border-radius:14px;background:linear-gradient(135deg,rgba(37,99,235,0.08),rgba(211,47,47,0.05));border:1px solid rgba(37,99,235,0.15);';
         const gridStyle = 'display:grid;grid-template-columns:repeat(2,1fr);gap:8px 14px;margin-top:10px;';
         const itemStyle = 'display:grid;gap:2px;';
-        const lblStyle = 'font-size:11px;color:#6b7280;';
-        const valStyle = 'font-size:13px;font-weight:700;';
+        const lblStyle = 'font-size:calc(11px * var(--fs, 1));color:#6b7280;';
+        const valStyle = 'font-size:calc(13px * var(--fs, 1));font-weight:700;';
         let body = `
           <div style="${feeStyle}">
             <div class="row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
-              <div style="font-weight:800;font-size:14px;">費用資訊</div>
-              <div style="font-size:26px;font-weight:900;letter-spacing:-0.5px;color:var(--brand,#d32f2f);">NT$ ${(safeParseNumber(r.fee) || 0).toFixed(2)}</div>
+              <div style="font-weight:800;font-size:calc(14px * var(--fs, 1));">費用資訊</div>
+              <div style="font-size:calc(26px * var(--fs, 1));font-weight:900;letter-spacing:-0.5px;color:var(--brand,#d32f2f);">NT$ ${(safeParseNumber(r.fee) || 0).toFixed(2)}</div>
             </div>
             <div style="${gridStyle}">
               <div style="${itemStyle}"><div style="${lblStyle}">類型</div><div style="${valStyle}">${t ? t.icon + ' ' + t.name : '—'}</div></div>
@@ -2184,10 +2184,10 @@
               <div class="card-hd" style="padding:10px 14px;">
                 <div class="left">
                   <div class="chip" style="width:32px;height:32px;">📩</div>
-                  <div style="min-width:0;"><h2 style="font-size:14px;margin:0;">核異資訊</h2><p style="margin:0;font-size:12px;">狀態：${esc(d.status || '')}</p></div>
+                  <div style="min-width:0;"><h2 style="font-size:calc(14px * var(--fs, 1));margin:0;">核異資訊</h2><p style="margin:0;font-size:calc(12px * var(--fs, 1));">狀態：${esc(d.status || '')}</p></div>
                 </div>
               </div>
-              <div class="card-bd" style="display:grid;gap:8px;font-size:13px;">
+              <div class="card-bd" style="display:grid;gap:8px;font-size:calc(13px * var(--fs, 1));">
                 <div><strong>申請人：</strong>${esc(d.residentName || '—')} · ${new Date(d.submittedAt || 0).toLocaleString('zh-TW')}</div>
                 <div><strong>說明：</strong>${esc(d.description || '')}</div>
                 ${d.photoDataUrl ? `<div style="margin-top:4px;"><img src="${esc(d.photoDataUrl)}" style="max-width:100%;border-radius:12px;border:1px solid rgba(17,24,39,0.1);max-height:240px;object-fit:cover;" alt="核異照片"/></div>` : ''}
@@ -2197,14 +2197,14 @@
           `;
         }
         if (mHist.length) {
-          const thStyle = 'padding:8px 10px;text-align:left;font-size:12px;font-weight:700;background:rgba(17,24,39,0.04);border-bottom:1px solid rgba(17,24,39,0.08);';
-          const tdStyle = 'padding:8px 10px;font-size:12px;border-bottom:1px solid rgba(17,24,39,0.06);vertical-align:top;';
+          const thStyle = 'padding:8px 10px;text-align:left;font-size:calc(12px * var(--fs, 1));font-weight:700;background:rgba(17,24,39,0.04);border-bottom:1px solid rgba(17,24,39,0.08);';
+          const tdStyle = 'padding:8px 10px;font-size:calc(12px * var(--fs, 1));border-bottom:1px solid rgba(17,24,39,0.06);vertical-align:top;';
           body += `
             <section class="card" style="box-shadow:none;border:1px solid rgba(17,24,39,0.08);margin-top:14px;">
               <div class="card-hd" style="padding:10px 14px;">
                 <div class="left">
                   <div class="chip" style="width:32px;height:32px;">📜</div>
-                  <div style="min-width:0;"><h2 style="font-size:14px;margin:0;">修改紀錄</h2><p style="margin:0;font-size:12px;">共 ${mHist.length} 筆</p></div>
+                  <div style="min-width:0;"><h2 style="font-size:calc(14px * var(--fs, 1));margin:0;">修改紀錄</h2><p style="margin:0;font-size:calc(12px * var(--fs, 1));">共 ${mHist.length} 筆</p></div>
                 </div>
               </div>
               <div class="card-bd" style="padding:0;">
@@ -2234,7 +2234,7 @@
           <form id="editForm" style="display:grid;gap:12px;padding:0;background:transparent;border:0;box-shadow:none;">
             <div class="row" style="gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;background:rgba(37,99,235,0.06);border:1px solid rgba(37,99,235,0.15);">
               <div class="tag" style="background:rgba(37,99,235,0.12);color:#2563eb;border-color:rgba(37,99,235,0.2);">ℹ</div>
-              <div style="flex:1;font-size:13px;">修正資料需填寫原因，所有修改會留痕。</div>
+              <div style="flex:1;font-size:calc(13px * var(--fs, 1));">修正資料需填寫原因，所有修改會留痕。</div>
             </div>
             <div class="row" style="gap:12px;flex-wrap:wrap;">
               <div class="field" style="flex:1;min-width:160px;">
@@ -2277,9 +2277,9 @@
           const pv = m.modal.querySelector('#edPreview');
           if (pv) pv.innerHTML = `
             <div style="padding:12px;border-radius:12px;background:rgba(22,163,74,0.06);border:1px solid rgba(22,163,74,0.15);display:grid;gap:4px;">
-              <div class="muted" style="font-size:12px;">更新後</div>
-              <div style="font-size:22px;font-weight:900;color:#16a34a;">NT$ ${fee.toFixed(2)}</div>
-              <div class="muted" style="font-size:12px;">用量：${usage.toFixed(2)}</div>
+              <div class="muted" style="font-size:calc(12px * var(--fs, 1));">更新後</div>
+              <div style="font-size:calc(22px * var(--fs, 1));font-weight:900;color:#16a34a;">NT$ ${fee.toFixed(2)}</div>
+              <div class="muted" style="font-size:calc(12px * var(--fs, 1));">用量：${usage.toFixed(2)}</div>
             </div>
           `;
         };
@@ -2307,7 +2307,7 @@
           const res = await updateRecord(db, communityId, r.id, patch, { id: ctx.uid || '', name: ctx.name || '', role }, reason);
           if (res.ok) {
             m.close();
-            const n = openModal('修正完成', `<div style="padding:14px;border-radius:14px;background:rgba(22,163,74,0.08);border:1px solid rgba(22,163,74,0.2);display:flex;gap:10px;align-items:flex-start;"><div style="font-size:22px;">✓</div><div style="flex:1;font-size:14px;font-weight:700;">資料已更新，系統已留存修改紀錄。</div></div>`, {
+            const n = openModal('修正完成', `<div style="padding:14px;border-radius:14px;background:rgba(22,163,74,0.08);border:1px solid rgba(22,163,74,0.2);display:flex;gap:10px;align-items:flex-start;"><div style="font-size:calc(22px * var(--fs, 1));">✓</div><div style="flex:1;font-size:calc(14px * var(--fs, 1));font-weight:700;">資料已更新，系統已留存修改紀錄。</div></div>`, {
               footerHtml: `<button class="btn btn-primary" data-ok>確定</button>`
             });
             n.modal.querySelector('[data-ok]').onclick = () => { n.close(); reload(); };
@@ -2326,10 +2326,10 @@
               <div class="card-hd" style="padding:10px 14px;">
                 <div class="left">
                   <div class="chip" style="width:32px;height:32px;">📩</div>
-                  <div style="min-width:0;"><h2 style="font-size:14px;margin:0;">核異內容</h2></div>
+                  <div style="min-width:0;"><h2 style="font-size:calc(14px * var(--fs, 1));margin:0;">核異內容</h2></div>
                 </div>
               </div>
-              <div class="card-bd" style="display:grid;gap:6px;font-size:13px;">
+              <div class="card-bd" style="display:grid;gap:6px;font-size:calc(13px * var(--fs, 1));">
                 <div><strong>申請人：</strong>${esc(dispute.residentName || '—')}</div>
                 <div><strong>說明：</strong>${esc(dispute.description || '')}</div>
                 ${dispute.photoDataUrl ? `<img src="${esc(dispute.photoDataUrl)}" style="max-width:100%;border-radius:12px;border:1px solid rgba(17,24,39,0.1);max-height:240px;object-fit:cover;margin-top:4px;"/>` : ''}
@@ -2375,7 +2375,7 @@
           const res = await resolveDispute(db, communityId, r.id, resolution);
           if (res.ok) {
             m.close();
-            const n = openModal('已處理', `<div style="padding:14px;border-radius:14px;background:rgba(22,163,74,0.08);border:1px solid rgba(22,163,74,0.2);display:flex;gap:10px;align-items:flex-start;"><div style="font-size:22px;">✓</div><div style="flex:1;font-size:14px;font-weight:700;">已回覆住戶並更新紀錄狀態。</div></div>`, {
+            const n = openModal('已處理', `<div style="padding:14px;border-radius:14px;background:rgba(22,163,74,0.08);border:1px solid rgba(22,163,74,0.2);display:flex;gap:10px;align-items:flex-start;"><div style="font-size:calc(22px * var(--fs, 1));">✓</div><div style="flex:1;font-size:calc(14px * var(--fs, 1));font-weight:700;">已回覆住戶並更新紀錄狀態。</div></div>`, {
               footerHtml: `<button class="btn btn-primary" data-ok>確定</button>`
             });
             n.modal.querySelector('[data-ok]').onclick = () => { n.close(); reload(); };
@@ -2515,14 +2515,14 @@
               <section class="card" style="box-shadow:none;border:1px solid rgba(22,163,74,0.18);background:linear-gradient(135deg,rgba(22,163,74,0.06),rgba(37,99,235,0.04);">
                 <div class="card-bd">
                   <div class="row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
-                    <div style="font-weight:800;font-size:14px;">預計應繳</div>
-                    <div style="font-size:26px;font-weight:900;letter-spacing:-0.5px;color:#16a34a;">NT$ ${v.data.fee.toFixed(2)}</div>
+                    <div style="font-weight:800;font-size:calc(14px * var(--fs, 1));">預計應繳</div>
+                    <div style="font-size:calc(26px * var(--fs, 1));font-weight:900;letter-spacing:-0.5px;color:#16a34a;">NT$ ${v.data.fee.toFixed(2)}</div>
                   </div>
                   <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px 14px;margin-top:8px;">
-                    <div class="row" style="justify-content:space-between;"><span class="muted" style="font-size:12px;">上期</span><strong>${v.data.previousValue}</strong></div>
-                    <div class="row" style="justify-content:space-between;"><span class="muted" style="font-size:12px;">本期</span><strong>${v.data.currentValue}</strong></div>
-                    <div class="row" style="justify-content:space-between;"><span class="muted" style="font-size:12px;">用量</span><strong>${v.data.usage.toFixed(2)}</strong></div>
-                    <div class="row" style="justify-content:space-between;"><span class="muted" style="font-size:12px;">狀態</span><strong style="color:${v.status === 'valid' ? '#16a34a' : '#b45309'};">${v.status === 'valid' ? '✓ 正常' : '⚠ ' + v.status}</strong></div>
+                    <div class="row" style="justify-content:space-between;"><span class="muted" style="font-size:calc(12px * var(--fs, 1));">上期</span><strong>${v.data.previousValue}</strong></div>
+                    <div class="row" style="justify-content:space-between;"><span class="muted" style="font-size:calc(12px * var(--fs, 1));">本期</span><strong>${v.data.currentValue}</strong></div>
+                    <div class="row" style="justify-content:space-between;"><span class="muted" style="font-size:calc(12px * var(--fs, 1));">用量</span><strong>${v.data.usage.toFixed(2)}</strong></div>
+                    <div class="row" style="justify-content:space-between;"><span class="muted" style="font-size:calc(12px * var(--fs, 1));">狀態</span><strong style="color:${v.status === 'valid' ? '#16a34a' : '#b45309'};">${v.status === 'valid' ? '✓ 正常' : '⚠ ' + v.status}</strong></div>
                   </div>
                 </div>
               </section>
@@ -2557,7 +2557,7 @@
             if (feePrev) feePrev.style.display = 'none';
             showErrors([]);
             showWarnings([]);
-            const n = openModal('建立成功', `<div style="padding:14px;border-radius:14px;background:rgba(22,163,74,0.08);border:1px solid rgba(22,163,74,0.2);display:flex;gap:10px;align-items:flex-start;"><div style="font-size:22px;">✓</div><div style="flex:1;font-size:14px;font-weight:700;">抄表紀錄已建立。${res.warnings && res.warnings.length ? `<div style="margin-top:6px;font-weight:500;font-size:13px;color:#b45309;">注意事項：${res.warnings.map(esc).join('<br/>')}</div>` : ''}</div></div>`, {
+            const n = openModal('建立成功', `<div style="padding:14px;border-radius:14px;background:rgba(22,163,74,0.08);border:1px solid rgba(22,163,74,0.2);display:flex;gap:10px;align-items:flex-start;"><div style="font-size:calc(22px * var(--fs, 1));">✓</div><div style="flex:1;font-size:calc(14px * var(--fs, 1));font-weight:700;">抄表紀錄已建立。${res.warnings && res.warnings.length ? `<div style="margin-top:6px;font-weight:500;font-size:calc(13px * var(--fs, 1));color:#b45309;">注意事項：${res.warnings.map(esc).join('<br/>')}</div>` : ''}</div></div>`, {
               footerHtml: `<button class="btn btn-ghost" data-stay>繼續登記</button>${canReview ? `<button class="btn btn-primary" data-golist>前往待處理</button>` : ''}`
             });
             n.modal.querySelector('[data-stay]').onclick = () => n.close();
@@ -2641,7 +2641,7 @@
                       <td>${r.readingDate ? (r.readingDate instanceof Date ? formatDateFull(r.readingDate) : r.readingDate) : ''}</td>
                     </tr>`).join('')}</tbody>
                   </table></div>
-                  ${pendingRows.length > 30 ? `<div style="margin-top:8px;font-size:12px;color:var(--mr-muted);">僅顯示前 30 筆，其餘 ${pendingRows.length - 30} 筆將於匯入時處理。</div>` : ''}` : ''}
+                  ${pendingRows.length > 30 ? `<div style="margin-top:8px;font-size:calc(12px * var(--fs, 1));color:var(--mr-muted);">僅顯示前 30 筆，其餘 ${pendingRows.length - 30} 筆將於匯入時處理。</div>` : ''}` : ''}
                 `;
               }
             } else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
@@ -2683,7 +2683,7 @@
                 <div style="max-height:260px;overflow:auto;margin-top:12px;border:1px solid var(--mr-border);border-radius:12px;">
                   <table class="mr-history-table">
                     <thead><tr><th>#</th><th>結果</th><th>錯誤原因</th></tr></thead>
-                    <tbody>${summary.results.filter(r => !r.ok).map(r => `<tr><td>${r.index + 1}</td><td>失敗</td><td style="color:var(--mr-gas);font-size:12px;">${(r.errors || []).map(esc).join('<br/>')}</td></tr>`).join('')}</tbody>
+                    <tbody>${summary.results.filter(r => !r.ok).map(r => `<tr><td>${r.index + 1}</td><td>失敗</td><td style="color:var(--mr-gas);font-size:calc(12px * var(--fs, 1));">${(r.errors || []).map(esc).join('<br/>')}</td></tr>`).join('')}</tbody>
                   </table>
                 </div>
               ` : ''}

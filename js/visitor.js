@@ -19,6 +19,10 @@
     return n;
   };
 
+  // 台灣手機號碼：須為 10 位數且以 09 開頭（例：0912345678）
+  const TW_MOBILE_RE = /^09\d{8}$/;
+  const isTwMobile = (v) => TW_MOBILE_RE.test(String(v || "").trim());
+
   const getParam = (k) => {
     try { return new URL(location.href).searchParams.get(k) || ""; } catch { return ""; }
   };
@@ -475,6 +479,15 @@
 
       if (!name || !unit || !phone || !partyRaw) {
         setStatus("請填寫訪客姓名、拜訪人數、拜訪戶號與手機。", true);
+        return;
+      }
+
+      if (!isTwMobile(phone)) {
+        setStatus("號碼錯誤，請重新輸入（台灣手機 10 位數，例：0912345678）。", true);
+        const phoneEl = qs("#v_phone");
+        if (phoneEl) {
+          try { phoneEl.focus(); } catch {}
+        }
         return;
       }
 

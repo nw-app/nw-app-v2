@@ -493,11 +493,12 @@ async function loadFacilities(userData) {
     const dk = String(dateKey || "").trim();
     if (!fid || !dk) return [];
     try {
-      const snap = await db.collection("communities").doc(communityId).collection("reservations")
-        .where("facilityId", "==", fid)
-        .where("dateKey", "==", dk)
-        .get();
-      const list = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
+      // 單欄位查詢（避免複合索引），再於客戶端過濾設施
+      const col = db.collection("communities").doc(communityId).collection("reservations");
+      const snap = await col.where("dateKey", "==", dk).get();
+      const list = (snap && snap.docs ? snap.docs : [])
+        .map((d) => ({ id: d.id, ...(d.data() || {}) }))
+        .filter((r) => String(r.facilityId || "").trim() === fid);
       list.sort((a, b) => String(a.startTime || "").localeCompare(String(b.startTime || "")) || String(a.unit || "").localeCompare(String(b.unit || "")));
       return list;
     } catch {
@@ -508,46 +509,78 @@ async function loadFacilities(userData) {
   async function loadUserReservations(cid, userId) {
     const communityId = String(cid || "").trim() || "default";
     const uid = String(userId || "").trim();
-    console.log('loadUserReservations - communityId:', communityId, 'userId:', uid);
     if (!uid) return [];
-    try {
-      // 先尝试获取该社区的所有预约，然后在本地过滤（避免索引问题）
-      console.log('尝试获取社区所有预约...');
-      let snap;
+    const col = db.collection("communities").doc(communityId).collection("reservations");
+    const merged = new Map();
+
+    const gather = async (query) => {
       try {
-        snap = await db.collection("communities").doc(communityId).collection("reservations")
-          .get();
+        const snap = await query.get();
+        (snap && snap.docs ? snap.docs : []).forEach((d) => {
+          if (!merged.has(d.id)) merged.set(d.id, { id: d.id, ...(d.data() || {}) });
+        });
       } catch (error) {
-        console.log('查询失败，尝试其他方式');
-        snap = { size: 0, docs: [] };
+        console.log('loadUserReservations 子查詢失敗', error);
       }
-      
-      // 在本地过滤出该用户的预约
-      const allReservations = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
-      console.log('该社区的所有预约数量:', allReservations.length);
-      console.log('所有预约数据:', allReservations);
-      
-      const userReservations = allReservations.filter(r => {
-        // 尝试多种可能的用户ID字段
-        const matchById = String(r.createdBy || r.uid || r.userId || r.userUid || '') === uid;
-        const matchByName = String(r.createdByName || r.userName || r.name || '') === currentUserName;
-        const matchByUnit = String(r.unit || '') === currentUserHouseNo;
-        return matchById || matchByName || matchByUnit;
-      });
-      
-      // 按创建时间排序（新的在前）
-      userReservations.sort((a, b) => {
-        const timeA = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
-        const timeB = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
-        return timeB - timeA;
-      });
-      
-      console.log('本地过滤后的预约数量:', userReservations.length);
-      console.log('本地过滤后的预约记录:', userReservations);
-      return userReservations;
-    } catch (e) {
-      console.error('loadUserReservations error:', e);
-      return [];
+    };
+
+    // 以單欄位查詢取得本人相關預約（建立者 uid / 同戶號），避免複合索引
+    await gather(col.where("createdBy", "==", uid));
+    if (currentUserHouseNo) {
+      await gather(col.where("unit", "==", String(currentUserHouseNo).trim()));
+    }
+
+    const userReservations = Array.from(merged.values());
+
+    // 按创建时间排序（新的在前）
+    userReservations.sort((a, b) => {
+      const timeA = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
+      const timeB = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
+      return timeB - timeA;
+    });
+
+    return userReservations;
+  }
+
+  /* ── 時段名額鎖（交易），避免併發超賣 ── */
+  function slotLockId(facilityId, dateKey, startTime) {
+    return `${String(facilityId || '').trim()}__${String(dateKey || '').trim()}__${String(startTime || '').trim()}`.replace(/\//g, '-');
+  }
+
+  function slotLockRef(cid, facilityId, dateKey, startTime) {
+    const communityId = String(cid || '').trim() || 'default';
+    return db.collection('communities').doc(communityId).collection('slotLocks').doc(slotLockId(facilityId, dateKey, startTime));
+  }
+
+  async function reserveSlotTx({ cid, facilityId, dateKey, startTime, capacity, currentUsed, buildPayload }) {
+    const communityId = String(cid || '').trim() || 'default';
+    const cap = Math.max(1, Number(capacity) || 1);
+    const lockRef = slotLockRef(communityId, facilityId, dateKey, startTime);
+    const resRef = db.collection('communities').doc(communityId).collection('reservations').doc();
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(lockRef);
+      const base = snap && snap.exists ? (Number((snap.data() || {}).count) || 0) : (Number(currentUsed) || 0);
+      if (base >= cap) return { ok: false, reason: 'full' };
+      tx.set(lockRef, {
+        facilityId,
+        dateKey,
+        startTime,
+        count: base + 1,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      tx.set(resRef, buildPayload());
+      return { ok: true, id: resRef.id };
+    });
+  }
+
+  async function loadUserPointsBalance(cid, uid) {
+    const userId = String(uid || '').trim();
+    if (!userId) return 0;
+    try {
+      const d = await db.collection('users').doc(userId).get();
+      return d && d.exists ? (Number((d.data() || {}).points || 0) || 0) : 0;
+    } catch {
+      return 0;
     }
   }
 
@@ -797,7 +830,7 @@ async function loadFacilities(userData) {
         
         if (status === 'self-booked' && reservationId) {
           // 自己预约的，显示取消确认
-          openCancelConfirmModal(facility, start, end, reservationId);
+          openCancelConfirmModal(facility, start, end, reservationId, ymd80(selectedDate));
         } else if (status === 'available') {
           // 可用时段，显示预约确认
           handleTimeSlotSelect(facility, start, end);
@@ -893,6 +926,12 @@ async function loadFacilities(userData) {
   }
 
   function openBookingConfirmModal(facility, start, end) {
+    const chargeMethod = String(facility.chargeMethod || '').trim();
+    const chargeAmount = Number(facility.chargeAmount || 0) || 0;
+    let chargeText = chargeMethod || '免費';
+    if (chargeAmount > 0) chargeText += `（${chargeAmount}${chargeMethod === '現金' ? ' 元' : ' 點'}）`;
+    const needPoints = chargeMethod === '點數' && chargeAmount > 0;
+
     const confirmHtml = `
       <div class="booking-confirm-modal" id="bookingConfirmModal">
         <div class="booking-confirm-backdrop" id="bookingConfirmBackdrop"></div>
@@ -917,7 +956,11 @@ async function loadFacilities(userData) {
               </div>
               <div class="booking-confirm-row">
                 <span class="booking-confirm-label">消費方式</span>
-                <span class="booking-confirm-value">${escapeHtml(facility.chargeMethod || '免費')}</span>
+                <span class="booking-confirm-value">${escapeHtml(chargeText)}</span>
+              </div>
+              <div class="booking-confirm-row" id="bookingPointsRow" ${needPoints ? '' : 'hidden'}>
+                <span class="booking-confirm-label">目前點數</span>
+                <span class="booking-confirm-value" id="bookingPointsValue">讀取中…</span>
               </div>
             </div>
           </div>
@@ -949,8 +992,20 @@ async function loadFacilities(userData) {
     closeBtn.addEventListener('click', closeModal);
     cancelBtn.addEventListener('click', closeModal);
     backdrop.addEventListener('click', closeModal);
-    
+
+    // 點數模式：顯示目前餘額
+    if (needPoints) {
+      loadUserPointsBalance(currentCommunityId, currentUserId).then((bal) => {
+        const el = document.getElementById('bookingPointsValue');
+        if (!el) return;
+        el.textContent = `${bal} 點`;
+        el.style.color = bal < chargeAmount ? '#d32f2f' : '';
+      });
+    }
+
     confirmBtn.addEventListener('click', async () => {
+      if (confirmBtn.disabled) return;
+      confirmBtn.disabled = true;
       try {
         // 检查用户信息
         if (!currentUserId || !currentUserHouseNo || !currentUserName) {
@@ -960,8 +1015,14 @@ async function loadFacilities(userData) {
         
         // 获取日期key
         const dateKey = ymd80(selectedDate);
-        
-        // 检查该时段是否已满
+        const startAt = makeDateTime80(dateKey, start);
+        const endAt = makeDateTime80(dateKey, end);
+        if (!startAt || !endAt) {
+          alert('時段資料異常，請重新選擇');
+          return;
+        }
+
+        // 取得該時段目前使用數（作為交易首次寫入的起始值）
         const existingReservations = await loadReservationsByFacilityDate(
           currentCommunityId,
           facility.id,
@@ -972,15 +1033,8 @@ async function loadFacilities(userData) {
           String(r.startTime || '') === start && 
           ['pending', 'approved'].includes(String(r.status || 'pending'))
         ).length;
-        
-        if (used >= Number(facility.capacity || 1)) {
-          alert('該時段已滿，請選擇其他時段');
-          return;
-        }
-        
+
         // 创建预约
-        const startAt = makeDateTime80(dateKey, start);
-        const endAt = makeDateTime80(dateKey, end);
         const status = facility.requireApproval ? 'pending' : 'approved';
         
         const payload = {
@@ -995,6 +1049,10 @@ async function loadFacilities(userData) {
           name: currentUserName,
           note: '',
           status,
+          chargeMethod,
+          chargeAmount,
+          pointDeducted: false,
+          residentId: currentUserId,
           createdBy: currentUserId,
           createdByName: currentUserName,
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -1007,7 +1065,20 @@ async function loadFacilities(userData) {
           payload.approvedByName = currentUserName;
         }
         
-        await db.collection('communities').doc(currentCommunityId).collection('reservations').add(payload);
+        const result = await reserveSlotTx({
+          cid: currentCommunityId,
+          facilityId: facility.id,
+          dateKey,
+          startTime: start,
+          capacity: Number(facility.capacity || 1),
+          currentUsed: used,
+          buildPayload: () => payload
+        });
+
+        if (!result || result.ok !== true) {
+          alert('該時段已滿，請選擇其他時段');
+          return;
+        }
         
         alert(status === 'pending' ? '預約已送出，請等待審核' : '預約成功！');
         closeModal();
@@ -1021,6 +1092,8 @@ async function loadFacilities(userData) {
       } catch (e) {
         console.error('Error booking:', e);
         alert('預約失敗，請稍後再試');
+      } finally {
+        confirmBtn.disabled = false;
       }
     });
     
@@ -1028,7 +1101,9 @@ async function loadFacilities(userData) {
     modal.hidden = false;
   }
 
-  function openCancelConfirmModal(facility, start, end, reservationId) {
+  function openCancelConfirmModal(facility, start, end, reservationId, dateKey) {
+    const displayDate = dateKey ? new Date(String(dateKey) + 'T00:00:00') : selectedDate;
+    const displayDateText = displayDate && !Number.isNaN(displayDate.getTime()) ? formatDateDisplay(displayDate) : formatDateDisplay(selectedDate);
     const confirmHtml = `
       <div class="booking-confirm-modal" id="cancelConfirmModal">
         <div class="booking-confirm-backdrop" id="cancelConfirmBackdrop"></div>
@@ -1045,7 +1120,7 @@ async function loadFacilities(userData) {
               </div>
               <div class="booking-confirm-row">
                 <span class="booking-confirm-label">預約日期</span>
-                <span class="booking-confirm-value">${formatDateDisplay(selectedDate)}</span>
+                <span class="booking-confirm-value">${displayDateText}</span>
               </div>
               <div class="booking-confirm-row">
                 <span class="booking-confirm-label">預約時段</span>
@@ -1083,10 +1158,40 @@ async function loadFacilities(userData) {
     backdrop.addEventListener('click', closeModal);
     
     confirmBtn.addEventListener('click', async () => {
+      if (confirmBtn.disabled) return;
+      confirmBtn.disabled = true;
       try {
+        const ref = db.collection('communities').doc(currentCommunityId).collection('reservations').doc(reservationId);
+        let prev = {};
+        try {
+          const cur = await ref.get();
+          prev = cur && cur.exists ? (cur.data() || {}) : {};
+        } catch {}
+
+        // 已報到：不可取消
+        if (prev.checkedIn === true) {
+          alert('此預約已完成報到，無法取消');
+          return;
+        }
+        // 已非待審核／已核准狀態：不可取消
+        const prevStatus = String(prev.status || '');
+        if (prevStatus && !['pending', 'approved'].includes(prevStatus)) {
+          alert('此預約已無法取消');
+          return;
+        }
+        // 時段已開始：不可取消
+        let startAt = prev.startAt && prev.startAt.toDate ? prev.startAt.toDate() : null;
+        if (!startAt) startAt = makeDateTime80(prev.dateKey || ymd80(selectedDate), prev.startTime || start);
+        if (startAt && startAt.getTime() <= Date.now()) {
+          alert('預約時段已開始，無法取消');
+          return;
+        }
+
         // 取消预约
-        await db.collection('communities').doc(currentCommunityId).collection('reservations').doc(reservationId).update({
+        await ref.update({
           status: 'canceled',
+          canceledAt: firebase.firestore.FieldValue.serverTimestamp(),
+          canceledByName: currentUserName,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         
@@ -1111,6 +1216,8 @@ async function loadFacilities(userData) {
       } catch (e) {
         console.error('Error canceling booking:', e);
         alert('取消預約失敗，請稍後再試');
+      } finally {
+        confirmBtn.disabled = false;
       }
     });
     
@@ -1268,7 +1375,7 @@ async function loadFacilities(userData) {
       id: '',
       name: facilityName
     };
-    openCancelConfirmModal(facility, startTime, endTime, reservationId);
+    openCancelConfirmModal(facility, startTime, endTime, reservationId, dateKey);
   };
 
   let authWaitTimer = null;

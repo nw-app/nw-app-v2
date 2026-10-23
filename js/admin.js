@@ -1132,6 +1132,15 @@
     modal.hidden = false;
   }
 
+  let _unsubResidentsOverview = null;
+
+  function stopResidentsOverviewSubscription() {
+    if (typeof _unsubResidentsOverview === "function") {
+      try { _unsubResidentsOverview(); } catch {}
+    }
+    _unsubResidentsOverview = null;
+  }
+
   function stopResidentsSubscription() {
      if (state.unsubResidents) {
        try {
@@ -1202,6 +1211,10 @@
     if (_unsubParcels) {
       try { _unsubParcels(); } catch {}
       _unsubParcels = null;
+    }
+    if (_unsubTempItems) {
+      try { _unsubTempItems(); } catch {}
+      _unsubTempItems = null;
     }
   }
 
@@ -1323,6 +1336,8 @@
       subnavBadge.hidden = n === 0;
     }
     updateResidentsNavBadgeCombined();
+    const overviewPendingEl = document.querySelector("#residentsOverview [data-overview-pending]");
+    if (overviewPendingEl) overviewPendingEl.textContent = String(n);
   }
   function ensureResidentsPendingCountSubscription(cid) {
     const communityId = String(cid || "").trim();
@@ -2654,7 +2669,7 @@
       try {
         const html = `
           <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,Noto Sans TC,PingFang TC,Microsoft JhengHei,sans-serif;">
-            <div style="font-weight:900;font-size:16px;">${escapeHtml(String(communityName || "").trim() || "社區")}｜訪客證</div>
+            <div style="font-weight:900;font-size:calc(16px * var(--fs, 1));">${escapeHtml(String(communityName || "").trim() || "社區")}｜訪客證</div>
             <div style="margin-top:10px;color:#374151;">
               <div>來訪：${escapeHtml(inText || "—")}</div>
               <div>離開：${escapeHtml(outText || "—")}</div>
@@ -2768,7 +2783,7 @@
       const subject = `訪客證 QR code（${String(name || "訪客")}）`;
       const html = `
         <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,Noto Sans TC,PingFang TC,Microsoft JhengHei,sans-serif;">
-          <div style="font-weight:900;font-size:16px;">${escapeHtml(String(communityName || "").trim() || "社區")}｜訪客證</div>
+          <div style="font-weight:900;font-size:calc(16px * var(--fs, 1));">${escapeHtml(String(communityName || "").trim() || "社區")}｜訪客證</div>
           <div style="margin-top:10px;color:#374151;">
             <div>來訪：${escapeHtml(inText || "—")}</div>
             <div>離開：${escapeHtml(outText || "—")}</div>
@@ -4285,7 +4300,7 @@
         </div>
         <div class="modal-body" style="display:flex;flex-direction:column;gap:16px;">
           <div style="padding:16px 18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#f9fafb;">
-            <div style="font-size:16px;font-weight:800;color:#111827;">社區角色子分頁</div>
+            <div style="font-size:calc(16px * var(--fs, 1));font-weight:800;color:#111827;">社區角色子分頁</div>
             <div style="margin-top:6px;color:#6b7280;line-height:1.65;">控制社區角色是否顯示住戶模組上方子分頁列。每個子分頁可獨立開關；關閉的子分頁在社區角色下不顯示且不可操作。</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#fff;">
@@ -4297,7 +4312,7 @@
               { id: "chatphone", label: "對講機" },
             ].map((x) => `
               <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 12px;border:1px solid rgba(17,24,39,0.08);border-radius:14px;background:#f9fafb;">
-                <div style="font-size:15px;font-weight:800;color:#111827;">${x.label}</div>
+                <div style="font-size:calc(15px * var(--fs, 1));font-weight:800;color:#111827;">${x.label}</div>
                 <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
                   <span data-subnav-off="${x.id}" style="font-weight:700;color:#9ca3af;">關閉</span>
                   <label class="switch" aria-label="切換 ${x.label}">
@@ -4665,11 +4680,15 @@
     
     if (subnavEl) {
       subnavEl.innerHTML = `
-        <button class="btn btn-sm btn-primary" data-filter="pending">
+        <button class="btn btn-sm btn-primary" data-filter="overview">總覽</button>
+        <button class="btn btn-sm" data-filter="pending">
           <span class="badge-inline" id="parcelPendingBadge" hidden>0</span>
           待領取
         </button>
         <button class="btn btn-sm" data-filter="received">已領取</button>
+        <button class="btn btn-sm" data-filter="overdue">逾期</button>
+        <button class="btn btn-sm" data-filter="temp">暫寄物</button>
+        <button class="btn btn-sm" type="button" id="btnCourierConfig">設定</button>
       `;
       
       subnavEl.querySelectorAll("[data-filter]").forEach(btn => {
@@ -4677,9 +4696,16 @@
           subnavEl.querySelectorAll("[data-filter]").forEach(b => b.classList.remove("btn-primary"));
           btn.classList.add("btn-primary");
           const filter = btn.getAttribute("data-filter");
-          renderParcelList(filter, readParcelFilters());
+          if (filter === "overview") renderParcelOverview(cid, communityName);
+          else if (filter === "temp") renderTempItemPanel(cid, communityName);
+          else renderParcelPanel(filter, communityName);
         };
       });
+
+      const btnCourierConfig = document.getElementById("btnCourierConfig");
+      if (btnCourierConfig) {
+        btnCourierConfig.onclick = () => openCourierConfigModal80({ cid });
+      }
     }
 
     contentEl.innerHTML = `
@@ -4688,53 +4714,123 @@
           <div class="left">
             <div class="chip" aria-hidden="true">${iconSvg("parcel")}</div>
             <div style="min-width:0;">
-              <h2>包裹郵件${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+              <h2>包裹郵件</h2>
               <p>登記到貨、通知住戶、領取簽收</p>
             </div>
           </div>
-          <button class="btn btn-sm btn-ghost" type="button" id="btnCourierConfig" aria-label="物流設定" title="物流設定">
-            ${iconSvg("settings")}
-          </button>
         </div>
         <div class="card-bd">
-          <div class="parcel-filter-bar" id="parcelFilterBar">
-            <div class="field">
-              <label for="parcelFilterDate">日期</label>
-              <input id="parcelFilterDate" type="date" />
-            </div>
-            <div class="field">
-              <label for="parcelFilterUnit">戶號</label>
-              <input id="parcelFilterUnit" type="text" autocomplete="off" placeholder="例如 A1-1" />
-            </div>
-            <div class="field">
-              <label for="parcelFilterName">姓名</label>
-              <input id="parcelFilterName" type="text" autocomplete="off" placeholder="例如 王小明" />
-            </div>
-            <button class="btn btn-sm" type="button" id="btnParcelFilterClear">清除</button>
-            <button class="btn btn-sm danger" type="button" id="btnRegisterParcel">登記包裹</button>
-            <button class="btn btn-sm btn-success" type="button" id="btnScanResidentParcel" aria-label="掃描住戶 QR Code" title="掃描住戶 QR Code">掃描 QR code</button>
-          </div>
-          <div class="parcel-list-container" id="parcelList">
-            <div class="status">讀取中...</div>
-          </div>
+          <div id="parcelBody"></div>
         </div>
       </section>
     `;
 
-    bindParcelFilterBar();
+    ensureParcelPendingCountSubscription(cid);
+    ensureParcelConfig80(cid);
+    _parcelFilterCache = { date: "", unit: "", name: "" };
+    _tempFilterCache = { date: "", unit: "", name: "", status: "pending" };
+    renderParcelOverview(cid, communityName);
+  }
 
-    const btnCourierConfig = document.getElementById("btnCourierConfig");
-    if (btnCourierConfig) {
-      btnCourierConfig.onclick = () => openCourierConfigModal80({ cid });
-    }
+  /* 總覽：當日包裹狀況（KPI 區塊） */
+  function renderParcelOverview(cid, communityName) {
+    stopParcelsSubscription();
+
+    const bodyEl = document.getElementById("parcelBody");
+    if (!bodyEl) return;
+
+    ensureParcelStatsSubscription80(cid);
+
+    const now = new Date();
+    const dateLabel = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    bodyEl.innerHTML = `
+          <div class="parcel-overview">
+            <div class="parcel-overview-head">
+              <strong>今日包裹狀況</strong>
+              <span>${escapeHtml(dateLabel)}</span>
+            </div>
+            <div class="parcel-overview-grid" id="parcelKpiBar"></div>
+          </div>
+    `;
+    renderParcelKpi80();
+  }
+
+  /* 待領取／已領取：包裹清單（含篩選列） */
+  function renderParcelPanel(filter, communityName) {
+    stopParcelsSubscription();
+
+    const cid = resolveActiveCommunityId();
+    const bodyEl = document.getElementById("parcelBody");
+    if (!bodyEl) return;
+
+    const cache = _parcelFilterCache || { date: "", unit: "", name: "" };
+    bodyEl.innerHTML = `
+          <div class="parcel-filter-bar" id="parcelFilterBar">
+            <div class="field">
+              <label for="parcelFilterDate">日期</label>
+              <input id="parcelFilterDate" type="date" value="${escapeHtml(cache.date)}" />
+            </div>
+            <div class="field">
+              <label for="parcelFilterUnit">戶號</label>
+              <input id="parcelFilterUnit" type="text" autocomplete="off" placeholder="例如 A1-1" value="${escapeHtml(cache.unit)}" />
+            </div>
+            <div class="field">
+              <label for="parcelFilterName">姓名</label>
+              <input id="parcelFilterName" type="text" autocomplete="off" placeholder="例如 王小明" value="${escapeHtml(cache.name)}" />
+            </div>
+            <button class="btn btn-sm" type="button" id="btnParcelFilterClear">清除</button>
+            <button class="btn btn-sm danger" type="button" id="btnRegisterParcel">登記包裹</button>
+            <button class="btn btn-sm btn-success" type="button" id="btnScanResidentParcel" aria-label="掃描住戶 QR Code" title="掃描住戶 QR Code">掃描 QR code</button>
+            <div class="field parcel-sort-field">
+              <label for="parcelSortSelect80">排序</label>
+              <select id="parcelSortSelect80">
+                <option value="arrival_desc">到貨（新→舊）</option>
+                <option value="arrival_asc">到貨（舊→新）</option>
+                <option value="age_desc">待領天數（多→少）</option>
+                <option value="unit">戶號</option>
+                <option value="company">物流</option>
+              </select>
+            </div>
+          </div>
+          <div class="parcel-tools">
+            <button class="btn btn-sm" type="button" id="btnBatchNotify80">批次催領</button>
+            <button class="btn btn-sm" type="button" id="btnParcelMonthly80">月報匯出</button>
+          </div>
+          <div class="parcel-summary-bar" id="parcelSummaryBar" hidden></div>
+          <div class="parcel-list-container" id="parcelList">
+            ${parcelSkeletonHtml80()}
+          </div>
+    `;
+
+    bindParcelFilterBar();
 
     const btnRegister = document.getElementById("btnRegisterParcel");
     if (btnRegister) {
       btnRegister.onclick = () => openParcelModal80({ cid, communityName });
     }
 
-    ensureParcelPendingCountSubscription(cid);
-    renderParcelList("pending", readParcelFilters());
+    const btnBatchNotify = document.getElementById("btnBatchNotify80");
+    if (btnBatchNotify) {
+      btnBatchNotify.onclick = () => openParcelBatchNotifyModal80({ cid, communityName });
+    }
+
+    const btnMonthly = document.getElementById("btnParcelMonthly80");
+    if (btnMonthly) {
+      btnMonthly.onclick = () => exportParcelMonthlyReport80(cid, communityName);
+    }
+
+    const sortSel = document.getElementById("parcelSortSelect80");
+    if (sortSel) {
+      sortSel.value = _parcelSort80 || "arrival_desc";
+      sortSel.onchange = () => {
+        _parcelSort80 = String(sortSel.value || "arrival_desc");
+        const activeBtn = subnavEl ? subnavEl.querySelector("[data-filter].btn-primary") : null;
+        const cur = activeBtn ? String(activeBtn.getAttribute("data-filter") || "pending") : filter;
+        renderParcelList(cur, readParcelFilters());
+      };
+    }
+
+    renderParcelList(filter, readParcelFilters());
   }
 
   function bindParcelFilterBar() {
@@ -4784,6 +4880,7 @@
     const date = dateEl ? String(dateEl.value || "").trim() : "";
     const unit = unitEl ? String(unitEl.value || "").trim() : "";
     const name = nameEl ? String(nameEl.value || "").trim() : "";
+    _parcelFilterCache = { date, unit, name };
     return { date, unit, name };
   }
 
@@ -4905,24 +5002,16 @@
     const dk = String(dateKey || "").trim();
     if (!fid) return [];
     try {
-      console.log('loadReservationsByFacilityDate80 - 开始加载:', { communityId, fid, dk });
-      
-      // 获取该设施的所有预约（避免复合索引问题）
-      const snap = await db.collection("communities").doc(communityId).collection("reservations")
-        .where("facilityId", "==", fid)
-        .get();
-      
-      console.log('原始查询结果数量:', snap.size);
-      
+      // 單欄位查詢（免複合索引）：有日期時查該日全部預約再過濾設施，無日期時查該設施全部
+      const col = db.collection("communities").doc(communityId).collection("reservations");
+      const snap = dk
+        ? await col.where("dateKey", "==", dk).get()
+        : await col.where("facilityId", "==", fid).get();
+
       let list = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
-      
-      console.log('解析后列表长度:', list.length);
-      console.log('预约数据示例:', list[0]);
-      
-      // 如果指定了日期，在本地过滤
+
       if (dk) {
-        list = list.filter(r => String(r.dateKey || "").trim() === dk);
-        console.log('按日期过滤后长度:', list.length);
+        list = list.filter((r) => String(r.facilityId || "").trim() === fid);
       }
       
       // 按日期和时间从新到旧排序
@@ -4955,6 +5044,117 @@
     }
   }
 
+  async function loadReservationsByDate80({ cid, dateKey }) {
+    const communityId = String(cid || "").trim() || "default";
+    const dk = String(dateKey || "").trim();
+    if (!dk) return [];
+    try {
+      const snap = await db.collection("communities").doc(communityId).collection("reservations")
+        .where("dateKey", "==", dk)
+        .get();
+      return (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
+    } catch {
+      return [];
+    }
+  }
+
+  /* ── 設施預約：時段名額鎖（交易）＋稽核軌跡 ── */
+
+  function slotLockId80(facilityId, dateKey, startTime) {
+    return `${String(facilityId || "").trim()}__${String(dateKey || "").trim()}__${String(startTime || "").trim()}`.replace(/\//g, "-");
+  }
+
+  function slotLockRef80(cid, facilityId, dateKey, startTime) {
+    const communityId = String(cid || "").trim() || "default";
+    return db.collection("communities").doc(communityId).collection("slotLocks").doc(slotLockId80(facilityId, dateKey, startTime));
+  }
+
+  /**
+   * 以交易建立預約並佔用時段名額，避免併發超賣。
+   * lock 尚不存在時（舊資料）以 currentUsed 初始化，確保既有預約也被計入。
+   */
+  async function reserveSlotTx80({ cid, facilityId, dateKey, startTime, capacity, currentUsed, buildPayload }) {
+    const communityId = String(cid || "").trim() || "default";
+    const cap = Math.max(1, Number(capacity) || 1);
+    const lockRef = slotLockRef80(communityId, facilityId, dateKey, startTime);
+    const resRef = db.collection("communities").doc(communityId).collection("reservations").doc();
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(lockRef);
+      const base = snap.exists ? (Number((snap.data() || {}).count) || 0) : (Number(currentUsed) || 0);
+      if (base >= cap) return { ok: false, reason: "full" };
+      tx.set(lockRef, {
+        facilityId: String(facilityId || ""),
+        dateKey: String(dateKey || ""),
+        startTime: String(startTime || ""),
+        count: base + 1,
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      tx.set(resRef, buildPayload());
+      return { ok: true, id: resRef.id };
+    });
+  }
+
+  /** 釋放時段名額（取消／拒絕／刪除時）。lock 不存在時不建立，避免污染舊資料。 */
+  async function releaseSlotTx80({ cid, facilityId, dateKey, startTime }) {
+    if (!facilityId || !dateKey || !startTime) return;
+    const lockRef = slotLockRef80(cid, facilityId, dateKey, startTime);
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(lockRef);
+        if (!snap.exists) return;
+        const cur = Number((snap.data() || {}).count) || 0;
+        tx.set(lockRef, { count: Math.max(0, cur - 1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      });
+    } catch {}
+  }
+
+  const RESERVATION_AUDIT_LABELS = {
+    create: "建立",
+    approved: "核准",
+    rejected: "拒絕",
+    canceled: "取消",
+    checkedIn: "報到",
+    delete: "刪除"
+  };
+
+  const RESERVATION_DELETE_REASONS = [
+    "重複登記",
+    "住戶自行取消",
+    "資料誤植",
+    "時段異動",
+    "系統測試資料"
+  ];
+
+  /** 寫入預約稽核紀錄（失敗不阻斷主流程） */
+  async function writeReservationAudit80({ cid, action, reservationId, reservation, reason = "", snapshot = null }) {
+    const communityId = String(cid || "").trim();
+    const act = String(action || "").trim();
+    if (!communityId || !act) return;
+    const r = reservation && typeof reservation === "object" ? reservation : {};
+    try {
+      const u = auth && auth.currentUser ? auth.currentUser : null;
+      await db.collection("communities").doc(communityId).collection("reservationAudit").add({
+        action: act,
+        actionLabel: RESERVATION_AUDIT_LABELS[act] || act,
+        reservationId: String(reservationId || ""),
+        facilityId: String(r.facilityId || ""),
+        facilityName: String(r.facilityName || ""),
+        dateKey: String(r.dateKey || ""),
+        startTime: String(r.startTime || ""),
+        endTime: String(r.endTime || ""),
+        unit: String(r.unit || ""),
+        name: String(r.name || ""),
+        status: String(r.status || ""),
+        reason: String(reason || ""),
+        snapshot: snapshot || r || null,
+        actorUid: u ? String(u.uid || "") : "",
+        actorName: getAdminDisplayName80(),
+        at: FieldValue.serverTimestamp()
+      });
+    } catch {}
+  }
+
+
   function getAdminDisplayName80() {
     const el = document.getElementById("profileNameText");
     const name = el ? String(el.textContent || "").trim() : "";
@@ -4984,17 +5184,17 @@
               <table class="units-table">
                 <thead>
                   <tr>
-                    <th style="width: 240px;">上傳圖片</th>
-                    <th style="width: 190px;">名稱</th>
-                    <th style="width: 110px;">開始</th>
-                    <th style="width: 110px;">結束</th>
-                    <th style="width: 110px;">時段(分)</th>
+                    <th style="width: 320px;">上傳圖片</th>
+                    <th style="width: 200px;">名稱</th>
+                    <th style="width: 150px;">開始</th>
+                    <th style="width: 150px;">結束</th>
+                    <th style="width: 130px;">時段(分)</th>
                     <th style="width: 110px;">名額</th>
-                    <th style="width: 200px;">消費方式</th>
-                    <th style="width: 150px;">金額</th>
-                    <th style="width: 110px;">提前預約(天)</th>
-                    <th style="width: 110px;">需審核</th>
-                    <th style="width: 110px;">啟用</th>
+                    <th style="width: 180px;">消費方式</th>
+                    <th style="width: 130px;">金額</th>
+                    <th style="width: 160px;">提前預約(天)</th>
+                    <th style="width: 100px;">需審核</th>
+                    <th style="width: 100px;">啟用</th>
                     <th style="width: 50px;"></th>
                   </tr>
                 </thead>
@@ -5073,9 +5273,17 @@
         uploadBtn.onclick = () => uploadInput.click();
         uploadInput.onchange = async () => {
           const file = uploadInput.files && uploadInput.files[0] ? uploadInput.files[0] : null;
+          if (!file) return;
+          setStatus("圖片處理中...", false);
           const dataUrl = await fileToImageDataUrl80(file);
+          if (dataUrl && dataUrl.length > FACILITY_IMAGE_MAX_CHARS) {
+            if (uploadInput) uploadInput.value = "";
+            setStatus("圖片過大，請改用較小的圖片。", true);
+            return;
+          }
           if (uploadHidden) uploadHidden.value = String(dataUrl || "");
           if (uploadPreview) uploadPreview.style.backgroundImage = dataUrl ? `url('${String(dataUrl).replace(/'/g, "%27")}')` : "";
+          setStatus("", false);
         };
       }
       const rm = tr.querySelector(".remove-row");
@@ -5175,8 +5383,13 @@
         modal.hidden = true;
         detach();
       } catch (err) {
+        console.error("[facility config save]", err);
         const code = String(err && err.code ? err.code : "");
-        setStatus(code.includes("permission-denied") ? "沒有權限儲存。" : "儲存失敗，請稍後再試。", true);
+        const msg = String(err && err.message ? err.message : "");
+        if (code.includes("permission-denied")) setStatus("沒有權限儲存。", true);
+        else if (/exceed|too large|1048576|longer than|maximum/i.test(msg)) setStatus("圖片過大，請改用較小的圖片。", true);
+        else if (code) setStatus(`儲存失敗（${code}）`, true);
+        else setStatus(msg ? `儲存失敗：${msg}` : "儲存失敗，請稍後再試。", true);
       } finally {
         if (btnSave) btnSave.disabled = false;
       }
@@ -5192,12 +5405,60 @@
     };
   }
 
-  function fileToImageDataUrl80(file) {
+  /* 設施圖片以 Base64 存於 Firestore，單一文件上限 1MB，故先壓縮並限制大小 */
+  const FACILITY_IMAGE_MAX_CHARS = 700 * 1024;
+
+  function fileToImageDataUrl80(file, maxEdge = 1024, quality = 0.72, maxChars = FACILITY_IMAGE_MAX_CHARS) {
     return new Promise((resolve) => {
       if (!file) return resolve("");
       const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ""));
       reader.onerror = () => resolve("");
+      reader.onload = () => {
+        const raw = String(reader.result || "");
+        const img = new Image();
+        img.onerror = () => resolve(raw);
+        img.onload = () => {
+          try {
+            const sw = img.naturalWidth || img.width || 0;
+            const sh = img.naturalHeight || img.height || 0;
+            if (!sw || !sh) return resolve(raw);
+            // 由高品質逐步降階，直到 Base64 長度可安全存入單一 Firestore 文件
+            const attempts = [
+              [Number(maxEdge) || 1024, Number(quality) || 0.72],
+              [900, 0.6],
+              [720, 0.5],
+              [560, 0.45],
+              [420, 0.4],
+            ];
+            let best = "";
+            for (const item of attempts) {
+              const limit = Math.max(1, item[0]);
+              let w = sw;
+              let h = sh;
+              if (sw > limit || sh > limit) {
+                const s = Math.min(limit / sw, limit / sh);
+                w = Math.max(1, Math.round(sw * s));
+                h = Math.max(1, Math.round(sh * s));
+              }
+              const canvas = document.createElement("canvas");
+              canvas.width = w;
+              canvas.height = h;
+              const ctx = canvas.getContext("2d");
+              if (!ctx) return resolve(raw);
+              ctx.fillStyle = "#ffffff";
+              ctx.fillRect(0, 0, w, h);
+              ctx.drawImage(img, 0, 0, w, h);
+              const out = canvas.toDataURL("image/jpeg", Math.max(0.1, Math.min(1, item[1])));
+              if (out && out.length < raw.length && (!best || out.length < best.length)) best = out;
+              if (out && out.length <= maxChars) return resolve(out);
+            }
+            resolve(best || raw);
+          } catch {
+            resolve(raw);
+          }
+        };
+        img.src = raw;
+      };
       reader.readAsDataURL(file);
     });
   }
@@ -5984,7 +6245,7 @@
           <!-- 預約列表模式 -->
           <div id="listMode80" hidden>
             <div id="residentCheckInInfo80">
-              <div class="resident-name" style="font-size:18px; font-weight:600; margin-bottom:8px;"></div>
+              <div class="resident-name" style="font-size:calc(18px * var(--fs, 1)); font-weight:600; margin-bottom:8px;"></div>
               <div class="resident-sub" style="color:var(--color-text-muted); margin-bottom:16px;"></div>
             </div>
             <div id="residentReservationsList80"></div>
@@ -6275,18 +6536,11 @@
       if (!ok) return;
 
       try {
-        const u = auth && auth.currentUser ? auth.currentUser : null;
-        const by = u ? String(u.uid || "") : "";
-        const byName = getAdminDisplayName80();
-        const patch = {
-          checkedIn: true,
-          checkedInAt: FieldValue.serverTimestamp(),
-          checkedInBy: by,
-          checkedInByName: byName,
-          updatedAt: FieldValue.serverTimestamp()
-        };
-        await db.collection("communities").doc(cid).collection("reservations").doc(id).set(patch, { merge: true });
-        
+        const okDone = await checkInReservation80({ cid, id });
+        if (!okDone) {
+          setStatus("報到失敗，請稍後再試。", true);
+          return;
+        }
         if (currentReservations) {
           const r = currentReservations.find(x => String(x.id || "") === String(id || ""));
           if (r) {
@@ -6481,12 +6735,9 @@
       if (btnSubmit) btnSubmit.disabled = true;
       setStatus("建立中...", false);
       try {
+        // 先取得此時段目前使用數（作為交易首次寫入的起始值）
         const exist = await loadReservationsByFacilityDate80({ cid: communityId, facilityId: fid, dateKey });
         const used = exist.filter((x) => String(x.startTime || "") === startTime && ["pending", "approved"].includes(String(x.status || "pending"))).length;
-        if (used >= Number(cfg.capacity || 1)) {
-          setStatus("此時段名額已滿。", true);
-          return;
-        }
 
         // 查找住戶數據
         let residentData = {};
@@ -6516,6 +6767,8 @@
         const createdBy = u ? String(u.uid || "") : "";
         const createdByName = getAdminDisplayName80();
         const status = cfg.requireApproval ? "pending" : "approved";
+        const chargeMethod = String(cfg.chargeMethod || "").trim();
+        const chargeAmount = Number(cfg.chargeAmount || 0) || 0;
         const payload = {
           facilityId: fid,
           facilityName: cfg.name,
@@ -6528,6 +6781,9 @@
           name,
           note,
           status,
+          chargeMethod,
+          chargeAmount,
+          pointDeducted: false,
           createdBy,
           createdByName,
           createdAt: FieldValue.serverTimestamp(),
@@ -6539,7 +6795,25 @@
           payload.approvedBy = createdBy;
           payload.approvedByName = createdByName;
         }
-        await db.collection("communities").doc(communityId).collection("reservations").add(payload);
+        const result = await reserveSlotTx80({
+          cid: communityId,
+          facilityId: fid,
+          dateKey,
+          startTime: s.startTime,
+          capacity: Number(cfg.capacity || 1),
+          currentUsed: used,
+          buildPayload: () => payload,
+        });
+        if (!result || result.ok !== true) {
+          setStatus("此時段名額已滿。", true);
+          return;
+        }
+        await writeReservationAudit80({
+          cid: communityId,
+          action: "create",
+          reservationId: result.id,
+          reservation: { ...payload, id: result.id },
+        });
         toast(status === "pending" ? "已送出待審核" : "已建立預約");
         if (typeof onSaved === "function") onSaved();
         modal.hidden = true;
@@ -6590,24 +6864,226 @@
       patch.canceledBy = by;
       patch.canceledByName = byName;
     }
+    const ref = db.collection("communities").doc(communityId).collection("reservations").doc(rid);
+    let prev = {};
     try {
-      await db.collection("communities").doc(communityId).collection("reservations").doc(rid).set(patch, { merge: true });
+      const cur = await ref.get();
+      prev = cur && cur.exists ? (cur.data() || {}) : {};
+    } catch {}
+    try {
+      await ref.set(patch, { merge: true });
+      // 狀態若離開 pending/approved，釋放該時段名額
+      const prevStatus = String(prev.status || "pending");
+      if (st !== prevStatus && ["rejected", "canceled"].includes(st) && ["pending", "approved"].includes(prevStatus)) {
+        await releaseSlotTx80({ cid: communityId, facilityId: prev.facilityId, dateKey: prev.dateKey, startTime: prev.startTime });
+      }
+      await writeReservationAudit80({ cid: communityId, action: st, reservationId: rid, reservation: { ...prev, status: st } });
       return true;
     } catch {
       return false;
     }
   }
 
-  async function deleteReservation80({ cid, id }) {
+  async function deleteReservation80({ cid, id, reason = "" }) {
     const communityId = String(cid || "").trim() || "default";
     const rid = String(id || "").trim();
     if (!rid) return false;
+    const ref = db.collection("communities").doc(communityId).collection("reservations").doc(rid);
+    let prev = {};
     try {
-      await db.collection("communities").doc(communityId).collection("reservations").doc(rid).delete();
+      const cur = await ref.get();
+      prev = cur && cur.exists ? (cur.data() || {}) : {};
+    } catch {}
+    try {
+      // 刪除前先留下含原因的稽核快照
+      await writeReservationAudit80({
+        cid: communityId,
+        action: "delete",
+        reservationId: rid,
+        reservation: prev,
+        reason: String(reason || ""),
+        snapshot: prev
+      });
+      await ref.delete();
+      const prevStatus = String(prev.status || "pending");
+      if (["pending", "approved"].includes(prevStatus)) {
+        await releaseSlotTx80({ cid: communityId, facilityId: prev.facilityId, dateKey: prev.dateKey, startTime: prev.startTime });
+      }
       return true;
     } catch {
       return false;
     }
+  }
+
+  /** 刪除預約（需填寫原因的二次授權彈窗） */
+  function openReservationDeleteModal80({ cid, id, reservation, onDone }) {
+    const communityId = String(cid || "").trim() || "default";
+    const rid = String(id || "").trim();
+    if (!rid) return;
+    const r = reservation && typeof reservation === "object" ? reservation : {};
+    const modal = ensureModal("reservationDeleteModal80", "modal-parcel-delete", "min(560px, 92vw)");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const chips = RESERVATION_DELETE_REASONS
+      .map((x) => `<button class="btn btn-sm" type="button" data-rd-reason="${escapeHtml(x)}">${escapeHtml(x)}</button>`)
+      .join("");
+
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="reservationDeleteTitle80">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="reservationDeleteTitle80">刪除預約（需填寫原因）</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="parcel-delete-summary">
+            <div><span>設施</span><strong>${escapeHtml(r.facilityName || r.facilityId || "—")}</strong></div>
+            <div><span>時段</span><strong>${escapeHtml(r.dateKey || "—")} ${escapeHtml(r.startTime || "")}${r.endTime ? " - " + escapeHtml(r.endTime) : ""}</strong></div>
+            <div><span>戶號／姓名</span><strong>${escapeHtml(r.unit || "—")} ${escapeHtml(r.name || "")}</strong></div>
+          </div>
+          <div class="field">
+            <label for="rdReason80">刪除原因（必填）</label>
+            <div class="parcel-delete-chips">${chips}</div>
+            <textarea id="rdReason80" rows="3" placeholder="請說明刪除此筆預約的原因"></textarea>
+          </div>
+          <div class="status" id="rdStatus80" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+          <button class="btn btn-primary" type="button" id="rdConfirm80" style="background:#d32f2f;border-color:#d32f2f;">確認刪除</button>
+        </div>
+      </div>
+    `.trim();
+
+    const reasonEl = modal.querySelector("#rdReason80");
+    const statusEl = modal.querySelector("#rdStatus80");
+    const btnConfirm = modal.querySelector("#rdConfirm80");
+
+    modal.querySelectorAll("[data-rd-reason]").forEach((btn) => {
+      btn.onclick = () => {
+        const x = String(btn.getAttribute("data-rd-reason") || "");
+        if (!reasonEl) return;
+        reasonEl.value = reasonEl.value.trim() ? `${reasonEl.value.trim()}、${x}` : x;
+        reasonEl.focus();
+      };
+    });
+
+    if (btnConfirm) {
+      btnConfirm.onclick = async () => {
+        const reason = String(reasonEl ? reasonEl.value : "").trim();
+        if (!reason) {
+          if (statusEl) {
+            statusEl.textContent = "請填寫刪除原因後再確認。";
+            statusEl.hidden = false;
+            statusEl.classList.add("error");
+          }
+          if (reasonEl) reasonEl.focus();
+          return;
+        }
+        btnConfirm.disabled = true;
+        try {
+          const done = await deleteReservation80({ cid: communityId, id: rid, reason });
+          if (!done) throw new Error("刪除失敗");
+          modal.hidden = true;
+          detach();
+          if (typeof onDone === "function") onDone();
+        } catch (err) {
+          if (statusEl) {
+            statusEl.textContent = "刪除失敗：" + (err && err.message ? err.message : "未知錯誤");
+            statusEl.hidden = false;
+            statusEl.classList.add("error");
+          }
+        } finally {
+          btnConfirm.disabled = false;
+        }
+      };
+    }
+
+    modal.hidden = false;
+  }
+
+  /**
+   * 報到時扣抵設施點數（點數模式）：以交易扣住戶點數，並同步戶號總點數與點數歷史。
+   */
+  async function deductReservationPoints80({ cid, reservationId, reservation }) {
+    const communityId = String(cid || "").trim() || "default";
+    const r = reservation && typeof reservation === "object" ? reservation : {};
+    const method = String(r.chargeMethod || "").trim();
+    const amount = Number(r.chargeAmount || 0) || 0;
+    if (method !== "點數" || amount <= 0 || r.pointDeducted) return { ok: true, skipped: true };
+
+    const name = String(r.name || "").trim();
+    const unit = String(r.unit || "").trim();
+
+    // 找扣點對象：優先 residentId，其次同戶號同姓名
+    let targetId = String(r.residentId || "").trim();
+    try {
+      if (targetId) {
+        const d = await db.collection("users").doc(targetId).get();
+        if (!d || !d.exists) targetId = "";
+      }
+      if (!targetId && unit) {
+        const snap = await db.collection("users").where("unit", "==", unit).limit(20).get();
+        let rows = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
+        if (!rows.length) {
+          const snap2 = await db.collection("users").where("houseNo", "==", unit).limit(20).get();
+          rows = (snap2 && snap2.docs ? snap2.docs : []).map((d) => ({ id: d.id, ...(d.data() || {}) }));
+        }
+        const hit = rows.find((x) => String(x.displayName || x.name || "").trim() === name) || rows[0] || null;
+        if (hit) targetId = String(hit.id);
+      }
+    } catch {}
+    if (!targetId) return { ok: false, reason: "no-user" };
+
+    // 戶號總點數以 users.houseNo 為鍵（與管理端 saveHousePointsTotals 一致）
+    let houseNo = "";
+    try {
+      const d = await db.collection("users").doc(targetId).get();
+      houseNo = String((d && d.exists ? (d.data() || {}).houseNo : "") || "").trim();
+    } catch {}
+
+    const userRef = db.collection("users").doc(targetId);
+    let balance = 0;
+    try {
+      const result = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(userRef);
+        const data = snap && snap.exists ? (snap.data() || {}) : {};
+        const cur = Number(data.points || 0) || 0;
+        if (cur < amount) return { ok: false, insufficient: true, points: cur };
+        tx.set(userRef, { points: cur - amount, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        return { ok: true, points: cur - amount };
+      });
+      if (!result.ok) return { ok: false, insufficient: true, points: result.points, required: amount };
+      balance = result.points;
+    } catch {
+      return { ok: false, reason: "tx-failed" };
+    }
+
+    try {
+      if (houseNo) {
+        const cRef = db.collection("communities").doc(communityId);
+        const cSnap = await cRef.get();
+        const cData = cSnap && cSnap.exists ? (cSnap.data() || {}) : {};
+        const hp = { ...(cData.housePoints || {}) };
+        hp[houseNo] = Math.max(0, (Number(hp[houseNo]) || 0) - amount);
+        await cRef.set({ housePoints: hp, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      }
+      await db.collection("pointsHistory").add({
+        userId: targetId,
+        communityId,
+        oldPoints: balance + amount,
+        newPoints: balance,
+        pointsChange: -amount,
+        reason: `設施預約扣點（${String(r.facilityName || "")} ${String(r.dateKey || "")} ${String(r.startTime || "")}）`,
+        operatorName: getAdminDisplayName80(),
+        operatorUid: auth && auth.currentUser ? String(auth.currentUser.uid || "") : "",
+        reservationId: String(reservationId || ""),
+        createdAt: FieldValue.serverTimestamp()
+      });
+    } catch {}
+
+    return { ok: true, points: balance, deducted: amount };
   }
 
   async function checkInReservation80({ cid, id }) {
@@ -6624,8 +7100,35 @@
       checkedInByName: byName,
       updatedAt: FieldValue.serverTimestamp()
     };
+    const ref = db.collection("communities").doc(communityId).collection("reservations").doc(rid);
+    let prev = {};
     try {
-      await db.collection("communities").doc(communityId).collection("reservations").doc(rid).set(patch, { merge: true });
+      const cur = await ref.get();
+      prev = cur && cur.exists ? (cur.data() || {}) : {};
+    } catch {}
+    try {
+      await ref.set(patch, { merge: true });
+      // 點數模式：報到時扣點
+      const pay = await deductReservationPoints80({ cid: communityId, reservationId: rid, reservation: prev });
+      if (pay && pay.ok && pay.deducted) {
+        await ref.set({
+          pointDeducted: true,
+          deductedPoints: pay.deducted,
+          deductedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+        toast(`已扣 ${pay.deducted} 點（餘 ${pay.points} 點）`);
+      } else if (pay && pay.ok === false && pay.insufficient) {
+        toast(`點數不足，未扣點（目前 ${pay.points} 點，需 ${pay.required} 點）`);
+      } else if (pay && pay.ok === false && pay.reason === "no-user") {
+        toast("找不到住戶帳號，未扣點");
+      }
+      await writeReservationAudit80({
+        cid: communityId,
+        action: "checkedIn",
+        reservationId: rid,
+        reservation: { ...prev, checkedIn: true }
+      });
       return true;
     } catch {
       return false;
@@ -6637,7 +7140,9 @@
     const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
     if (subnavEl) {
       subnavEl.innerHTML = `
+        <button class="btn btn-sm btn-primary" type="button" id="btnFacilityOverview80">總覽</button>
         <div id="facilitySubnavButtons80" style="display:flex; gap:0; align-items:center; flex-wrap:nowrap;"></div>
+        <button class="btn btn-sm" type="button" id="btnFacilityManage80" aria-label="設施設定" title="設施設定">設定</button>
       `.trim();
     }
 
@@ -6647,50 +7152,45 @@
           <div class="left">
             <div class="chip" aria-hidden="true">${iconSvg("facility")}</div>
             <div style="min-width:0;">
-              <h2>設施預約${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+              <h2>設施預約</h2>
               <p>時段控管、名額與審核流程</p>
             </div>
           </div>
-          <button class="btn btn-sm btn-ghost" type="button" id="btnFacilityExpense80" aria-label="消費明細" title="消費明細" style="width:20px;height:20px;padding:0;">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px; height:20px;">
-              <path d="M10 4h4a2 2 0 0 1 2 2v1H6V6a2 2 0 0 1 2-2h2Zm-5 4h14v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-              <path d="M8 12h8M8 16h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-            </svg>
-          </button>
-          <button class="btn btn-sm btn-ghost" type="button" id="btnFacilityManage80" aria-label="設施設定" title="設施設定">
-            ${iconSvg("settings")}
-          </button>
         </div>
         <div class="card-bd">
-          <div class="parcel-filter-bar" id="facilityFilterBar">
-            <div class="field">
-              <label for="facilitySelect80">設施</label>
-              <select id="facilitySelect80"></select>
-            </div>
-            <div class="field">
-              <label for="facilityDate80">日期</label>
-              <input id="facilityDate80" type="date" />
-            </div>
-            <div class="field">
-              <label for="facilitySearch80">搜尋</label>
-              <input id="facilitySearch80" type="text" autocomplete="off" placeholder="戶號/姓名" />
-            </div>
-            <button class="btn btn-sm danger" type="button" id="btnFacilityNew80">新增預約</button>
-            <button class="icon-btn" type="button" id="btnFacilityScanQr80" aria-label="掃描QR Code報到" title="掃描QR Code報到" style="margin-left:8px;">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px; height:20px;">
-                <path d="M4 4h7v7H4V4zm2 2v3h3V6H6zm11-2h5v5h-5V4zm2 2h1v1h-1V6zm-6 2h2v2h-2V8zm-2 4h2v2h-2v-2zm6 0h2v2h-2v-2zm2 2h2v2h-2v-2zm-6 0h2v2h-2v-2zm-4 0h2v2h-2v-2zm-2 2h2v2H8v-2zM4 13h7v7H4v-7zm2 2v3h3v-3H6zm11 2h5v5h-5v-5zm2 2h1v1h-1v-1z" fill="currentColor"/>
-              </svg>
-            </button>
-          </div>
-          <div id="facilityFilterButtons80" style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
-            <button class="btn btn-sm btn-primary" type="button" data-filter="all">全部</button>
-            <button class="btn btn-sm" type="button" data-filter="recent">近期</button>
-            <button class="btn btn-sm" type="button" data-filter="checkedIn">已報到</button>
-            <button class="btn btn-sm" type="button" data-filter="expired">已逾期</button>
-          </div>
-          <div class="status" id="facilityStatus80" hidden></div>
-          <div id="facilityReservationContainer80" style="display:flex; flex-direction:column; gap:12px; width:100%; overflow-x:hidden;">
+          <div class="facility-overview" id="facilityOverview80">
             <div class="status">讀取中...</div>
+          </div>
+          <div id="facilityReservationsView80" hidden>
+            <div class="parcel-filter-bar" id="facilityFilterBar">
+              <div class="field">
+                <label for="facilitySelect80">設施</label>
+                <select id="facilitySelect80"></select>
+              </div>
+              <div class="field">
+                <label for="facilityDate80">日期</label>
+                <input id="facilityDate80" type="date" />
+              </div>
+              <div class="field">
+                <label for="facilitySearch80">搜尋</label>
+                <input id="facilitySearch80" type="text" autocomplete="off" placeholder="戶號/姓名" />
+              </div>
+              <button class="btn btn-sm btn-warning" type="button" id="btnFacilityExpense80">消費明細</button>
+              <button class="btn btn-sm danger" type="button" id="btnFacilityNew80">新增預約</button>
+              <button class="btn btn-sm btn-success" type="button" id="btnFacilityScanQr80" aria-label="掃描QR code" title="掃描QR code">
+                掃描QR code
+              </button>
+            </div>
+            <div id="facilityFilterButtons80" style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+              <button class="btn btn-sm btn-primary" type="button" data-filter="all">全部</button>
+              <button class="btn btn-sm" type="button" data-filter="recent">近期</button>
+              <button class="btn btn-sm" type="button" data-filter="checkedIn">已報到</button>
+              <button class="btn btn-sm" type="button" data-filter="expired">已逾期</button>
+            </div>
+            <div class="status" id="facilityStatus80" hidden></div>
+            <div id="facilityReservationContainer80" style="display:flex; flex-direction:column; gap:12px; width:100%; overflow-x:hidden;">
+              <div class="status">讀取中...</div>
+            </div>
           </div>
         </div>
       </section>
@@ -6699,6 +7199,7 @@
     const selFacility = document.getElementById("facilitySelect80");
     const inputDate = document.getElementById("facilityDate80");
     const inputSearch = document.getElementById("facilitySearch80");
+    const btnOverview = document.getElementById("btnFacilityOverview80");
     const btnManage = document.getElementById("btnFacilityManage80");
     const btnExpense = document.getElementById("btnFacilityExpense80");
     const btnNew = document.getElementById("btnFacilityNew80");
@@ -6707,8 +7208,20 @@
     const statusEl = document.getElementById("facilityStatus80");
     const reservationContainer = document.getElementById("facilityReservationContainer80");
     const filterButtonsContainer = document.getElementById("facilityFilterButtons80");
+    const overviewContainer = document.getElementById("facilityOverview80");
+    const reservationsView = document.getElementById("facilityReservationsView80");
 
     let currentFilter = "all"; // 筛选状态: "all" | "recent" | "checkedIn" | "expired";
+    let currentTab = "overview"; // 子分頁狀態: "overview" | 設施 id
+
+    const isOverviewTab = () => currentTab === "overview";
+
+    const setTabUI = () => {
+      const overview = isOverviewTab();
+      if (overviewContainer) overviewContainer.hidden = !overview;
+      if (reservationsView) reservationsView.hidden = overview;
+      if (btnOverview) btnOverview.classList.toggle("btn-primary", overview);
+    };
 
     const setStatus = (msg, isError) => {
       if (!statusEl) return;
@@ -6754,7 +7267,7 @@
     const renderFacilityButtons = () => {
       if (!subnavButtonsWrap) return;
       const enabled = facilities.filter((f) => f && f.enabled !== false);
-      const activeId = selFacility ? String(selFacility.value || "").trim() : "";
+      const activeId = isOverviewTab() ? "" : (selFacility ? String(selFacility.value || "").trim() : "");
       subnavButtonsWrap.innerHTML = enabled.map((f) => {
         const id = String(f.id || "");
         const name = String(f.name || id || "設施");
@@ -7203,6 +7716,96 @@
       renderFacilityButtons();
     };
 
+    // 設施總覽：今日各設施使用情形
+    const reservationRange80 = (r) => {
+      const start = r.startAt ? (r.startAt.toDate ? r.startAt.toDate() : new Date(r.startAt)) : makeDateTime80(r.dateKey, r.startTime);
+      const end = r.endAt ? (r.endAt.toDate ? r.endAt.toDate() : new Date(r.endAt)) : makeDateTime80(r.dateKey, r.endTime);
+      if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+      return { start, end };
+    };
+
+    const renderFacilityOverview = (todayReservations) => {
+      if (!overviewContainer) return;
+      const now = new Date();
+      const todayKey = ymd80(now);
+      const nowText = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+
+      const stats = new Map();
+      (todayReservations || []).forEach((r) => {
+        const fid = String(r.facilityId || "").trim();
+        if (!fid) return;
+        const st = String(r.status || "pending");
+        if (st === "rejected" || st === "canceled") return;
+        const s = stats.get(fid) || { booked: 0, inUse: 0, pending: 0 };
+        const range = reservationRange80(r);
+        const notEnded = !range || range.end >= now;
+        s.booked += 1;
+        if (st === "pending" && notEnded) s.pending += 1;
+        if (st === "approved" && range && range.start <= now && now <= range.end) s.inUse += 1;
+        stats.set(fid, s);
+      });
+
+      if (!facilities.length) {
+        overviewContainer.innerHTML = `<div class="status">尚未建立設施，請先到「設定」新增。</div>`;
+        return;
+      }
+
+      let totalInUse = 0;
+      let totalPending = 0;
+      stats.forEach((s) => { totalInUse += s.inUse; totalPending += s.pending; });
+
+      const cardsHtml = facilities.map((f) => {
+        const id = String(f.id || "");
+        const name = String(f.name || id || "設施");
+        const enabled = f.enabled !== false;
+        const s = stats.get(id) || { booked: 0, inUse: 0, pending: 0 };
+        const img = String(f.imageDataUrl || "").trim();
+        const tone = !enabled ? "muted" : (s.inUse > 0 ? "success" : (s.pending > 0 ? "warning" : ""));
+        const stateText = !enabled ? "已停用" : (s.inUse > 0 ? "使用中" : "空閒");
+        const stateTag = !enabled ? "gray" : (s.inUse > 0 ? "green" : "gray");
+        const thumb = img
+          ? `<div class="fo-thumb" style="background-image:url('${img.replace(/'/g, "%27")}');"></div>`
+          : `<div class="fo-thumb">${iconSvg("facility")}</div>`;
+        return `
+          <div class="fo-card ${tone ? `tone-${tone}` : ""}">
+            ${thumb}
+            <div class="fo-body">
+              <div class="fo-title">
+                <div class="fo-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+                <span class="tag ${stateTag}">${escapeHtml(stateText)}</span>
+              </div>
+              <div class="fo-stats">
+                <div class="fo-stat"><b>${s.booked}</b><span>今日預約</span></div>
+                <div class="fo-stat${s.inUse > 0 ? " tone-success" : ""}"><b>${s.inUse}</b><span>使用中</span></div>
+                <div class="fo-stat${s.pending > 0 ? " tone-warning" : ""}"><b>${s.pending}</b><span>待審核</span></div>
+              </div>
+              <div class="fo-meta">
+                <span>開放 ${escapeHtml(String(f.openTime || "—"))}–${escapeHtml(String(f.closeTime || "—"))}</span>
+                <span>每時段名額 ${Number(f.capacity) || 1}</span>
+                <span>時段 ${Number(f.slotMinutes) || 60} 分</span>
+              </div>
+            </div>
+          </div>
+        `.trim();
+      }).join("");
+
+      overviewContainer.innerHTML = `
+        <div class="facility-overview-head">
+          <strong>設施使用情形</strong>
+          <span>${escapeHtml(todayKey)} ${escapeHtml(nowText)}</span>
+          <span>使用中 ${totalInUse} 項｜待審核 ${totalPending} 筆</span>
+        </div>
+        <div class="facility-overview-grid">${cardsHtml}</div>
+      `.trim();
+    };
+
+    const refreshOverview = async () => {
+      if (!overviewContainer) return;
+      overviewContainer.innerHTML = `<div class="status">讀取中...</div>`;
+      const list = await loadReservationsByDate80({ cid, dateKey: ymd80(new Date()) });
+      renderFacilityOverview(list);
+    };
+
     // 設置住戶數據監聽器
     const setupResidentsListener = () => {
       try {
@@ -7261,6 +7864,8 @@
     };
 
     const init = async () => {
+      // 預設顯示「總覽」子分頁
+      setTabUI();
       await refreshFacilities();
       // 设置实时监听器
       setupPendingListener();
@@ -7268,7 +7873,8 @@
       setupResidentsListener();
       // 不预设日期，显示所有预约
       if (inputDate) inputDate.value = "";
-      await refreshReservations();
+      if (isOverviewTab()) await refreshOverview();
+      else await refreshReservations();
     };
 
     const onFilter = () => {
@@ -7346,17 +7952,16 @@
       }
 
       if (action === "delete") {
-        const ok = await (window.nwConfirm ? window.nwConfirm({
-          title: "刪除預約",
-          message: "確認是否刪除此筆資料？",
-          okText: "刪除",
-          cancelText: "取消",
-          danger: true,
-        }) : Promise.resolve(confirm("確認是否刪除此筆資料？")));
-        if (!ok) return;
-        const done = await deleteReservation80({ cid, id });
-        if (!done) toast("刪除失敗");
-        await refreshReservations();
+        const target = (Array.isArray(currentReservations) ? currentReservations : []).find((x) => String(x.id || "") === id) || null;
+        openReservationDeleteModal80({
+          cid,
+          id,
+          reservation: target,
+          onDone: async () => {
+            toast("已刪除");
+            await refreshReservations();
+          }
+        });
       }
     };
 
@@ -7424,6 +8029,8 @@
         const id = String(btn.getAttribute("data-facility-id") || "").trim();
         if (!id || !selFacility) return;
         selFacility.value = id;
+        currentTab = id;
+        setTabUI();
         renderFacilityButtons();
         await refreshReservations();
       });
@@ -7468,13 +8075,23 @@
       });
     }
 
+    if (btnOverview) {
+      btnOverview.addEventListener("click", async () => {
+        currentTab = "overview";
+        setTabUI();
+        renderFacilityButtons();
+        await refreshOverview();
+      });
+    }
+
     if (btnManage) {
       btnManage.addEventListener("click", () => {
         openFacilityConfigModal80({
           cid,
           onSaved: async () => {
             await refreshFacilities();
-            await refreshReservations();
+            if (isOverviewTab()) await refreshOverview();
+            else await refreshReservations();
           }
         });
       });
@@ -7690,8 +8307,8 @@
           <div class="card" style="margin:0;" data-bulletin-id="${escapeHtml(item.id)}">
             <div class="card-hd">
               <div class="left">
-                <h3 style="font-size:16px;">${escapeHtml(item.title || "")}</h3>
-                <p style="margin:0; font-size:14px;">${escapeHtml(item.subtitle || "")}</p>
+                <h3 style="font-size:calc(16px * var(--fs, 1));">${escapeHtml(item.title || "")}</h3>
+                <p style="margin:0; font-size:calc(14px * var(--fs, 1));">${escapeHtml(item.subtitle || "")}</p>
               </div>
               <div class="bulletin-head-actions">
                 <span class="tag ${tagColor}">${tagText}</span>
@@ -7766,7 +8383,7 @@
             <div class="left">
               <div class="chip" aria-hidden="true">${iconSvg("bulletin")}</div>
               <div style="min-width:0;">
-                <h2>公告系統${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <h2>公告系統</h2>
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
@@ -7803,7 +8420,7 @@
             <div class="left">
               <div class="chip" aria-hidden="true">${iconSvg("bulletin")}</div>
               <div style="min-width:0;">
-                <h2>公告系統${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <h2>公告系統</h2>
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
@@ -7840,7 +8457,7 @@
             <div class="left">
               <div class="chip" aria-hidden="true">${iconSvg("bulletin")}</div>
               <div style="min-width:0;">
-                <h2>公告系統${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <h2>公告系統</h2>
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
@@ -7877,7 +8494,7 @@
             <div class="left">
               <div class="chip" aria-hidden="true">${iconSvg("bulletin")}</div>
               <div style="min-width:0;">
-                <h2>公告系統${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <h2>公告系統</h2>
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
@@ -8092,9 +8709,9 @@
           imagePreviewContainer.style.display = "flex";
           imagePreviewContainer.innerHTML = `
             <div style="position:relative; min-width:220px; max-width:100%; padding:14px 44px 14px 14px; border:1px solid #d1d5db; border-radius:10px; background:#f9fafb; text-align:left;">
-              <div style="font-size:13px; color:#6b7280;">PDF 檔案</div>
-              <div style="font-size:14px; font-weight:700; color:#111827; word-break:break-all;">${escapeHtml(selectedAttachment.name || "附件.pdf")}</div>
-              <button type="button" style="position:absolute; top:10px; right:10px; width:24px; height:24px; border-radius:50%; background:red; color:white; border:none; cursor:pointer; font-size:14px;" data-remove-pdf="1">×</button>
+              <div style="font-size:calc(13px * var(--fs, 1)); color:#6b7280;">PDF 檔案</div>
+              <div style="font-size:calc(14px * var(--fs, 1)); font-weight:700; color:#111827; word-break:break-all;">${escapeHtml(selectedAttachment.name || "附件.pdf")}</div>
+              <button type="button" style="position:absolute; top:10px; right:10px; width:24px; height:24px; border-radius:50%; background:red; color:white; border:none; cursor:pointer; font-size:calc(14px * var(--fs, 1));" data-remove-pdf="1">×</button>
             </div>
           `;
           const removePdfBtn = imagePreviewContainer.querySelector("[data-remove-pdf]");
@@ -8118,7 +8735,7 @@
         imagePreviewContainer.innerHTML = selectedImages.map((img, idx) => `
           <div style="position:relative;">
             <img src="${escapeHtml(img)}" style="width:100px; height:100px; object-fit:cover; border-radius:8px;" />
-            <button type="button" style="position:absolute; top:4px; right:4px; width:24px; height:24px; border-radius:50%; background:red; color:white; border:none; cursor:pointer; font-size:14px;" data-remove-image="${idx}">×</button>
+            <button type="button" style="position:absolute; top:4px; right:4px; width:24px; height:24px; border-radius:50%; background:red; color:white; border:none; cursor:pointer; font-size:calc(14px * var(--fs, 1));" data-remove-image="${idx}">×</button>
           </div>
         `).join("");
         imagePreviewContainer.querySelectorAll("[data-remove-image]").forEach(btn => {
@@ -8385,7 +9002,7 @@
       <div class="modal-backdrop" data-modal-close="1"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="residentParcelScanModalTitle80">
         <div class="modal-hd">
-          <h3 class="modal-title" id="residentParcelScanModalTitle80">掃描住戶 QR Code</h3>
+          <h3 class="modal-title" id="residentParcelScanModalTitle80">掃描住戶 QR／包裹標籤</h3>
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <div class="modal-body">
@@ -8399,16 +9016,20 @@
             <div class="scan-results-side">
               <div class="field">
                 <label for="residentParcelScanInput80">掃碼槍輸入</label>
-                <input id="residentParcelScanInput80" type="text" autocomplete="off" placeholder="請掃描住戶 QR code" />
+                <input id="residentParcelScanInput80" type="text" autocomplete="off" placeholder="請掃描住戶 QR code 或包裹標籤" />
               </div>
-              <div class="scan-hint" id="residentParcelScanHint80">可使用相機或掃碼槍掃描住戶 QR code</div>
+              <div class="scan-hint" id="residentParcelScanHint80">可使用相機或掃碼槍掃描住戶 QR code，或掃描列印的包裹標籤直接簽收</div>
               <div class="status" id="residentParcelScanStatus80" hidden></div>
               <div id="residentParcelScanResult80" hidden>
                 <div class="scan-results-preview" style="margin-top:10px;">
                   <div class="scan-result-item"><span>戶號</span><span id="rpUnit80">—</span></div>
                   <div class="scan-result-item"><span>姓名</span><span id="rpName80">—</span></div>
                 </div>
-                <div class="scan-hint" style="margin-top:10px;">未領取</div>
+                <div class="scan-hint" style="margin-top:10px;">未領取（可勾選批次簽收）</div>
+                <div class="parcel-scan-toolbar">
+                  <button class="btn btn-sm" type="button" id="rpSelectAll80">全選</button>
+                  <button class="btn btn-sm btn-primary" type="button" id="rpBatchReceive80">批次簽收</button>
+                </div>
                 <div class="parcel-grid" id="rpPendingList80"></div>
                 <div class="scan-hint" style="margin-top:10px;">已領取</div>
                 <div class="parcel-grid" id="rpReceivedList80"></div>
@@ -8447,9 +9068,13 @@
     const pendingEl = modal.querySelector("#rpPendingList80");
     const receivedEl = modal.querySelector("#rpReceivedList80");
     const btnRescan = modal.querySelector("#btnResidentParcelRescan80");
+    const btnSelectAll = modal.querySelector("#rpSelectAll80");
+    const btnBatchReceive = modal.querySelector("#rpBatchReceive80");
 
     let scanner = null;
     let busy = false;
+    let lastToken = "";
+    let lastPending = [];
 
     const setStatus = (msg, isError) => {
       const t = String(msg || "").trim();
@@ -8514,7 +9139,7 @@
       renderParcelList(filter, readParcelFilters());
     };
 
-    const renderParcelLine = (p, id, index = 0) => {
+    const renderParcelLine = (p, id, selectable) => {
       const company = escapeHtml(p.company || "其他物流");
       const trackNo = escapeHtml(p.trackNo || "—");
       const time = p.createdAt ? (p.createdAt.toDate ? p.createdAt.toDate() : new Date(p.createdAt)) : null;
@@ -8531,9 +9156,46 @@
               <div class="parcel-track">單號：${trackNo}</div>
               <div class="parcel-time">到貨：${timeText}</div>
             </div>
+            ${selectable ? `<label class="parcel-select"><input type="checkbox" data-rp-sel="${String(id || "")}" checked /></label>` : ""}
           </div>
         </div>
       `;
+    };
+
+    const collectSelectedItems = () => {
+      if (!pendingEl) return [];
+      return Array.from(pendingEl.querySelectorAll("[data-rp-sel]"))
+        .filter((el) => el.checked)
+        .map((el) => String(el.getAttribute("data-rp-sel") || "").trim())
+        .filter(Boolean)
+        .map((id) => {
+          const hit = lastPending.find((x) => x.id === id);
+          return hit ? Object.assign({ id }, hit.p) : { id };
+        });
+    };
+
+    const runBatchReceive = async () => {
+      const items = collectSelectedItems();
+      if (!items.length) { setStatus("請先勾選要簽收的包裹。", true); return; }
+      const ok = await (window.nwConfirm ? window.nwConfirm({
+        title: "批次簽收",
+        message: `確認簽收選取的 ${items.length} 件包裹？`,
+        okText: "確認簽收",
+        cancelText: "取消"
+      }) : Promise.resolve(confirm(`確認簽收選取的 ${items.length} 件包裹？`)));
+      if (!ok) return;
+      setStatus("簽收中...", false);
+      if (btnBatchReceive) btnBatchReceive.disabled = true;
+      try {
+        const cid = String(resolveActiveCommunityId() || "").trim() || "default";
+        const done = await markParcelsReceived80(cid, items);
+        toast(`已完成 ${done} 件簽收`);
+        await closeNow();
+      } catch (err) {
+        setStatus("簽收失敗：" + (err && err.message ? err.message : "未知錯誤"), true);
+      } finally {
+        if (btnBatchReceive) btnBatchReceive.disabled = false;
+      }
     };
 
     const clearResult = () => {
@@ -8542,12 +9204,70 @@
       if (pendingEl) pendingEl.innerHTML = "";
       if (receivedEl) receivedEl.innerHTML = "";
       if (resultWrap) resultWrap.hidden = true;
+      lastPending = [];
+    };
+
+    // 解析列印標籤 QR（格式：nwparcel:{cid}:{parcelId}:{serial}）
+    const parseParcelLabelToken80 = (raw) => {
+      const m = /^nwparcel:([^:]*):([^:]*):?(.*)$/i.exec(String(raw || "").trim());
+      if (!m) return null;
+      return { cid: String(m[1] || "").trim(), id: String(m[2] || "").trim(), serial: String(m[3] || "").trim() };
+    };
+
+    // 掃到包裹標籤：直接定位該件包裹並允許立即簽收
+    const processParcelLabelToken = async (info, token) => {
+      const cid = String(resolveActiveCommunityId() || "").trim() || "default";
+      if (info.cid && info.cid !== cid) {
+        setStatus("", false);
+        await closeNow();
+        openNotice80("非本社區包裹");
+        return;
+      }
+      setStatus("查詢包裹中...", false);
+      clearResult();
+      let doc = null;
+      try {
+        doc = await db.collection("communities").doc(cid).collection("parcels").doc(info.id).get();
+      } catch (e) {
+        setStatus("讀取包裹失敗，請稍後再試。", true);
+        return;
+      }
+      if (!doc || !doc.exists) {
+        setStatus("", false);
+        await closeNow();
+        openNotice80("找不到對應包裹");
+        return;
+      }
+      const p = doc.data() || {};
+      const uUnit = String(p.unit || p.houseNo || "").trim();
+      const uName = String(p.recipient || "").trim();
+      lastToken = token;
+      if (unitEl) unitEl.textContent = uUnit || "—";
+      if (nameEl) nameEl.textContent = uName || "—";
+      const isPending = String(p.status || "pending") !== "received";
+      lastPending = isPending ? [{ id: info.id, p }] : [];
+      if (pendingEl) {
+        pendingEl.innerHTML = isPending
+          ? renderParcelLine(p, info.id, true)
+          : `<div class="status">此包裹已完成簽收。</div>`;
+      }
+      if (receivedEl) receivedEl.innerHTML = "";
+      if (resultWrap) resultWrap.hidden = false;
+      if (btnBatchReceive) btnBatchReceive.disabled = !isPending;
+      setStatus(isPending ? "掃描到包裹標籤，可直接簽收。" : "此包裹已完成簽收。", false);
+      applyScannedToFilters(uUnit, uName);
     };
 
     const processToken = async (rawToken) => {
       if (busy) return;
       const token = String(rawToken || "").trim();
-      if (!token) return;
+      if (!token || token === lastToken) return;
+      const labelInfo = parseParcelLabelToken80(token);
+      if (labelInfo && labelInfo.id) {
+        busy = true;
+        try { await processParcelLabelToken(labelInfo, token); } finally { busy = false; }
+        return;
+      }
       busy = true;
       setStatus("查詢住戶中...", false);
       clearResult();
@@ -8583,14 +9303,23 @@
 
       const uUnit = String(udata.houseNo || udata.unit || "").trim();
       const uName = String(udata.displayName || udata.name || "").trim() || inferUserName({ email: udata.email });
+      lastToken = token;
       if (unitEl) unitEl.textContent = uUnit || "—";
       if (nameEl) nameEl.textContent = uName || "—";
 
       setStatus("查詢包裹中...", false);
       let parcelDocs = [];
       try {
-        const psnap = await db.collection("communities").doc(cid).collection("parcels").orderBy("createdAt", "desc").limit(200).get();
-        parcelDocs = psnap && psnap.docs ? psnap.docs : [];
+        // 待領取以狀態查詢（避免被大量已領取紀錄擠出上限而漏件）；
+        // 已領取取最近 200 筆作為參考
+        const [pendingSnap, receivedSnap] = await Promise.all([
+          db.collection("communities").doc(cid).collection("parcels").where("status", "==", "pending").get(),
+          db.collection("communities").doc(cid).collection("parcels").orderBy("createdAt", "desc").limit(200).get()
+        ]);
+        const map = new Map();
+        (pendingSnap && pendingSnap.docs ? pendingSnap.docs : []).forEach((d) => map.set(d.id, d));
+        (receivedSnap && receivedSnap.docs ? receivedSnap.docs : []).forEach((d) => map.set(d.id, d));
+        parcelDocs = Array.from(map.values());
       } catch (e) {
         setStatus("讀取包裹失敗。", true);
         busy = false;
@@ -8611,13 +9340,27 @@
         return;
       }
 
+      if (pendingEl) {
+        pendingEl.innerHTML = pending.length
+          ? pending.map((x) => renderParcelLine(x.p, x.id, true)).join("")
+          : `<div class="status">目前沒有未領取的包裹。</div>`;
+      }
+      if (receivedEl) {
+        receivedEl.innerHTML = received.length
+          ? received.map((x) => renderParcelLine(x.p, x.id, false)).join("")
+          : `<div class="status">沒有已領取紀錄。</div>`;
+      }
+      lastPending = pending;
+      if (resultWrap) resultWrap.hidden = false;
+      if (btnBatchReceive) btnBatchReceive.disabled = false;
+      setStatus("", false);
       applyScannedToFilters(uUnit, uName);
-      await closeNow();
       busy = false;
     };
 
     const startScanner = async () => {
       await stopScanner();
+      lastToken = "";
       setStatus("啟動相機中...", false);
       clearResult();
       try {
@@ -8669,6 +9412,20 @@
     if (btnRescan) {
       btnRescan._rpHandler = () => startScanner();
       btnRescan.addEventListener("click", btnRescan._rpHandler);
+    }
+
+    if (btnSelectAll) {
+      btnSelectAll.onclick = () => {
+        if (!pendingEl) return;
+        const boxes = Array.from(pendingEl.querySelectorAll("[data-rp-sel]"));
+        if (!boxes.length) return;
+        const allChecked = boxes.every((el) => el.checked);
+        boxes.forEach((el) => { el.checked = !allChecked; });
+      };
+    }
+
+    if (btnBatchReceive) {
+      btnBatchReceive.onclick = () => { runBatchReceive(); };
     }
 
     modal.hidden = false;
@@ -8768,7 +9525,319 @@
     return _parcelSerialBackfillPromise;
   }
 
+  /* ── 包裹營運效率：逾期天數設定／到貨通知 ── */
+  let _parcelOverdueDays = 3;
+  let _parcelConfigLoadedCid = "";
+  /* 包裹設定快取（物流清單／常用儲位／通知範本） */
+  let _parcelConfigCache80 = { couriers: [], shelves: [], notifyTemplate: {} };
+  /* 清單排序：arrival_desc｜arrival_asc｜unit｜company｜age_desc */
+  let _parcelSort80 = "arrival_desc";
+  /* 營運統計（KPI） */
+  let _parcelStats80 = null;
+  let _parcelStatsCid80 = "";
+  let _unsubParcelStats80 = null;
+
+  function getParcelShelves80() {
+    const list = (_parcelConfigCache80 && Array.isArray(_parcelConfigCache80.shelves)) ? _parcelConfigCache80.shelves : [];
+    return list.map((s) => String(s || "").trim()).filter(Boolean);
+  }
+
+  function getParcelNotifyTemplate80() {
+    const t = (_parcelConfigCache80 && _parcelConfigCache80.notifyTemplate) || {};
+    return {
+      pickupPlace: String(t.pickupPlace || "").trim(),
+      serviceHours: String(t.serviceHours || "").trim(),
+      contactPhone: String(t.contactPhone || "").trim(),
+      footer: String(t.footer || "").trim()
+    };
+  }
+
+  function getParcelOverdueDays80() {
+    const n = Number(_parcelOverdueDays);
+    return Number.isFinite(n) && n > 0 ? Math.min(60, Math.round(n)) : 3;
+  }
+
+  function ensureParcelConfig80(cid) {
+    const communityId = String(cid || "").trim();
+    if (!communityId || _parcelConfigLoadedCid === communityId) return;
+    _parcelConfigLoadedCid = communityId;
+    db.collection("communities").doc(communityId).collection("settings").doc("parcel_config").get()
+      .then((doc) => {
+        const v = doc && doc.exists ? (doc.data() || {}) : {};
+        const days = Number(v.overdueDays);
+        _parcelOverdueDays = Number.isFinite(days) && days > 0 ? Math.min(60, Math.round(days)) : 3;
+        _parcelConfigCache80 = {
+          couriers: Array.isArray(v.couriers) ? v.couriers : [],
+          shelves: Array.isArray(v.shelves) ? v.shelves : [],
+          notifyTemplate: (v.notifyTemplate && typeof v.notifyTemplate === "object") ? v.notifyTemplate : {}
+        };
+        ensureParcelStatsSubscription80(communityId);
+        if (!document.getElementById("parcelList")) return;
+        const activeBtn = subnavEl ? subnavEl.querySelector("[data-filter].btn-primary") : null;
+        const filter = activeBtn ? String(activeBtn.getAttribute("data-filter") || "pending") : "pending";
+        if (filter === "temp" || filter === "overview") return;
+        renderParcelList(filter, readParcelFilters());
+      })
+      .catch(() => {});
+  }
+
+  /* ── 營運統計（KPI）：以最近 300 筆前端彙總，避免複合索引 ── */
+  function ensureParcelStatsSubscription80(cid) {
+    const communityId = String(cid || "").trim();
+    if (!communityId) return;
+    if (_parcelStatsCid80 === communityId && _unsubParcelStats80) return;
+    if (_unsubParcelStats80) {
+      try { _unsubParcelStats80(); } catch {}
+      _unsubParcelStats80 = null;
+    }
+    _parcelStatsCid80 = communityId;
+
+    const startOfToday = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+    const cutoff30 = Date.now() - 30 * 86400000;
+
+    _unsubParcelStats80 = db.collection("communities").doc(communityId).collection("parcels")
+      .orderBy("createdAt", "desc").limit(300)
+      .onSnapshot((snap) => {
+        let todayArrivals = 0;
+        let pending = 0;
+        let overdue = 0;
+        let pendingAgeSum = 0;
+        let received30 = 0;
+        (snap && snap.docs ? snap.docs : []).forEach((d) => {
+          const p = d.data() || {};
+          const created = toDate80(p.createdAt);
+          const ctime = created ? created.getTime() : 0;
+          if (ctime >= startOfToday) todayArrivals += 1;
+          const status = String(p.status || "pending");
+          if (status !== "received") {
+            pending += 1;
+            const age = parcelAgeDays80(p);
+            pendingAgeSum += age;
+            if (age >= getParcelOverdueDays80()) overdue += 1;
+          } else {
+            const rt = toDate80(p.receivedAt);
+            if (rt && rt.getTime() >= cutoff30) received30 += 1;
+          }
+        });
+        const avgPendingDays = pending ? (pendingAgeSum / pending) : 0;
+        _parcelStats80 = { todayArrivals, pending, overdue, avgPendingDays, received30 };
+        renderParcelKpi80();
+      }, () => {});
+  }
+
+  function stopParcelStatsSubscription80() {
+    if (_unsubParcelStats80) {
+      try { _unsubParcelStats80(); } catch {}
+      _unsubParcelStats80 = null;
+    }
+    _parcelStatsCid80 = "";
+    _parcelStats80 = null;
+  }
+
+  function renderParcelKpi80() {
+    const el = document.getElementById("parcelKpiBar");
+    if (!el) return;
+    const s = _parcelStats80;
+    const overdueDays = getParcelOverdueDays80();
+    const val = (v) => (s ? String(v) : "—");
+    const unit = (u) => (s ? u : "");
+    const cards = [
+      { label: "今日到貨", value: val(s ? s.todayArrivals : ""), unit: unit("件"), sub: "今日新進", tone: "" },
+      { label: "待領取", value: val(s ? s.pending : ""), unit: unit("件"), sub: "含逾期待領", tone: "info" },
+      { label: "逾期未領", value: val(s ? s.overdue : ""), unit: unit("件"), sub: `超過 ${overdueDays} 天`, tone: "danger" },
+      { label: "平均待領天數", value: val(s ? s.avgPendingDays.toFixed(1) : ""), unit: unit("天"), sub: "待領件平均滯留", tone: "muted" },
+      { label: "近 30 天已領取", value: val(s ? s.received30 : ""), unit: unit("件"), sub: "已完成簽收", tone: "success" }
+    ];
+    el.hidden = false;
+    el.innerHTML = cards.map((c) => `
+      <div class="po-card${c.tone ? ` tone-${c.tone}` : ""}">
+        <div class="po-label">${escapeHtml(c.label)}</div>
+        <div class="po-value">${escapeHtml(c.value)}<span class="po-unit">${escapeHtml(c.unit)}</span></div>
+        <div class="po-sub">${escapeHtml(c.sub)}</div>
+      </div>`).join("");
+  }
+
+  function parcelAgeDays80(p) {
+    const d = toDate80((p || {}).createdAt);
+    if (!d) return 0;
+    const diff = Date.now() - d.getTime();
+    return diff > 0 ? Math.floor(diff / 86400000) : 0;
+  }
+
+  /** 依 _parcelSort80 就地排序（待領取／逾期時，逾期件固定置頂） */
+  function applyParcelSort80(docs, filter, ageMap, overdueDays) {
+    const sort = String(_parcelSort80 || "arrival_desc");
+    const pinOverdue = filter === "pending" || filter === "overdue";
+    const cmp = (a, b) => {
+      const pa = a.data() || {};
+      const pb = b.data() || {};
+      if (sort === "unit") return String(pa.unit || "").localeCompare(String(pb.unit || ""), "zh-Hant");
+      if (sort === "company") return String(pa.company || "").localeCompare(String(pb.company || ""), "zh-Hant");
+      if (sort === "age_desc") return (ageMap.get(b.id) || 0) - (ageMap.get(a.id) || 0);
+      const ta = toDate80(pa.createdAt);
+      const tb = toDate80(pb.createdAt);
+      if (sort === "arrival_asc") return (ta ? ta.getTime() : 0) - (tb ? tb.getTime() : 0);
+      return (tb ? tb.getTime() : 0) - (ta ? ta.getTime() : 0);
+    };
+    docs.sort((a, b) => {
+      if (pinOverdue) {
+        const ao = (ageMap.get(a.id) || 0) >= overdueDays ? 1 : 0;
+        const bo = (ageMap.get(b.id) || 0) >= overdueDays ? 1 : 0;
+        if (ao !== bo) return bo - ao;
+      }
+      return cmp(a, b);
+    });
+    return docs;
+  }
+
+  function formatMd80(value) {
+    const d = toDate80(value);
+    return d ? `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}` : "";
+  }
+
+  function buildParcelNotifyText80(ctx) {
+    const c = ctx || {};
+    const tpl = getParcelNotifyTemplate80();
+    const lines = ["【包裹到貨通知】"];
+    if (c.communityName) lines.push(String(c.communityName));
+    const who = [String(c.unit || "").trim(), String(c.recipient || "").trim()].filter(Boolean).join(" ");
+    if (who) lines.push(`戶號／收件人：${who}`);
+    if (c.company) lines.push(`物流：${c.company}`);
+    if (c.trackNo) lines.push(`單號：${c.trackNo}`);
+    if (c.serial) lines.push(`包裹編號：${c.serial}`);
+    if (c.shelf) lines.push(`儲位：${c.shelf}`); 
+    if (c.arrival) lines.push(`到貨時間：${c.arrival}`);
+    lines.push("");
+    if (tpl.pickupPlace) lines.push(`領取地點：${tpl.pickupPlace}`);
+    if (tpl.serviceHours) lines.push(`服務時間：${tpl.serviceHours}`);
+    lines.push(tpl.footer || "請儘速至管理室領取，謝謝。");
+    if (tpl.contactPhone) lines.push(`聯絡電話：${tpl.contactPhone}`);
+    return lines.join("\n");
+  }
+
+  /** 以住戶戶號查找聯絡資訊（單欄等值查詢，避免複合索引） */
+  function findResidentContact80(cid, unit) {
+    const u = String(unit || "").trim();
+    if (!u) return Promise.resolve(null);
+    const pick = (snap) => {
+      let hit = null;
+      (snap && snap.docs ? snap.docs : []).forEach((doc) => {
+        if (hit) return;
+        const d = doc.data() || {};
+        if (String(d.community || "").trim() !== String(cid || "").trim()) return;
+        const phone = String(d.phone || d.mobile || "").trim();
+        const email = String(d.email || "").trim();
+        if (phone || email) hit = { name: String(d.displayName || d.name || "").trim(), phone, email };
+      });
+      return hit;
+    };
+    return db.collection("users").where("houseNo", "==", u).limit(10).get()
+      .then(pick)
+      .catch(() => null)
+      .then((hit) => {
+        if (hit) return hit;
+        return db.collection("users").where("unit", "==", u).limit(10).get().then(pick).catch(() => null);
+      });
+  }
+
   let _unsubParcels = null;
+  let _unsubTempItems = null;
+  let _parcelFilterCache = { date: "", unit: "", name: "" };
+  let _tempFilterCache = { date: "", unit: "", name: "", status: "pending" };
+
+  /** 載入骨架 */
+  function parcelSkeletonHtml80() {
+    return Array.from({ length: 4 }).map(() => `
+      <div class="parcel-skeleton" aria-hidden="true">
+        <div class="sk-seq"></div>
+        <div class="sk-body">
+          <div class="sk-line w60"></div>
+          <div class="sk-line w40"></div>
+        </div>
+        <div class="sk-actions"></div>
+      </div>`).join("");
+  }
+
+  const PARCEL_EMPTY_META80 = {
+    pending: { title: "目前沒有待領取包裹", desc: "有住戶包裹到貨時，可透過「登記包裹」或「掃描 QR code」快速建立。" },
+    received: { title: "目前沒有已領取紀錄", desc: "住戶完成簽收後，紀錄會顯示在這裡。" },
+    overdue: { title: "目前沒有逾期未領的包裹", desc: "超過設定天數未領取的包裹會標紅並置頂提醒。" },
+    all: { title: "目前沒有包裹紀錄", desc: "可透過「登記包裹」開始建立第一筆紀錄。" },
+    filtered: { title: "沒有符合條件的包裹", desc: "試著調整或清除日期、戶號與姓名篩選條件。" },
+    tempPending: { title: "目前沒有待領取的暫寄物", desc: "住戶或訪客有物品暫寄時，可透過「登記暫寄」建立紀錄。" },
+    tempDone: { title: "目前沒有已結案的暫寄物", desc: "物品完成領取或歸還並結案後，紀錄會顯示在這裡。" },
+    tempAll: { title: "目前沒有暫寄物紀錄", desc: "可透過「登記暫寄」開始建立第一筆紀錄。" },
+    tempFiltered: { title: "沒有符合條件的暫寄物", desc: "試著調整或清除日期、戶號與姓名篩選條件。" }
+  };
+
+  /** 空狀態（含引導動作：register＝登記包裹、clear＝清除篩選、registerTemp／clearTemp＝暫寄物） */
+  function parcelEmptyHtml80(key, action) {
+    const meta = PARCEL_EMPTY_META80[key] || PARCEL_EMPTY_META80.all;
+    let btn = "";
+    if (action === "clear") btn = `<button class="btn btn-sm" type="button" data-empty-clear="1">清除篩選</button>`;
+    else if (action === "register") btn = `<button class="btn btn-sm danger" type="button" data-empty-register="1">登記包裹</button>`;
+    else if (action === "clearTemp") btn = `<button class="btn btn-sm" type="button" data-empty-clear-temp="1">清除篩選</button>`;
+    else if (action === "registerTemp") btn = `<button class="btn btn-sm danger" type="button" data-empty-register-temp="1">登記暫寄</button>`;
+    return `
+      <div class="parcel-empty">
+        <div class="parcel-empty-icon" aria-hidden="true">${iconSvg("parcel")}</div>
+        <p class="parcel-empty-title">${escapeHtml(meta.title)}</p>
+        <p class="parcel-empty-desc">${escapeHtml(meta.desc)}</p>
+        ${btn}
+      </div>`;
+  }
+
+  /** 綁定空狀態引導動作 */
+  function bindParcelEmptyActions80(listEl, cid, communityName) {
+    if (!listEl) return;
+    listEl.querySelectorAll("[data-empty-register]").forEach((b) => {
+      b.onclick = () => openParcelModal80({ cid, communityName });
+    });
+    listEl.querySelectorAll("[data-empty-clear]").forEach((b) => {
+      b.onclick = () => {
+        _parcelFilterCache = { date: "", unit: "", name: "" };
+        const d = document.getElementById("parcelFilterDate"); if (d) d.value = "";
+        const u = document.getElementById("parcelFilterUnit"); if (u) u.value = "";
+        const n = document.getElementById("parcelFilterName"); if (n) n.value = "";
+        const activeBtn = subnavEl ? subnavEl.querySelector("[data-filter].btn-primary") : null;
+        const f = activeBtn ? String(activeBtn.getAttribute("data-filter") || "pending") : "pending";
+        renderParcelList(f, { date: "", unit: "", name: "" });
+      };
+    });
+    listEl.querySelectorAll("[data-empty-register-temp]").forEach((b) => {
+      b.onclick = () => openTempItemModal80({ cid, communityName });
+    });
+    listEl.querySelectorAll("[data-empty-clear-temp]").forEach((b) => {
+      b.onclick = () => clearTempItemFilters80();
+    });
+  }
+
+  /** 更新清單摘要列（筆數／逾期件數／清除篩選） */
+  function updateParcelSummary80(count, overdueCount, hasFilter, filter) {
+    const el = document.getElementById("parcelSummaryBar");
+    if (!el) return;
+    if (!count) { el.hidden = true; el.innerHTML = ""; return; }
+    const label = filter === "received" ? "已領取" : (filter === "overdue" ? "逾期" : (filter === "pending" ? "待領取" : "全部"));
+    el.hidden = false;
+    el.innerHTML = `
+      <span class="parcel-count">${label} <strong>${count}</strong> 筆</span>
+      ${overdueCount > 0 ? `<span class="parcel-overdue-chip">逾期 ${overdueCount} 件</span>` : ""}
+      ${hasFilter ? `<button class="parcel-filter-reset" type="button" data-clear-parcel-filter="1">清除篩選</button>` : ""}
+    `;
+    const resetBtn = el.querySelector("[data-clear-parcel-filter]");
+    if (resetBtn) {
+      resetBtn.onclick = () => {
+        _parcelFilterCache = { date: "", unit: "", name: "" };
+        const d = document.getElementById("parcelFilterDate"); if (d) d.value = "";
+        const u = document.getElementById("parcelFilterUnit"); if (u) u.value = "";
+        const n = document.getElementById("parcelFilterName"); if (n) n.value = "";
+        const activeBtn = subnavEl ? subnavEl.querySelector("[data-filter].btn-primary") : null;
+        const f = activeBtn ? String(activeBtn.getAttribute("data-filter") || "pending") : "pending";
+        renderParcelList(f, { date: "", unit: "", name: "" });
+      };
+    }
+  }
+
   function renderParcelList(filter = "all", filters = {}) {
     const cid = resolveActiveCommunityId();
     const listEl = document.getElementById("parcelList");
@@ -8779,21 +9848,40 @@
       _unsubParcels = null;
     }
 
-    // 為了避免複合索引報錯，改為讀取後在前端過濾
-    let query = db.collection("communities").doc(cid).collection("parcels").orderBy("createdAt", "desc").limit(200);
-    
+    // 待領取：直接以狀態查詢，避免被大量「已領取」紀錄擠出 200 筆上限而漏件
+    // 已領取／全部：為避免複合索引報錯，維持以時間排序取最近 200 筆後前端過濾
+    const parcelsRef = db.collection("communities").doc(cid).collection("parcels");
+    const query = (filter === "pending" || filter === "overdue")
+      ? parcelsRef.where("status", "==", "pending")
+      : parcelsRef.orderBy("createdAt", "desc").limit(200);
+
     _unsubParcels = query.onSnapshot((snap) => {
+      const overdueDays = getParcelOverdueDays80();
+      const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
       if (snap.empty) {
-        listEl.innerHTML = `<div class="status">目前沒有包裹紀錄。</div>`;
+        const emptyKey = filter === "received" ? "received"
+          : (filter === "overdue" ? "overdue"
+          : (filter === "pending" ? "pending" : "all"));
+        listEl.innerHTML = parcelEmptyHtml80(emptyKey, "register");
+        bindParcelEmptyActions80(listEl, cid, communityName);
+        updateParcelSummary80(0, 0, false, filter);
         return;
       }
 
       ensureParcelInternalSerials(cid, snap.docs).catch(() => {});
 
-      let docs = snap.docs;
-      if (filter !== "all") {
+      let docs = snap.docs.slice();
+      const ageMap = new Map();
+      if (filter === "pending" || filter === "overdue") {
+        docs.forEach((doc) => ageMap.set(doc.id, parcelAgeDays80(doc.data())));
+        if (filter === "overdue") {
+          docs = docs.filter((doc) => (ageMap.get(doc.id) || 0) >= overdueDays);
+        }
+      } else if (filter !== "all") {
         docs = docs.filter(doc => doc.data().status === filter);
       }
+      // 依使用者選擇的排序方式排列（待領取／逾期時，逾期件固定置頂）
+      applyParcelSort80(docs, filter, ageMap, overdueDays);
 
       const f = filters && typeof filters === "object" ? filters : {};
       const fDate = String(f.date || "").trim();
@@ -8813,10 +9901,20 @@
         });
       }
 
+      const hasFilter = !!(fDate || fUnit || fName);
       if (docs.length === 0) {
-        listEl.innerHTML = `<div class="status">沒有符合條件的包裹。</div>`;
+        const emptyKey = hasFilter ? "filtered"
+          : (filter === "overdue" ? "overdue" : (filter === "received" ? "received" : (filter === "pending" ? "pending" : "all")));
+        listEl.innerHTML = parcelEmptyHtml80(emptyKey, hasFilter ? "clear" : "register");
+        bindParcelEmptyActions80(listEl, cid, communityName);
+        updateParcelSummary80(0, 0, hasFilter, filter);
         return;
       }
+
+      const overdueCount = (filter === "pending" || filter === "overdue")
+        ? docs.filter((doc) => (ageMap.get(doc.id) || 0) >= overdueDays).length
+        : 0;
+      updateParcelSummary80(docs.length, overdueCount, hasFilter, filter);
 
       listEl.innerHTML = `
         <div class="parcel-grid">
@@ -8829,7 +9927,6 @@
             const timeText = time ? `${pad2(time.getMonth()+1)}/${pad2(time.getDate())} ${pad2(time.getHours())}:${pad2(time.getMinutes())}` : "—";
             const rtime = p.receivedAt ? (p.receivedAt.toDate ? p.receivedAt.toDate() : new Date(p.receivedAt)) : null;
             const rtimeText = rtime ? `${pad2(rtime.getMonth()+1)}/${pad2(rtime.getDate())} ${pad2(rtime.getHours())}:${pad2(rtime.getMinutes())}` : "";
-            const receivedLine = (p.status === "received" && rtimeText) ? `<div class="parcel-received">領取：${rtimeText}</div>` : "";
             const handlerAccountRaw = String(p.receivedByAccount || "").trim();
             const handlerNameRaw = String(p.receivedByDisplayName || p.receivedByName || "").trim();
             const handlerAccount = handlerAccountRaw || "";
@@ -8837,33 +9934,67 @@
             const handlerText =
               handlerAccount && handlerName && handlerAccount !== handlerName ? `${handlerAccount}<${handlerName}>` :
               handlerName || handlerAccount;
-            const handlerLine = (p.status === "received" && handlerText) ? `<div class="parcel-handler">處理：${escapeHtml(handlerText)}</div>` : "";
             const serial = normalizeParcelSerial(p.internalSerial) || "配號中";
+            const ageDays = ageMap.get(id) || 0;
+            const isOverdue = p.status !== "received" && ageDays >= overdueDays;
+            const notifiedText = formatMd80(p.notifiedAt);
             
             return `
-              <div class="parcel-card" data-id="${id}">
+              <div class="parcel-card${isOverdue ? " overdue" : ""}" data-id="${id}">
                 <div class="parcel-seq">${serial}</div>
                 <div class="parcel-card-hd">
                   <div class="parcel-company">${escapeHtml(p.company || "其他物流")}</div>
                   <div class="${statusClass}">${statusLabel}</div>
+                  ${isOverdue ? `<span class="tag red">逾期 ${ageDays} 天</span>` : ""}
                 </div>
                 <div class="parcel-card-bd">
                   <div class="parcel-info">
-                    <div class="parcel-recipient"><strong>${escapeHtml(p.unit || "—")}</strong> ${escapeHtml(p.recipient || "—")}</div>
-                    <div class="parcel-track">單號：${escapeHtml(p.trackNo || "—")}</div>
-                    <div class="parcel-type">類型：${escapeHtml(p.type || "一般包裹")}</div>
-                    <div class="parcel-time">到貨：${timeText}</div>
-                    ${receivedLine}
-                    ${handlerLine}
+                    <div class="parcel-recipient"><strong>${escapeHtml(p.unit || "—")}</strong> <span>${escapeHtml(p.recipient || "—")}</span></div>
+                    <div class="parcel-meta">
+                      <span class="parcel-track">單號：${escapeHtml(p.trackNo || "—")}</span>
+                      <span class="parcel-type">類型：${escapeHtml(p.type || "一般包裹")}</span>
+                      ${p.shelf ? `<span class="parcel-shelf">儲位：${escapeHtml(String(p.shelf))}</span>` : ""}
+                    </div>
+                    <div class="parcel-meta">
+                      <span class="parcel-time">到貨：${timeText}</span>
+                      ${notifiedText ? `<span class="parcel-notified">已通知 ${notifiedText}${p.notifyChannel ? `（${escapeHtml(String(p.notifyChannel))}）` : ""}</span>` : ""}
+                      ${(p.status === "received" && rtimeText) ? `<span class="parcel-received">領取：${rtimeText}</span>` : ""}
+                      ${(p.status === "received" && p.receivedForProxy) ? `<span class="parcel-proxy">代領：${escapeHtml(String(p.receivedForProxy))}</span>` : ""}
+                      ${(p.status === "received" && handlerText) ? `<span class="parcel-handler">處理：${escapeHtml(handlerText)}</span>` : ""}
+                    </div>
                   </div>
                   <div class="parcel-actions">
                     ${p.status === "pending" ? `
+                      <button class="icon-btn sm" type="button" data-notify="${id}" aria-label="通知住戶" title="通知住戶">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                          <path d="M13.7 21a2 2 0 0 1-3.4 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span class="icon-btn-label">通知</span>
+                      </button>
                       <button class="icon-btn primary sm" type="button" data-receive="${id}" aria-label="簽收" title="簽收">
                         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                           <path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
+                        <span class="icon-btn-label">簽收</span>
+                      </button>
+                      <button class="icon-btn sm" type="button" data-label="${id}" aria-label="列印標籤" title="列印到貨標籤">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M6 9V3h12v6" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                          <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                          <path d="M6 14h12v8H6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                        </svg>
+                        <span class="icon-btn-label">標籤</span>
                       </button>
                     ` : ""}
+                    <button class="icon-btn sm" type="button" data-detail="${id}" aria-label="詳情" title="詳情">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 8.6h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+                        <path d="M11 11.2h1v6.2h-1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M12 21.5a9.5 9.5 0 1 0 0-19 9.5 9.5 0 0 0 0 19Z" stroke="currentColor" stroke-width="2"/>
+                      </svg>
+                      <span class="icon-btn-label">詳情</span>
+                    </button>
                     ${p.status === "received" ? `
                       <button class="icon-btn danger sm" type="button" data-delete="${id}" aria-label="刪除" title="刪除">
                         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -8873,16 +10004,9 @@
                           <path d="M6 7l1 14h10l1-14" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
                           <path d="M9 7V4h6v3" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
                         </svg>
+                        <span class="icon-btn-label">刪除</span>
                       </button>
-                    ` : `
-                      <button class="icon-btn sm" type="button" data-detail="${id}" aria-label="詳情" title="詳情">
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                          <path d="M12 8.6h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
-                          <path d="M11 11.2h1v6.2h-1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                          <path d="M12 21.5a9.5 9.5 0 1 0 0-19 9.5 9.5 0 0 0 0 19Z" stroke="currentColor" stroke-width="2"/>
-                        </svg>
-                      </button>
-                    `}
+                    ` : ""}
                   </div>
                 </div>
               </div>
@@ -8895,7 +10019,26 @@
         btn.onclick = (e) => {
           e.stopPropagation();
           const id = btn.getAttribute("data-receive");
-          receiveParcel(id);
+          const doc = snap.docs.find(d => d.id === id);
+          receiveParcel(Object.assign({ id }, doc ? doc.data() : {}));
+        };
+      });
+
+      listEl.querySelectorAll("[data-notify]").forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const id = btn.getAttribute("data-notify");
+          const doc = snap.docs.find(d => d.id === id);
+          openParcelNotifyModal80({ cid, parcelId: id, parcel: doc ? doc.data() : {} });
+        };
+      });
+
+      listEl.querySelectorAll("[data-label]").forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const id = btn.getAttribute("data-label");
+          const doc = snap.docs.find(d => d.id === id);
+          openParcelLabelPrint80({ cid, parcel: Object.assign({ id }, doc ? doc.data() : {}) });
         };
       });
 
@@ -8909,23 +10052,18 @@
       });
 
       listEl.querySelectorAll("[data-delete]").forEach(btn => {
-        btn.onclick = async (e) => {
+        btn.onclick = (e) => {
           try { e.stopPropagation(); } catch {}
           const id = String(btn.getAttribute("data-delete") || "").trim();
           if (!id) return;
-          const ok = await (window.nwConfirm ? window.nwConfirm({
-            title: "刪除包裹",
-            message: "確認是否刪除此筆資料？",
-            okText: "刪除",
-            cancelText: "取消"
-          }) : Promise.resolve(confirm("確認是否刪除此筆資料？")));
-          if (!ok) return;
-          try {
-            await db.collection("communities").doc(cid).collection("parcels").doc(id).delete();
-            toast("已刪除");
-          } catch (err) {
-            toast("刪除失敗：" + (err && err.message ? err.message : "未知錯誤"));
-          }
+          const doc = snap.docs.find(d => d.id === id);
+          const p = doc ? doc.data() : {};
+          openParcelDeleteModal80({
+            cid,
+            parcelId: id,
+            parcel: Object.assign({ id }, p),
+            onDone: () => toast("已刪除")
+          });
         };
       });
     }, (err) => {
@@ -8933,50 +10071,1728 @@
     });
   }
 
-  async function receiveParcel(id) {
-    const cid = resolveActiveCommunityId();
-    const ok = await (window.nwConfirm ? window.nwConfirm({
-      title: "包裹簽收",
-      message: "確認住戶已領取此包裹？",
-      okText: "確認簽收",
-      cancelText: "取消"
-    }) : Promise.resolve(confirm("確認簽收？")));
-
-    if (ok) {
+  /** 取得目前操作人資訊（用於簽收／通知寫回） */
+  async function resolveParcelOperator80() {
+    const uid = String((auth.currentUser && auth.currentUser.uid) || "");
+    const account = inferUserAccount80(auth.currentUser);
+    let displayName = "";
+    if (uid) {
       try {
-        const receivedByUid = String((auth.currentUser && auth.currentUser.uid) || "");
-        const receivedByAccount = inferUserAccount80(auth.currentUser);
-        let receivedByDisplayName = "";
-        if (receivedByUid) {
-          try {
-            const udoc = await db.collection("users").doc(receivedByUid).get();
-            const udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
-            receivedByDisplayName = String(udata.displayName || udata.name || "").trim();
-          } catch {}
-        }
-        if (!receivedByDisplayName) {
-          try {
-            const domName = String(document.getElementById("profileNameText")?.textContent || "").trim();
-            if (domName && domName !== "—") receivedByDisplayName = domName;
-          } catch {}
-        }
-        if (!receivedByDisplayName) receivedByDisplayName = String((auth.currentUser && auth.currentUser.displayName) || "").trim();
-        if (!receivedByDisplayName) receivedByDisplayName = receivedByAccount;
-        const receivedByName = receivedByDisplayName;
-        await db.collection("communities").doc(cid).collection("parcels").doc(id).update({
+        const udoc = await db.collection("users").doc(uid).get();
+        const udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
+        displayName = String(udata.displayName || udata.name || "").trim();
+      } catch {}
+    }
+    if (!displayName) {
+      try {
+        const domName = String(document.getElementById("profileNameText")?.textContent || "").trim();
+        if (domName && domName !== "—") displayName = domName;
+      } catch {}
+    }
+    if (!displayName) displayName = String((auth.currentUser && auth.currentUser.displayName) || "").trim();
+    if (!displayName) displayName = account;
+    return { uid, account, displayName };
+  }
+
+  const PARCEL_AUDIT_LABELS = {
+    create: "登記",
+    edit: "修改",
+    receive: "簽收",
+    notify: "通知",
+    delete: "刪除"
+  };
+
+  /** 寫入包裹稽核紀錄（失敗不阻斷主流程） */
+  async function writeParcelAudit80(cid, payload) {
+    const communityId = String(cid || "").trim();
+    if (!communityId) return;
+    try {
+      const op = await resolveParcelOperator80();
+      await db.collection("communities").doc(communityId).collection("parcelAudit").add({
+        action: String((payload && payload.action) || ""),
+        parcelId: String((payload && payload.parcelId) || ""),
+        unit: String((payload && payload.unit) || ""),
+        recipient: String((payload && payload.recipient) || ""),
+        serial: String((payload && payload.serial) || ""),
+        trackNo: String((payload && payload.trackNo) || ""),
+        reason: String((payload && payload.reason) || ""),
+        snapshot: (payload && payload.snapshot) || null,
+        operatorUid: op.uid,
+        operatorAccount: op.account,
+        operatorName: op.displayName,
+        at: FieldValue.serverTimestamp()
+      });
+    } catch (err) { /* 稽核失敗不阻斷主流程 */ }
+  }
+
+  /** 正規化包裹參考（可為 id 字串或含摘要的物件） */
+  function normalizeParcelRef80(x) {
+    if (x && typeof x === "object") {
+      return {
+        id: String(x.id || "").trim(),
+        unit: String(x.unit || "").trim(),
+        recipient: String(x.recipient || "").trim(),
+        serial: normalizeParcelSerial(x.internalSerial) || "",
+        trackNo: String(x.trackNo || "").trim()
+      };
+    }
+    return { id: String(x || "").trim(), unit: "", recipient: "", serial: "", trackNo: "" };
+  }
+
+  /** 批次／單筆簽收（extra：代領人、電子簽名等附加欄位） */
+  async function markParcelsReceived80(cid, items, extra) {
+    const list = (Array.isArray(items) ? items : [items]).map(normalizeParcelRef80).filter((x) => x.id);
+    if (!list.length) return 0;
+    const op = await resolveParcelOperator80();
+    const col = db.collection("communities").doc(cid).collection("parcels");
+    const extraFields = (extra && typeof extra === "object") ? extra : {};
+    let done = 0;
+    for (const item of list) {
+      try {
+        await col.doc(item.id).update(Object.assign({
           status: "received",
           receivedAt: FieldValue.serverTimestamp(),
-          receivedBy: receivedByUid,
-          receivedByAccount,
-          receivedByName,
-          receivedByDisplayName,
+          receivedBy: op.uid,
+          receivedByAccount: op.account,
+          receivedByName: op.displayName,
+          receivedByDisplayName: op.displayName,
           updatedAt: FieldValue.serverTimestamp()
+        }, extraFields));
+        done += 1;
+        writeParcelAudit80(cid, {
+          action: "receive",
+          parcelId: item.id,
+          unit: item.unit,
+          recipient: item.recipient,
+          serial: item.serial,
+          trackNo: item.trackNo,
+          reason: String(extraFields.receivedForProxy || "")
         });
-        toast("已完成簽收");
       } catch (err) {
-        toast("操作失敗：" + err.message);
+        /* 單筆失敗不中斷其餘簽收 */
       }
     }
+    return done;
+  }
+
+  function receiveParcel(ref) {
+    const cid = resolveActiveCommunityId();
+    const target = normalizeParcelRef80(ref);
+    if (!target.id) return;
+    const parcel = Object.assign({}, ref && typeof ref === "object" ? ref : {}, { id: target.id });
+    openParcelReceiveModal80({ cid, parcel });
+  }
+
+  /* ── 簽收（含代領人與電子簽名） ── */
+  function ensureParcelReceiveModal80() {
+    let modal = document.getElementById("parcelReceiveModal80");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "parcelReceiveModal80";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="parcelReceiveTitle80" style="width: min(560px, 94vw);">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="parcelReceiveTitle80">包裹簽收</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="parcel-delete-summary">
+            <div><span>編號</span><strong id="prSerial80">—</strong></div>
+            <div><span>戶號／收件人</span><strong id="prWho80">—</strong></div>
+            <div><span>物流／單號</span><strong id="prLogistics80">—</strong></div>
+          </div>
+          <div class="field">
+            <label>領取方式</label>
+            <div class="parcel-quick-tags" id="prMode80">
+              <button class="btn btn-sm btn-primary" type="button" data-pr-mode="self">本人領取</button>
+              <button class="btn btn-sm" type="button" data-pr-mode="proxy">他人代領</button>
+            </div>
+          </div>
+          <div class="field" id="prProxyWrap80" hidden>
+            <label for="prProxyName80">代領人姓名 <span style="color:#d32f2f;">*</span></label>
+            <input id="prProxyName80" type="text" autocomplete="off" placeholder="請輸入代領人姓名" />
+          </div>
+          <div class="field">
+            <label>電子簽名（選填）</label>
+            <div class="parcel-sign-box">
+              <canvas id="prSignCanvas80" width="520" height="160"></canvas>
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin-top:6px;">
+              <button class="btn btn-sm btn-ghost" type="button" id="prSignClear80">清除簽名</button>
+            </div>
+          </div>
+          <div class="status" id="prStatus80" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+          <button class="btn btn-primary" type="button" id="prConfirm80">確認簽收</button>
+        </div>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openParcelReceiveModal80({ cid, parcel, onDone }) {
+    const p = parcel || {};
+    const modal = ensureParcelReceiveModal80();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const serial = normalizeParcelSerial(p.internalSerial) || "—";
+    const setText = (id, text) => { const el = modal.querySelector(id); if (el) el.textContent = text; };
+    setText("#prSerial80", serial);
+    setText("#prWho80", `${p.unit || "—"} ${p.recipient || ""}`.trim());
+    setText("#prLogistics80", `${p.company || "—"} ${p.trackNo || ""}`.trim());
+
+    const statusEl = modal.querySelector("#prStatus80");
+    const modeBox = modal.querySelector("#prMode80");
+    const proxyWrap = modal.querySelector("#prProxyWrap80");
+    const proxyInput = modal.querySelector("#prProxyName80");
+    const btnConfirm = modal.querySelector("#prConfirm80");
+    const canvas = modal.querySelector("#prSignCanvas80");
+    const btnSignClear = modal.querySelector("#prSignClear80");
+    if (proxyInput) proxyInput.value = "";
+
+    let mode = "self";
+    const setMode = (m) => {
+      mode = m === "proxy" ? "proxy" : "self";
+      if (modeBox) {
+        modeBox.querySelectorAll("[data-pr-mode]").forEach((b) => {
+          b.classList.toggle("btn-primary", String(b.getAttribute("data-pr-mode")) === mode);
+        });
+      }
+      if (proxyWrap) proxyWrap.hidden = mode !== "proxy";
+    };
+    setMode("self");
+    if (modeBox) {
+      modeBox.querySelectorAll("[data-pr-mode]").forEach((b) => {
+        b.onclick = () => setMode(b.getAttribute("data-pr-mode"));
+      });
+    }
+
+    /* 電子簽名畫布 */
+    let hasInk = false;
+    let drawing = false;
+    let ctx2d = null;
+    const initCanvas = () => {
+      if (!canvas) return;
+      try {
+        ctx2d = canvas.getContext("2d");
+        ctx2d.lineWidth = 2.2;
+        ctx2d.lineCap = "round";
+        ctx2d.lineJoin = "round";
+        ctx2d.strokeStyle = "#111827";
+      } catch {}
+    };
+    const posOf = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+      const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+      return { x: cx * (canvas.width / rect.width), y: cy * (canvas.height / rect.height) };
+    };
+    const start = (e) => { if (!ctx2d) return; drawing = true; const pt = posOf(e); ctx2d.beginPath(); ctx2d.moveTo(pt.x, pt.y); };
+    const move = (e) => { if (!drawing || !ctx2d) return; try { e.preventDefault(); } catch {} const pt = posOf(e); ctx2d.lineTo(pt.x, pt.y); ctx2d.stroke(); hasInk = true; };
+    const end = () => { drawing = false; };
+    initCanvas();
+    if (canvas) {
+      canvas.addEventListener("mousedown", start);
+      canvas.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", end);
+      canvas.addEventListener("touchstart", start, { passive: true });
+      canvas.addEventListener("touchmove", move, { passive: false });
+      canvas.addEventListener("touchend", end);
+    }
+    if (btnSignClear) {
+      btnSignClear.onclick = () => {
+        if (ctx2d) ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+        hasInk = false;
+      };
+    }
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      statusEl.textContent = String(msg || "");
+      statusEl.hidden = !msg;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+    setStatus("", false);
+
+    const oldDetach = detach;
+    detach = () => {
+      window.removeEventListener("mouseup", end);
+      oldDetach();
+    };
+
+    if (btnConfirm) {
+      btnConfirm.onclick = async () => {
+        const proxyName = String(proxyInput ? proxyInput.value : "").trim();
+        if (mode === "proxy" && !proxyName) { setStatus("請輸入代領人姓名。", true); return; }
+        btnConfirm.disabled = true;
+        setStatus("處理中...", false);
+        try {
+          let signature = "";
+          if (hasInk && canvas) { try { signature = canvas.toDataURL("image/png"); } catch {} }
+          const extra = {};
+          if (signature) extra.signature = signature;
+          if (mode === "proxy") {
+            extra.receivedForProxy = proxyName;
+            extra.receivedForProxyAt = FieldValue.serverTimestamp();
+          }
+          const done = await markParcelsReceived80(cid, [Object.assign({ id: p.id }, p)], extra);
+          if (!done) throw new Error("更新失敗");
+          toast("已完成簽收");
+          modal.hidden = true;
+          detach();
+          if (typeof onDone === "function") { try { onDone(); } catch {} }
+        } catch (err) {
+          setStatus("簽收失敗：" + (err && err.message ? err.message : "未知錯誤"), true);
+        } finally {
+          btnConfirm.disabled = false;
+        }
+      };
+    }
+
+    modal.hidden = false;
+  }
+
+  /* ── 到貨通知住戶（多元管道，零成本） ── */
+  function buildParcelNotifyHtml80(title, text) {
+    return "<!doctype html><html lang=\"zh-Hant\"><head><meta charset=\"utf-8\"/>" +
+      "<title>" + escapeHtml(title) + "</title>" +
+      "<style>html,body{margin:0;padding:24px;background:#fff;color:#111827;" +
+      "font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;}" +
+      "pre{white-space:pre-wrap;font-family:inherit;font-size:calc(16px * var(--fs, 1));line-height:2;margin:0;}" +
+      "</style></head><body><pre>" + escapeHtml(text) + "</pre></body></html>";
+  }
+
+  function printParcelNotify80(title, text) {
+    const win = window.open("", "_blank");
+    if (!win) { toast("請允許彈出視窗以列印"); return false; }
+    try {
+      win.document.open();
+      win.document.write(buildParcelNotifyHtml80(title, text));
+      win.document.close();
+      win.focus();
+      win.print();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function openParcelNotifyModal80({ cid, parcelId, parcel }) {
+    const p = parcel || {};
+    const modal = ensureModal("parcelNotifyModal80", "modal-parcel-notify", "min(680px, 92vw)");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
+    const serial = normalizeParcelSerial(p.internalSerial) || "—";
+    const arrivalTime = toDate80(p.createdAt);
+    const arrivalText = arrivalTime
+      ? `${arrivalTime.getFullYear()}/${pad2(arrivalTime.getMonth() + 1)}/${pad2(arrivalTime.getDate())} ${pad2(arrivalTime.getHours())}:${pad2(arrivalTime.getMinutes())}`
+      : "";
+    const notifyCtx = {
+      communityName,
+      unit: p.unit || "",
+      recipient: p.recipient || "",
+      company: p.company || "",
+      trackNo: p.trackNo || "",
+      serial: serial === "—" ? "" : serial,
+      shelf: p.shelf || "",
+      arrival: arrivalText
+    };
+    const notifyText = buildParcelNotifyText80(notifyCtx);
+
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="parcelNotifyTitle80">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="parcelNotifyTitle80">通知住戶取件</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="parcel-notify-meta">
+            <span>${escapeHtml(p.unit || "—")} ${escapeHtml(p.recipient || "—")}</span>
+            <span class="tag">編號 ${escapeHtml(serial)}</span>
+          </div>
+          <div class="notice-field-row">
+            <div class="field">
+              <label for="pnPhone80">住戶手機</label>
+              <input id="pnPhone80" type="tel" autocomplete="off" placeholder="09xxxxxxxx" />
+            </div>
+            <div class="field">
+              <label for="pnEmail80">住戶 Email</label>
+              <input id="pnEmail80" type="email" autocomplete="off" placeholder="name@example.com" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="pnText80">通知內容</label>
+            <textarea id="pnText80" rows="8"></textarea>
+          </div>
+          <div class="status" id="pnStatus80" hidden></div>
+        </div>
+        <div class="modal-ft parcel-notify-ft">
+          <button class="btn btn-ghost" type="button" id="pnCopy80">複製文字</button>
+          <button class="btn btn-line" type="button" id="pnLine80">轉發 LINE</button>
+          <button class="btn btn-ghost" type="button" id="pnMail80">Email</button>
+          <button class="btn btn-ghost" type="button" id="pnSms80">簡訊</button>
+          <button class="btn btn-ghost" type="button" id="pnPrint80">列印</button>
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+
+    const phoneEl = modal.querySelector("#pnPhone80");
+    const emailEl = modal.querySelector("#pnEmail80");
+    const textEl = modal.querySelector("#pnText80");
+    const statusEl = modal.querySelector("#pnStatus80");
+    if (textEl) textEl.value = notifyText;
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    // 自動帶入住戶聯絡資訊
+    findResidentContact80(cid, p.unit || "").then((info) => {
+      if (!info) return;
+      if (phoneEl && !phoneEl.value) phoneEl.value = info.phone || "";
+      if (emailEl && !emailEl.value) emailEl.value = info.email || "";
+    }).catch(() => {});
+
+    const recordNotice = async (channel) => {
+      try {
+        const op = await resolveParcelOperator80();
+        await db.collection("communities").doc(cid).collection("parcels").doc(parcelId).update({
+          notifiedAt: FieldValue.serverTimestamp(),
+          notifiedBy: op.uid,
+          notifiedByAccount: op.account,
+          notifiedByName: op.displayName,
+          notifyChannel: channel,
+          updatedAt: FieldValue.serverTimestamp()
+        });
+        setStatus(`已透過${channel}通知，並記錄通知時間。`, false);
+        writeParcelAudit80(cid, {
+          action: "notify",
+          parcelId,
+          unit: p.unit || "",
+          recipient: p.recipient || "",
+          serial: serial === "—" ? "" : serial,
+          trackNo: p.trackNo || "",
+          reason: channel
+        });
+      } catch (err) {
+        setStatus("通知已發送，但紀錄失敗：" + (err && err.message ? err.message : "未知錯誤"), true);
+      }
+    };
+
+    const body = () => String(textEl ? textEl.value : notifyText);
+
+    const btnCopy = modal.querySelector("#pnCopy80");
+    if (btnCopy) {
+      btnCopy.onclick = () => {
+        const text = body();
+        const fn = window.NwFeeNotice && window.NwFeeNotice.copyText;
+        Promise.resolve(fn ? fn(text) : navigator.clipboard.writeText(text))
+          .then(() => { toast("已複製通知內容"); return recordNotice("複製文字"); })
+          .catch(() => setStatus("複製失敗，請手動選取文字。", true));
+      };
+    }
+
+    const btnLine = modal.querySelector("#pnLine80");
+    if (btnLine) {
+      btnLine.onclick = () => {
+        const fn = window.NwFeeNotice && window.NwFeeNotice.shareLine;
+        if (fn) fn("", body());
+        else window.open("https://line.me/R/msg/text/?" + encodeURIComponent(body()), "_blank", "noopener");
+        recordNotice("LINE");
+      };
+    }
+
+    const btnMail = modal.querySelector("#pnMail80");
+    if (btnMail) {
+      btnMail.onclick = () => {
+        const to = String(emailEl ? emailEl.value : "").trim();
+        const subject = `【${communityName || "社區"}】包裹到貨通知`;
+        const fn = window.NwFeeNotice && window.NwFeeNotice.shareEmail;
+        if (fn) fn(to, subject, body());
+        else window.location.href = "mailto:" + encodeURIComponent(to) + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body());
+        recordNotice("Email");
+      };
+    }
+
+    const btnSms = modal.querySelector("#pnSms80");
+    if (btnSms) {
+      btnSms.onclick = () => {
+        const phone = String(phoneEl ? phoneEl.value : "").trim();
+        if (!phone) { setStatus("請先填寫住戶手機號碼。", true); return; }
+        const fn = window.NwFeeNotice && window.NwFeeNotice.shareSms;
+        if (fn) fn(phone, body());
+        else window.location.href = "sms:" + phone.replace(/[^\d+]/g, "") + "?body=" + encodeURIComponent(body());
+        recordNotice("簡訊");
+      };
+    }
+
+    const btnPrint = modal.querySelector("#pnPrint80");
+    if (btnPrint) {
+      btnPrint.onclick = () => {
+        if (printParcelNotify80(`包裹到貨通知 - ${p.unit || ""}`, body())) recordNotice("列印");
+      };
+    }
+
+    modal.hidden = false;
+  }
+
+  /* ── 列印到貨標籤（含 QR Code，零成本） ── */
+  function buildParcelLabelHtml80({ parcel, communityName, qrSrc }) {
+    const p = parcel || {};
+    const serial = normalizeParcelSerial(p.internalSerial) || "—";
+    const rows = [
+      ["戶號", p.unit || "—"],
+      ["收件人", p.recipient || "—"],
+      ["物流", p.company || "—"],
+      ["單號", p.trackNo || "—"],
+      ["儲位", p.shelf || "—"],
+      ["編號", serial]
+    ];
+    const arrival = toDate80(p.createdAt);
+    const arrivalText = arrival
+      ? `${arrival.getFullYear()}/${pad2(arrival.getMonth() + 1)}/${pad2(arrival.getDate())} ${pad2(arrival.getHours())}:${pad2(arrival.getMinutes())}`
+      : "—";
+    return "<!doctype html><html lang=\"zh-Hant\"><head><meta charset=\"utf-8\"/><title>到貨標籤</title>" +
+      "<style>" +
+      "@page{size:100mm 60mm;margin:4mm;}" +
+      "html,body{margin:0;padding:0;background:#fff;color:#111827;font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;}" +
+      ".lbl{width:92mm;border:1.5px solid #111827;border-radius:4mm;padding:4mm;box-sizing:border-box;}" +
+      ".lbl-hd{display:flex;align-items:center;justify-content:space-between;gap:4mm;border-bottom:1px dashed #9ca3af;padding-bottom:2mm;margin-bottom:2mm;}" +
+      ".lbl-title{font-size:calc(14px * var(--fs, 1));font-weight:800;}" +
+      ".lbl-sub{font-size:calc(11px * var(--fs, 1));color:#4b5563;}" +
+      ".lbl-body{display:flex;gap:4mm;align-items:center;}" +
+      ".lbl-rows{flex:1;}" +
+      ".lbl-row{display:flex;font-size:calc(12px * var(--fs, 1));line-height:1.9;}" +
+      ".lbl-row .k{width:16mm;color:#6b7280;}" +
+      ".lbl-row .v{flex:1;font-weight:700;word-break:break-all;}" +
+      ".lbl-qr{width:26mm;height:26mm;}" +
+      "</style></head><body>" +
+      "<div class=\"lbl\">" +
+      "<div class=\"lbl-hd\"><div><div class=\"lbl-title\">包裹到貨標籤</div>" +
+      "<div class=\"lbl-sub\">" + escapeHtml(communityName || "") + "</div></div>" +
+      "<div class=\"lbl-sub\">到貨 " + escapeHtml(arrivalText) + "</div></div>" +
+      "<div class=\"lbl-body\"><div class=\"lbl-rows\">" +
+      rows.map((r) => "<div class=\"lbl-row\"><span class=\"k\">" + escapeHtml(r[0]) + "</span><span class=\"v\">" + escapeHtml(String(r[1])) + "</span></div>").join("") +
+      "</div><img class=\"lbl-qr\" src=\"" + escapeHtml(qrSrc) + "\" alt=\"QR\" /></div>" +
+      "</div></body></html>";
+  }
+
+  function openParcelLabelPrint80({ cid, parcel }) {
+    const p = parcel || {};
+    const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
+    const serial = normalizeParcelSerial(p.internalSerial) || "";
+    const qrData = `nwparcel:${cid}:${p.id || ""}:${serial}`;
+    const qrSrc = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(qrData);
+    const win = window.open("", "_blank");
+    if (!win) { toast("請允許彈出視窗以列印標籤"); return; }
+    try {
+      win.document.open();
+      win.document.write(buildParcelLabelHtml80({ parcel: p, communityName, qrSrc }));
+      win.document.close();
+      win.focus();
+      setTimeout(() => { try { win.print(); } catch {} }, 600);
+    } catch (e) {
+      toast("列印失敗，請稍後再試");
+    }
+  }
+
+  /* ── 批次催領：一次產生多筆催領通知（複製／列印） ── */
+  function openParcelBatchNotifyModal80({ cid, communityName }) {
+    const modal = ensureModal("parcelBatchNotifyModal80", "modal-parcel-batch-notify", "min(760px, 94vw)");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const overdueDays = getParcelOverdueDays80();
+    const cname = communityName || (state.communities.find((c) => c.id === cid) || {}).name || "";
+
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="parcelBatchNotifyTitle80">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="parcelBatchNotifyTitle80">批次催領</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="parcel-batch-toolbar">
+            <label class="parcel-batch-opt"><input type="radio" name="pbnScope80" value="overdue" checked /> 僅逾期未領（≥ ${overdueDays} 天）</label>
+            <label class="parcel-batch-opt"><input type="radio" name="pbnScope80" value="all" /> 全部待領取</label>
+            <button class="btn btn-sm" type="button" id="pbnRefresh80">重新整理</button>
+          </div>
+          <div class="status" id="pbnStatus80" hidden></div>
+          <div class="parcel-batch-list" id="pbnList80"><div class="status">載入中...</div></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn btn-ghost" type="button" id="pbnCopyAll80">複製全部</button>
+          <button class="btn btn-ghost" type="button" id="pbnPrintAll80">列印全部</button>
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `;
+
+    const listEl = modal.querySelector("#pbnList80");
+    const statusEl = modal.querySelector("#pbnStatus80");
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      statusEl.textContent = String(msg || "");
+      statusEl.hidden = !msg;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    const scope = () => {
+      const el = modal.querySelector('input[name="pbnScope80"]:checked');
+      return el ? String(el.value) : "overdue";
+    };
+
+    let pendingDocs = [];
+
+    const buildRows = () => {
+      const ov = scope() === "overdue";
+      const rows = pendingDocs
+        .map((d) => {
+          const p = d.data() || {};
+          return { id: d.id, p, age: parcelAgeDays80(p) };
+        })
+        .filter((r) => (ov ? r.age >= overdueDays : true))
+        .sort((a, b) => b.age - a.age);
+      if (!rows.length) {
+        listEl.innerHTML = `<div class="parcel-batch-empty">${ov ? "目前沒有逾期未領的包裹。" : "目前沒有待領取包裹。"}</div>`;
+        return rows;
+      }
+      listEl.innerHTML = rows.map((r) => {
+        const p = r.p;
+        const serial = normalizeParcelSerial(p.internalSerial) || "—";
+        return `
+          <div class="parcel-batch-item">
+            <div class="parcel-batch-info">
+              <strong>${escapeHtml(p.unit || "—")} ${escapeHtml(p.recipient || "")}</strong>
+              <span class="parcel-batch-sub">${escapeHtml(p.company || "—")} ・ ${escapeHtml(p.trackNo || "—")} ・ 編號 ${escapeHtml(serial)}</span>
+              <span class="tag red">逾期 ${r.age} 天</span>
+            </div>
+            <div class="parcel-batch-actions">
+              <button class="btn btn-sm" type="button" data-pbn-copy="${r.id}">複製</button>
+              <button class="btn btn-sm" type="button" data-pbn-notify="${r.id}">通知</button>
+            </div>
+          </div>`;
+      }).join("");
+
+      listEl.querySelectorAll("[data-pbn-copy]").forEach((btn) => {
+        btn.onclick = () => {
+          const id = btn.getAttribute("data-pbn-copy");
+          const r = rows.find((x) => x.id === id);
+          if (!r) return;
+          const text = buildParcelNotifyText80({
+            communityName: cname,
+            unit: r.p.unit, recipient: r.p.recipient, company: r.p.company,
+            trackNo: r.p.trackNo, serial: normalizeParcelSerial(r.p.internalSerial) || "",
+            shelf: r.p.shelf, arrival: ""
+          });
+          const fn = window.NwFeeNotice && window.NwFeeNotice.copyText;
+          Promise.resolve(fn ? fn(text) : navigator.clipboard.writeText(text))
+            .then(() => toast("已複製催領內容"))
+            .catch(() => toast("複製失敗", true));
+        };
+      });
+
+      listEl.querySelectorAll("[data-pbn-notify]").forEach((btn) => {
+        btn.onclick = () => {
+          const id = btn.getAttribute("data-pbn-notify");
+          const r = rows.find((x) => x.id === id);
+          if (!r) return;
+          openParcelNotifyModal80({ cid, parcelId: r.id, parcel: r.p });
+        };
+      });
+
+      return rows;
+    };
+
+    const load = () => {
+      listEl.innerHTML = `<div class="status">載入中...</div>`;
+      db.collection("communities").doc(cid).collection("parcels")
+        .where("status", "==", "pending").limit(300).get()
+        .then((snap) => {
+          pendingDocs = snap && snap.docs ? snap.docs.slice() : [];
+          const rows = buildRows();
+          setStatus(`共 ${rows.length} 筆待催領。`, false);
+        })
+        .catch((err) => {
+          listEl.innerHTML = `<div class="parcel-batch-empty">讀取失敗：${escapeHtml(err && err.message ? err.message : "未知錯誤")}</div>`;
+        });
+    };
+
+    modal.querySelectorAll('input[name="pbnScope80"]').forEach((el) => {
+      el.onchange = () => { const rows = buildRows(); setStatus(`共 ${rows.length} 筆待催領。`, false); };
+    });
+    const btnRefresh = modal.querySelector("#pbnRefresh80");
+    if (btnRefresh) btnRefresh.onclick = () => load();
+
+    const btnCopyAll = modal.querySelector("#pbnCopyAll80");
+    if (btnCopyAll) {
+      btnCopyAll.onclick = () => {
+        const ov = scope() === "overdue";
+        const rows = pendingDocs
+          .map((d) => ({ id: d.id, p: d.data() || {}, age: parcelAgeDays80(d.data() || {}) }))
+          .filter((r) => (ov ? r.age >= overdueDays : true))
+          .sort((a, b) => b.age - a.age);
+        if (!rows.length) { setStatus("沒有可複製的催領內容。", true); return; }
+        const text = rows.map((r) => buildParcelNotifyText80({
+          communityName: cname,
+          unit: r.p.unit, recipient: r.p.recipient, company: r.p.company,
+          trackNo: r.p.trackNo, serial: normalizeParcelSerial(r.p.internalSerial) || "",
+          shelf: r.p.shelf, arrival: ""
+        })).join("\n\n──────────\n\n");
+        const fn = window.NwFeeNotice && window.NwFeeNotice.copyText;
+        Promise.resolve(fn ? fn(text) : navigator.clipboard.writeText(text))
+          .then(() => setStatus(`已複製 ${rows.length} 筆催領內容。`, false))
+          .catch(() => setStatus("複製失敗，請手動選取。", true));
+      };
+    }
+
+    const btnPrintAll = modal.querySelector("#pbnPrintAll80");
+    if (btnPrintAll) {
+      btnPrintAll.onclick = () => {
+        const ov = scope() === "overdue";
+        const rows = pendingDocs
+          .map((d) => ({ id: d.id, p: d.data() || {}, age: parcelAgeDays80(d.data() || {}) }))
+          .filter((r) => (ov ? r.age >= overdueDays : true))
+          .sort((a, b) => b.age - a.age);
+        if (!rows.length) { setStatus("沒有可列印的催領內容。", true); return; }
+        const text = rows.map((r) => buildParcelNotifyText80({
+          communityName: cname,
+          unit: r.p.unit, recipient: r.p.recipient, company: r.p.company,
+          trackNo: r.p.trackNo, serial: normalizeParcelSerial(r.p.internalSerial) || "",
+          shelf: r.p.shelf, arrival: ""
+        })).join("\n\n────────────────\n\n");
+        printParcelNotify80("批次催領通知", text);
+      };
+    }
+
+    const oldDetach = detach;
+    detach = () => { oldDetach(); };
+    modal.hidden = false;
+    load();
+  }
+
+  /* ── 月報匯出（Excel／CSV） ── */
+  async function exportParcelMonthlyReport80(cid, communityName) {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const ymLabel = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+    try {
+      const snap = await db.collection("communities").doc(cid).collection("parcels")
+        .where("createdAt", ">=", start).where("createdAt", "<", end).limit(2000).get();
+      const docs = (snap && snap.docs ? snap.docs : []).map((d) => Object.assign({ _id: d.id }, d.data() || {}));
+      if (!docs.length) { toast(`${ymLabel} 沒有包裹紀錄可匯出`); return; }
+
+      const overdueDays = getParcelOverdueDays80();
+      let received = 0, pending = 0, overdue = 0, ageSum = 0, ageCnt = 0;
+      docs.forEach((p) => {
+        if (String(p.status || "pending") === "received") {
+          received += 1;
+        } else {
+          pending += 1;
+          const age = parcelAgeDays80(p);
+          ageSum += age;
+          ageCnt += 1;
+          if (age >= overdueDays) overdue += 1;
+        }
+      });
+      const avg = ageCnt ? (ageSum / ageCnt).toFixed(1) : "0.0";
+
+      const detail = docs.map((p) => ({
+        "編號": normalizeParcelSerial(p.internalSerial) || "",
+        "戶號": p.unit || "",
+        "收件人": p.recipient || "",
+        "物流": p.company || "",
+        "單號": p.trackNo || "",
+        "類型": p.type || "",
+        "儲位": p.shelf || "",
+        "狀態": String(p.status || "pending") === "received" ? "已領取" : "待領取",
+        "到貨時間": auditTimeText80(p.createdAt),
+        "領取時間": auditTimeText80(p.receivedAt),
+        "代領人": p.receivedForProxy || "",
+        "經手人": p.receivedByDisplayName || p.receivedByName || "",
+        "備註": p.note || ""
+      }));
+
+      const XLSX = window.XLSX;
+      if (!XLSX) { toast("Excel 元件尚未載入，請稍後再試", true); return; }
+      const summary = [
+        { "項目": "統計月份", "數值": ymLabel },
+        { "項目": "到貨總數", "數值": docs.length },
+        { "項目": "已領取", "數值": received },
+        { "項目": "待領取", "數值": pending },
+        { "項目": "逾期未領", "數值": overdue },
+        { "項目": "平均待領天數", "數值": avg }
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "月報摘要");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detail), "明細");
+      XLSX.writeFile(wb, `${sanitizeFileName80(communityName)}_包裹月報_${ymLabel}_${stamp80()}.xlsx`);
+      toast(`已匯出 ${ymLabel} 月報（${docs.length} 筆）`);
+      writeParcelAudit80(cid, { action: "notify", reason: `匯出月報 ${ymLabel}` });
+    } catch (err) {
+      toast("匯出失敗：" + (err && err.message ? err.message : "未知錯誤"), true);
+    }
+  }
+
+  /** 查詢同社區是否已有相同單號的未領取包裹（單欄等值查詢，避免複合索引） */
+  function findDuplicateParcelByTrackNo80(cid, trackNo) {
+    const t = String(trackNo || "").trim();
+    if (!t) return Promise.resolve(null);
+    return db.collection("communities").doc(cid).collection("parcels")
+      .where("trackNo", "==", t).limit(5).get()
+      .then((snap) => {
+        let hit = null;
+        (snap && snap.docs ? snap.docs : []).forEach((d) => {
+          if (hit) return;
+          const p = d.data() || {};
+          if (String(p.status || "pending") !== "received") hit = Object.assign({ id: d.id }, p);
+        });
+        return hit;
+      })
+      .catch(() => null);
+  }
+
+  /* ── 刪除二次授權（必填原因，並寫入稽核） ── */
+  const PARCEL_DELETE_REASONS = ["重複登記", "誤登", "住戶已自行領取", "資料有誤", "測試資料"];
+
+  function openParcelDeleteModal80({ cid, parcelId, parcel, onDone }) {
+    const p = parcel || {};
+    const modal = ensureModal("parcelDeleteModal80", "modal-parcel-delete", "min(560px, 92vw)");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const serial = normalizeParcelSerial(p.internalSerial) || "—";
+    const chips = PARCEL_DELETE_REASONS
+      .map((r) => `<button class="btn btn-sm" type="button" data-pd-reason="${escapeHtml(r)}">${escapeHtml(r)}</button>`)
+      .join("");
+
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="parcelDeleteTitle80">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="parcelDeleteTitle80">刪除包裹（需填寫原因）</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="parcel-delete-summary">
+            <div><span>編號</span><strong>${escapeHtml(serial)}</strong></div>
+            <div><span>戶號／收件人</span><strong>${escapeHtml(p.unit || "—")} ${escapeHtml(p.recipient || "")}</strong></div>
+            <div><span>物流／單號</span><strong>${escapeHtml(p.company || "—")} ${escapeHtml(p.trackNo || "")}</strong></div>
+          </div>
+          <div class="field">
+            <label for="pdReason80">刪除原因（必填）</label>
+            <div class="parcel-delete-chips">${chips}</div>
+            <textarea id="pdReason80" rows="3" placeholder="請說明刪除此筆包裹紀錄的原因"></textarea>
+          </div>
+          <div class="status" id="pdStatus80" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+          <button class="btn btn-primary" type="button" id="pdConfirm80" style="background:#d32f2f;border-color:#d32f2f;">確認刪除</button>
+        </div>
+      </div>
+    `.trim();
+
+    const reasonEl = modal.querySelector("#pdReason80");
+    const statusEl = modal.querySelector("#pdStatus80");
+    const btnConfirm = modal.querySelector("#pdConfirm80");
+
+    modal.querySelectorAll("[data-pd-reason]").forEach((btn) => {
+      btn.onclick = () => {
+        const r = String(btn.getAttribute("data-pd-reason") || "");
+        if (!reasonEl) return;
+        reasonEl.value = reasonEl.value.trim() ? `${reasonEl.value.trim()}、${r}` : r;
+        reasonEl.focus();
+      };
+    });
+
+    if (btnConfirm) {
+      btnConfirm.onclick = async () => {
+        const reason = String(reasonEl ? reasonEl.value : "").trim();
+        if (!reason) {
+          if (statusEl) {
+            statusEl.textContent = "請填寫刪除原因後再確認。";
+            statusEl.hidden = false;
+            statusEl.classList.add("error");
+          }
+          if (reasonEl) reasonEl.focus();
+          return;
+        }
+        btnConfirm.disabled = true;
+        try {
+          await writeParcelAudit80(cid, {
+            action: "delete",
+            parcelId,
+            unit: p.unit || "",
+            recipient: p.recipient || "",
+            serial: serial === "—" ? "" : serial,
+            trackNo: p.trackNo || "",
+            reason,
+            snapshot: {
+              company: p.company || "",
+              trackNo: p.trackNo || "",
+              type: p.type || "",
+              unit: p.unit || "",
+              recipient: p.recipient || "",
+              address: p.address || "",
+              note: p.note || "",
+              status: p.status || "",
+              internalSerial: serial === "—" ? "" : serial,
+              notifiedAt: formatMd80(p.notifiedAt),
+              notifyChannel: p.notifyChannel || "",
+              receivedAt: formatMd80(p.receivedAt),
+              receivedByDisplayName: p.receivedByDisplayName || p.receivedByName || ""
+            }
+          });
+          await db.collection("communities").doc(cid).collection("parcels").doc(parcelId).delete();
+          modal.hidden = true;
+          detach();
+          if (typeof onDone === "function") onDone();
+        } catch (err) {
+          if (statusEl) {
+            statusEl.textContent = "刪除失敗：" + (err && err.message ? err.message : "未知錯誤");
+            statusEl.hidden = false;
+            statusEl.classList.add("error");
+          }
+        } finally {
+          btnConfirm.disabled = false;
+        }
+      };
+    }
+
+    modal.hidden = false;
+  }
+
+  /* ── 稽核紀錄查詢 ── */
+  function auditTimeText80(value) {
+    const d = toDate80(value);
+    if (!d) return "—";
+    return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  }
+
+  function renderParcelAuditRows80(records) {
+    if (!records.length) return `<div class="status">目前沒有稽核紀錄。</div>`;
+    return records.map((r) => {
+      const label = PARCEL_AUDIT_LABELS[r.action] || r.action || "—";
+      const who = String(r.operatorName || r.operatorAccount || "—");
+      const target = [r.serial ? `#${r.serial}` : "", r.unit, r.recipient].filter(Boolean).join(" ");
+      const reasonText = r.reason ? `<div class="parcel-audit-reason">${escapeHtml(label === "通知" ? `管道：${r.reason}` : `原因：${r.reason}`)}</div>` : "";
+      return `
+        <div class="parcel-audit-item">
+          <div class="parcel-audit-hd">
+            <span class="tag ${r.action === "delete" ? "red" : (r.action === "receive" ? "green" : "yellow")}">${escapeHtml(label)}</span>
+            <span class="parcel-audit-time">${auditTimeText80(r.at)}</span>
+          </div>
+          <div class="parcel-audit-body">
+            <div class="parcel-audit-target">${escapeHtml(target || "—")}</div>
+            <div class="parcel-audit-op">操作人：${escapeHtml(who)}</div>
+            ${reasonText}
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function openParcelAuditModal80({ cid }) {
+    const modal = ensureModal("parcelAuditModal80", "modal-parcel-audit", "min(720px, 94vw)");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="parcelAuditTitle80">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="parcelAuditTitle80">包裹稽核紀錄</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="parcel-audit-toolbar">
+            <button class="btn btn-sm btn-primary" type="button" data-pa-filter="all">全部</button>
+            <button class="btn btn-sm" type="button" data-pa-filter="delete">刪除</button>
+            <button class="btn btn-sm" type="button" data-pa-filter="receive">簽收</button>
+            <button class="btn btn-sm" type="button" data-pa-filter="notify">通知</button>
+          </div>
+          <div id="parcelAuditList80"><div class="status">載入中...</div></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+
+    const listEl = modal.querySelector("#parcelAuditList80");
+    let allRecords = [];
+    let currentFilter = "all";
+
+    const paint = () => {
+      if (!listEl) return;
+      const rows = currentFilter === "all" ? allRecords : allRecords.filter((r) => r.action === currentFilter);
+      listEl.innerHTML = renderParcelAuditRows80(rows);
+    };
+
+    modal.querySelectorAll("[data-pa-filter]").forEach((btn) => {
+      btn.onclick = () => {
+        modal.querySelectorAll("[data-pa-filter]").forEach((b) => b.classList.remove("btn-primary"));
+        btn.classList.add("btn-primary");
+        currentFilter = String(btn.getAttribute("data-pa-filter") || "all");
+        paint();
+      };
+    });
+
+    db.collection("communities").doc(cid).collection("parcelAudit")
+      .orderBy("at", "desc").limit(100).get()
+      .then((snap) => {
+        allRecords = (snap && snap.docs ? snap.docs : []).map((d) => d.data() || {});
+        paint();
+      })
+      .catch((err) => {
+        if (listEl) listEl.innerHTML = `<div class="status error">讀取失敗：${escapeHtml(err && err.message ? err.message : "未知錯誤")}</div>`;
+      });
+
+    modal.hidden = false;
+  }
+
+  /** 單件操作軌跡（嵌入包裹詳情） */
+  function renderParcelTrace80(container, cid, parcelId) {
+    if (!container || !cid || !parcelId) return;
+    container.innerHTML = `<div class="status">載入操作軌跡中...</div>`;
+    db.collection("communities").doc(cid).collection("parcelAudit")
+      .where("parcelId", "==", parcelId).limit(50).get()
+      .then((snap) => {
+        const rows = (snap && snap.docs ? snap.docs : [])
+          .map((d) => d.data() || {})
+          .sort((a, b) => {
+            const ta = toDate80(a.at), tb = toDate80(b.at);
+            return (ta ? ta.getTime() : 0) - (tb ? tb.getTime() : 0);
+          });
+        if (!rows.length) {
+          container.innerHTML = `<div class="status">尚無異動紀錄。</div>`;
+          return;
+        }
+        container.innerHTML = `
+          <div class="parcel-trace">
+            ${rows.map((r) => {
+              const label = PARCEL_AUDIT_LABELS[r.action] || r.action || "—";
+              const who = String(r.operatorName || r.operatorAccount || "—");
+              const extra = r.reason ? `（${escapeHtml(label === "通知" ? `管道：${r.reason}` : r.reason)}）` : "";
+              return `<div class="parcel-trace-row">
+                <span class="parcel-trace-time">${auditTimeText80(r.at)}</span>
+                <span class="parcel-trace-action">${escapeHtml(label)}${extra}</span>
+                <span class="parcel-trace-op">${escapeHtml(who)}</span>
+              </div>`;
+            }).join("")}
+          </div>
+        `;
+      })
+      .catch(() => {
+        container.innerHTML = `<div class="status">操作軌跡讀取失敗。</div>`;
+      });
+  }
+
+  /* ── 資料維護：匯出 ／ 備份 ／ 清理 ── */
+  function sanitizeFileName80(name) {
+    return String(name || "社區").replace(/[\\/:*?"<>|\s]+/g, "_").slice(0, 40) || "社區";
+  }
+
+  function stamp80() {
+    const d = new Date();
+    return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}`;
+  }
+
+  function downloadJson80(filename, dataObj) {
+    const blob = new Blob([JSON.stringify(dataObj, null, 2)], { type: "application/json;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  function parcelExcelRow80(p) {
+    return {
+      "內部編號": normalizeParcelSerial(p.internalSerial) || "",
+      "物流": p.company || "",
+      "託運單號": p.trackNo || "",
+      "類型": p.type || "",
+      "戶號": p.unit || p.houseNo || "",
+      "收件人": p.recipient || "",
+      "地址": p.address || "",
+      "儲位": p.shelf || "",
+      "狀態": p.status === "received" ? "已領取" : "待領取",
+      "到貨時間": auditTimeText80(p.createdAt),
+      "通知時間": auditTimeText80(p.notifiedAt),
+      "通知管道": p.notifyChannel || "",
+      "領取時間": auditTimeText80(p.receivedAt),
+      "領取人": p.receivedByDisplayName || p.receivedByName || "",
+      "代領人": p.receivedForProxy || "",
+      "備註": p.note || ""
+    };
+  }
+
+  function auditExcelRow80(r) {
+    return {
+      "時間": auditTimeText80(r.at),
+      "動作": PARCEL_AUDIT_LABELS[r.action] || r.action || "",
+      "編號": r.serial || "",
+      "戶號": r.unit || "",
+      "收件人": r.recipient || "",
+      "物流單號": r.trackNo || "",
+      "原因": r.reason || "",
+      "操作人": r.operatorName || r.operatorAccount || ""
+    };
+  }
+
+  /** 匯出包裹紀錄（Excel） */
+  async function exportParcelsExcel80(cid, communityName) {
+    const XLSX = window.XLSX;
+    if (!XLSX) { toast("Excel 元件尚未載入，請稍後再試", true); return; }
+    try {
+      const snap = await db.collection("communities").doc(cid).collection("parcels").get();
+      if (!snap.size) { toast("目前沒有包裹紀錄可匯出"); return; }
+      const rows = snap.docs.map((d) => parcelExcelRow80(d.data() || {}));
+      const ws = XLSX.utils.json_to_sheet(rows, { header: Object.keys(rows[0]) });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "包裹紀錄");
+      XLSX.writeFile(wb, `${sanitizeFileName80(communityName)}_包裹紀錄_${stamp80()}.xlsx`);
+      toast(`已匯出 ${rows.length} 筆包裹紀錄`);
+    } catch (err) {
+      toast("匯出失敗：" + (err && err.message ? err.message : "未知錯誤"), true);
+    }
+  }
+
+  /** 匯出稽核紀錄（Excel） */
+  async function exportParcelAuditExcel80(cid, communityName) {
+    const XLSX = window.XLSX;
+    if (!XLSX) { toast("Excel 元件尚未載入，請稍後再試", true); return; }
+    try {
+      const snap = await db.collection("communities").doc(cid).collection("parcelAudit")
+        .orderBy("at", "desc").limit(5000).get();
+      if (!snap.size) { toast("目前沒有稽核紀錄可匯出"); return; }
+      const rows = snap.docs.map((d) => auditExcelRow80(d.data() || {}));
+      const ws = XLSX.utils.json_to_sheet(rows, { header: Object.keys(rows[0]) });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "稽核紀錄");
+      XLSX.writeFile(wb, `${sanitizeFileName80(communityName)}_包裹稽核紀錄_${stamp80()}.xlsx`);
+      toast(`已匯出 ${rows.length} 筆稽核紀錄`);
+    } catch (err) {
+      toast("匯出失敗：" + (err && err.message ? err.message : "未知錯誤"), true);
+    }
+  }
+
+  /** 完整資料備份（JSON：包裹、稽核、暫寄物、設定） */
+  async function backupParcelData80(cid, communityName) {
+    try {
+      const base = db.collection("communities").doc(cid);
+      const [parcelsSnap, auditSnap, tempSnap, cfgDoc] = await Promise.all([
+        base.collection("parcels").get(),
+        base.collection("parcelAudit").orderBy("at", "desc").limit(5000).get().catch(() => null),
+        base.collection("tempItems").get().catch(() => null),
+        base.collection("settings").doc("parcel_config").get().catch(() => null)
+      ]);
+      const payload = {
+        meta: {
+          communityId: cid,
+          communityName: communityName || "",
+          exportedAt: new Date().toISOString(),
+          counts: {
+            parcels: parcelsSnap.size,
+            audit: auditSnap ? auditSnap.size : 0,
+            tempItems: tempSnap ? tempSnap.size : 0
+          }
+        },
+        config: cfgDoc && cfgDoc.exists ? cfgDoc.data() : {},
+        parcels: parcelsSnap.docs.map((d) => Object.assign({ _id: d.id }, d.data() || {})),
+        parcelAudit: auditSnap ? auditSnap.docs.map((d) => Object.assign({ _id: d.id }, d.data() || {})) : [],
+        tempItems: tempSnap ? tempSnap.docs.map((d) => Object.assign({ _id: d.id }, d.data() || {})) : []
+      };
+      downloadJson80(`${sanitizeFileName80(communityName)}_包裹資料備份_${stamp80()}.json`, payload);
+      toast("已匯出資料備份");
+    } catch (err) {
+      toast("備份失敗：" + (err && err.message ? err.message : "未知錯誤"), true);
+    }
+  }
+
+  /** 清除歷史包裹（僅已領取且早於保留期限），含預覽與二次確認 */
+  async function openParcelPurgeModal80({ cid, communityName, onDone }) {
+    const modal = ensureModal("parcelPurgeModal80", "modal-parcel-purge", "min(560px, 92vw)");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="parcelPurgeTitle80">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="parcelPurgeTitle80">清除歷史包裹</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:calc(13px * var(--fs, 1));color:var(--muted);margin-bottom:12px;">僅清除「已領取」且領取時間早於保留期限的紀錄，待領取包裹不受影響。清除前會寫入稽核紀錄。</p>
+          <div class="field">
+            <label for="purgeKeepMonths80">保留最近</label>
+            <select id="purgeKeepMonths80">
+              <option value="3">3 個月</option>
+              <option value="6" selected>6 個月</option>
+              <option value="12">12 個月</option>
+              <option value="24">24 個月</option>
+            </select>
+          </div>
+          <div class="status" id="purgeStatus80">正在計算符合條件的紀錄...</div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+          <button class="btn" type="button" id="purgeConfirm80" style="background:#d32f2f;border-color:#d32f2f;color:#fff;" disabled>確認清除</button>
+        </div>
+      </div>
+    `.trim();
+
+    const statusEl = modal.querySelector("#purgeStatus80");
+    const keepSel = modal.querySelector("#purgeKeepMonths80");
+    const btnConfirm = modal.querySelector("#purgeConfirm80");
+    const col = db.collection("communities").doc(cid).collection("parcels");
+    let targets = [];
+
+    const scan = async () => {
+      targets = [];
+      if (btnConfirm) btnConfirm.disabled = true;
+      if (statusEl) { statusEl.textContent = "正在計算符合條件的紀錄..."; statusEl.hidden = false; statusEl.classList.remove("error"); }
+      try {
+        const snap = await col.where("status", "==", "received").get();
+        const cutoff = new Date();
+        cutoff.setMonth(cutoff.getMonth() - Number(keepSel ? keepSel.value : 6));
+        const cutoffMs = cutoff.getTime();
+        targets = snap.docs.filter((d) => {
+          const t = toDate80((d.data() || {}).receivedAt);
+          return t && t.getTime() < cutoffMs;
+        });
+        if (statusEl) statusEl.textContent = targets.length ? `將清除 ${targets.length} 筆已領取紀錄。` : "沒有符合條件的紀錄。";
+        if (btnConfirm) btnConfirm.disabled = !targets.length;
+      } catch (err) {
+        if (statusEl) {
+          statusEl.textContent = "計算失敗：" + (err && err.message ? err.message : "未知錯誤");
+          statusEl.classList.add("error");
+        }
+      }
+    };
+
+    if (keepSel) keepSel.onchange = scan;
+    if (btnConfirm) {
+      btnConfirm.onclick = async () => {
+        if (!targets.length) return;
+        const ok = await (window.nwConfirm ? window.nwConfirm({
+          title: "清除歷史包裹",
+          message: `確定清除 ${targets.length} 筆已領取包裹紀錄？此動作無法復原。`,
+          okText: "確認清除",
+          cancelText: "取消"
+        }) : Promise.resolve(confirm(`確定清除 ${targets.length} 筆紀錄？`)));
+        if (!ok) return;
+        btnConfirm.disabled = true;
+        if (statusEl) { statusEl.textContent = "清除中..."; statusEl.hidden = false; }
+        try {
+          let deleted = 0;
+          const ids = targets.map((d) => d.id);
+          for (let i = 0; i < ids.length; i += 400) {
+            const chunk = ids.slice(i, i + 400);
+            const batch = db.batch();
+            chunk.forEach((id) => batch.delete(col.doc(id)));
+            await batch.commit();
+            deleted += chunk.length;
+          }
+          writeParcelAudit80(cid, { action: "delete", reason: `系統清理（保留 ${keepSel.value} 個月，共 ${deleted} 筆）` });
+          if (statusEl) statusEl.textContent = `已清除 ${deleted} 筆紀錄。`;
+          toast(`已清除 ${deleted} 筆歷史包裹`);
+          targets = [];
+          if (typeof onDone === "function") onDone();
+          setTimeout(() => { modal.hidden = true; detach(); }, 1200);
+        } catch (err) {
+          if (statusEl) {
+            statusEl.textContent = "清除失敗：" + (err && err.message ? err.message : "未知錯誤");
+            statusEl.classList.add("error");
+          }
+          btnConfirm.disabled = false;
+        }
+      };
+    }
+
+    modal.hidden = false;
+    scan();
+  }
+
+  /* ── 暫寄物：訪客暫寄物品給住戶 ／ 住戶暫寄物品給訪客 ── */
+  function renderTempItemPanel(cid, communityName) {
+    stopParcelsSubscription();
+
+    const bodyEl = document.getElementById("parcelBody");
+    if (!bodyEl) return;
+
+    const cache = _tempFilterCache || { date: "", unit: "", name: "", status: "pending" };
+    const status = String(cache.status || "pending");
+    bodyEl.innerHTML = `
+      <div class="parcel-filter-bar" id="tempItemFilterBar">
+        <div class="field">
+          <label for="tempFilterDate">日期</label>
+          <input id="tempFilterDate" type="date" value="${escapeHtml(cache.date)}" />
+        </div>
+        <div class="field">
+          <label for="tempFilterUnit">戶號</label>
+          <input id="tempFilterUnit" type="text" autocomplete="off" placeholder="例如 A1-1" value="${escapeHtml(cache.unit)}" />
+        </div>
+        <div class="field">
+          <label for="tempFilterName">姓名</label>
+          <input id="tempFilterName" type="text" autocomplete="off" placeholder="例如 王小明" value="${escapeHtml(cache.name)}" />
+        </div>
+        <button class="btn btn-sm" type="button" id="btnTempFilterClear">清除</button>
+        <button class="btn btn-sm${status === "pending" ? " btn-primary" : ""}" type="button" data-tmp-filter="pending">待領取</button>
+        <button class="btn btn-sm${status === "done" ? " btn-primary" : ""}" type="button" data-tmp-filter="done">已結案</button>
+        <button class="btn btn-sm${status === "all" ? " btn-primary" : ""}" type="button" data-tmp-filter="all">全部</button>
+        <button class="btn btn-sm danger" type="button" id="btnRegisterTempItem">登記暫寄</button>
+      </div>
+      <div class="parcel-summary-bar" id="tempItemSummaryBar" hidden></div>
+      <div class="parcel-list-container" id="tempItemList">
+        ${parcelSkeletonHtml80()}
+      </div>
+    `;
+
+    bindTempItemFilterBar();
+
+    const filterBar = document.getElementById("tempItemFilterBar");
+    if (filterBar) {
+      filterBar.querySelectorAll("[data-tmp-filter]").forEach((btn) => {
+        btn.onclick = () => {
+          const f = String(btn.getAttribute("data-tmp-filter") || "pending");
+          _tempFilterCache.status = f;
+          filterBar.querySelectorAll("[data-tmp-filter]").forEach((b) => {
+            b.classList.toggle("btn-primary", String(b.getAttribute("data-tmp-filter") || "") === f);
+          });
+          renderTempItemList(f);
+        };
+      });
+    }
+
+    const btnRegister = document.getElementById("btnRegisterTempItem");
+    if (btnRegister) {
+      btnRegister.onclick = () => openTempItemModal80({ cid, communityName });
+    }
+
+    renderTempItemList(status);
+  }
+
+  /** 讀取暫寄物篩選條件（並寫入快取） */
+  function readTempItemFilters() {
+    const dateEl = document.getElementById("tempFilterDate");
+    const unitEl = document.getElementById("tempFilterUnit");
+    const nameEl = document.getElementById("tempFilterName");
+    const date = dateEl ? String(dateEl.value || "").trim() : "";
+    const unit = unitEl ? String(unitEl.value || "").trim() : "";
+    const name = nameEl ? String(nameEl.value || "").trim() : "";
+    _tempFilterCache = Object.assign({}, _tempFilterCache, { date, unit, name });
+    return { date, unit, name };
+  }
+
+  /** 清除暫寄物篩選條件（保留目前狀態分頁） */
+  function clearTempItemFilters80() {
+    _tempFilterCache = Object.assign({}, _tempFilterCache, { date: "", unit: "", name: "" });
+    const d = document.getElementById("tempFilterDate"); if (d) d.value = "";
+    const u = document.getElementById("tempFilterUnit"); if (u) u.value = "";
+    const n = document.getElementById("tempFilterName"); if (n) n.value = "";
+    renderTempItemList(String(_tempFilterCache.status || "pending"));
+  }
+
+  function bindTempItemFilterBar() {
+    const dateEl = document.getElementById("tempFilterDate");
+    const unitEl = document.getElementById("tempFilterUnit");
+    const nameEl = document.getElementById("tempFilterName");
+    const clearBtn = document.getElementById("btnTempFilterClear");
+    const apply = () => {
+      readTempItemFilters();
+      renderTempItemList(String(_tempFilterCache.status || "pending"));
+    };
+    const onEnter = (e) => {
+      if (!e || e.key !== "Enter") return;
+      try { e.preventDefault(); } catch {}
+      apply();
+    };
+    if (dateEl) dateEl.addEventListener("change", apply);
+    if (unitEl) {
+      unitEl.addEventListener("input", apply);
+      unitEl.addEventListener("keydown", onEnter);
+    }
+    if (nameEl) {
+      nameEl.addEventListener("input", apply);
+      nameEl.addEventListener("keydown", onEnter);
+    }
+    if (clearBtn) clearBtn.addEventListener("click", clearTempItemFilters80);
+  }
+
+  /** 更新暫寄物清單摘要列 */
+  function updateTempSummary80(count, hasFilter, filter) {
+    const el = document.getElementById("tempItemSummaryBar");
+    if (!el) return;
+    if (!count) { el.hidden = true; el.innerHTML = ""; return; }
+    const label = filter === "done" ? "已結案" : (filter === "pending" ? "待領取" : "全部");
+    el.hidden = false;
+    el.innerHTML = `
+      <span class="parcel-count">暫寄物${label} <strong>${count}</strong> 筆</span>
+      ${hasFilter ? `<button class="parcel-filter-reset" type="button" data-clear-temp-filter="1">清除篩選</button>` : ""}
+    `;
+    const resetBtn = el.querySelector("[data-clear-temp-filter]");
+    if (resetBtn) resetBtn.onclick = () => clearTempItemFilters80();
+  }
+
+  function normalizeTempDirection80(value) {
+    return String(value || "").trim() === "resident_to_guest" ? "resident_to_guest" : "guest_to_resident";
+  }
+
+  function tempDirectionLabel80(value) {
+    return normalizeTempDirection80(value) === "resident_to_guest" ? "住戶暫寄 → 訪客" : "訪客暫寄 → 住戶";
+  }
+
+  function toDate80(value) {
+    if (!value) return null;
+    return value.toDate ? value.toDate() : new Date(value);
+  }
+
+  function renderTempItemList(filter = "pending") {
+    const cid = resolveActiveCommunityId();
+    const listEl = document.getElementById("tempItemList");
+    if (!listEl) return;
+
+    if (_unsubTempItems) {
+      try { _unsubTempItems(); } catch {}
+      _unsubTempItems = null;
+    }
+
+    const query = db.collection("communities").doc(cid).collection("tempItems").orderBy("createdAt", "desc").limit(200);
+    _unsubTempItems = query.onSnapshot((snap) => {
+      let docs = snap.docs.slice();
+      if (filter !== "all") {
+        docs = docs.filter((doc) => String((doc.data() || {}).status || "pending") === filter);
+      }
+
+      const f = _tempFilterCache || {};
+      const fDate = String(f.date || "").trim();
+      const fUnit = String(f.unit || "").trim().toLowerCase();
+      const fName = String(f.name || "").trim().toLowerCase();
+      const hasFilter = !!(fDate || fUnit || fName);
+      if (hasFilter) {
+        docs = docs.filter((doc) => {
+          const p = doc.data() || {};
+          const unit = String(p.unit || "").trim().toLowerCase();
+          const name = String(p.residentName || "").trim().toLowerCase();
+          const guest = String(p.guestName || "").trim().toLowerCase();
+          const dt = toDate80(p.createdAt);
+          const ymd = dt ? `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}` : "";
+          if (fDate && ymd !== fDate) return false;
+          if (fUnit && !unit.includes(fUnit)) return false;
+          if (fName && !name.includes(fName) && !guest.includes(fName)) return false;
+          return true;
+        });
+      }
+
+      if (docs.length === 0) {
+        const emptyKey = hasFilter ? "tempFiltered"
+          : (filter === "done" ? "tempDone" : (filter === "pending" ? "tempPending" : "tempAll"));
+        listEl.innerHTML = parcelEmptyHtml80(emptyKey, hasFilter ? "clearTemp" : "registerTemp");
+        bindParcelEmptyActions80(listEl, cid, (state.communities.find((c) => c.id === cid) || {}).name || "");
+        updateTempSummary80(0, hasFilter, filter);
+        return;
+      }
+
+      updateTempSummary80(docs.length, hasFilter, filter);
+
+      listEl.innerHTML = `
+        <div class="parcel-grid">
+          ${docs.map((doc) => {
+            const p = doc.data() || {};
+            const id = doc.id;
+            const isDone = String(p.status || "pending") === "done";
+            const time = toDate80(p.createdAt);
+            const timeText = time ? `${pad2(time.getMonth() + 1)}/${pad2(time.getDate())} ${pad2(time.getHours())}:${pad2(time.getMinutes())}` : "—";
+            const doneTime = toDate80(p.doneAt);
+            const doneText = doneTime ? `${pad2(doneTime.getMonth() + 1)}/${pad2(doneTime.getDate())} ${pad2(doneTime.getHours())}:${pad2(doneTime.getMinutes())}` : "";
+            const guestText = [String(p.guestName || "").trim(), String(p.guestPhone || "").trim()].filter(Boolean).join(" ");
+            const qty = String(p.itemQty || "").trim();
+            const note = String(p.note || "").trim();
+            const handlerText = String(p.doneByName || p.doneByAccount || "").trim();
+            return `
+              <div class="parcel-card" data-id="${id}">
+                <div class="parcel-card-hd">
+                  <div class="parcel-company">${escapeHtml(tempDirectionLabel80(p.direction))}</div>
+                  <div class="${isDone ? "tag green" : "tag yellow"}">${isDone ? "已結案" : "待領取"}</div>
+                </div>
+                <div class="parcel-card-bd">
+                  <div class="parcel-info">
+                    <div class="parcel-recipient">
+                      <strong>${escapeHtml(String(p.unit || "").trim() || "—")}</strong> <span>${escapeHtml(String(p.residentName || "").trim() || "—")}</span>
+                    </div>
+                    <div class="parcel-meta">
+                      <span class="parcel-track">暫寄人：${escapeHtml(guestText || "—")}</span>
+                      <span class="parcel-type">物品：${escapeHtml(String(p.itemName || "").trim() || "—")}${qty ? ` ×${escapeHtml(qty)}` : ""}</span>
+                    </div>
+                    <div class="parcel-meta">
+                      <span class="parcel-time">暫寄：${timeText}</span>
+                      ${note ? `<span class="parcel-track">備註：${escapeHtml(note)}</span>` : ""}
+                      ${isDone && doneText ? `<span class="parcel-received">結案：${doneText}</span>` : ""}
+                      ${isDone && handlerText ? `<span class="parcel-handler">經手：${escapeHtml(handlerText)}</span>` : ""}
+                    </div>
+                  </div>
+                  <div class="parcel-actions">
+                    ${isDone ? "" : `
+                      <button class="icon-btn primary sm" type="button" data-tmp-done="${id}" aria-label="結案" title="結案">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span class="icon-btn-label">結案</span>
+                      </button>
+                    `}
+                    <button class="icon-btn danger sm" type="button" data-tmp-delete="${id}" aria-label="刪除" title="刪除">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M4 7h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M10 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M6 7l1 14h10l1-14" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                        <path d="M9 7V4h6v3" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                      </svg>
+                      <span class="icon-btn-label">刪除</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+
+      listEl.querySelectorAll("[data-tmp-done]").forEach((btn) => {
+        btn.onclick = (e) => {
+          try { e.stopPropagation(); } catch {}
+          completeTempItem80(String(btn.getAttribute("data-tmp-done") || ""));
+        };
+      });
+
+      listEl.querySelectorAll("[data-tmp-delete]").forEach((btn) => {
+        btn.onclick = async (e) => {
+          try { e.stopPropagation(); } catch {}
+          const id = String(btn.getAttribute("data-tmp-delete") || "").trim();
+          if (!id) return;
+          const ok = await (window.nwConfirm ? window.nwConfirm({
+            title: "刪除暫寄物",
+            message: "確認是否刪除此筆暫寄物紀錄？",
+            okText: "刪除",
+            cancelText: "取消"
+          }) : Promise.resolve(confirm("確認是否刪除此筆暫寄物紀錄？")));
+          if (!ok) return;
+          try {
+            await db.collection("communities").doc(cid).collection("tempItems").doc(id).delete();
+            toast("已刪除");
+          } catch (err) {
+            toast("刪除失敗：" + (err && err.message ? err.message : "未知錯誤"));
+          }
+        };
+      });
+    }, (err) => {
+      listEl.innerHTML = `<div class="status error">讀取失敗：${escapeHtml(String((err && err.message) || err))}</div>`;
+    });
+  }
+
+  async function resolveTempItemActor80() {
+    const uid = String((auth.currentUser && auth.currentUser.uid) || "");
+    const account = inferUserAccount80(auth.currentUser);
+    let name = "";
+    if (uid) {
+      try {
+        const udoc = await db.collection("users").doc(uid).get();
+        const udata = udoc && udoc.exists ? (udoc.data() || {}) : {};
+        name = String(udata.displayName || udata.name || "").trim();
+      } catch {}
+    }
+    if (!name) {
+      try {
+        const domName = String((document.getElementById("profileNameText") || {}).textContent || "").trim();
+        if (domName && domName !== "—") name = domName;
+      } catch {}
+    }
+    if (!name) name = String((auth.currentUser && auth.currentUser.displayName) || "").trim();
+    if (!name) name = account;
+    return { uid, account, name };
+  }
+
+  async function completeTempItem80(id) {
+    const cid = resolveActiveCommunityId();
+    const tempId = String(id || "").trim();
+    if (!tempId) return;
+    const ok = await (window.nwConfirm ? window.nwConfirm({
+      title: "暫寄物結案",
+      message: "確認此暫寄物已完成領取／歸還？",
+      okText: "確認結案",
+      cancelText: "取消"
+    }) : Promise.resolve(confirm("確認此暫寄物已完成領取／歸還？")));
+    if (!ok) return;
+    try {
+      const actor = await resolveTempItemActor80();
+      await db.collection("communities").doc(cid).collection("tempItems").doc(tempId).update({
+        status: "done",
+        doneAt: FieldValue.serverTimestamp(),
+        doneBy: actor.uid,
+        doneByAccount: actor.account,
+        doneByName: actor.name
+      });
+      toast("已結案");
+    } catch (err) {
+      toast("結案失敗：" + (err && err.message ? err.message : "未知錯誤"));
+    }
+  }
+
+  function ensureTempItemModal80() {
+    const modal = ensureModal("tempItemModal80", "modal-temp-item", "80%");
+    if (modal.dataset.built === "1") return modal;
+    modal.dataset.built = "1";
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="tempItemModalTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="tempItemModalTitle">登記暫寄物</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="tempItemForm">
+          <div class="modal-body">
+            <div class="field">
+              <label for="t_direction">暫寄方向</label>
+              <select id="t_direction">
+                <option value="guest_to_resident">訪客暫寄物品給住戶</option>
+                <option value="resident_to_guest">住戶暫寄物品給訪客</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="t_guestName">訪客姓名</label>
+              <input id="t_guestName" type="text" placeholder="例：陳先生" required />
+            </div>
+            <div class="field">
+              <label for="t_guestPhone">訪客聯絡電話</label>
+              <input id="t_guestPhone" type="tel" inputmode="tel" placeholder="例：0912345678" />
+            </div>
+            <div class="field">
+              <label for="t_unit">住戶戶號</label>
+              <input id="t_unit" type="text" placeholder="例：A-1203" list="t_unit_list" required />
+              <datalist id="t_unit_list"></datalist>
+            </div>
+            <div class="field">
+              <label for="t_residentName">住戶姓名</label>
+              <input id="t_residentName" type="text" placeholder="例：林小姐" />
+            </div>
+            <div class="field">
+              <label for="t_itemName">物品名稱</label>
+              <input id="t_itemName" type="text" placeholder="例：鑰匙、禮盒" required />
+            </div>
+            <div class="field">
+              <label for="t_itemQty">數量</label>
+              <input id="t_itemQty" type="text" placeholder="例：1 件" />
+            </div>
+            <div class="field">
+              <label for="t_note">備註</label>
+              <input id="t_note" type="text" placeholder="例：需冷藏、請當日取回" />
+            </div>
+            <div class="status" id="tempItemFormStatus" hidden></div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">取消</button>
+            <button class="btn btn-primary" type="submit" id="btnSubmitTempItem">登記</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    return modal;
+  }
+
+  function openTempItemModal80({ cid, communityName }) {
+    const modal = ensureTempItemModal80();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const form = modal.querySelector("#tempItemForm");
+    const statusEl = modal.querySelector("#tempItemFormStatus");
+    const btnSubmit = modal.querySelector("#btnSubmitTempItem");
+    const titleEl = modal.querySelector("#tempItemModalTitle");
+    const unitList = modal.querySelector("#t_unit_list");
+
+    if (titleEl) titleEl.textContent = communityName ? `登記暫寄物（${communityName}）` : "登記暫寄物";
+    if (statusEl) {
+      statusEl.hidden = true;
+      statusEl.textContent = "";
+      statusEl.classList.remove("error");
+    }
+    form.reset();
+
+    const unsubUnits = db.collection("communities").doc(cid).onSnapshot((doc) => {
+      const data = doc.data() || {};
+      const units = Array.isArray(data.units)
+        ? data.units.map((u) => (typeof u === "object" && u !== null) ? (u.id || "") : (u || "")).filter(Boolean)
+        : [];
+      if (unitList) unitList.innerHTML = units.map((u) => `<option value="${escapeHtml(u)}"></option>`).join("");
+    });
+
+    const oldDetach = detach;
+    detach = () => { unsubUnits(); oldDetach(); };
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      if (btnSubmit) btnSubmit.disabled = true;
+      try {
+        const actor = await resolveTempItemActor80();
+        const valueOf = (sel) => {
+          const el = modal.querySelector(sel);
+          return el ? String(el.value || "").trim() : "";
+        };
+        const payload = {
+          direction: normalizeTempDirection80(valueOf("#t_direction")),
+          guestName: valueOf("#t_guestName"),
+          guestPhone: valueOf("#t_guestPhone"),
+          unit: valueOf("#t_unit"),
+          residentName: valueOf("#t_residentName"),
+          itemName: valueOf("#t_itemName"),
+          itemQty: valueOf("#t_itemQty"),
+          note: valueOf("#t_note"),
+          status: "pending",
+          createdAt: FieldValue.serverTimestamp(),
+          createdBy: actor.uid,
+          createdByAccount: actor.account,
+          createdByName: actor.name
+        };
+        await db.collection("communities").doc(cid).collection("tempItems").add(payload);
+        toast("暫寄物已登記");
+        modal.hidden = true;
+        detach();
+      } catch (err) {
+        if (statusEl) {
+          statusEl.textContent = "登記失敗：" + (err && err.message ? err.message : "未知錯誤");
+          statusEl.hidden = false;
+          statusEl.classList.add("error");
+        }
+      } finally {
+        if (btnSubmit) btnSubmit.disabled = false;
+      }
+    };
+
+    modal.hidden = false;
   }
 
   function ensureParcelModal() {
@@ -9045,14 +11861,27 @@
               <input id="p_address" type="text" placeholder="物流單上的完整地址" />
             </div>
             <div class="field">
+              <label for="p_shelf">儲位編號 (選填)</label>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input id="p_shelf" type="text" placeholder="例：A櫃-3" list="p_shelf_list" style="flex:1;" />
+                <datalist id="p_shelf_list"></datalist>
+              </div>
+            </div>
+            <div class="field">
               <label for="p_note">備註</label>
               <input id="p_note" type="text" placeholder="例：冷藏、易碎品" />
+              <div class="parcel-quick-tags" id="pQuickTags80"></div>
+            </div>
+            <div class="field" id="parcelTraceWrap" hidden>
+              <label>操作軌跡</label>
+              <div id="parcelTrace80"></div>
             </div>
             <div class="status" id="parcelModalStatus" hidden></div>
           </div>
           <div class="modal-ft">
             <button class="btn" type="button" id="btnDeleteParcel" hidden>刪除</button>
             <button class="btn" type="button" data-modal-close="1">取消</button>
+            <button class="btn btn-ghost" type="button" id="btnSubmitParcelNext" hidden>儲存並新增</button>
             <button class="btn btn-primary" type="submit" id="btnSubmitParcel">儲存</button>
           </div>
         </form>
@@ -9071,6 +11900,7 @@
     const titleEl = modal.querySelector("#parcelModalTitle");
     const statusEl = modal.querySelector("#parcelModalStatus");
     const btnSubmit = modal.querySelector("#btnSubmitParcel");
+    const btnSubmitNext = modal.querySelector("#btnSubmitParcelNext");
     const btnScan = modal.querySelector("#btnScanParcel");
     const btnQuickScan = modal.querySelector("#btnQuickScan");
     const btnDelete = modal.querySelector("#btnDeleteParcel");
@@ -9081,9 +11911,14 @@
     const inputRecipient = modal.querySelector("#p_recipient");
     const inputAddress = modal.querySelector("#p_address");
     const inputNote = modal.querySelector("#p_note");
+    const inputShelf = modal.querySelector("#p_shelf");
     const inputType = modal.querySelector("#p_type");
     const listCompany = modal.querySelector("#p_company_list");
     const listUnit = modal.querySelector("#p_unit_list");
+    const listShelf = modal.querySelector("#p_shelf_list");
+    const quickTagsEl = modal.querySelector("#pQuickTags80");
+    const traceWrap = modal.querySelector("#parcelTraceWrap");
+    const traceEl = modal.querySelector("#parcelTrace80");
 
     const readOnly = Boolean(!isEdit && parcelId);
     if (titleEl) titleEl.textContent = readOnly ? "包裹資訊" : (isEdit ? "編輯包裹" : "登記包裹");
@@ -9091,8 +11926,28 @@
     if (statusEl) { statusEl.hidden = true; statusEl.textContent = ""; }
     if (btnDelete) btnDelete.hidden = !parcelId;
     if (btnSubmit) btnSubmit.hidden = readOnly;
+    if (btnSubmitNext) btnSubmitNext.hidden = readOnly || isEdit;
     if (btnScan) btnScan.hidden = readOnly;
     if (btnQuickScan) btnQuickScan.hidden = readOnly;
+
+    /* 常用備註快捷標籤 */
+    const PARCEL_NOTE_TAGS80 = ["冷藏", "冷凍", "易碎品", "貴重物品", "大件", "需盡快通知"];
+    if (quickTagsEl) {
+      quickTagsEl.innerHTML = PARCEL_NOTE_TAGS80
+        .map((t) => `<button class="tag" type="button" data-note-tag="${escapeHtml(t)}">+ ${escapeHtml(t)}</button>`)
+        .join("");
+      quickTagsEl.querySelectorAll("[data-note-tag]").forEach((b) => {
+        b.onclick = () => {
+          if (readOnly) return;
+          const tag = String(b.getAttribute("data-note-tag") || "").trim();
+          if (!tag || !inputNote) return;
+          const cur = String(inputNote.value || "").trim();
+          const parts = cur ? cur.split(/[、,，]\s*/).filter(Boolean) : [];
+          if (!parts.includes(tag)) parts.push(tag);
+          inputNote.value = parts.join("、");
+        };
+      });
+    }
 
     const setFormDisabled = (disabled) => {
       const on = Boolean(disabled);
@@ -9110,17 +11965,22 @@
       inputRecipient.value = parcelData.recipient || "";
       inputAddress.value = parcelData.address || "";
       inputNote.value = parcelData.note || "";
+      if (inputShelf) inputShelf.value = parcelData.shelf || "";
       if (inputType) inputType.value = parcelData.type || "一般包裹";
     } else {
       form.reset();
       if (inputType) inputType.value = "一般包裹";
+      if (inputShelf) inputShelf.value = "";
     }
 
-    // 載入物流清單到 datalist
+    // 載入物流清單與常用儲位到 datalist
     const unsubCouriers = db.collection("communities").doc(cid).collection("settings").doc("parcel_config")
       .onSnapshot(doc => {
-        let couriers = doc.exists ? (doc.data().couriers || []) : [];
+        const cfg = doc.exists ? (doc.data() || {}) : {};
+        const couriers = Array.isArray(cfg.couriers) ? cfg.couriers : [];
+        const shelves = Array.isArray(cfg.shelves) ? cfg.shelves : [];
         listCompany.innerHTML = couriers.map(name => `<option value="${escapeHtml(name)}"></option>`).join("");
+        if (listShelf) listShelf.innerHTML = shelves.map(s => `<option value="${escapeHtml(String(s))}"></option>`).join("");
       });
 
     // 載入戶號清單
@@ -9203,28 +12063,23 @@
     if (btnDelete) {
       btnDelete.onclick = async () => {
         if (!isEdit || !parcelId) return;
-        const ok = await (window.nwConfirm ? window.nwConfirm({
-          title: "刪除包裹",
-          message: "確認是否刪除此筆資料？",
-          okText: "刪除",
-          cancelText: "取消"
-        }) : Promise.resolve(confirm("確認是否刪除此筆資料？")));
-        if (!ok) return;
-        try {
-          await db.collection("communities").doc(cid).collection("parcels").doc(parcelId).delete();
-          toast("已刪除");
-          modal.hidden = true;
-          detach();
-        } catch (err) {
-          toast("刪除失敗：" + (err && err.message ? err.message : "未知錯誤"));
-        }
+        openParcelDeleteModal80({
+          cid,
+          parcelId,
+          parcel: Object.assign({ id: parcelId }, parcelData || {}),
+          onDone: () => {
+            toast("已刪除");
+            modal.hidden = true;
+            detach();
+          }
+        });
       };
     }
 
-    form.onsubmit = async (e) => {
-      e.preventDefault();
+    const submitParcel80 = async (keepOpen) => {
       if (readOnly) return;
       if (btnSubmit) btnSubmit.disabled = true;
+      if (btnSubmitNext) btnSubmitNext.disabled = true;
       try {
         const payload = {
           company: inputCompany.value.trim(),
@@ -9233,9 +12088,32 @@
           recipient: inputRecipient.value.trim(),
           address: inputAddress.value.trim(),
           note: inputNote.value.trim(),
+          shelf: inputShelf ? inputShelf.value.trim() : "",
           type: inputType ? String(inputType.value || "一般包裹").trim() : "一般包裹",
           updatedAt: FieldValue.serverTimestamp()
         };
+
+        // 重複單號偵測（僅新增時）：同社區已有相同單號的未領取件
+        if (!isEdit && payload.trackNo) {
+          const dup = await findDuplicateParcelByTrackNo80(cid, payload.trackNo);
+          if (dup) {
+            const msg = `單號「${payload.trackNo}」已有一筆未領取紀錄（${dup.unit || "—"} ${dup.recipient || ""}）。仍要新增嗎？`;
+            const ok = await (window.nwConfirm ? window.nwConfirm({
+              title: "單號重複",
+              message: msg,
+              okText: "仍要新增",
+              cancelText: "取消"
+            }) : Promise.resolve(confirm(msg)));
+            if (!ok) {
+              if (statusEl) {
+                statusEl.textContent = "已取消新增（單號重複）。";
+                statusEl.hidden = false;
+                statusEl.classList.remove("error");
+              }
+              return;
+            }
+          }
+        }
 
         if (!isEdit) {
           payload.status = "pending";
@@ -9243,24 +12121,67 @@
           payload.internalSerial = await allocateParcelInternalSerial(cid);
         }
 
-        const ref = isEdit 
+        const ref = isEdit
           ? db.collection("communities").doc(cid).collection("parcels").doc(parcelId)
           : db.collection("communities").doc(cid).collection("parcels").doc();
-        
+
         await ref.set(payload, { merge: true });
-        toast(isEdit ? "更新成功" : "登記成功");
-        modal.hidden = true;
-        detach();
+        writeParcelAudit80(cid, {
+          action: isEdit ? "edit" : "create",
+          parcelId: isEdit ? parcelId : ref.id,
+          unit: payload.unit,
+          recipient: payload.recipient,
+          serial: normalizeParcelSerial(payload.internalSerial || (parcelData && parcelData.internalSerial)) || "",
+          trackNo: payload.trackNo
+        });
+
+        if (keepOpen && !isEdit) {
+          // 連續登記：保留物流與類型，清空其餘欄位
+          toast("已登記，可繼續新增");
+          if (statusEl) {
+            statusEl.textContent = "已登記，請繼續輸入下一筆。";
+            statusEl.hidden = false;
+            statusEl.classList.remove("error");
+          }
+          inputTrackNo.value = "";
+          inputUnit.value = "";
+          inputRecipient.value = "";
+          inputAddress.value = "";
+          inputNote.value = "";
+          if (inputShelf) inputShelf.value = "";
+          try { inputTrackNo.focus(); } catch {}
+        } else {
+          toast(isEdit ? "更新成功" : "登記成功");
+          modal.hidden = true;
+          detach();
+        }
       } catch (err) {
         if (statusEl) {
-          statusEl.textContent = "儲存失敗：" + err.message;
+          statusEl.textContent = "儲存失敗：" + (err && err.message ? err.message : "未知錯誤");
           statusEl.hidden = false;
           statusEl.classList.add("error");
         }
       } finally {
         if (btnSubmit) btnSubmit.disabled = false;
+        if (btnSubmitNext) btnSubmitNext.disabled = false;
       }
     };
+
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      submitParcel80(false);
+    };
+
+    if (btnSubmitNext) {
+      btnSubmitNext.onclick = () => submitParcel80(true);
+    }
+
+    if (parcelId && traceWrap) {
+      traceWrap.hidden = false;
+      renderParcelTrace80(traceEl, cid, parcelId);
+    } else if (traceWrap) {
+      traceWrap.hidden = true;
+    }
 
     modal.hidden = false;
   }
@@ -9515,10 +12436,15 @@
       <div class="modal-backdrop" data-modal-close="1"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="courierConfigTitle" style="width: min(800px, 80vw); max-height: 80vh;">
         <div class="modal-hd">
-          <h3 class="modal-title" id="courierConfigTitle">物流公司設定</h3>
+          <h3 class="modal-title" id="courierConfigTitle">包裹設定</h3>
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <div class="modal-body">
+          <div class="parcel-config-box" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; background: var(--panel-2); padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <label for="parcelOverdueDays" style="font-weight: 700; font-size: calc(14px * var(--fs, 1));">逾期未領天數</label>
+            <input type="number" id="parcelOverdueDays" min="1" max="60" step="1" value="3" style="width: 110px; height: 44px; border-radius: 10px; border: 1px solid var(--border); padding: 0 12px;" />
+            <span style="font-size: calc(13px * var(--fs, 1)); color: var(--muted);">超過此天數的待領取包裹將標紅並置頂</span>
+          </div>
           <div class="courier-add-box" style="display: flex; gap: 10px; margin-bottom: 20px; background: var(--panel-2); padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
             <input type="text" id="newCourierName" placeholder="新增物流名稱 (如: 順豐速運)" style="flex: 1; height: 44px; border-radius: 10px; border: 1px solid var(--border); padding: 0 12px;" />
             <button class="btn btn-primary" id="btnAddCourier">新增</button>
@@ -9528,11 +12454,49 @@
             <!-- 物流清單 -->
           </div>
           <div style="margin-top: 24px;">
-            <p style="font-size: 13px; color: var(--muted); margin-bottom: 12px;">預設物流 (點擊可快速加入)：</p>
+            <p style="font-size: calc(13px * var(--fs, 1)); color: var(--muted); margin-bottom: 12px;">預設物流 (點擊可快速加入)：</p>
             <div id="defaultCouriers" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+          </div>
+          <div class="parcel-shelf-box" style="margin-top: 24px; background: var(--panel-2); padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <p style="font-size: calc(13px * var(--fs, 1)); font-weight: 700; margin-bottom: 4px;">常用儲位</p>
+            <p style="font-size: calc(12px * var(--fs, 1)); color: var(--muted); margin-bottom: 12px;">每行一個儲位編號（例如 A櫃-1），登記包裹時可快速選用。</p>
+            <textarea id="parcelShelves80" rows="4" style="width: 100%; border-radius: 10px; border: 1px solid var(--border); padding: 10px; font-family: inherit; box-sizing: border-box;" placeholder="A櫃-1&#10;A櫃-2&#10;B櫃-1"></textarea>
+            <div style="display:flex; justify-content:flex-end; margin-top: 8px;">
+              <button class="btn btn-sm btn-primary" type="button" id="btnSaveShelves80">儲存儲位清單</button>
+            </div>
+          </div>
+          <div class="parcel-notify-tpl-box" style="margin-top: 24px; background: var(--panel-2); padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <p style="font-size: calc(13px * var(--fs, 1)); font-weight: 700; margin-bottom: 4px;">通知範本</p>
+            <p style="font-size: calc(12px * var(--fs, 1)); color: var(--muted); margin-bottom: 12px;">套用於「通知住戶」與「批次催領」的預設文字。</p>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+              <div class="field"><label for="tplPickupPlace80">領取地點</label><input id="tplPickupPlace80" type="text" placeholder="例：管理室櫃檯" /></div>
+              <div class="field"><label for="tplServiceHours80">服務時間</label><input id="tplServiceHours80" type="text" placeholder="例：09:00-21:00" /></div>
+              <div class="field"><label for="tplContactPhone80">聯絡電話</label><input id="tplContactPhone80" type="text" placeholder="例：02-1234-5678" /></div>
+            </div>
+            <div class="field" style="margin-top: 12px;">
+              <label for="tplFooter80">結語</label>
+              <textarea id="tplFooter80" rows="2" placeholder="請儘速至管理室領取，謝謝。"></textarea>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top: 8px;">
+              <button class="btn btn-sm" type="button" id="btnPreviewTpl80">預覽</button>
+              <button class="btn btn-sm btn-primary" type="button" id="btnSaveTpl80">儲存範本</button>
+            </div>
+            <div class="parcel-tpl-preview" id="tplPreview80" hidden></div>
+          </div>
+          <div class="parcel-maintain-box" style="margin-top: 24px; background: var(--panel-2); padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <p style="font-size: calc(13px * var(--fs, 1)); font-weight: 700; margin-bottom: 4px;">資料維護</p>
+            <p style="font-size: calc(12px * var(--fs, 1)); color: var(--muted); margin-bottom: 12px;">匯出包裹紀錄、備份資料，或清除過期的已領取紀錄。</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+              <button class="btn btn-sm" type="button" id="btnExportParcels80">匯出包裹紀錄 (Excel)</button>
+              <button class="btn btn-sm" type="button" id="btnExportParcelAudit80">匯出稽核紀錄 (Excel)</button>
+              <button class="btn btn-sm" type="button" id="btnBackupParcel80">完整資料備份 (JSON)</button>
+              <button class="btn btn-sm danger" type="button" id="btnPurgeParcels80">清除歷史包裹</button>
+            </div>
+            <div class="status" id="parcelMaintainStatus80" hidden></div>
           </div>
         </div>
         <div class="modal-ft">
+          <button class="btn" type="button" id="btnParcelAudit80">稽核紀錄</button>
           <button class="btn" type="button" data-modal-close="1">關閉</button>
         </div>
       </div>
@@ -9551,6 +12515,103 @@
     const newCourierInput = modal.querySelector("#newCourierName");
     const btnAdd = modal.querySelector("#btnAddCourier");
     const defaultBox = modal.querySelector("#defaultCouriers");
+    const overdueInput = modal.querySelector("#parcelOverdueDays");
+    const btnAudit = modal.querySelector("#btnParcelAudit80");
+    if (btnAudit) btnAudit.onclick = () => openParcelAuditModal80({ cid });
+
+    const maintainCommunityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
+    const maintainStatus = modal.querySelector("#parcelMaintainStatus80");
+    const setMaintainStatus = (msg, isError) => {
+      if (!maintainStatus) return;
+      maintainStatus.textContent = msg || "";
+      maintainStatus.hidden = !msg;
+      maintainStatus.classList.toggle("error", !!isError);
+    };
+    const btnExportParcels = modal.querySelector("#btnExportParcels80");
+    if (btnExportParcels) btnExportParcels.onclick = () => {
+      setMaintainStatus("匯出中...", false);
+      exportParcelsExcel80(cid, maintainCommunityName).finally(() => setMaintainStatus("", false));
+    };
+    const btnExportParcelAudit = modal.querySelector("#btnExportParcelAudit80");
+    if (btnExportParcelAudit) btnExportParcelAudit.onclick = () => {
+      setMaintainStatus("匯出中...", false);
+      exportParcelAuditExcel80(cid, maintainCommunityName).finally(() => setMaintainStatus("", false));
+    };
+    const btnBackupParcel = modal.querySelector("#btnBackupParcel80");
+    if (btnBackupParcel) btnBackupParcel.onclick = () => {
+      setMaintainStatus("備份中...", false);
+      backupParcelData80(cid, maintainCommunityName).finally(() => setMaintainStatus("", false));
+    };
+    const btnPurgeParcels = modal.querySelector("#btnPurgeParcels80");
+    if (btnPurgeParcels) btnPurgeParcels.onclick = () => openParcelPurgeModal80({ cid, communityName: maintainCommunityName });
+
+    /* 常用儲位維護 */
+    const shelvesEl = modal.querySelector("#parcelShelves80");
+    const btnSaveShelves = modal.querySelector("#btnSaveShelves80");
+    if (btnSaveShelves) {
+      btnSaveShelves.onclick = async () => {
+        const shelves = String(shelvesEl ? shelvesEl.value : "")
+          .split("\n").map((s) => s.trim()).filter(Boolean);
+        setStatus("儲存中...", false);
+        try {
+          await db.collection("communities").doc(cid).collection("settings").doc("parcel_config")
+            .set({ shelves, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+          _parcelConfigCache80 = Object.assign({}, _parcelConfigCache80, { shelves });
+          _parcelConfigLoadedCid = String(cid || "").trim();
+          setStatus("", false);
+          toast(`已儲存 ${shelves.length} 個儲位`);
+        } catch (err) {
+          setStatus("儲存失敗：" + (err && err.message ? err.message : "未知錯誤"), true);
+        }
+      };
+    }
+
+    /* 通知範本維護 */
+    const tplPickupPlace = modal.querySelector("#tplPickupPlace80");
+    const tplServiceHours = modal.querySelector("#tplServiceHours80");
+    const tplContactPhone = modal.querySelector("#tplContactPhone80");
+    const tplFooter = modal.querySelector("#tplFooter80");
+    const tplPreview = modal.querySelector("#tplPreview80");
+    const readTplInputs = () => ({
+      pickupPlace: String(tplPickupPlace ? tplPickupPlace.value : "").trim(),
+      serviceHours: String(tplServiceHours ? tplServiceHours.value : "").trim(),
+      contactPhone: String(tplContactPhone ? tplContactPhone.value : "").trim(),
+      footer: String(tplFooter ? tplFooter.value : "").trim()
+    });
+    const btnSaveTpl = modal.querySelector("#btnSaveTpl80");
+    if (btnSaveTpl) {
+      btnSaveTpl.onclick = async () => {
+        const notifyTemplate = readTplInputs();
+        setStatus("儲存中...", false);
+        try {
+          await db.collection("communities").doc(cid).collection("settings").doc("parcel_config")
+            .set({ notifyTemplate, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+          _parcelConfigCache80 = Object.assign({}, _parcelConfigCache80, { notifyTemplate });
+          _parcelConfigLoadedCid = String(cid || "").trim();
+          setStatus("", false);
+          toast("已儲存通知範本");
+        } catch (err) {
+          setStatus("儲存失敗：" + (err && err.message ? err.message : "未知錯誤"), true);
+        }
+      };
+    }
+    const btnPreviewTpl = modal.querySelector("#btnPreviewTpl80");
+    if (btnPreviewTpl) {
+      btnPreviewTpl.onclick = () => {
+        if (!tplPreview) return;
+        const saved = _parcelConfigCache80.notifyTemplate || {};
+        _parcelConfigCache80 = Object.assign({}, _parcelConfigCache80, { notifyTemplate: readTplInputs() });
+        const text = buildParcelNotifyText80({
+          communityName: maintainCommunityName,
+          unit: "A-1-1", recipient: "王小明", company: "黑貓宅急便",
+          trackNo: "1234567890", serial: "A-20260101-001", shelf: "A櫃-1",
+          arrival: "2026/01/01 09:00"
+        });
+        _parcelConfigCache80 = Object.assign({}, _parcelConfigCache80, { notifyTemplate: saved });
+        tplPreview.hidden = false;
+        tplPreview.textContent = text;
+      };
+    }
 
     const defaultList = [
       "黑貓宅急便", "新竹物流", "宅配通", "嘉里大榮", "中華郵政", 
@@ -9608,10 +12669,51 @@
       saveCourier(name, true);
     };
 
+    const saveOverdueDays = async () => {
+      const raw = Number(overdueInput ? overdueInput.value : 3);
+      const days = Number.isFinite(raw) && raw > 0 ? Math.min(60, Math.round(raw)) : 3;
+      if (overdueInput) overdueInput.value = String(days);
+      setStatus("儲存中...", false);
+      try {
+        await db.collection("communities").doc(cid).collection("settings").doc("parcel_config")
+          .set({ overdueDays: days, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        _parcelOverdueDays = days;
+        _parcelConfigLoadedCid = String(cid || "").trim();
+        setStatus("", false);
+        toast("已更新逾期天數");
+        if (document.getElementById("parcelList")) {
+          const activeBtn = subnavEl ? subnavEl.querySelector("[data-filter].btn-primary") : null;
+          const filter = activeBtn ? String(activeBtn.getAttribute("data-filter") || "pending") : "pending";
+          renderParcelList(filter, readParcelFilters());
+        }
+      } catch (err) {
+        setStatus("儲存失敗：" + (err && err.message ? err.message : "未知錯誤"), true);
+      }
+    };
+    if (overdueInput) overdueInput.onchange = () => saveOverdueDays();
+
     // 監聽物流清單
     const unsub = db.collection("communities").doc(cid).collection("settings").doc("parcel_config")
       .onSnapshot(async doc => {
         let couriers = doc.exists ? (doc.data().couriers || []) : [];
+        const cfg = doc.exists ? (doc.data() || {}) : {};
+        const odRaw = Number(cfg.overdueDays);
+        const odDays = Number.isFinite(odRaw) && odRaw > 0 ? Math.min(60, Math.round(odRaw)) : 3;
+        _parcelOverdueDays = odDays;
+        if (overdueInput && document.activeElement !== overdueInput) overdueInput.value = String(odDays);
+
+        const shelvesArr = Array.isArray(cfg.shelves) ? cfg.shelves : [];
+        if (shelvesEl && document.activeElement !== shelvesEl) shelvesEl.value = shelvesArr.join("\n");
+        const tplRaw = (cfg.notifyTemplate && typeof cfg.notifyTemplate === "object") ? cfg.notifyTemplate : {};
+        if (tplPickupPlace && document.activeElement !== tplPickupPlace) tplPickupPlace.value = String(tplRaw.pickupPlace || "");
+        if (tplServiceHours && document.activeElement !== tplServiceHours) tplServiceHours.value = String(tplRaw.serviceHours || "");
+        if (tplContactPhone && document.activeElement !== tplContactPhone) tplContactPhone.value = String(tplRaw.contactPhone || "");
+        if (tplFooter && document.activeElement !== tplFooter) tplFooter.value = String(tplRaw.footer || "");
+        _parcelConfigCache80 = Object.assign({}, _parcelConfigCache80, {
+          couriers: Array.isArray(cfg.couriers) ? cfg.couriers : [],
+          shelves: shelvesArr,
+          notifyTemplate: tplRaw
+        });
         
         // 若完全沒有資料，則自動初始化預設清單
         if (!doc.exists || couriers.length === 0) {
@@ -9629,7 +12731,7 @@
         
         listEl.innerHTML = couriers.map(name => `
           <div class="courier-item" style="display: flex; justify-content: space-between; align-items: center; background: #fff; border: 1px solid var(--border); padding: 10px 12px; border-radius: 10px;">
-            <span style="font-weight: 700; font-size: 14px;">${escapeHtml(name)}</span>
+            <span style="font-weight: 700; font-size: calc(14px * var(--fs, 1));">${escapeHtml(name)}</span>
             <button class="icon-btn danger" style="width: 28px; height: 28px;" data-del-courier="${name}">×</button>
           </div>
         `).join("");
@@ -9650,6 +12752,7 @@
 
   function renderResidentsModule() {
     stopResidentsSubscription();
+    stopResidentsOverviewSubscription();
     if (subnavEl) subnavEl.innerHTML = "";
     if (!Array.isArray(state.communities) || state.communities.length === 0) {
       contentEl.innerHTML = `
@@ -9676,7 +12779,7 @@
     const accounts = loadAccounts();
     const c = (accounts.communities || []).find((x) => x && String(x.id || "") === String(cid || "")) || null;
     const cname = c ? String(c.name || "").trim() : "";
-    let currentPage = "list"; // "list"、"points"、"pending"
+    let currentPage = "overview"; // "overview"、"list"、"points"、"pending"
 
     let communityUnits = normalizeCommunityUnitRows(Array.isArray(c && c.units) ? c.units : []);
 
@@ -9722,7 +12825,9 @@
       const allowList = !isCurrentCommunityRole() || !!t.list;
       const allowPoints = !isCurrentCommunityRole() || !!t.points;
       const allowChatphone = !isCurrentCommunityRole() || !!t.chatphone;
+      const allowOverview = allowPending || allowList || allowPoints || allowChatphone;
       subnavEl.innerHTML = `
+        ${allowOverview ? `<button class="btn btn-sm ${currentPage === "overview" ? "btn-primary" : ""}" type="button" id="btnResidentsOverview">總覽</button>` : ""}
         ${allowPending ? `<button class="btn btn-sm ${currentPage === "pending" ? "btn-primary" : ""}" type="button" id="btnPendingResidents">
           <span class="badge-inline" id="pendingBadge" hidden>0</span>
           待審帳號
@@ -9733,14 +12838,22 @@
           <span class="badge-inline" id="chatphoneMissedBadge" hidden>0</span>
           對講機
         </button>` : ""}
+        ${isCurrentSystemAdmin() ? `<button class="btn btn-sm" type="button" id="btnResidentsSubnavSettings">設定</button>` : ""}
       `.trim();
       
       // 获取按钮引用
+      const overviewBtn = document.getElementById("btnResidentsOverview");
       const pendingBtn = document.getElementById("btnPendingResidents");
       const listBtn = document.getElementById("btnResidentsList");
       const pointsBtn = document.getElementById("btnResidentsPoints");
       const chatphoneBtn = document.getElementById("btnChatphone");
       
+      if (overviewBtn) {
+        overviewBtn.onclick = () => {
+          currentPage = "overview";
+          renderPage();
+        };
+      }
       if (pendingBtn) {
         pendingBtn.onclick = () => {
           currentPage = "pending";
@@ -9764,6 +12877,12 @@
           openChatphoneModal90();
         };
       }
+      const residentsSubnavSettingsBtn = document.getElementById("btnResidentsSubnavSettings");
+      if (residentsSubnavSettingsBtn) {
+        residentsSubnavSettingsBtn.onclick = () => {
+          openResidentsSubnavSettingsModal80({ communityId: cid, communityName: cname });
+        };
+      }
       
       // 确保 badges 被正确更新
       if (pendingBtn) ensureResidentsPendingCountSubscription(cid);
@@ -9777,6 +12896,7 @@
       if (t.list) allowed.push("list");
       if (t.points) allowed.push("points");
       if (t.pending) allowed.push("pending");
+      if (allowed.length) allowed.unshift("overview");
       if (!allowed.includes(currentPage)) currentPage = allowed[0] || "";
     }
     renderSubnav();
@@ -9803,6 +12923,7 @@
     };
 
     const renderPage = () => {
+      stopResidentsOverviewSubscription();
       renderSubnav();
       if (isCurrentCommunityRole()) {
         const t = getResidentsSubnavCommunityTabs();
@@ -9810,6 +12931,7 @@
         if (t.list) allowed.push("list");
         if (t.points) allowed.push("points");
         if (t.pending) allowed.push("pending");
+        if (allowed.length) allowed.unshift("overview");
         if (allowed.length && !allowed.includes(currentPage)) currentPage = allowed[0];
         if (!allowed.length) {
           contentEl.innerHTML = `
@@ -9818,7 +12940,7 @@
                 <div class="left">
                   <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
                   <div style="min-width:0;">
-                    <h2>住戶造冊${cname ? `｜${escapeHtml(cname)}` : ""}</h2>
+                    <h2>住戶造冊</h2>
                     <p>此帳號未開放任何子分頁</p>
                   </div>
                 </div>
@@ -9832,7 +12954,9 @@
           return;
         }
       }
-      if (currentPage === "list") {
+      if (currentPage === "overview") {
+        renderResidentsOverview();
+      } else if (currentPage === "list") {
         renderResidentsList();
       } else if (currentPage === "points") {
         renderResidentsPoints();
@@ -9848,21 +12972,9 @@
             <div class="left">
               <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
               <div style="min-width:0;">
-                <h2>住戶造冊${cname ? `｜${escapeHtml(cname)}` : ""}</h2>
+                <h2>住戶造冊</h2>
                 <p>住戶/承租/車位/聯絡方式彙整</p>
               </div>
-            </div>
-            <div style="display:flex; gap:8px; align-items:center;">
-              ${isCurrentSystemAdmin() ? `
-              <button class="btn btn-sm btn-ghost" type="button" id="btnResidentsSubnavSettings" aria-label="子分頁設定" title="子分頁設定">
-                ${iconSvg("settings")}
-              </button>` : ""}
-              <button class="icon-btn sm" type="button" id="btnUnits" aria-label="戶號列表" title="戶號列表">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M8 7h12M8 12h12M8 17h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                  <path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
-                </svg>
-              </button>
             </div>
           </div>
           <div class="card-bd">
@@ -9875,6 +12987,7 @@
                 <input id="residentSearch" type="text" placeholder="搜尋 戶號 / 姓名 / 手機 / Email / 棟別" autocomplete="off" />
               </div>
               <button class="btn btn-primary btn-sm" type="button" id="btnAddResident">新增帳號</button>
+              <button class="btn btn-warning btn-sm" type="button" id="btnUnits">戶號列表</button>
             </div>
             <div class="status" id="residentStatus" hidden></div>
             <div class="resident-list" id="residentList"></div>
@@ -9887,7 +13000,6 @@
     const searchEl = document.getElementById("residentSearch");
     const addBtn = document.getElementById("btnAddResident");
     const unitsBtn = document.getElementById("btnUnits");
-    const residentsSubnavSettingsBtn = document.getElementById("btnResidentsSubnavSettings");
     const peopleTotalEl = document.getElementById("peopleTotal");
 
     const setStatus = (msg, isError) => {
@@ -10082,11 +13194,6 @@
     if (searchEl) searchEl.addEventListener("input", renderList);
     if (addBtn) addBtn.addEventListener("click", () => openResidentEditor("create"));
     if (unitsBtn) unitsBtn.addEventListener("click", openUnitsEditor);
-    if (residentsSubnavSettingsBtn) {
-      residentsSubnavSettingsBtn.addEventListener("click", () => {
-        openResidentsSubnavSettingsModal80({ communityId: cid, communityName: cname });
-      });
-    }
 
     if (listEl) {
       listEl.addEventListener("click", async (e) => {
@@ -10202,6 +13309,95 @@
     loadResidents();
   };
 
+    /* 總覽：住戶總覽資訊（統計卡片） */
+    const renderResidentsOverviewCards = (list) => {
+      const el = document.getElementById("residentsOverview");
+      if (!el) return;
+      const hasData = Array.isArray(list);
+      const rows = hasData ? list : [];
+      const val = (v) => (hasData ? String(v) : "—");
+      const unit = (u) => (hasData ? u : "");
+      const enabledCount = rows.filter((r) => r.enabled !== false).length;
+      const cards = [
+        { label: "總戶號", value: val(normalizeResidentUnitList(communityUnits).length), unit: unit("戶"), sub: "社區戶號總數", tone: "" },
+        { label: "總住戶", value: val(rows.length), unit: unit("人"), sub: "已建檔住戶帳號", tone: "info" },
+        { label: "已啟用", value: val(enabledCount), unit: unit("人"), sub: "可正常登入", tone: "success" },
+        { label: "未啟用", value: val(rows.length - enabledCount), unit: unit("人"), sub: "已停用帳號", tone: "muted" },
+        { label: "已綁戶號", value: val(rows.filter((r) => String(r.houseNo || "").trim()).length), unit: unit("人"), sub: "已填寫戶號", tone: "" },
+        { label: "待審帳號", value: String(Number(_lastResidentsPendingCount) || 0), unit: "筆", sub: "待審核註冊申請", tone: "warning", pending: true },
+      ];
+      el.innerHTML = `
+        <div class="residents-overview">
+          <div class="residents-overview-head">
+            <strong>住戶總覽</strong>
+            <span>${escapeHtml(cname)}</span>
+          </div>
+          <div class="residents-overview-grid">
+            ${cards.map((c) => `
+              <div class="ro-card${c.tone ? ` tone-${c.tone}` : ""}">
+                <div class="ro-label">${escapeHtml(c.label)}</div>
+                <div class="ro-value"><span${c.pending ? ' data-overview-pending="1"' : ""}>${escapeHtml(c.value)}</span><span class="ro-unit">${escapeHtml(c.unit)}</span></div>
+                <div class="ro-sub">${escapeHtml(c.sub)}</div>
+              </div>`).join("")}
+          </div>
+        </div>
+      `.trim();
+    };
+
+    const renderResidentsOverview = () => {
+      stopResidentsOverviewSubscription();
+      contentEl.innerHTML = `
+        <section class="card residents-page">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
+              <div style="min-width:0;">
+                <h2>住戶造冊</h2>
+                <p>住戶總覽</p>
+              </div>
+            </div>
+          </div>
+          <div class="card-bd">
+            <div id="residentsOverview"></div>
+          </div>
+        </section>
+      `.trim();
+
+      renderResidentsOverviewCards(null);
+      ensureResidentsPendingCountSubscription(cid);
+      ensureResidentsOverviewSubscription();
+    };
+
+    const ensureResidentsOverviewSubscription = () => {
+      stopResidentsOverviewSubscription();
+      _unsubResidentsOverview = subscribeUsersByCommunityMembership(String(cid || "default"), (docs) => {
+        const list = docs
+          .map((d) => {
+            const v = d && typeof d.data === "function" ? (d.data() || {}) : {};
+            return {
+              id: d.id,
+              role: String(v.role || ""),
+              community: String(v.community || cid || "default"),
+              houseNo: String(v.houseNo || v.unit || ""),
+              subUnit: String(v.subUnit || ""),
+              displayName: String(v.displayName || v.name || ""),
+              email: String(v.email || v.username || ""),
+              phone: String(v.phone || ""),
+              enabled: v.enabled !== false,
+              status: String(v.status || ""),
+            };
+          })
+          .filter((x) => isResidentRole(x.role) && x.status !== "pending");
+        state.currentResidents = list;
+        state.currentCommunityUnits = communityUnits;
+        state.currentResidentsCommunityId = String(cid || "");
+        state.reloadResidents = ensureResidentsOverviewSubscription;
+        renderResidentsOverviewCards(list);
+      }, () => {
+        renderResidentsOverviewCards([]);
+      });
+    };
+
     const renderResidentsPoints = () => {
       contentEl.innerHTML = `
         <section class="card residents-page">
@@ -10209,13 +13405,10 @@
             <div class="left">
               <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
               <div style="min-width:0;">
-                <h2>住戶點數${cname ? `｜${escapeHtml(cname)}` : ""}</h2>
+                <h2>住戶點數</h2>
                 <p>住戶/承租/車位/聯絡方式彙整</p>
               </div>
             </div>
-            <button class="btn btn-sm btn-ghost" type="button" id="btnPointsSettings" aria-label="點數設定" title="點數設定">
-              ${iconSvg("settings")}
-            </button>
           </div>
           <div class="card-bd">
             <div class="resident-toolbar">
@@ -10225,6 +13418,7 @@
               <div class="search resident-search">
                 <input id="pointsSearch" type="text" placeholder="搜尋 戶號 / 姓名 / 手機 / Email" autocomplete="off" />
               </div>
+              <button class="btn btn-primary btn-sm" type="button" id="btnPointsSettings">點數設定</button>
             </div>
             <div class="status" id="pointsStatus" hidden></div>
             <div class="resident-list" id="pointsList"></div>
@@ -10298,7 +13492,7 @@
                       <input type="radio" name="pointsMode" value="share" ${pointsSettings.sharePoints ? "checked" : ""} />
                       <span>
                         <strong>共用點數</strong>
-                        <div style="font-size: 12px; color: var(--muted); margin-top: 4px;">
+                        <div style="font-size: calc(12px * var(--fs, 1)); color: var(--muted); margin-top: 4px;">
                           同戶號（例如 A1）的住戶共用點數，以 &lt;戶號&gt;-1 為主帳號顯示，子帳號點數合併計算
                         </div>
                       </span>
@@ -10307,7 +13501,7 @@
                       <input type="radio" name="pointsMode" value="separate" ${!pointsSettings.sharePoints ? "checked" : ""} />
                       <span>
                         <strong>分開計算</strong>
-                        <div style="font-size: 12px; color: var(--muted); margin-top: 4px;">
+                        <div style="font-size: calc(12px * var(--fs, 1)); color: var(--muted); margin-top: 4px;">
                           每個住戶獨立計算點數
                         </div>
                       </span>
@@ -10433,7 +13627,7 @@
                   </div>
                 </div>
                 <div class="resident-actions" style="gap: 8px; align-items: center;">
-                  <div style="font-weight: bold; font-size: 16px; color: var(--primary); min-width: 80px; text-align: right;">${points} 點</div>
+                  <div style="font-weight: bold; font-size: calc(16px * var(--fs, 1)); color: var(--primary); min-width: 80px; text-align: right;">${points} 點</div>
 
                   <button class="icon-btn" type="button" data-action="history" data-id="${String(r.id || "")}" aria-label="紀錄" title="紀錄">
                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -10534,8 +13728,8 @@
               </div>
               <div class="modal-body" style="display: flex; flex-direction: column; gap: 20px;">
                 <div style="background: var(--bg-soft); padding: 20px; border-radius: 12px; text-align: center;">
-                  <div style="color: var(--muted); font-size: 14px; margin-bottom: 8px;">目前點數</div>
-                  <div style="font-size: 48px; font-weight: 900; color: var(--primary); line-height: 1;" id="currentPointsDisplay">${currentPoints}</div>
+                  <div style="color: var(--muted); font-size: calc(14px * var(--fs, 1)); margin-bottom: 8px;">目前點數</div>
+                  <div style="font-size: calc(48px * var(--fs, 1)); font-weight: 900; color: var(--primary); line-height: 1;" id="currentPointsDisplay">${currentPoints}</div>
                 </div>
                 <div>
                   <button class="btn btn-primary" type="button" id="addPointsBtn">新增點數</button>
@@ -10659,14 +13853,14 @@
                   return `
                     <div style="border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: #fff;">
                       <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px;">
-                        <div style="font-weight: bold; font-size: 14px;">
-                          <span style="${changeClass} font-size: 18px; font-weight: 900;">${changeText} 點</span>
-                          <span style="color: var(--muted); font-size: 12px; margin-left: 8px;">(${record.oldPoints} → ${record.newPoints})</span>
+                        <div style="font-weight: bold; font-size: calc(14px * var(--fs, 1));">
+                          <span style="${changeClass} font-size: calc(18px * var(--fs, 1)); font-weight: 900;">${changeText} 點</span>
+                          <span style="color: var(--muted); font-size: calc(12px * var(--fs, 1)); margin-left: 8px;">(${record.oldPoints} → ${record.newPoints})</span>
                         </div>
-                        <div style="color: var(--muted); font-size: 12px;">${formatDate(record.createdAt)}</div>
+                        <div style="color: var(--muted); font-size: calc(12px * var(--fs, 1));">${formatDate(record.createdAt)}</div>
                       </div>
-                      <div style="color: var(--muted); font-size: 13px; margin-bottom: 4px;">${record.reason}</div>
-                      <div style="color: var(--muted); font-size: 12px;">操作人員：${record.operatorName || "—"}</div>
+                      <div style="color: var(--muted); font-size: calc(13px * var(--fs, 1)); margin-bottom: 4px;">${record.reason}</div>
+                      <div style="color: var(--muted); font-size: calc(12px * var(--fs, 1));">操作人員：${record.operatorName || "—"}</div>
                     </div>
                   `;
                 }).join("");
@@ -10759,14 +13953,14 @@
                       return `
                         <div style="border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: #fff;">
                           <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 8px;">
-                            <div style="font-weight: bold; font-size: 14px;">
-                              <span style="color: ${record.pointsChange > 0 ? '#10b981' : '#ef4444'}; font-size: 18px; font-weight: 900;">${changeText} 點</span>
-                              <span style="color: var(--muted); font-size: 12px; margin-left: 8px;">(${record.oldPoints} → ${record.newPoints})</span>
+                            <div style="font-weight: bold; font-size: calc(14px * var(--fs, 1));">
+                              <span style="color: ${record.pointsChange > 0 ? '#10b981' : '#ef4444'}; font-size: calc(18px * var(--fs, 1)); font-weight: 900;">${changeText} 點</span>
+                              <span style="color: var(--muted); font-size: calc(12px * var(--fs, 1)); margin-left: 8px;">(${record.oldPoints} → ${record.newPoints})</span>
                             </div>
-                            <div style="color: var(--muted); font-size: 12px;">${formatDate(record.createdAt)}</div>
+                            <div style="color: var(--muted); font-size: calc(12px * var(--fs, 1));">${formatDate(record.createdAt)}</div>
                           </div>
-                          <div style="color: var(--muted); font-size: 13px; margin-bottom: 4px;">${record.reason}</div>
-                          <div style="color: var(--muted); font-size: 12px;">操作人員：${record.operatorName || "—"}</div>
+                          <div style="color: var(--muted); font-size: calc(13px * var(--fs, 1)); margin-bottom: 4px;">${record.reason}</div>
+                          <div style="color: var(--muted); font-size: calc(12px * var(--fs, 1));">操作人員：${record.operatorName || "—"}</div>
                         </div>
                       `;
                     }).join("")}
@@ -10886,7 +14080,7 @@
             <div class="left">
               <div class="chip" aria-hidden="true">${iconSvg("residents")}</div>
               <div style="min-width:0;">
-                <h2>待審帳號${cname ? `｜${escapeHtml(cname)}` : ""}</h2>
+                <h2>待審帳號</h2>
                 <p>住戶/承租/車位/聯絡方式彙整</p>
               </div>
             </div>
@@ -12113,7 +15307,10 @@
 
     if (subnavEl) {
       subnavEl.innerHTML = `
-        <button class="btn btn-sm btn-primary" type="button" id="btnPendingVisitors" data-filter="pending">
+        <button class="btn btn-sm btn-primary" type="button" id="btnOverviewVisitors" data-filter="overview">
+          總覽
+        </button>
+        <button class="btn btn-sm" type="button" id="btnPendingVisitors" data-filter="pending">
           <span class="badge-inline" id="pendingVisitorsBadge" hidden>0</span>
           待審訪客
         </button>
@@ -12151,13 +15348,10 @@
           <div class="left">
             <div class="chip" aria-hidden="true">${iconSvg("visitor")}</div>
             <div style="min-width:0;">
-              <h2>訪客登記${cname ? `｜${escapeHtml(cname)}` : ""}</h2>
+              <h2>訪客登記</h2>
               <p>${visitorDesc}</p>
             </div>
           </div>
-          <button class="btn btn-sm icon-btn" type="button" id="btnVisitorQr" aria-label="訪客QR Code">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 9h4v4h-4V9zM8 8h2v2H8V8zm6 0h2v2h-2V8zm-6 6h2v2H8v-2zm6 0h2v2h-2v-2z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
         </div>
         <div class="card-bd" id="visitorPanel">
           <div class="visitor-toolbar" id="visitorToolbar">
@@ -12169,6 +15363,7 @@
               <label for="visitorSearch">搜尋</label>
               <input id="visitorSearch" type="text" placeholder="搜尋 姓名 / 手機 / 車牌 / 事由" autocomplete="off" />
             </div>
+            <button class="btn btn-sm btn-warning" type="button" id="btnVisitorQr">訪客申請連結</button>
             <button class="btn btn-sm danger" type="button" id="btnAddVisitor">新增訪客</button>
           <button class="btn btn-sm btn-success" type="button" id="btnScanVisitor" aria-label="掃描QR code" title="掃描QR code">
               掃描QR code
@@ -12252,7 +15447,7 @@
     };
 
     let visitors = [];
-    let currentFilter = 'pending'; // pending, approved, inside, history, settings
+    let currentFilter = 'overview'; // overview, pending, approved, inside, history, settings
     let historyUnit = "";
     let historyUnitNames = new Map();
     const elevatorCardStatusMeta = (raw) => {
@@ -12346,6 +15541,54 @@
       renderList();
     };
 
+    const renderVisitorOverview = () => {
+      if (!listEl) return;
+      const now = new Date();
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+      const inToday = (v) => {
+        const d = toDate(v);
+        return Boolean(d) && d.getTime() >= dayStart.getTime() && d.getTime() < dayEnd.getTime();
+      };
+      const todays = visitors.filter((v) => inToday(v && v.createdAt) || inToday(v && v.inAt) || inToday(v && v.outAt));
+      const statusOf = (v) => String((v && v.status) || "").toLowerCase();
+      const partyOf = (v) => {
+        const n = Number(v && v.partySize);
+        return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+      };
+      const sumParty = (list) => list.reduce((acc, v) => acc + partyOf(v), 0);
+
+      const pendingList = todays.filter((v) => statusOf(v) === "pending");
+      const approvedList = todays.filter((v) => statusOf(v) === "approved" && v.inAt == null);
+      const insideList = todays.filter((v) => statusOf(v) === "approved" && v.inAt != null && v.outAt == null);
+      const leftList = todays.filter((v) => v.outAt != null);
+      const cards = [
+        { label: "今日登記", list: todays, tone: "" },
+        { label: "待審核", list: pendingList, tone: "warning" },
+        { label: "已核准", list: approvedList, tone: "success" },
+        { label: "入內中", list: insideList, tone: "info" },
+        { label: "已離開", list: leftList, tone: "muted" },
+      ];
+
+      listEl.innerHTML = `
+        <div class="visitor-overview">
+          <div class="visitor-overview-head">
+            <strong>今日訪客狀況</strong>
+            <span>${escapeHtml(todayStr)}</span>
+          </div>
+          <div class="visitor-overview-grid">
+            ${cards.map((c) => `
+              <div class="vo-card ${c.tone ? `tone-${c.tone}` : ""}">
+                <div class="vo-label">${escapeHtml(c.label)}</div>
+                <div class="vo-value">${sumParty(c.list)}<span class="vo-unit">人</span></div>
+                <div class="vo-sub">${c.list.length} 筆登記</div>
+              </div>
+            `.trim()).join("")}
+          </div>
+        </div>
+      `.trim();
+    };
+
     const renderList = () => {
       // 计算并更新各筛选条件的数字泡泡
       const pendingCount = visitors.filter(x => String(x.status || "").toLowerCase() === 'pending').length;
@@ -12374,11 +15617,19 @@
         insideBadge.hidden = insideCount === 0;
       }
 
+      const isOverviewTab = currentFilter === 'overview';
       const isHistoryTab = currentFilter === 'history';
       const isSettingsTab = currentFilter === 'settings';
       if (historyToolbarEl) historyToolbarEl.hidden = !isHistoryTab;
       if (settingsToolbarEl) settingsToolbarEl.hidden = !isSettingsTab;
-      if (visitorToolbarEl) visitorToolbarEl.hidden = isSettingsTab;
+      if (visitorToolbarEl) {
+        visitorToolbarEl.hidden = isSettingsTab;
+        visitorToolbarEl.querySelectorAll(".field").forEach((f) => { f.hidden = isOverviewTab; });
+      }
+      if (isOverviewTab) {
+        renderVisitorOverview();
+        return;
+      }
       if (isHistoryTab) refreshHistoryUnitOptions();
       if (isSettingsTab) {
         renderElevatorCards();
@@ -15436,12 +18687,12 @@
               <div class="muted" style="margin-top:6px;">設定時數，預設為 72 小時。</div>
             </div>
             <div style="padding:16px 18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#f9fafb;">
-              <div style="font-size:16px;font-weight:800;color:#111827;">報到功能設定</div>
+              <div style="font-size:calc(16px * var(--fs, 1));font-weight:800;color:#111827;">報到功能設定</div>
               <div style="margin-top:6px;color:#6b7280;line-height:1.65;">啟用後，住戶需在設定時數內報到，超過時間未報到將發出響鈴提醒。</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#fff;">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 12px;border:1px solid rgba(17,24,39,0.08);border-radius:14px;background:#f9fafb;">
-                <div style="font-size:15px;font-weight:800;color:#111827;">啟用報到功能</div>
+                <div style="font-size:calc(15px * var(--fs, 1));font-weight:800;color:#111827;">啟用報到功能</div>
                 <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
                   <span data-checkin-off style="font-weight:700;color:#9ca3af;">關閉</span>
                   <label class="switch" aria-label="切換報到功能">
@@ -15471,7 +18722,7 @@
             </div>
             ${isSystemAdmin ? `
             <div style="padding:16px 18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#f9fafb;">
-              <div style="font-size:16px;font-weight:800;color:#111827;">社區角色子分頁</div>
+              <div style="font-size:calc(16px * var(--fs, 1));font-weight:800;color:#111827;">社區角色子分頁</div>
               <div style="margin-top:6px;color:#6b7280;line-height:1.65;">控制社區角色是否顯示關懷救護模組上方子分頁列。每個子分頁可獨立開關；關閉的子分頁在社區角色下不顯示且不可操作。</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#fff;">
@@ -15482,7 +18733,7 @@
                 { id: "reminder", label: "提醒" },
               ].map((x) => `
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 12px;border:1px solid rgba(17,24,39,0.08);border-radius:14px;background:#f9fafb;">
-                  <div style="font-size:15px;font-weight:800;color:#111827;">${x.label}</div>
+                  <div style="font-size:calc(15px * var(--fs, 1));font-weight:800;color:#111827;">${x.label}</div>
                   <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
                     <span data-care-subnav-off="${x.id}" style="font-weight:700;color:#9ca3af;">關閉</span>
                     <label class="switch" aria-label="切換 ${x.label}">
@@ -16122,7 +19373,7 @@
     
     return `
       <div class="row">
-        <div style="font-size:16px;font-weight:800;color:#111827;margin-bottom:8px;">住戶報到</div>
+        <div style="font-size:calc(16px * var(--fs, 1));font-weight:800;color:#111827;margin-bottom:8px;">住戶報到</div>
         <div class="muted">住戶需在 ${hours} 小時內完成報到，超過時間未報到將發出響鈴提醒。</div>
       </div>
       
@@ -16152,7 +19403,7 @@
       </div>
       
       <div style="margin-top:24px;">
-        <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:12px;">住戶報到狀態</div>
+        <div style="font-size:calc(14px * var(--fs, 1));font-weight:700;color:#111827;margin-bottom:12px;">住戶報到狀態</div>
         ${allResidents.length === 0 ? `
           <div style="text-align:center;padding:24px;color:#9ca3af;">請先至「住戶」頁面載入住戶資料</div>
         ` : residents.length === 0 ? `
@@ -16190,7 +19441,7 @@
                 <div class="list-item" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
                   <div style="flex:1;min-width:0;">
                     <strong>${escapeHtml(name)}</strong>
-                    <div class="muted" style="font-size:13px;">
+                    <div class="muted" style="font-size:calc(13px * var(--fs, 1));">
                       ${houseNo ? escapeHtml(houseNo) : ''}${subHouseNo ? '-' + escapeHtml(subHouseNo) : ''}
                       ${lastCheckinText ? ' | 最後報到：' + escapeHtml(lastCheckinText) : ''}
                       ${methodText ? ' (' + escapeHtml(methodText) + ')' : ''}
@@ -16215,7 +19466,7 @@
       </div>
       
       <div style="margin-top:24px;">
-        <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:12px;">報到記錄</div>
+        <div style="font-size:calc(14px * var(--fs, 1));font-weight:700;color:#111827;margin-bottom:12px;">報到記錄</div>
         ${records.length === 0 ? `
           <div style="text-align:center;padding:24px;color:#9ca3af;">暫無報到記錄</div>
         ` : `
@@ -16340,7 +19591,7 @@
               <div class="left">
                 <div class="chip" aria-hidden="true">${iconSvg("care")}</div>
                 <div style="min-width:0;">
-                  <h2>關懷救護${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                  <h2>關懷救護</h2>
                   <p>緊急求助、即時通報與聯絡資訊整合。</p>
                 </div>
               </div>
@@ -16384,7 +19635,7 @@
             <div class="left">
               <div class="chip" aria-hidden="true">${iconSvg("care")}</div>
               <div style="min-width:0;">
-                <h2>關懷救護${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <h2>關懷救護</h2>
                 <p>${page.desc}</p>
               </div>
             </div>
@@ -16397,7 +19648,7 @@
           <div class="card-bd">
             <div class="row">
               <div>
-                <div style="font-size:18px; font-weight:800; color:#111827;">${page.title}</div>
+                <div style="font-size:calc(18px * var(--fs, 1)); font-weight:800; color:#111827;">${page.title}</div>
                 ${!["sos", "72h"].includes(targetPage) ? `<div class="muted" style="margin-top:4px;">此子分頁目前為示意版，可再接實際資料與功能。</div>` : ''}
               </div>
             </div>
@@ -16581,12 +19832,12 @@
         </div>
         <div class="modal-body" style="display:flex;flex-direction:column;gap:16px;">
           <div style="padding:16px 18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#f9fafb;">
-            <div style="font-size:16px;font-weight:800;color:#111827;">YouTube 直播串流連結</div>
+            <div style="font-size:calc(16px * var(--fs, 1));font-weight:800;color:#111827;">YouTube 直播串流連結</div>
             <div style="margin-top:6px;color:#6b7280;line-height:1.65;">請輸入 YouTube 直播或影片的連結</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:12px;">
-            <label style="font-size:14px;font-weight:700;color:#111827;">串流連結</label>
-            <input type="url" id="liveMeetingYoutubeUrlInput" placeholder="例如：https://www.youtube.com/watch?v=..." style="padding:12px 16px;border:1px solid rgba(17,24,39,0.2);border-radius:12px;font-size:16px;">
+            <label style="font-size:calc(14px * var(--fs, 1));font-weight:700;color:#111827;">串流連結</label>
+            <input type="url" id="liveMeetingYoutubeUrlInput" placeholder="例如：https://www.youtube.com/watch?v=..." style="padding:12px 16px;border:1px solid rgba(17,24,39,0.2);border-radius:12px;font-size:calc(16px * var(--fs, 1));">
           </div>
         </div>
         <div class="modal-ft">
@@ -16779,17 +20030,17 @@
           </div>
           <div class="modal-body" style="display:flex;flex-direction:column;gap:16px;">
             <div style="display:flex;flex-direction:column;gap:10px;">
-              <label style="font-size:14px;font-weight:700;color:#111827;">影片標題</label>
-              <input id="hist-title" type="text" value="${escapeHtml(titleVal)}" placeholder="例如：113年8月管委會會議" maxlength="80" style="padding:12px 16px;border:1px solid rgba(17,24,39,0.2);border-radius:12px;font-size:16px;">
+              <label style="font-size:calc(14px * var(--fs, 1));font-weight:700;color:#111827;">影片標題</label>
+              <input id="hist-title" type="text" value="${escapeHtml(titleVal)}" placeholder="例如：113年8月管委會會議" maxlength="80" style="padding:12px 16px;border:1px solid rgba(17,24,39,0.2);border-radius:12px;font-size:calc(16px * var(--fs, 1));">
             </div>
             <div style="display:flex;flex-direction:column;gap:10px;">
-              <label style="font-size:14px;font-weight:700;color:#111827;">日期時間</label>
-              <input id="hist-datetime" type="datetime-local" value="${escapeHtml(dtVal)}" style="padding:12px 16px;border:1px solid rgba(17,24,39,0.2);border-radius:12px;font-size:16px;">
+              <label style="font-size:calc(14px * var(--fs, 1));font-weight:700;color:#111827;">日期時間</label>
+              <input id="hist-datetime" type="datetime-local" value="${escapeHtml(dtVal)}" style="padding:12px 16px;border:1px solid rgba(17,24,39,0.2);border-radius:12px;font-size:calc(16px * var(--fs, 1));">
             </div>
             <div style="display:flex;flex-direction:column;gap:10px;">
-              <label style="font-size:14px;font-weight:700;color:#111827;">YouTube 連結網址</label>
-              <input id="hist-yt" type="url" value="${escapeHtml(ytVal)}" placeholder="例如：https://www.youtube.com/watch?v=xxxxxx" style="padding:12px 16px;border:1px solid rgba(17,24,39,0.2);border-radius:12px;font-size:16px;">
-              <div style="font-size:12.5px;color:#6b7280;line-height:1.65;">支援 YouTube 觀看網址、youtu.be 短網址，自動解析產生封面</div>
+              <label style="font-size:calc(14px * var(--fs, 1));font-weight:700;color:#111827;">YouTube 連結網址</label>
+              <input id="hist-yt" type="url" value="${escapeHtml(ytVal)}" placeholder="例如：https://www.youtube.com/watch?v=xxxxxx" style="padding:12px 16px;border:1px solid rgba(17,24,39,0.2);border-radius:12px;font-size:calc(16px * var(--fs, 1));">
+              <div style="font-size:calc(12.5px * var(--fs, 1));color:#6b7280;line-height:1.65;">支援 YouTube 觀看網址、youtu.be 短網址，自動解析產生封面</div>
             </div>
           </div>
           <div class="modal-ft">
@@ -16878,7 +20129,7 @@
             <div class="left">
               <div class="chip" aria-hidden="true">${iconSvg("live-meeting")}</div>
               <div style="min-width:0;">
-                <h2>直播${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <h2>直播</h2>
                 <p>YouTube 直播串流管理</p>
               </div>
             </div>
@@ -16896,8 +20147,8 @@
                   ${iconSvg("live-meeting")}
                 </div>
                 <div>
-                  <div style="font-size:15px;font-weight:800;color:#111827;">啟用社區直播</div>
-                  <div style="font-size:12.5px;color:#6b7280;margin-top:2px;">關閉時住戶端與後台皆顯示「目前無社區區大直播」</div>
+                  <div style="font-size:calc(15px * var(--fs, 1));font-weight:800;color:#111827;">啟用社區直播</div>
+                  <div style="font-size:calc(12.5px * var(--fs, 1));color:#6b7280;margin-top:2px;">關閉時住戶端與後台皆顯示「目前無社區區大直播」</div>
                 </div>
               </div>
               <label for="${toggleId}" style="display:inline-flex;align-items:center;cursor:pointer;user-select:none;position:relative;flex:0 0 auto;min-width:54px;min-height:30px;touch-action:manipulation;">
@@ -16917,11 +20168,11 @@
                              <path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l11.3-6.8a1 1 0 0 0 0-1.7l-11.3-6.8A1 1 0 0 0 8 5.2Z" fill="currentColor"/>
                            </svg>
                          </div>
-                         <div style="position:absolute;top:12px;left:12px;display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(220,38,38,0.95);color:#fff;font-size:12px;font-weight:800;">
+                         <div style="position:absolute;top:12px;left:12px;display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(220,38,38,0.95);color:#fff;font-size:calc(12px * var(--fs, 1));font-weight:800;">
                            <span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:sosCardPulse 1.5s ease-in-out infinite;"></span>
                            LIVE
                          </div>
-                         <div style="position:absolute;top:12px;right:12px;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:999px;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:12px;font-weight:800;box-shadow:0 6px 18px rgba(239,68,68,0.35);">
+                         <div style="position:absolute;top:12px;right:12px;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:999px;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:calc(12px * var(--fs, 1));font-weight:800;box-shadow:0 6px 18px rgba(239,68,68,0.35);">
                            ↗ 另開
                          </div>
                        </div>`
@@ -16930,16 +20181,16 @@
                            <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
                            <path d="m10 9 5 3-5 3V9Z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
                          </svg>
-                         <div style="font-size:14px;font-weight:700;">尚未設定直播連結</div>
-                         <div style="font-size:13px;">點擊右上角齒輪按鈕進行設定</div>
+                         <div style="font-size:calc(14px * var(--fs, 1));font-weight:700;">尚未設定直播連結</div>
+                         <div style="font-size:calc(13px * var(--fs, 1));">點擊右上角齒輪按鈕進行設定</div>
                        </div>`
                   }
                   <div style="padding:16px 18px;display:flex;align-items:center;gap:14px;">
                     <div style="flex:1;min-width:0;">
-                      <div style="font-size:16px;font-weight:800;color:#111827;line-height:1.5;">
+                      <div style="font-size:calc(16px * var(--fs, 1));font-weight:800;color:#111827;line-height:1.5;">
                         ${youtubeUrl ? (videoId ? `YouTube 直播串流 (${videoId})` : "直播連結已設定") : "尚未設定直播"}
                       </div>
-                      <div style="margin-top:4px;font-size:13px;color:#6b7280;word-break:break-all;">
+                      <div style="margin-top:4px;font-size:calc(13px * var(--fs, 1));color:#6b7280;word-break:break-all;">
                         ${youtubeUrl ? escapeHtml(youtubeUrl) : "請先於設定中輸入 YouTube 直播或影片連結"}
                       </div>
                     </div>
@@ -16953,8 +20204,8 @@
                        <path d="M17 9.5 7 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                      </svg>
                    </div>
-                   <div style="font-size:20px;font-weight:900;color:#111827;letter-spacing:0.2px;">目前無社區區大直播</div>
-                   <div style="font-size:13px;color:#6b7280;">管理員已關閉直播顯示，若需開啟請使用上方開關</div>
+                   <div style="font-size:calc(20px * var(--fs, 1));font-weight:900;color:#111827;letter-spacing:0.2px;">目前無社區區大直播</div>
+                   <div style="font-size:calc(13px * var(--fs, 1));color:#6b7280;">管理員已關閉直播顯示，若需開啟請使用上方開關</div>
                  </div>`
             }
 
@@ -17028,7 +20279,7 @@
             <div class="left">
               <div class="chip" aria-hidden="true">${iconSvg("live-meeting")}</div>
               <div style="min-width:0;">
-                <h2>歷史影片${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <h2>歷史影片</h2>
                 <p>過往直播錄影檔案</p>
               </div>
             </div>
@@ -17057,8 +20308,8 @@
                 <path d="M10 9v6l6-3-6-3Z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
               </svg>
             </div>
-            <div style="font-size:20px;font-weight:900;color:#111827;letter-spacing:0.2px;">尚未新增歷史影片</div>
-            <div style="font-size:13px;color:#6b7280;">點擊右上角「＋」新增卡片式影片</div>
+            <div style="font-size:calc(20px * var(--fs, 1));font-weight:900;color:#111827;letter-spacing:0.2px;">尚未新增歷史影片</div>
+            <div style="font-size:calc(13px * var(--fs, 1));color:#6b7280;">點擊右上角「＋」新增卡片式影片</div>
           </div>
         `;
         return;
@@ -17081,8 +20332,8 @@
               <div style="flex:1 1 auto;min-width:0;padding:12px 16px 12px 0;display:flex;flex-direction:column;gap:10px;">
                 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
                   <div style="min-width:0;flex:1;">
-                    <div style="font-size:15px;font-weight:800;color:#111827;line-height:1.5;">${escapeHtml(it.title || "未命名影片")}</div>
-                    <div style="margin-top:5px;display:inline-flex;align-items:center;gap:6px;padding:4.5px 10px;border-radius:999px;background:rgba(17,24,39,0.04);color:#6b7280;font-size:12px;font-weight:700;">
+                    <div style="font-size:calc(15px * var(--fs, 1));font-weight:800;color:#111827;line-height:1.5;">${escapeHtml(it.title || "未命名影片")}</div>
+                    <div style="margin-top:5px;display:inline-flex;align-items:center;gap:6px;padding:4.5px 10px;border-radius:999px;background:rgba(17,24,39,0.04);color:#6b7280;font-size:calc(12px * var(--fs, 1));font-weight:700;">
                       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:13.5px;height:13.5px;">
                         <path d="M4 8.5h16M6.5 4.5v4M17.5 4.5v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
                         <path d="M3 8.5V20a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
@@ -17106,7 +20357,7 @@
                   </div>
                 </div>
                 <div style="margin-top:auto;">
-                  <button class="btn btn-sm" type="button" data-action="hist-open" data-hist-id="${escapeHtml(it.id)}" style="padding:7px 12px;border-radius:11px;font-weight:700;font-size:13px;">
+                  <button class="btn btn-sm" type="button" data-action="hist-open" data-hist-id="${escapeHtml(it.id)}" style="padding:7px 12px;border-radius:11px;font-weight:700;font-size:calc(13px * var(--fs, 1));">
                     <span style="display:inline-flex;align-items:center;gap:7px;">
                       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:15px;height:15px;">
                         <path d="M14 4h6v6M20 4l-9 9M10 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -17210,7 +20461,7 @@
           <div class="left">
             <div class="chip" aria-hidden="true">${iconSvg("digital-signage")}</div>
             <div style="min-width:0;">
-              <h2>電子看版${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+              <h2>電子看版</h2>
               <p>社區公告、活動訊息與即時資訊顯示</p>
             </div>
           </div>
@@ -17387,7 +20638,7 @@
           <div class="left">
             <div class="chip" aria-hidden="true">${iconSvg("parking")}</div>
             <div style="min-width:0;">
-              <h2>車位管理${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+              <h2>車位管理</h2>
               <p>住戶開放上架車位一覽、預約審核與處理</p>
             </div>
           </div>
@@ -17962,7 +21213,7 @@
       return;
     }
     content.innerHTML = `
-      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <table style="width:100%; border-collapse:collapse; font-size:calc(13px * var(--fs, 1));">
         <thead>
           <tr style="background:rgba(245,247,250,1);">
             <th style="text-align:left; padding:8px 10px; border:1px solid var(--border);">戶號/住戶</th>
@@ -18154,7 +21405,7 @@
     if (moduleId !== "visitor") stopVisitorElevatorCardsSubscription();
     if (moduleId !== "visitor") stopVisitorElevatorCardConfigSubscription();
     if (moduleId !== "residents") stopResidentsSubscription();
-    if (moduleId !== "parcel") stopParcelsSubscription();
+    if (moduleId !== "parcel") { stopParcelsSubscription(); stopParcelStatsSubscription80(); }
     if (moduleId !== "care") stopCheckinListener();
     if (moduleId !== "finance" && typeof window.__nwFinanceCleanup === "function") {
       try { window.__nwFinanceCleanup(); } catch {}
@@ -18301,7 +21552,7 @@
           <div class="left">
             <div class="chip" aria-hidden="true">${iconSvg(m.id)}</div>
             <div style="min-width:0;">
-              <h2>${m.name}${cname ? `｜${escapeHtml(cname)}` : ""}</h2>
+              <h2>${m.name}</h2>
               <p>${m.desc}</p>
             </div>
           </div>
@@ -18561,11 +21812,11 @@
           <div class="modal-body">
             <div style="display:flex; flex-direction:column; gap:10px;">
               <div>
-                <div class="muted" style="font-size:13px;">時間</div>
+                <div class="muted" style="font-size:calc(13px * var(--fs, 1));">時間</div>
                 <div style="font-weight:600;">${escapeHtml(formatActivityTime(item.activityTime || item.createdAt) || "—")}</div>
               </div>
               <div>
-                <div class="muted" style="font-size:13px;">連結位置</div>
+                <div class="muted" style="font-size:calc(13px * var(--fs, 1));">連結位置</div>
                 <div style="word-break:break-all;"><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;">${escapeHtml(url || "—")}</a></div>
               </div>
               <div style="margin-top:8px; display:flex; justify-content:center; background:#f3f4f6; border-radius:12px; padding:12px; min-height:260px; align-items:center;">
@@ -18637,7 +21888,7 @@
                 <label for="activityUrl">連結位置</label>
                 <input id="activityUrl" type="url" placeholder="${isVideoType ? "例如 https://www.youtube.com/watch?v=..." : "例如 https://photos.google.com/... 或 https://...jpg"}" required />
               </div>
-              <div id="activityPreviewHint" style="font-size:13px; color:#6b7280; margin-top:-6px;">儲存前可先點擊下方「預覽連結」。</div>
+              <div id="activityPreviewHint" style="font-size:calc(13px * var(--fs, 1)); color:#6b7280; margin-top:-6px;">儲存前可先點擊下方「預覽連結」。</div>
               <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
                 <button class="btn btn-sm" type="button" id="btnActivityPreviewLink">預覽連結</button>
                 <button class="btn btn-sm" type="button" id="btnActivityOpenLink">另開視窗前往</button>
@@ -18792,9 +22043,9 @@
           <div class="card" style="margin:0;" data-activity-id="${escapeHtml(String(item.id || ""))}">
             <div class="card-hd">
               <div class="left" style="min-width:0;">
-                <h3 style="font-size:16px; margin:0 0 6px 0;">${escapeHtml(String(item.title || ""))}</h3>
-                <div class="muted" style="font-size:13px;">時間：${escapeHtml(time || "—")}</div>
-                <div class="muted" style="font-size:13px; word-break:break-all; margin-top:4px;">連結：<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;">${escapeHtml(url)}</a></div>
+                <h3 style="font-size:calc(16px * var(--fs, 1)); margin:0 0 6px 0;">${escapeHtml(String(item.title || ""))}</h3>
+                <div class="muted" style="font-size:calc(13px * var(--fs, 1));">時間：${escapeHtml(time || "—")}</div>
+                <div class="muted" style="font-size:calc(13px * var(--fs, 1)); word-break:break-all; margin-top:4px;">連結：<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;">${escapeHtml(url)}</a></div>
               </div>
               <div class="bulletin-head-actions">
                 <span class="tag ${isVideo ? "yellow" : "green"}">${isVideo ? "影片" : "相片"}</span>
@@ -18932,7 +22183,7 @@
             <div class="left">
               <div class="chip" aria-hidden="true">${iconSvg("activity")}</div>
               <div style="min-width:0;">
-                <h2>社區活動${communityName ? `｜${escapeHtml(communityName)}` : ""}</h2>
+                <h2>社區活動</h2>
                 <p>活動影片（YouTube）與活動相片（Google 相簿）管理與預覽</p>
               </div>
             </div>
