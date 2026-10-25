@@ -932,16 +932,10 @@
                 const el = document.elementFromPoint(ev.clientX, ev.clientY);
                 hitTag = String(el && el.tagName ? el.tagName : "").toLowerCase();
               } catch {}
-              // #region debug-point P:card-pointerdown
-              fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"P",location:"chatphone.html:card-pointerdown",msg:"[DEBUG] card pointerdown",data:{uid,tag:String((targetEl&&targetEl.tagName)||"").toLowerCase(),hitTag,pt:String(ev.pointerType||""),trusted:Boolean(ev.isTrusted),x:Number(ev.clientX||0),y:Number(ev.clientY||0)},ts:Date.now()})}).catch(()=>{});
-              // #endregion
             });
             card.addEventListener("click", (ev) => {
               const targetEl = getEventTargetElement(ev);
               if (targetEl && targetEl.closest && targetEl.closest('[data-action="history"]')) return;
-              // #region debug-point A:card-direct-click
-              fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"A",location:"chatphone.html:card-direct-click",msg:"[DEBUG] direct card click trigger dial",data:{uid:String(card.getAttribute("data-uid")||""),tag:String((targetEl&&targetEl.tagName)||"").toLowerCase(),nodeType:Number((ev.target&&ev.target.nodeType)||0)},ts:Date.now()})}).catch(()=>{});
-              // #endregion
               triggerDialByUid(card.getAttribute("data-uid"));
             });
 
@@ -1118,28 +1112,16 @@
         async function startOutgoingResidentCall(targetUid) {
           const uid = String(targetUid || "").trim();
           const user = auth.currentUser;
-          // #region debug-point A:start-outgoing-entry
-          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"A",location:"chatphone.html:startOutgoingResidentCall:entry",msg:"[DEBUG] startOutgoingResidentCall entry",data:{targetUid:uid,currentUid:String((user&&user.uid)||"").trim()},ts:Date.now()})}).catch(()=>{});
-          // #endregion
           if (!user || !uid) return;
           if (uid === String(user.uid || "").trim()) {
-            // #region debug-point B:self-call-blocked
-            fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"B",location:"chatphone.html:startOutgoingResidentCall:self",msg:"[DEBUG] blocked self call",data:{targetUid:uid,currentUid:String(user.uid||"").trim()},ts:Date.now()})}).catch(()=>{});
-            // #endregion
             window.alert("不能撥打給自己。");
             return;
           }
           const target = allAccounts.find((item) => String(item.id || "").trim() === uid);
           if (!target) {
-            // #region debug-point B:target-not-found
-            fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"B",location:"chatphone.html:startOutgoingResidentCall:target",msg:"[DEBUG] target not found",data:{targetUid:uid,accountCount:Array.isArray(allAccounts)?allAccounts.length:-1},ts:Date.now()})}).catch(()=>{});
-            // #endregion
             window.alert("找不到聯絡人資料。");
             return;
           }
-          // #region debug-point B:target-found
-          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"B",location:"chatphone.html:startOutgoingResidentCall:target-found",msg:"[DEBUG] target found",data:{targetUid:uid,targetName:String(target.displayName||""),targetHouseNo:String(target.houseNo||""),targetSubUnit:String(target.subUnit||"")},ts:Date.now()})}).catch(()=>{});
-          // #endregion
 
           cleanupChatCall();
           openCallModal(target);
@@ -1187,9 +1169,6 @@
           try {
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
           } catch (err) {
-            // #region debug-point M:getusermedia-error
-            fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"M",location:"chatphone.html:startOutgoingResidentCall:getusermedia-error",msg:"[DEBUG] getUserMedia error",data:{message:String((err&&err.message)||err||""),name:String((err&&err.name)||""),code:String((err&&err.code)||"")},ts:Date.now()})}).catch(()=>{});
-            // #endregion
             setCallStatus("無法開啟麥克風。", true);
             setCallHelp(buildMicrophonePermissionMessage(err), true);
             await releaseChatCallResources({ keepModalOpen: true });
@@ -1213,9 +1192,6 @@
           await pc.setLocalDescription(offer);
 
           try {
-            // #region debug-point C:before-calldoc-set
-            fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"C",location:"chatphone.html:startOutgoingResidentCall:before-set",msg:"[DEBUG] before call doc set",data:{callId:String((callDocRef&&callDocRef.id)||""),community:String((currentUserData&&currentUserData.community)||currentCommunityKey||"").trim(),toUid:uid,toRole:"resident",status:"ringing"},ts:Date.now()})}).catch(()=>{});
-            // #endregion
             await callDocRef.set({
               community: String(currentCommunityKey || (currentUserData && currentUserData.community) || "").trim(),
               fromUid: String(user.uid),
@@ -1235,13 +1211,7 @@
               createdAtMs: Date.now(),
               offer: { type: offer.type, sdp: offer.sdp },
             }, { merge: true });
-            // #region debug-point C:after-calldoc-set
-            fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"C",location:"chatphone.html:startOutgoingResidentCall:after-set",msg:"[DEBUG] call doc set success",data:{callId:String((callDocRef&&callDocRef.id)||""),toUid:uid,toRole:"resident",status:"ringing"},ts:Date.now()})}).catch(()=>{});
-            // #endregion
           } catch (err) {
-            // #region debug-point C:calldoc-set-error
-            fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"C",location:"chatphone.html:startOutgoingResidentCall:set-error",msg:"[DEBUG] call doc set error",data:{message:String((err&&err.message)||err||""),targetUid:uid},ts:Date.now()})}).catch(()=>{});
-            // #endregion
             console.error(err);
             setCallStatus("呼叫失敗：可能沒有權限或網路異常。", true);
             setCallHelp("請檢查 Firestore 權限、通知/麥克風權限，或稍後再試。", true);
@@ -1307,15 +1277,9 @@
         let __nwDialLastMs = 0;
         function triggerDialByUid(uid) {
           const id = String(uid || "").trim();
-          // #region debug-point A:trigger-dial-entry
-          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"A",location:"chatphone.html:triggerDialByUid:entry",msg:"[DEBUG] triggerDialByUid entry",data:{uid:id},ts:Date.now()})}).catch(()=>{});
-          // #endregion
           if (!id) return;
           const now = Date.now();
           if (now - __nwDialLastMs < 650) {
-            // #region debug-point D:trigger-dial-deduped
-            fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"section-call-no-ring",runId:"pre-fix",hypothesisId:"D",location:"chatphone.html:triggerDialByUid:dedupe",msg:"[DEBUG] triggerDialByUid deduped",data:{uid:id,delta:now-__nwDialLastMs},ts:Date.now()})}).catch(()=>{});
-            // #endregion
             return;
           }
           __nwDialLastMs = now;

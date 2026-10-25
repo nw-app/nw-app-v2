@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>掃碼｜報到投票</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg?v=5" />
+    <meta name="theme-color" content="#d32f2f" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <style>
+      * { box-sizing: border-box; }
+      :root { --brand: #d32f2f; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        font-family: "Noto Sans TC", "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
+        background: #0f172a;
+        color: #e5e7eb;
+        height: 100dvh;
+        overflow: hidden;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .scan-app {
+        display: flex;
+        flex-direction: column;
+        height: 100dvh;
+        padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+        gap: 8px;
+      }
+      .scan-hd { display: flex; align-items: center; gap: 8px; }
+      .scan-title { font-size: 18px; font-weight: 800; color: #fff; white-space: nowrap; }
+      .scan-sub {
+        flex: 1;
+        min-width: 0;
+        font-size: 12px;
+        color: #94a3b8;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .scan-close {
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        background: transparent;
+        color: #e5e7eb;
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .scan-modes { display: flex; gap: 8px; }
+      .mode-btn {
+        flex: 1;
+        height: 40px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.06);
+        color: #e5e7eb;
+        font-size: 14px;
+        font-weight: 700;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .mode-btn.is-active { background: var(--brand); border-color: var(--brand); color: #fff; }
+      .scan-stage {
+        position: relative;
+        flex: 1;
+        min-height: 120px;
+        border-radius: 14px;
+        overflow: hidden;
+        background: #000;
+      }
+      #reader { width: 100%; height: 100%; }
+      #reader video { width: 100% !important; height: 100% !important; object-fit: cover; }
+      .scan-frame { position: absolute; inset: 0; pointer-events: none; }
+      .scan-frame::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: min(60%, 210px);
+        aspect-ratio: 1;
+        transform: translate(-50%, -50%);
+        border: 3px solid rgba(255, 255, 255, 0.9);
+        border-radius: 14px;
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.28);
+      }
+      .scan-info { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 12px;
+        min-width: 0;
+      }
+      .info-row span:first-child { color: #94a3b8; white-space: nowrap; }
+      .info-row span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .scan-status {
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 13px;
+        line-height: 1.5;
+        background: rgba(255, 255, 255, 0.08);
+        min-height: 44px;
+      }
+      .scan-status.success { background: rgba(22, 163, 74, 0.24); color: #bbf7d0; }
+      .scan-status.error { background: rgba(220, 38, 38, 0.26); color: #fecaca; }
+      .scan-status.warn { background: rgba(217, 119, 6, 0.26); color: #fde68a; }
+      .scan-ft { display: flex; gap: 8px; }
+      .ft-btn {
+        flex: 1;
+        height: 44px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.08);
+        color: #e5e7eb;
+        font-size: 14px;
+        font-weight: 700;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .ft-btn[hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="scan-app">
+      <header class="scan-hd">
+        <div class="scan-title">掃碼</div>
+        <div class="scan-sub" id="projectName">載入中…</div>
+        <button class="scan-close" type="button" id="btnClose">關閉</button>
+      </header>
+
+      <div class="scan-modes">
+        <button class="mode-btn" type="button" data-mode="checkin">報到掃碼</button>
+        <button class="mode-btn" type="button" data-mode="vote">投票掃碼</button>
+      </div>
+
+      <div class="scan-stage">
+        <div id="reader"></div>
+        <div class="scan-frame" aria-hidden="true"></div>
+      </div>
+
+      <div class="scan-info">
+        <div class="info-row"><span>名單</span><span id="infoRoster">—</span></div>
+        <div class="info-row"><span>已報到</span><span id="infoChecked">—</span></div>
+        <div class="info-row"><span>議題</span><span id="infoTopics">—</span></div>
+        <div class="info-row"><span>投票人</span><span id="infoVoter">尚未選定</span></div>
+      </div>
+
+      <div class="scan-status" id="status">正在載入專案資料…</div>
+
+      <footer class="scan-ft">
+        <button class="ft-btn" type="button" id="btnRestart">重新啟動鏡頭</button>
+        <button class="ft-btn" type="button" id="btnClearVoter" hidden>清除投票人</button>
+      </footer>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="js/firebase-config.js"></script>
+    <script>
+      (function () {
+        const params = new URLSearchParams(location.search);
+        const cid = String(params.get("c") || "").trim() || "default";
+        const modeParam = String(params.get("mode") || "").trim();
+
+        const state = {
+          projectId: String(params.get("p") || "").trim(),
+          project: null,
+          roster: [],
+          topics: [],
+          mode: modeParam === "vote" ? "vote" : "checkin",
+          voterId: "",
+          scanner: null,
+          processing: false,
+          ignoreUntil: 0,
+        };
+
+        let db = null;
+        let actorName = "掃碼人員";
+        let actorUid = "";
+        let rosterUnsub = null;
+        let topicsUnsub = null;
+        const el = (id) => document.getElementById(id);
+
+        function pad2(n) { return String(n).padStart(2, "0"); }
+
+        function formatDateTime(ms) {
+          const n = Number(ms || 0);
+          if (!n) return "—";
+          const d = new Date(n);
+          return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+        }
+
+        function formatUnit(item) {
+          const houseNo = String((item && item.houseNo) || "").trim();
+          const subHouseNo = String((item && item.subHouseNo) || "").trim();
+          return [houseNo, subHouseNo].filter(Boolean).join("-") || "—";
+        }
+
+        function setStatus(message, tone) {
+          const statusEl = el("status");
+          if (!statusEl) return;
+          statusEl.textContent = String(message || "");
+          statusEl.className = "scan-status" + (tone ? ` ${tone}` : "");
+        }
+
+        function rosterRef() {
+          return db.collection("communities").doc(cid).collection("checkinVoteProjects").doc(state.projectId).collection("roster");
+        }
+
+        function findEntry(id) {
+          return state.roster.find((item) => String(item.id || "") === String(id || "").trim()) || null;
+        }
+
+        function findTopic(id) {
+          return state.topics.find((item) => String(item.id || "") === String(id || "").trim()) || null;
+        }
+
+        function normalizeRoster(doc) {
+          const v = doc.data() || {};
+          const votes = v.votes && typeof v.votes === "object" ? v.votes : {};
+          return {
+            id: doc.id,
+            name: String(v.name || "").trim() || "住戶",
+            houseNo: String(v.houseNo || "").trim(),
+            subHouseNo: String(v.subHouseNo || "").trim(),
+            qrToken: String(v.qrToken || "").trim(),
+            checkedIn: v.checkedIn === true,
+            checkedInAtMs: Number(v.checkedInAtMs || 0) || 0,
+            votes,
+          };
+        }
+
+        function normalizeTopic(doc) {
+          const v = doc.data() || {};
+          const options = Array.isArray(v.options) ? v.options : [];
+          return {
+            id: doc.id,
+            title: String(v.title || "").trim() || "未命名議題",
+            enabled: v.enabled !== false,
+            singleChoice: v.singleChoice !== false,
+            order: Number(v.order || 0) || 0,
+            options: options.map((opt, index) => ({
+              id: String((opt && opt.id) || `opt${index + 1}`).trim(),
+              label: String((opt && opt.label) || "").trim() || `選項 ${index + 1}`,
+              qrToken: String((opt && opt.qrToken) || "").trim(),
+            })),
+          };
+        }
+
+        function parseScanText(rawText) {
+          const text = String(rawText || "").trim();
+          if (!text) return null;
+          const directEntry = state.roster.find((entry) => entry.qrToken && entry.qrToken === text);
+          if (directEntry) return { kind: "person", entryId: directEntry.id, token: directEntry.qrToken };
+          let foundTopic = null;
+          let foundOption = null;
+          state.topics.some((topic) => {
+            const option = (topic.options || []).find((item) => item.qrToken && item.qrToken === text);
+            if (option) {
+              foundTopic = topic;
+              foundOption = option;
+              return true;
+            }
+            return false;
+          });
+          if (foundTopic && foundOption) {
+            return { kind: "option", projectId: state.projectId, topicId: foundTopic.id, optionId: foundOption.id, token: foundOption.qrToken };
+          }
+          const parts = text.split(":");
+          if (parts.length >= 5 && parts[0] === "nwcv" && parts[1] === "person") {
+            return { kind: "person", projectId: String(parts[2] || "").trim(), entryId: String(parts[3] || "").trim(), token: String(parts[4] || "").trim() };
+          }
+          if (parts.length >= 6 && parts[0] === "nwcv" && parts[1] === "option") {
+            return { kind: "option", projectId: String(parts[2] || "").trim(), topicId: String(parts[3] || "").trim(), optionId: String(parts[4] || "").trim(), token: String(parts[5] || "").trim() };
+          }
+          return null;
+        }
+
+        function renderInfo() {
+          const checkedCount = state.roster.filter((entry) => entry.checkedIn).length;
+          const enabledTopics = state.topics.filter((topic) => topic.enabled !== false);
+          el("infoRoster").textContent = `${state.roster.length} 人`;
+          el("infoChecked").textContent = `${checkedCount} 人`;
+          el("infoTopics").textContent = `${enabledTopics.length} 題`;
+          const voter = findEntry(state.voterId);
+          el("infoVoter").textContent = voter ? `${voter.name}（${formatUnit(voter)}）` : "尚未選定";
+        }
+
+        function renderModes() {
+          document.querySelectorAll("[data-mode]").forEach((btn) => {
+            const isActive = String(btn.getAttribute("data-mode") || "") === state.mode;
+            btn.classList.toggle("is-active", isActive);
+          });
+          const clearBtn = el("btnClearVoter");
+          if (clearBtn) clearBtn.hidden = state.mode !== "vote";
+        }
+
+        async function applyCheckin(entry) {
+          const now = Date.now();
+          await rosterRef().doc(entry.id).set({
+            checkedIn: true,
+            checkedInAtMs: now,
+            checkedInMethod: "qr",
+            checkedInByUid: actorUid,
+            checkedInByName: actorName,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAtMs: now,
+          }, { merge: true });
+          entry.checkedIn = true;
+          entry.checkedInAtMs = now;
+          renderInfo();
+        }
+
+        async function applyVote(entry, topic, option) {
+          const now = Date.now();
+          const currentVote = entry.votes ? entry.votes[topic.id] : null;
+          const currentOptionIds = currentVote && Array.isArray(currentVote.optionIds) ? currentVote.optionIds : [];
+          const nextOptionIds = topic.singleChoice
+            ? [option.id]
+            : Array.from(new Set(currentOptionIds.concat(option.id)));
+          const votes = { ...(entry.votes || {}) };
+          votes[topic.id] = {
+            optionIds: nextOptionIds,
+            updatedAtMs: now,
+            method: "qr",
+            operatorUid: actorUid,
+            operatorName: actorName,
+          };
+          await rosterRef().doc(entry.id).set({
+            votes,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAtMs: now,
+          }, { merge: true });
+          entry.votes = votes;
+          renderInfo();
+        }
+
+        async function handleScanText(rawText) {
+          const project = state.project;
+          if (!project) {
+            setStatus("目前沒有啟用中的專案", "error");
+            return;
+          }
+          const parsed = parseScanText(rawText);
+          if (!parsed) {
+            setStatus("無法辨識此 QR code", "error");
+            return;
+          }
+          if (parsed.projectId && parsed.projectId !== state.projectId) {
+            setStatus("掃到的是其他專案的 QR code", "error");
+            return;
+          }
+          if (parsed.kind === "person") {
+            const entry = findEntry(parsed.entryId);
+            if (!entry || entry.qrToken !== parsed.token) {
+              setStatus("找不到對應的名單住戶", "error");
+              return;
+            }
+            if (state.mode === "checkin") {
+              if (project.settings.allowQrCheckin === false) {
+                setStatus("此專案未開啟 QR 報到", "error");
+                return;
+              }
+              if (entry.checkedIn) {
+                setStatus(`${entry.name}（${formatUnit(entry)}）已於 ${formatDateTime(entry.checkedInAtMs)} 完成報到`, "warn");
+                return;
+              }
+              await applyCheckin(entry);
+              setStatus(`${entry.name}（${formatUnit(entry)}）已完成 QR 報到`, "success");
+              return;
+            }
+            state.voterId = entry.id;
+            renderInfo();
+            setStatus(`已選定投票人：${entry.name}（${formatUnit(entry)}），請掃描議題選項 QR code`, "success");
+            return;
+          }
+          if (state.mode !== "vote") {
+            setStatus("目前是報到掃碼模式，請先切換成投票掃碼", "error");
+            return;
+          }
+          if (project.settings.allowQrVote === false) {
+            setStatus("此專案未開啟 QR 投票", "error");
+            return;
+          }
+          const voter = findEntry(state.voterId);
+          if (!voter) {
+            setStatus("請先掃描投票人的個人 QR code", "error");
+            return;
+          }
+          if (project.settings.requireCheckinBeforeVote === true && !voter.checkedIn) {
+            setStatus(`${voter.name} 尚未報到，此專案需先報到才能投票`, "error");
+            return;
+          }
+          const topic = findTopic(parsed.topicId);
+          const option = topic ? topic.options.find((item) => item.id === String(parsed.optionId || "").trim()) : null;
+          if (!topic || !option || option.qrToken !== parsed.token) {
+            setStatus("找不到對應的議題選項", "error");
+            return;
+          }
+          await applyVote(voter, topic, option);
+          setStatus(`${voter.name} 已投「${topic.title}」→ ${option.label}`, "success");
+        }
+
+        async function stopScanner() {
+          const scanner = state.scanner;
+          state.scanner = null;
+          if (!scanner) return;
+          try { await scanner.stop(); } catch {}
+          try { scanner.clear(); } catch {}
+        }
+
+        async function startScanner() {
+          await stopScanner();
+          if (typeof Html5Qrcode !== "function") {
+            setStatus("掃碼元件尚未載入，請重新整理", "error");
+            return;
+          }
+          let scanner = null;
+          try {
+            scanner = new Html5Qrcode("reader");
+          } catch {
+            setStatus("無法啟動掃描器", "error");
+            return;
+          }
+          state.scanner = scanner;
+          try {
+            await scanner.start(
+              { facingMode: "environment" },
+              {
+                fps: 10,
+                qrbox: function (w, h) {
+                  const size = Math.floor(Math.min(w, h, 260));
+                  return { width: size, height: size };
+                },
+              },
+              async function (decodedText) {
+                const now = Date.now();
+                if (state.processing || now < state.ignoreUntil) return;
+                state.processing = true;
+                try {
+                  await handleScanText(decodedText);
+                } catch (e) {
+                  setStatus("掃碼處理失敗，請確認網路與權限", "error");
+                } finally {
+                  state.processing = false;
+                  state.ignoreUntil = Date.now() + 1200;
+                }
+              },
+              function () {}
+            );
+          } catch {
+            setStatus("無法開啟相機，請確認已授權鏡頭權限", "error");
+          }
+        }
+
+        async function loadProject() {
+          if (!state.projectId) {
+            const cfgSnap = await db.collection("communities").doc(cid).get();
+            state.projectId = String(((cfgSnap.data() || {}).checkinVoteActiveProjectId) || "").trim();
+          }
+          if (!state.projectId) throw new Error("此社區尚未設定目前專案");
+          const snap = await db.collection("communities").doc(cid).collection("checkinVoteProjects").doc(state.projectId).get();
+          if (!snap.exists) throw new Error("找不到指定專案");
+          const v = snap.data() || {};
+          state.project = {
+            id: snap.id,
+            name: String(v.name || "").trim() || "未命名專案",
+            settings: {
+              allowQrCheckin: !(v.settings && v.settings.allowQrCheckin === false),
+              allowQrVote: !(v.settings && v.settings.allowQrVote === false),
+              requireCheckinBeforeVote: !!(v.settings && v.settings.requireCheckinBeforeVote === true),
+            },
+          };
+          el("projectName").textContent = `社區：${cid}｜${state.project.name}`;
+        }
+
+        function subscribeCollections() {
+          rosterUnsub = rosterRef().onSnapshot((snap) => {
+            state.roster = (snap && snap.docs ? snap.docs : []).map(normalizeRoster);
+            renderInfo();
+          }, () => setStatus("名單載入失敗，請確認權限", "error"));
+          topicsUnsub = db.collection("communities").doc(cid).collection("checkinVoteProjects").doc(state.projectId)
+            .collection("topics").onSnapshot((snap) => {
+              state.topics = (snap && snap.docs ? snap.docs : []).map(normalizeTopic)
+                .filter((topic) => topic.enabled !== false)
+                .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title, "zh-Hant"));
+              renderInfo();
+            }, () => setStatus("議題載入失敗，請確認權限", "error"));
+        }
+
+        document.querySelectorAll("[data-mode]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const next = String(btn.getAttribute("data-mode") || "checkin").trim();
+            if (next === state.mode) return;
+            state.mode = next === "vote" ? "vote" : "checkin";
+            if (state.mode === "checkin") state.voterId = "";
+            renderModes();
+            renderInfo();
+            setStatus(state.mode === "checkin" ? "報到掃碼：請掃描住戶個人 QR code。" : "投票掃碼：請先掃描投票人的個人 QR code，再掃描議題選項 QR code。");
+          });
+        });
+
+        el("btnRestart").addEventListener("click", () => {
+          startScanner();
+        });
+
+        el("btnClearVoter").addEventListener("click", () => {
+          state.voterId = "";
+          renderInfo();
+          setStatus("已清除目前投票人");
+        });
+
+        el("btnClose").addEventListener("click", () => {
+          window.close();
+        });
+
+        window.addEventListener("beforeunload", () => {
+          if (rosterUnsub) rosterUnsub();
+          if (topicsUnsub) topicsUnsub();
+          stopScanner();
+        });
+
+        function boot() {
+          try {
+            firebase.initializeApp(window.FIREBASE_CONFIG);
+            db = firebase.firestore();
+          } catch {
+            setStatus("Firebase 初始化失敗", "error");
+            return;
+          }
+          firebase.auth().onAuthStateChanged((user) => {
+            actorUid = user ? String(user.uid || "") : "";
+            actorName = user ? String(user.displayName || user.email || "掃碼人員") : "掃碼人員";
+            if (!user) setStatus("尚未登入，掃碼結果將無法寫入", "warn");
+          });
+          renderModes();
+          loadProject()
+            .then(() => {
+              subscribeCollections();
+              setStatus(state.mode === "checkin" ? "報到掃碼：請掃描住戶個人 QR code。" : "投票掃碼：請先掃描投票人的個人 QR code，再掃描議題選項 QR code。");
+              return startScanner();
+            })
+            .catch((e) => {
+              setStatus(`載入失敗：${(e && e.message) || e}`, "error");
+            });
+        }
+
+        boot();
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,968 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>分享｜報到投票</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg?v=5" />
+    <meta name="theme-color" content="#d32f2f" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <style>
+      * { box-sizing: border-box; }
+      :root {
+        --brand: #d32f2f;
+        --border: #e5e7eb;
+        --ink: #111827;
+        --muted: #6b7280;
+        --ok: #16a34a;
+      }
+      html,
+      body { margin: 0; height: 100%; overflow: hidden; }
+      body {
+        font-family: "Noto Sans TC", "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
+        background: #f6f7f9;
+        color: var(--ink);
+        height: 100dvh;
+      }
+      .share-app {
+        height: 100dvh;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+      }
+
+      /* 抬頭：社區名稱 ＋ 專案名稱 */
+      .share-hd {
+        --hd-size: clamp(34px, 4.4vh, 56px);
+        display: flex;
+        align-items: center;
+        gap: clamp(8px, 1.2vw, 16px);
+        padding: clamp(8px, 1.6vh, 18px) clamp(12px, 2vw, 28px);
+        background: #fff;
+        border-bottom: 1px solid var(--border);
+      }
+      .share-logo {
+        flex: 0 0 auto;
+        width: var(--hd-size);
+        height: var(--hd-size);
+        border-radius: 14px;
+        background: var(--brand);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .share-logo svg { width: 60%; height: 60%; }
+      /* 社區名稱與專案名稱同一列，文字高度與 logo 相同 */
+      .share-titles {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: clamp(10px, 1.4vw, 22px);
+      }
+      .share-community {
+        flex: 0 1 auto;
+        min-width: 0;
+        font-size: var(--hd-size);
+        font-weight: 900;
+        line-height: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .share-project {
+        flex: 0 1 auto;
+        min-width: 0;
+        font-size: var(--hd-size);
+        font-weight: 700;
+        color: var(--muted);
+        line-height: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      /* 手機直屏：社區名稱與專案名稱分成上下兩行，並縮小字體 */
+      @media (orientation: portrait) {
+        .share-titles {
+          flex-direction: column;
+          align-items: stretch;
+          justify-content: center;
+          gap: clamp(1px, 0.3vh, 5px);
+        }
+        .share-community,
+        .share-project { font-size: calc(var(--hd-size) * 0.62); }
+        /* 報到統計：手機直屏時縮到內容高度（區塊縮小），
+           若內容仍超過一頁則可上下捲動 */
+        .ck-stats {
+          flex: 0 1 auto;
+          align-content: start;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
+        }
+        /* 統計卡：縮小區塊高度（內距與字級更緊湊） */
+        .stat {
+          padding: clamp(5px, 0.9vh, 11px) clamp(7px, 1.1vw, 14px);
+          gap: 1px;
+        }
+        .stat-label { font-size: clamp(10px, 2.9vw, 13px); }
+        .stat-value { font-size: clamp(20px, 5.4vw, 34px); line-height: 1; }
+        .stat-sub { font-size: clamp(9px, 2.6vw, 12px); }
+        /* 掃碼區塊：吸收統計卡讓出的高度（QR 變大） */
+        .ck-list-wrap {
+          flex: 1 1 auto;
+          height: auto;
+        }
+      }
+      .share-live {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: clamp(13px, 1.35vw, 19px);
+        font-weight: 800;
+        color: var(--ok);
+        border: 1px solid rgba(22, 163, 74, 0.35);
+        background: rgba(22, 163, 74, 0.08);
+        border-radius: 999px;
+        padding: 4px 12px;
+      }
+      /* 即時時間：日期與時間分兩行顯示 */
+      .live-clock {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 1px;
+        line-height: 1.15;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .share-live i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--ok);
+        animation: livePulse 1.6s ease-in-out infinite;
+      }
+      @keyframes livePulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.35; transform: scale(0.75); }
+      }
+
+      /* 內容區 */
+      .share-bd {
+        min-height: 0;
+        overflow: hidden;
+        padding: clamp(8px, 1.6vh, 20px) clamp(12px, 2vw, 28px);
+        display: flex;
+      }
+      .view {
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: clamp(6px, 1.2vh, 14px);
+      }
+      .view[hidden] { display: none; }
+      .view-note {
+        font-size: clamp(10px, 1vw, 13px);
+        color: var(--muted);
+        font-weight: 700;
+      }
+      .view-note:empty { display: none; }
+      .empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        color: var(--muted);
+        font-size: clamp(12px, 1.3vw, 18px);
+        font-weight: 700;
+      }
+
+      /* 報到資訊 */
+      /* 統計卡：前 3 張（應到／已報到／未到）同一列，
+         後 2 張（報到率／報到結果）各自佔滿整列；
+         橫屏時每張卡等高撐滿欄高 */
+      .ck-stats {
+        /* 統計區塊以內容高度為基準撐開（直屏另有縮小與捲動規則） */
+        flex: 1 1 auto;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-auto-rows: auto;
+        gap: clamp(6px, 1vh, 14px);
+        align-content: stretch;
+      }
+      .ck-stats > .stat:nth-child(n + 4) { grid-column: 1 / -1; }
+      .stat {
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: clamp(8px, 1.4vh, 18px) clamp(10px, 1.1vw, 18px);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
+        min-width: 0;
+      }
+      .stat-label { font-size: clamp(12px, 1.15vw, 17px); font-weight: 800; color: var(--muted); }
+      .stat-value {
+        font-size: clamp(24px, 3.8vw, 56px);
+        font-weight: 900;
+        line-height: 1.05;
+        white-space: nowrap;
+        /* 數值水平置中，並稍微靠右一些 */
+        text-align: center;
+        padding-left: clamp(2px, 0.8vw, 14px);
+      }
+      .stat-value small { font-size: 0.44em; font-weight: 800; color: var(--muted); margin-left: 3px; }
+      .stat-sub { font-size: clamp(11px, 1.05vw, 15px); font-weight: 800; color: var(--muted); }
+      .stat.tone-ok .stat-value { color: var(--ok); }
+      .stat.tone-rate .stat-value { color: var(--brand); }
+      .stat.tone-pass { border-color: rgba(22, 163, 74, 0.45); background: rgba(22, 163, 74, 0.06); }
+      .stat.tone-pass .stat-value { color: var(--ok); }
+      .stat.tone-fail { border-color: rgba(211, 47, 47, 0.35); background: rgba(211, 47, 47, 0.05); }
+      .stat.tone-fail .stat-value { color: var(--brand); }
+
+      /* 雙軌進度條：戶數（人數）與區分所有權比例 */
+      .ck-bars {
+        flex: 0 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: clamp(4px, 0.7vh, 8px);
+      }
+      .ck-bar-row { display: flex; align-items: center; gap: clamp(6px, 0.8vw, 12px); }
+      .ck-bar-label {
+        flex: 0 0 auto;
+        width: clamp(58px, 6vw, 96px);
+        white-space: nowrap;
+        font-size: clamp(10px, 1vw, 13px);
+        font-weight: 800;
+        color: var(--muted);
+      }
+      .ck-bar-row .ck-progress { flex: 1; }
+
+      .ck-progress {
+        height: clamp(8px, 1.5vh, 18px);
+        border-radius: 999px;
+        background: #e9ecf1;
+        overflow: hidden;
+        flex: 0 0 auto;
+      }
+      .ck-progress > i {
+        display: block;
+        height: 100%;
+        width: 0;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #ef5350, var(--brand));
+        transition: width 320ms ease;
+      }
+
+      .ck-list-wrap {
+        flex: 1;
+        min-height: 0;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: clamp(8px, 1.2vh, 14px);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .ck-list-title {
+        flex: 0 0 auto;
+        font-size: clamp(11px, 1.1vw, 15px);
+        font-weight: 900;
+      }
+      .ck-list-title span { font-weight: 700; color: var(--muted); }
+
+      /* 掃碼：顯示本分享頁的 QR code，供手機掃描開啟 */
+      .ck-qr-wrap { justify-content: flex-start; }
+      .qr-box {
+        flex: 1;
+        min-height: 0;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .qr-box svg {
+        height: 100%;
+        width: auto;
+        max-width: 100%;
+        aspect-ratio: 1 / 1;
+        border-radius: 10px;
+      }
+      .qr-url {
+        flex: 0 0 auto;
+        font-size: clamp(9px, 0.85vw, 12px);
+        font-weight: 700;
+        color: var(--muted);
+        text-align: center;
+        word-break: break-all;
+        line-height: 1.25;
+      }
+      /* 投票資訊：顯示全部議題，超出範圍時可上下捲動 */
+      .vote-grid {
+        flex: 1;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-auto-rows: min-content;
+        align-content: start;
+        gap: clamp(8px, 1.4vh, 16px);
+      }
+      /* 議題卡：手機直屏時抬頭（標題／統計）在上、選項在下；
+         橫屏（電腦／平板橫放）時抬頭在左、選項在右並左右並排 */
+      .topic-card {
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: clamp(8px, 1.2vh, 14px);
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: clamp(8px, 1.2vh, 16px);
+        align-items: center;
+        min-width: 0;
+      }
+      .topic-info {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: clamp(4px, 0.6vh, 8px);
+      }
+      .topic-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+      .topic-title {
+        font-size: clamp(22px, 2.4vw, 38px);
+        font-weight: 900;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .topic-tag {
+        flex: 0 0 auto;
+        font-size: clamp(15px, 1.6vw, 24px);
+        font-weight: 800;
+        color: var(--brand);
+        background: rgba(211, 47, 47, 0.1);
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+      .topic-meta { font-size: clamp(16px, 1.7vw, 25px); font-weight: 700; color: var(--muted); }
+      .opt-list {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        gap: clamp(8px, 1.2vw, 18px);
+        align-content: start;
+      }
+      /* 每個選項（同意／不同意）自成一格區塊並放大顯示 */
+      .opt-row {
+        min-width: 0;
+        background: #f9fafb;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: clamp(8px, 1.2vh, 16px) clamp(10px, 1.2vw, 20px);
+        display: flex;
+        flex-direction: column;
+        gap: clamp(6px, 1vh, 12px);
+      }
+      .opt-row.is-pass {
+        background: rgba(22, 163, 74, 0.07);
+        border-color: rgba(22, 163, 74, 0.45);
+      }
+      /* 選項名稱在上，票數於其下方靠左對齊（三行） */
+      .opt-top {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: clamp(2px, 0.5vh, 6px);
+      }
+      .opt-label { font-weight: 800; font-size: clamp(20px, 2.3vw, 36px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .opt-count { font-weight: 800; color: var(--muted); font-size: clamp(12px, 1.15vw, 18px); text-align: left; line-height: 1.35; }
+      .opt-bar {
+        height: clamp(11px, 2vh, 24px);
+        border-radius: 999px;
+        background: #eef0f3;
+        overflow: hidden;
+      }
+      .opt-bar > i {
+        display: block;
+        height: 100%;
+        width: 0;
+        border-radius: 999px;
+        background: var(--brand);
+        transition: width 320ms ease;
+      }
+      .opt-row.is-pass .opt-bar > i { background: var(--ok); }
+      .opt-row.is-pass .opt-count { color: var(--ok); }
+      .opt-flag { font-size: clamp(14px, 1.5vw, 22px); font-weight: 800; color: var(--ok); }
+
+      /* 底部子分頁按鈕 */
+      .share-tabs {
+        display: flex;
+        gap: clamp(8px, 1vw, 14px);
+        padding: clamp(8px, 1.4vh, 16px) clamp(12px, 2vw, 28px) calc(clamp(8px, 1.4vh, 16px) + env(safe-area-inset-bottom));
+        background: #fff;
+        border-top: 1px solid var(--border);
+      }
+      .tab-btn {
+        flex: 1;
+        min-height: 48px;
+        border-radius: 12px;
+        border: 1px solid #d1d5db;
+        background: #fff;
+        color: #374151;
+        font-family: inherit;
+        font-size: clamp(14px, 1.5vw, 20px);
+        font-weight: 900;
+        cursor: pointer;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+      }
+      .tab-btn.is-active {
+        background: var(--brand);
+        border-color: var(--brand);
+        color: #fff;
+      }
+      .tab-btn:active { transform: translateY(1px); }
+
+      /* 橫屏（電腦、平板橫放）：報到資訊的「統計」與「已報到名單」左右並排、欄寬相同；
+         直屏（手機）維持上下堆疊。統計卡一律一行一個。 */
+      @media (orientation: landscape) {
+        .view.view-checkin:not([hidden]) {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          grid-template-rows: auto minmax(0, 1fr);
+          grid-template-areas:
+            "progress progress"
+            "stats list";
+        }
+        .view-checkin > .ck-bars { grid-area: progress; }
+        .view-checkin > .ck-stats {
+          grid-area: stats;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          align-content: stretch;
+        }
+        .view-checkin > .ck-list-wrap { grid-area: list; }
+        /* 橫屏時議題卡改回「抬頭在左、選項在右」左右並排；
+           抬頭欄縮小、選項欄加大 */
+        .topic-card {
+          grid-template-columns: minmax(0, 0.6fr) minmax(0, 1.4fr);
+          column-gap: clamp(10px, 1.4vw, 24px);
+          row-gap: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="share-app">
+      <header class="share-hd">
+        <div class="share-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M7 10.5 10 13.5 17 6.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M6.5 4.5h11A2 2 0 0 1 19.5 6.5v11a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+          </svg>
+        </div>
+        <div class="share-titles">
+          <div class="share-community" id="communityName">載入中…</div>
+          <div class="share-project" id="projectName">—</div>
+        </div>
+        <div class="share-live"><i aria-hidden="true"></i><span class="live-clock"><span id="liveDate">—</span><span id="liveTime">—</span></span></div>
+      </header>
+
+      <main class="share-bd">
+        <section class="view view-checkin" id="viewCheckin" aria-label="報到資訊">
+          <div class="ck-stats">
+            <div class="stat"><div class="stat-label">應到</div><div class="stat-value" id="ckTotal">0<small>戶</small></div></div>
+            <div class="stat tone-ok"><div class="stat-label">已報到</div><div class="stat-value" id="ckDone">0<small>戶</small></div></div>
+            <div class="stat"><div class="stat-label">未到</div><div class="stat-value" id="ckMiss">0<small>戶</small></div></div>
+            <div class="stat tone-rate">
+              <div class="stat-label">報到率（戶數／區分所有權）</div>
+              <div class="stat-value" id="ckRate">0%<small>／0%</small></div>
+              <div class="stat-sub" id="ckTarget">門檻 戶數 50%／區分所有權 50%</div>
+            </div>
+            <div class="stat" id="ckVerdictCard">
+              <div class="stat-label">報到結果</div>
+              <div class="stat-value" id="ckVerdict">未通過</div>
+              <div class="stat-sub" id="ckVerdictSub">戶數與區分所有權皆須達門檻</div>
+            </div>
+          </div>
+          <div class="ck-bars">
+            <div class="ck-bar-row"><span class="ck-bar-label">戶數</span><div class="ck-progress"><i id="ckBar"></i></div></div>
+            <div class="ck-bar-row"><span class="ck-bar-label">區分所有權</span><div class="ck-progress"><i id="ckShareBar"></i></div></div>
+          </div>
+          <div class="ck-list-wrap ck-qr-wrap">
+            <div class="ck-list-title">掃碼瀏覽本頁 <span id="qrStatus"></span></div>
+            <div class="qr-box" id="qrBox"><div class="empty">QR code 載入中…</div></div>
+            <div class="qr-url" id="qrUrl"></div>
+          </div>
+        </section>
+
+        <section class="view view-vote" id="viewVote" aria-label="投票資訊" hidden>
+          <div class="view-note" id="voteMore"></div>
+          <div class="vote-grid" id="voteGrid"></div>
+        </section>
+      </main>
+
+      <nav class="share-tabs" aria-label="資訊分頁">
+        <button class="tab-btn is-active" type="button" data-tab="checkin">報到資訊</button>
+        <button class="tab-btn" type="button" data-tab="vote">投票資訊</button>
+      </nav>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
+    <script>
+      (function () {
+        /* 新分頁（sessionStorage 不跨分頁）不會共用「SESSION 持久化」的登入狀態，
+           因此在初始化 Firebase 之前，先從開啟者分頁接手 Firebase 登入資料，
+           否則 Firestore 規則會以未登入身分拒絕讀取。 */
+        try {
+          if (window.opener && window.opener !== window && window.opener.sessionStorage) {
+            const src = window.opener.sessionStorage;
+            for (let i = 0; i < src.length; i += 1) {
+              const key = src.key(i);
+              if (key && key.indexOf("firebase:") === 0 && !sessionStorage.getItem(key)) {
+                sessionStorage.setItem(key, src.getItem(key));
+              }
+            }
+          }
+        } catch {}
+
+        const params = new URLSearchParams(location.search);
+        const cid = String(params.get("c") || "").trim() || "default";
+        let projectId = String(params.get("p") || "").trim();
+
+        const state = { communityName: cid, project: null, roster: [], topics: [], tab: "checkin" };
+        let db = null;
+        let rosterUnsub = null;
+        let topicsUnsub = null;
+        let resizeTimer = 0;
+
+        const el = (id) => document.getElementById(id);
+
+        function pad2(n) { return String(n).padStart(2, "0"); }
+
+        function escapeHtml(value) {
+          return String(value == null ? "" : value).replace(/[&<>"']/g, (ch) => (
+            { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]
+          ));
+        }
+
+        function normalizeRoster(doc) {
+          const v = doc.data() || {};
+          return {
+            id: doc.id,
+            name: String(v.name || "").trim() || "住戶",
+            houseNo: String(v.houseNo || "").trim(),
+            subHouseNo: String(v.subHouseNo || "").trim(),
+            ownership: String(v.ownership || "").trim(),
+            checkedIn: v.checkedIn === true,
+            checkedInAtMs: Number(v.checkedInAtMs || 0) || 0,
+            votes: v.votes && typeof v.votes === "object" ? v.votes : {},
+          };
+        }
+
+        function toOptionalPct(value) {
+          if (value === null || value === undefined || String(value).trim() === "") return null;
+          const n = Number(value);
+          if (!Number.isFinite(n)) return null;
+          return Math.min(100, Math.max(0, Math.round(n)));
+        }
+
+        function normalizeTopic(doc) {
+          const v = doc.data() || {};
+          const options = Array.isArray(v.options) ? v.options : [];
+          return {
+            id: doc.id,
+            title: String(v.title || "").trim() || "未命名議題",
+            enabled: v.enabled !== false,
+            singleChoice: v.singleChoice !== false,
+            order: Number(v.order || 0) || 0,
+            options: options.map((opt, index) => ({
+              id: String((opt && opt.id) || `opt${index + 1}`).trim(),
+              label: String((opt && opt.label) || "").trim() || `選項 ${index + 1}`,
+            })),
+            passCountPct: toOptionalPct(v.passCountPct),
+            passSharePct: toOptionalPct(v.passSharePct),
+          };
+        }
+
+        /* 通過門檻：報到與各議題皆需「戶數（人數）」與「區分所有權比例」同時達標 */
+        function projectSettings() {
+          const v = (state.project && state.project.settings) || {};
+          const pct = (value, fallback) => {
+            const n = Number(value);
+            if (!Number.isFinite(n)) return fallback;
+            return Math.min(100, Math.max(0, Math.round(n)));
+          };
+          return {
+            checkinTargetCountPct: pct(v.checkinTargetCountPct, 50),
+            checkinTargetSharePct: pct(v.checkinTargetSharePct, 50),
+            topicPassCountPct: pct(v.topicPassCountPct, 50),
+            topicPassSharePct: pct(v.topicPassSharePct, 50),
+          };
+        }
+
+        function ownershipValue(entry) {
+          const n = parseFloat(String((entry && entry.ownership) || "").replace(/[^\d.\-]/g, ""));
+          return Number.isFinite(n) && n > 0 ? n : 0;
+        }
+
+        function ownershipSum(list) {
+          return (Array.isArray(list) ? list : []).reduce((sum, entry) => sum + ownershipValue(entry), 0);
+        }
+
+        function pct(part, whole) {
+          return whole ? (part / whole) * 100 : 0;
+        }
+
+        function pctText(value) {
+          return `${Math.round(Number(value) || 0)}%`;
+        }
+
+        function checkinStats() {
+          const settings = projectSettings();
+          const list = state.roster;
+          const doneList = list.filter((item) => item.checkedIn);
+          const totalShare = ownershipSum(list);
+          const doneShare = ownershipSum(doneList);
+          const shareKnown = totalShare > 0;
+          const countRatePct = pct(doneList.length, list.length);
+          const shareRatePct = pct(doneShare, totalShare);
+          const targetCountPct = settings.checkinTargetCountPct;
+          const targetSharePct = settings.checkinTargetSharePct;
+          const missed = [];
+          if (countRatePct < targetCountPct) missed.push("戶數");
+          if (shareKnown && shareRatePct < targetSharePct) missed.push("區分所有權");
+          return {
+            totalCount: list.length,
+            doneCount: doneList.length,
+            missCount: Math.max(0, list.length - doneList.length),
+            totalShare,
+            doneShare,
+            shareKnown,
+            countRatePct,
+            shareRatePct,
+            targetCountPct,
+            targetSharePct,
+            missed,
+            passed: list.length > 0 && missed.length === 0,
+          };
+        }
+
+        function topicStats(topic) {
+          const settings = projectSettings();
+          const list = state.roster;
+          /* 有報到才能投票：議題一律以「實際報到人數」為分母 */
+          const checkedList = list.filter((entry) => entry && entry.checkedIn);
+          const totalCount = checkedList.length;
+          const totalShare = ownershipSum(checkedList);
+          const shareKnown = totalShare > 0;
+          const usingDefaultCount = topic.passCountPct === null || topic.passCountPct === undefined;
+          const usingDefaultShare = topic.passSharePct === null || topic.passSharePct === undefined;
+          const passCountPct = usingDefaultCount ? settings.topicPassCountPct : Number(topic.passCountPct);
+          const passSharePct = usingDefaultShare ? settings.topicPassSharePct : Number(topic.passSharePct);
+          const voters = checkedList.filter((entry) => {
+            const vote = entry.votes ? entry.votes[topic.id] : null;
+            return vote && Array.isArray(vote.optionIds) && vote.optionIds.length > 0;
+          });
+          const options = topic.options.map((opt) => {
+            const picked = voters.filter((entry) => {
+              const vote = entry.votes ? entry.votes[topic.id] : null;
+              return vote && Array.isArray(vote.optionIds) && vote.optionIds.indexOf(opt.id) !== -1;
+            });
+            const countRatePct = pct(picked.length, totalCount);
+            const shareRatePct = pct(ownershipSum(picked), totalShare);
+            return {
+              id: opt.id,
+              count: picked.length,
+              countRatePct,
+              shareRatePct,
+              passed: totalCount > 0
+                && countRatePct >= passCountPct
+                && (!shareKnown || shareRatePct >= passSharePct),
+            };
+          });
+          return {
+            totalCount,
+            totalShare,
+            shareKnown,
+            voterCount: voters.length,
+            participantCountPct: pct(voters.length, totalCount),
+            participantSharePct: pct(ownershipSum(voters), totalShare),
+            passCountPct,
+            passSharePct,
+            usingDefaultCount,
+            usingDefaultShare,
+            options,
+            passedCount: options.filter((item) => item.passed).length,
+          };
+        }
+
+        /* 抬頭狀態列（QR 區塊標題旁） */
+        function setQrStatus(message) {
+          const node = el("qrStatus");
+          if (node) node.textContent = message ? `（${message}）` : "";
+        }
+
+        /* 產生本分享頁的 QR code，供手機掃描開啟 */
+        function renderQrCode() {
+          const box = el("qrBox");
+          if (!box) return;
+          const url = location.href;
+          const urlEl = el("qrUrl");
+          if (urlEl) urlEl.textContent = url;
+          if (typeof qrcode !== "function") {
+            box.innerHTML = `<div class="empty">QR code 元件載入失敗</div>`;
+            return;
+          }
+          try {
+            const qr = qrcode(0, "M");
+            qr.addData(url);
+            qr.make();
+            const count = qr.getModuleCount();
+            const quiet = 2;
+            const size = count + quiet * 2;
+            let path = "";
+            for (let r = 0; r < count; r += 1) {
+              for (let c = 0; c < count; c += 1) {
+                if (qr.isDark(r, c)) path += `M${c + quiet} ${r + quiet}h1v1h-1z`;
+              }
+            }
+            box.innerHTML = `<svg viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges" role="img" aria-label="本頁 QR code"><rect width="${size}" height="${size}" fill="#fff" /><path d="${path}" fill="#111827" /></svg>`;
+          } catch (e) {
+            box.innerHTML = `<div class="empty">QR code 產生失敗</div>`;
+          }
+        }
+
+        function renderCheckin() {
+          const s = checkinStats();
+
+          el("ckTotal").innerHTML = `${s.totalCount}<small>戶</small>`;
+          el("ckDone").innerHTML = `${s.doneCount}<small>戶</small>`;
+          el("ckMiss").innerHTML = `${s.missCount}<small>戶</small>`;
+          el("ckRate").innerHTML = `${pctText(s.countRatePct)}<small>／${s.shareKnown ? pctText(s.shareRatePct) : "—"}</small>`;
+          el("ckTarget").textContent = `門檻 戶數 ${s.targetCountPct}%／區分所有權 ${s.targetSharePct}%`;
+          el("ckVerdict").textContent = s.passed ? "通過" : "未通過";
+          el("ckVerdictSub").textContent = s.passed
+            ? "戶數與區分所有權皆達門檻"
+            : `未達：${s.missed.join("、") || "—"}（兩者皆須達標）`;
+          const verdictCard = el("ckVerdictCard");
+          verdictCard.classList.toggle("tone-pass", s.passed);
+          verdictCard.classList.toggle("tone-fail", !s.passed);
+          el("ckBar").style.width = `${Math.min(100, s.countRatePct)}%`;
+          el("ckShareBar").style.width = `${Math.min(100, s.shareRatePct)}%`;
+        }
+
+        function renderVote() {
+          const topics = state.topics;
+          const grid = el("voteGrid");
+
+          if (!topics.length) {
+            grid.innerHTML = `<div class="empty">此專案尚無啟用中的議題</div>`;
+            el("voteMore").textContent = "";
+            return;
+          }
+
+          grid.innerHTML = topics.map((topic) => {
+            const s = topicStats(topic);
+
+            const rows = topic.options.map((opt) => {
+              const o = s.options.find((item) => item.id === opt.id)
+                || { count: 0, countRatePct: 0, shareRatePct: 0, passed: false };
+              return `
+                <div class="opt-row${o.passed ? " is-pass" : ""}">
+                  <div class="opt-top">
+                    <span class="opt-label">${escapeHtml(opt.label)}</span>
+                    <span class="opt-count">${o.count} 票<br />戶數 ${pctText(o.countRatePct)}${s.shareKnown ? `<br />區分所有權 ${pctText(o.shareRatePct)}` : ""}</span>
+                  </div>
+                  <div class="opt-bar"><i style="width:${Math.min(100, o.countRatePct)}%"></i></div>
+                  ${o.passed ? `<div class="opt-flag">已達通過門檻</div>` : ""}
+                </div>
+              `;
+            }).join("");
+
+            return `
+              <article class="topic-card">
+                <div class="topic-info">
+                  <div class="topic-hd">
+                    <span class="topic-title">${escapeHtml(topic.title)}</span>
+                    <span class="topic-tag">${topic.singleChoice ? "單選" : "多選"}</span>
+                  </div>
+                  <div class="topic-meta">投票 ${s.voterCount}/${s.totalCount} 戶</div>
+                </div>
+                <div class="opt-list">${rows}</div>
+              </article>
+            `;
+          }).join("");
+
+          // 議題不裁切，全部顯示；超出範圍時由上層容器提供捲動
+          const more = el("voteMore");
+          if (more) more.textContent = "";
+        }
+
+        /* 抬頭即時時鐘：日期（YYYY-MM-DD）與時間（HH:MM:SS）分兩行 */
+        function startClock() {
+          const dateEl = el("liveDate");
+          const timeEl = el("liveTime");
+          const pad = (n) => String(n).padStart(2, "0");
+          const tick = () => {
+            const now = new Date();
+            if (dateEl) dateEl.textContent = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+            if (timeEl) timeEl.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+          };
+          tick();
+          window.setInterval(tick, 1000);
+        }
+
+        function renderCurrent() {
+          if (state.tab === "checkin") renderCheckin();
+          else renderVote();
+        }
+
+        function switchTab(tab) {
+          const next = tab === "vote" ? "vote" : "checkin";
+          if (next === state.tab) return;
+          state.tab = next;
+          document.querySelectorAll(".tab-btn").forEach((btn) => {
+            btn.classList.toggle("is-active", String(btn.getAttribute("data-tab")) === next);
+          });
+          el("viewCheckin").hidden = next !== "checkin";
+          el("viewVote").hidden = next !== "vote";
+          renderCurrent();
+        }
+
+        function subscribe() {
+          const base = () => db.collection("communities").doc(cid)
+            .collection("checkinVoteProjects").doc(projectId);
+
+          rosterUnsub = base().collection("roster").onSnapshot((snap) => {
+            state.roster = (snap && snap.docs ? snap.docs : []).map(normalizeRoster);
+            if (state.tab === "checkin") renderCheckin();
+          }, () => {
+            setQrStatus("名單載入失敗，請確認權限");
+          });
+
+          topicsUnsub = base().collection("topics").onSnapshot((snap) => {
+            state.topics = (snap && snap.docs ? snap.docs : [])
+              .map(normalizeTopic)
+              .filter((topic) => topic.enabled !== false)
+              .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title, "zh-Hant"));
+            if (state.tab === "vote") renderVote();
+          }, () => {
+            el("voteGrid").innerHTML = `<div class="empty">議題載入失敗，請確認權限</div>`;
+          });
+        }
+
+        document.querySelectorAll(".tab-btn").forEach((btn) => {
+          btn.addEventListener("click", () => switchTab(String(btn.getAttribute("data-tab") || "checkin")));
+        });
+
+        window.addEventListener("resize", () => {
+          window.clearTimeout(resizeTimer);
+          resizeTimer = window.setTimeout(renderCurrent, 150);
+        });
+
+        window.addEventListener("beforeunload", () => {
+          if (rosterUnsub) rosterUnsub();
+          if (topicsUnsub) topicsUnsub();
+        });
+
+        /* 等待 Auth 還原完成再讀取 Firestore，避免以未登入身分發出請求而被規則拒絕 */
+        function waitForUser(timeoutMs) {
+          return new Promise((resolve) => {
+            let done = false;
+            let unsub = null;
+            const finish = (user) => {
+              if (done) return;
+              done = true;
+              try { if (typeof unsub === "function") unsub(); } catch {}
+              resolve(user || null);
+            };
+            unsub = firebase.auth().onAuthStateChanged((user) => { if (user) finish(user); });
+            window.setTimeout(() => finish(firebase.auth().currentUser || null), timeoutMs || 1500);
+          });
+        }
+
+        /* 初次讀取若因 Auth 權杖尚未就緒被拒，短暫重試，避免間歇性 permission-denied */
+        async function getDocWithRetry(ref, attempts) {
+          const max = attempts || 3;
+          let last = null;
+          for (let i = 0; i < max; i += 1) {
+            try {
+              return await ref.get();
+            } catch (e) {
+              last = e;
+              const code = String((e && e.code) || "");
+              if (code.indexOf("permission-denied") === -1 && code.indexOf("unauthenticated") === -1) throw e;
+              await new Promise((r) => window.setTimeout(r, 250 * (i + 1)));
+            }
+          }
+          throw last;
+        }
+
+        async function boot() {
+          startClock();
+          renderQrCode();
+          try {
+            firebase.initializeApp(window.FIREBASE_CONFIG);
+            db = firebase.firestore();
+          } catch {
+            el("projectName").textContent = "Firebase 初始化失敗";
+            return;
+          }
+
+          /* 先等 Auth 還原（若有的話），但不再阻擋未登入瀏覽：
+             未登入時仍嘗試讀取，能否看到資料交由 Firestore 規則決定。 */
+          await waitForUser();
+
+          try {
+            const cSnap = await getDocWithRetry(db.collection("communities").doc(cid));
+            const cdata = cSnap && cSnap.exists ? (cSnap.data() || {}) : {};
+            state.communityName = String(cdata.name || "").trim() || cid;
+            el("communityName").textContent = state.communityName;
+
+            if (!projectId) projectId = String(cdata.checkinVoteActiveProjectId || "").trim();
+            if (!projectId) throw new Error("此社區尚未設定目前專案");
+
+            const pSnap = await getDocWithRetry(db.collection("communities").doc(cid)
+              .collection("checkinVoteProjects").doc(projectId));
+            if (!pSnap.exists) throw new Error("找不到指定專案");
+
+            const pdata = pSnap.data() || {};
+            state.project = {
+              id: projectId,
+              name: String(pdata.name || "").trim() || "未命名專案",
+              settings: pdata.settings && typeof pdata.settings === "object" ? pdata.settings : {},
+            };
+            el("projectName").textContent = state.project.name;
+            document.title = `分享｜${state.project.name}`;
+
+            renderCurrent();
+            subscribe();
+          } catch (e) {
+            el("projectName").textContent = `載入失敗：${(e && e.message) || e}`;
+            setQrStatus("無法載入專案資料");
+          }
+        }
+
+        boot();
+      })();
+    </script>
+  </body>
+</html>

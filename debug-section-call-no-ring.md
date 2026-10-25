@@ -1,7 +1,6 @@
 # Debug Session: section-call-no-ring
 - **Status**: [OPEN]
 - **Issue**: `chatphone.html` 中點 `img` 可正常撥號並讓住戶端響鈴，但點整張 `section.account-card` 時，住戶端沒有來電畫面也沒有響鈴。
-- **Debug Server**: http://127.0.0.1:7777/event
 - **Log File**: .dbg/trae-debug-log-section-call-no-ring.ndjson
 - **Last Updated**: 2026-06-30
 
@@ -21,7 +20,6 @@
 | E | `section` 路徑在 `getUserMedia` 或 `callDocRef.set` 失敗（權限/網路/gesture），導致受話端完全收不到 `ringing` 文件 | High | Low | Pending |
 
 ## Log Evidence
-- Debug collector started on `127.0.0.1:7777`
 - Instrumentation added in `chatphone.html` for pointer/click path and call document write path
 
 ## Verification Conclusion

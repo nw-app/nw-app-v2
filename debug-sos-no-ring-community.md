@@ -1,7 +1,6 @@
 # Debug Session: sos-no-ring-community
 - **Status**: [OPEN]
 - **Issue**: 住戶端按下 SOS 後，社區角色登入的後台頁面沒有響聲（預期應與系統管理員一致會響鈴/跳提醒）。
-- **Debug Server**: http://127.0.0.1:7777/event
 - **Log File**: .dbg/trae-debug-log-sos-no-ring-community.ndjson
 
 ## Reproduction Steps

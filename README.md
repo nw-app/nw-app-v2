@@ -109,10 +109,10 @@
 ### 🏁 5. 公告系統（已完成）
 > 包含「社區園地、財務報表、會議紀錄、修繕報告」等圖片、PDF 公告功能，全面取代紙本公告欄。
 - **頁面（四類公告各有獨立頁 + 住戶前台入口）**：
-  - 社區園地：`bulletin-community.html?v=8`（JS：`bulletin-community.js?v=4`）
-  - 財務報表：`bulletin-finance.html?v=8`（JS：`bulletin-finance.js?v=4`）
-  - 會議紀錄：`bulletin-meeting.html?v=8`（JS：`bulletin-meeting.js?v=4`）
-  - 修繕報告：`bulletin-repair.html?v=8`（JS：`bulletin-repair.js?v=4`）
+  - 社區園地：`bulletin-community.html?v=9`（JS：`bulletin-community.js?v=5`）
+  - 財務報表：`bulletin-finance.html?v=9`（JS：`bulletin-finance.js?v=5`）
+  - 會議紀錄：`bulletin-meeting.html?v=9`（JS：`bulletin-meeting.js?v=5`）
+  - 修繕報告：`bulletin-repair.html?v=9`（JS：`bulletin-repair.js?v=5`）
 - **共用後台發布架構（admin.html）**：
   - ✅ 公告 CRUD：分類、置頂（永遠顯示在最上方）、標籤、**預約發布時間**
   - ✅ 發布對象：全住戶 / 特定棟別 / 特定住戶（例：只有 A 棟住戶能看到 A 棟電梯維修公告）
@@ -384,8 +384,8 @@
 
 ### 🏁 17. 清潔通報（已完成）
 > 住戶可即時通報清潔人員處理清潔，加速環境問題回應。
-- **頁面**：`bulletin-clean.html?v=8`（整合住戶通報 + 後台查核 + 排程）
-- **對應 JS**：`js/bulletin-clean.js?v=1`
+- **頁面**：`bulletin-clean.html?v=9`（整合住戶通報 + 後台查核 + 排程）
+- **對應 JS**：`js/bulletin-clean.js?v=2`
 - **住戶端通報**：
   - ✅ 一鍵通報：選擇地點（A 棟 3F 樓梯間 / B 棟電梯 / 公園 …）+ 問題描述（垃圾滿、髒亂、異味…）+ **上傳現場照片最多 3 張**
   - ✅ 進度追蹤：未處理 / 處理中 / 已完成（可看處理前後對比圖）
