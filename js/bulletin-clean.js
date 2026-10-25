@@ -36,6 +36,8 @@
   let currentUserName = "";
   let currentUserHouseNo = "";
   let bulletinPdfMap = new Map();
+  let readIds = new Set();
+  let readUnsub = null;
 
   function nameFromEmail(email) {
     const e = String(email || '').trim();
@@ -108,8 +110,7 @@
     }
     
     return data.filter(item => {
-      const readKey = `bulletin_read_${BULLETIN_TYPE}_${item.id}`;
-      const isRead = localStorage.getItem(readKey) === 'true';
+      const isRead = readIds.has(String(item.id || ''));
       
       if (currentFilter === 'unread') {
         return !isRead;
@@ -160,8 +161,7 @@
       if (hasPdf) {
         try { pdfMap.set(String(item.id || ''), String(attachment.dataUrl || '')); } catch {}
       }
-      const readKey = `bulletin_read_${BULLETIN_TYPE}_${item.id}`;
-      const isRead = localStorage.getItem(readKey) === 'true';
+      const isRead = readIds.has(String(item.id || ''));
       
       let tagBgColor, tagTextColor;
       if (tagColor === 'red') {
@@ -184,7 +184,7 @@
                 ${!isRead ? '<span style="display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; font-weight:600; background:#dc2626; color:#fff;">未讀</span>' : '<span style="display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; font-weight:600; background:#6b7280; color:#fff;">已讀</span>'}
               </div>
               <div class="bulletin-content" style="display:none;">
-                <p style="font-size:14px; margin:8px 0 12px 0; color:#333; line-height:1.5;">${escapeHtml(item.content || '')}</p>
+                <p style="font-size:14px; margin:8px 0 12px 0; color:#333; line-height:1.5; white-space:pre-wrap;">${escapeHtml(item.content || '')}</p>
                 <div style="font-size:12px; color:#888;">建立時間：${formatDate(item.createdAt)}</div>
               </div>
             </div>
@@ -260,9 +260,10 @@
     }
     
     function markAsRead(bulletinItem) {
-      const bulletinId = bulletinItem.getAttribute('data-bulletin-id');
-      const readKey = `bulletin_read_${BULLETIN_TYPE}_${bulletinId}`;
-      localStorage.setItem(readKey, 'true');
+      const bulletinId = String(bulletinItem.getAttribute('data-bulletin-id') || '').trim();
+      if (!bulletinId) return;
+      const isFirstRead = !readIds.has(bulletinId);
+      readIds.add(bulletinId);
       
       const titleEl = bulletinItem.querySelector('h3');
       const readTag = bulletinItem.querySelector('h3 + span');
@@ -274,6 +275,9 @@
         readTag.textContent = '已讀';
         readTag.style.background = '#6b7280';
       }
+      
+      // 首次閱讀才寫入 Firestore 已讀紀錄
+      if (isFirstRead) persistReadReceipt(bulletinId);
     }
     
     toggleButtons.forEach(btn => {
@@ -392,10 +396,21 @@
             data.push({ id: doc.id, ...doc.data() });
           });
           
+          // Sort：置頂 → 重要 → 建立時間（新到舊）
+          const pinnedOf = (x) => (x && x.isPinned ? 1 : 0);
+          const importantOf = (x) => (x && x.isImportant ? 1 : 0);
+          const timeOf = (x) => {
+            const t = x && x.createdAt;
+            if (!t) return 0;
+            if (t.toMillis) return t.toMillis();
+            if (t instanceof Date) return t.getTime();
+            const d = new Date(t).getTime();
+            return isNaN(d) ? 0 : d;
+          };
           data.sort((a, b) => {
-            const tA = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : a.createdAt) : 0;
-            const tB = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : b.createdAt) : 0;
-            return tB - tA;
+            if (pinnedOf(a) !== pinnedOf(b)) return pinnedOf(b) - pinnedOf(a);
+            if (importantOf(a) !== importantOf(b)) return importantOf(b) - importantOf(a);
+            return timeOf(b) - timeOf(a);
           });
           
           renderBulletinList(data);
@@ -405,6 +420,49 @@
           renderBulletinList([]);
         }
       );
+  }
+
+  // 監聽自己的已讀清單（跨裝置一致）
+  function setupReadListener(communityId, uid) {
+    if (readUnsub) {
+      try { readUnsub(); } catch {}
+      readUnsub = null;
+    }
+    if (!communityId || !uid) return;
+    readUnsub = db
+      .collection('communities')
+      .doc(communityId)
+      .collection('bulletinReads')
+      .doc(String(uid))
+      .onSnapshot(
+        (snap) => {
+          const ids = snap && snap.exists && Array.isArray(snap.data()?.ids) ? snap.data().ids : [];
+          readIds = new Set(ids.map((x) => String(x || '')));
+          renderBulletinList(allBulletinsData);
+        },
+        (err) => {
+          console.warn("[Bulletin] 已讀紀錄讀取失敗:", err);
+        }
+      );
+  }
+
+  // 首次閱讀：寫入自己的已讀清單，並累加該公告的已讀人數
+  function persistReadReceipt(bulletinId) {
+    const communityId = getActiveCommunityId();
+    const uid = String(currentUserId || '').trim();
+    if (!communityId || !uid || !bulletinId) return;
+    const FieldValue = firebase.firestore.FieldValue;
+    const readRef = db.collection('communities').doc(communityId).collection('bulletinReads').doc(uid);
+    const countRef = db.collection('communities').doc(communityId).collection('bulletinReadCounts').doc(String(bulletinId));
+    db.runTransaction(async (tx) => {
+      const snap = await tx.get(readRef);
+      const ids = snap && snap.exists && Array.isArray(snap.data()?.ids) ? snap.data().ids.map((x) => String(x || '')) : [];
+      if (ids.indexOf(String(bulletinId)) !== -1) return;
+      tx.set(readRef, { ids: ids.concat([String(bulletinId)]), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      tx.set(countRef, { count: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    }).catch((err) => {
+      console.warn("[Bulletin] 已讀紀錄寫入失敗:", err);
+    });
   }
 
   function init() {
@@ -427,6 +485,7 @@
         await loadProfile(user);
         const communityId = getActiveCommunityId();
         console.log("[Bulletin] Community ID:", communityId);
+        setupReadListener(communityId, user.uid);
         setupBulletinsListener(communityId, BULLETIN_TYPE);
       }
     });

@@ -254,7 +254,7 @@
     { id: "community-staff", name: "管理帳號", desc: "管理社區後台登入帳號（總幹事／秘書／保全）", badge: "人員", page: "#community/community-staff" },
     { id: "suite", name: "套房專區", desc: "客製化電費、水費、維護費、其他費用公式計算", badge: "套房", page: "#community/suite" },
     { id: "finance", name: "財報系統", desc: "收入／支出明細、銀行明細、報表匯出、類別名單與設定", badge: "財務", page: "#community/finance" },
-    { id: "checkin-vote", name: "報到投票", desc: "活動報到、投票與統計結果（示意）", badge: "活動", page: "#community/checkin-vote" },
+    { id: "checkin-vote", name: "報到投票", desc: "活動報到、投票、名單、文件與掃碼管理", badge: "活動", page: "#community/checkin-vote" },
     { id: "assignments", name: "交辦事項", desc: "派工、追蹤進度、回報與結案（示意）", badge: "待辦", page: "#community/assignments" },
     { id: "duty", name: "勤務管理", desc: "排班、值勤紀錄與交接（示意）", badge: "管理", page: "#community/duty" },
     { id: "care", name: "關懷救護", desc: "緊急聯絡、救護資訊與關懷通報（示意）", badge: "關懷", page: "#community/care" },
@@ -276,9 +276,16 @@
     const host = contentEl.firstElementChild;
     const hd = host && host.classList.contains("card") ? host.querySelector(":scope > .card-hd") : null;
     if (!hd) {
+      /* 首頁（卡片牆）沒有 .card-hd，改顯示即時資訊列 */
+      if (contentEl.querySelector("#moduleGrid")) {
+        renderDashboardMidtop();
+        return;
+      }
+      stopDashboardClock();
       if (midtopEl.firstElementChild) midtopEl.innerHTML = "";
       return;
     }
+    stopDashboardClock();
     if (midtopEl.firstElementChild !== hd) {
       midtopEl.innerHTML = "";
       midtopEl.appendChild(hd);
@@ -296,6 +303,53 @@
      事件就會綁在被稍後丟棄的舊節點上，導致畫面上的按鈕點了沒反應。 */
   function clearPageHeader() {
     if (midtopEl && midtopEl.firstElementChild) midtopEl.innerHTML = "";
+  }
+
+  /* 首頁「頁中上」即時資訊列：日期時間 ＋ 今日待辦統計。
+     與其他分頁的 .card-hd 維持 chip + h2 + p 同構結構。 */
+  let dashboardClockTimer = 0;
+  function stopDashboardClock() {
+    if (dashboardClockTimer) {
+      window.clearInterval(dashboardClockTimer);
+      dashboardClockTimer = 0;
+    }
+  }
+  function dashboardRealtimeText() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const week = "日一二三四五六".charAt(d.getDay());
+    const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}（週${week}）${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    const stats = [
+      ["待審訪客", _lastVisitorsPendingCount],
+      ["未領包裹", _lastParcelPendingCount],
+      ["待審帳號", _lastResidentsPendingCount],
+    ].map(([label, count]) => `${label} ${Number(count) || 0}`).join(" · ");
+    return `${stamp} ｜ ${stats}`;
+  }
+  function renderDashboardMidtop() {
+    if (!midtopEl) return;
+    if (!midtopEl.querySelector("#dashboardRealtimeText")) {
+      midtopEl.innerHTML = `
+        <div class="card-hd">
+          <div class="left">
+            <div class="chip" aria-hidden="true">${homeSvg()}</div>
+            <div style="min-width:0;">
+              <h2>首頁</h2>
+              <p id="dashboardRealtimeText"></p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    const textEl = document.getElementById("dashboardRealtimeText");
+    if (textEl) textEl.textContent = dashboardRealtimeText();
+    if (!dashboardClockTimer) {
+      dashboardClockTimer = window.setInterval(() => {
+        const el = document.getElementById("dashboardRealtimeText");
+        if (!el) { stopDashboardClock(); return; }
+        el.textContent = dashboardRealtimeText();
+      }, 1000);
+    }
   }
 
   function toast(message) {
@@ -737,7 +791,7 @@
 
     const mods = orderedModules();
     const items = [
-      { id: "community-dashboard", label: "總覽", url: "#community/community-dashboard", icon: homeSvg() },
+      { id: "community-dashboard", label: "首頁", url: "#community/community-dashboard", icon: homeSvg() },
       ...mods.map((m) => {
         const cfg = resolveUrl(m.id);
         const url = cfg && cfg.enabled && cfg.url ? cfg.url : `#community/${m.id}`;
@@ -859,11 +913,13 @@
     const gate = cfg && cfg.careSubnav && typeof cfg.careSubnav === "object" ? cfg.careSubnav : null;
     const tabs = gate && gate.communityTabs && typeof gate.communityTabs === "object" ? gate.communityTabs : null;
     const base = {
+      overview: true,
       sos: true,
       "72h": true,
       reminder: true,
     };
     return {
+      overview: tabs && Object.prototype.hasOwnProperty.call(tabs, "overview") ? tabs.overview !== false : base.overview,
       sos: tabs && Object.prototype.hasOwnProperty.call(tabs, "sos") ? tabs.sos !== false : base.sos,
       "72h": tabs && Object.prototype.hasOwnProperty.call(tabs, "72h") ? tabs["72h"] !== false : base["72h"],
       reminder: tabs && Object.prototype.hasOwnProperty.call(tabs, "reminder") ? tabs.reminder !== false : base.reminder,
@@ -872,7 +928,7 @@
 
   function isCareSubnavEnabledForCommunity() {
     const t = getCareSubnavCommunityTabs();
-    return !!(t && (t.sos || t["72h"] || t.reminder));
+    return !!(t && (t.overview || t.sos || t["72h"] || t.reminder));
   }
 
   function isResidentsSubnavEnabledForCommunity() {
@@ -8675,7 +8731,31 @@
     updateFooterActiveNav();
   }
 
-  // 高度壓縮圖片用於公告，避免超過Firebase 1MB限制
+  // 公告附件容量防護：Firestore 單文件上限 1MiB，附件以 Base64 內嵌，需保留安全餘量。
+  const BULLETIN_MAX_PAYLOAD_BYTES = 900 * 1024;      // 單筆公告（含附件）總容量上限
+  const BULLETIN_IMAGE_BUDGET_BYTES = 180 * 1024;     // 單張圖片 Base64 預算
+  const BULLETIN_PDF_BUDGET_BYTES = 620 * 1024;       // PDF 附件 Base64 預算
+
+  /** 取 DataURL 的 Base64 實際位元組數 */
+  function dataUrlBase64Bytes(dataUrl) {
+    const raw = String(dataUrl || "");
+    const comma = raw.indexOf(",");
+    const b64 = comma >= 0 ? raw.slice(comma + 1) : raw;
+    if (!b64) return 0;
+    const padding = (b64.match(/=+$/) || [""])[0].length;
+    return Math.max(0, Math.floor((b64.length * 3) / 4) - padding);
+  }
+
+  /** 估算物件以 UTF-8 序列化後的位元組數 */
+  function estimatePayloadBytes(obj) {
+    try {
+      const json = JSON.stringify(obj);
+      if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(json).length;
+      return unescape(encodeURIComponent(json)).length;
+    } catch { return 0; }
+  }
+
+  // 公告圖片採階梯式壓縮，逐級降低尺寸與品質，直到符合單張預算
   const fileToImageDataUrlForBulletin = (file) => new Promise((resolve, reject) => {
     if (!file) {
       resolve("");
@@ -8687,34 +8767,41 @@
       const img = new Image();
       img.onerror = () => reject(new Error("image-decode-failed"));
       img.onload = () => {
-        const maxWidth = 800; // 最大寬度
-        const maxHeight = 600; // 最大高度
-        let srcW = img.naturalWidth || 0;
-        let srcH = img.naturalHeight || 0;
+        const srcW = img.naturalWidth || 0;
+        const srcH = img.naturalHeight || 0;
         if (!srcW || !srcH) {
           reject(new Error("bad-image"));
           return;
         }
-        
-        // 計算縮放比例，保持長寬比
-        let targetW = srcW;
-        let targetH = srcH;
-        if (srcW > maxWidth || srcH > maxHeight) {
-          const ratio = Math.min(maxWidth / srcW, maxHeight / srcH);
-          targetW = Math.round(srcW * ratio);
-          targetH = Math.round(srcH * ratio);
-        }
-        
         const canvas = document.createElement("canvas");
-        canvas.width = targetW;
-        canvas.height = targetH;
         const ctx = canvas.getContext("2d");
         if (!ctx) {
           reject(new Error("no-canvas"));
           return;
         }
-        ctx.drawImage(img, 0, 0, targetW, targetH);
-        resolve(canvas.toDataURL("image/jpeg", 0.5)); // 質量設為 0.5，更緊湊
+        const ladder = [
+          { w: 800, h: 600, q: 0.5 },
+          { w: 640, h: 480, q: 0.45 },
+          { w: 520, h: 390, q: 0.4 },
+          { w: 420, h: 315, q: 0.35 },
+        ];
+        let best = "";
+        for (const step of ladder) {
+          let targetW = srcW;
+          let targetH = srcH;
+          if (srcW > step.w || srcH > step.h) {
+            const ratio = Math.min(step.w / srcW, step.h / srcH);
+            targetW = Math.max(1, Math.round(srcW * ratio));
+            targetH = Math.max(1, Math.round(srcH * ratio));
+          }
+          canvas.width = targetW;
+          canvas.height = targetH;
+          ctx.clearRect(0, 0, targetW, targetH);
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+          best = canvas.toDataURL("image/jpeg", step.q);
+          if (dataUrlBase64Bytes(best) <= BULLETIN_IMAGE_BUDGET_BYTES) break;
+        }
+        resolve(best);
       };
       img.src = String(reader.result || "");
     };
@@ -8748,29 +8835,206 @@
     }, true);
   }
 
+  /* ── 公告系統：監聽器生命週期（模組層，避免切換子分頁／離開模組時殘留） ── */
+  let bulletinUnsubscribe = null;
+  let bulletinReadCountUnsubscribe = null;
+  let bulletinReadCounts = {};
+  let bulletinData = [];
+  let bulletinRenderListRef = null;
+
+  function stopBulletinsSubscription() {
+    if (bulletinUnsubscribe) {
+      try { bulletinUnsubscribe(); } catch {}
+      bulletinUnsubscribe = null;
+    }
+    if (bulletinReadCountUnsubscribe) {
+      try { bulletinReadCountUnsubscribe(); } catch {}
+      bulletinReadCountUnsubscribe = null;
+    }
+    bulletinReadCounts = {};
+    bulletinRenderListRef = null;
+  }
+
+  /** 監聽公告已讀統計（bulletinReadCounts/{bulletinId}: { count }） */
+  function subscribeBulletinReadCounts(cid) {
+    if (bulletinReadCountUnsubscribe) {
+      try { bulletinReadCountUnsubscribe(); } catch {}
+      bulletinReadCountUnsubscribe = null;
+    }
+    const communityId = String(cid || "").trim();
+    if (!communityId) return;
+    bulletinReadCountUnsubscribe = db
+      .collection("communities").doc(communityId).collection("bulletinReadCounts")
+      .onSnapshot(
+        (snap) => {
+          const map = {};
+          snap.forEach((doc) => {
+            const data = doc.data() || {};
+            map[String(doc.id)] = Number(data.count || 0);
+          });
+          bulletinReadCounts = map;
+          if (typeof bulletinRenderListRef === "function" && bulletinData.length) {
+            try { bulletinRenderListRef(); } catch {}
+          }
+        },
+        () => { /* 讀取失敗時不影響公告列表 */ }
+      );
+  }
+
+  /* ── 公告系統：刪除二次授權（必填原因，並寫入稽核） ── */
+  const BULLETIN_TYPE_LABELS = {
+    community: "社區園地",
+    finance: "財務報表",
+    meeting: "會議紀錄",
+    repair: "修繕報告"
+  };
+  const BULLETIN_DELETE_REASONS = ["重複張貼", "內容有誤", "已過期", "誤發", "測試資料"];
+
+  /** 寫入公告稽核紀錄（失敗不阻斷主流程） */
+  async function writeBulletinAudit(cid, payload) {
+    const communityId = String(cid || "").trim();
+    if (!communityId) return;
+    try {
+      const op = await resolveParcelOperator80();
+      await db.collection("communities").doc(communityId).collection("bulletinAudit").add({
+        action: String((payload && payload.action) || ""),
+        bulletinId: String((payload && payload.bulletinId) || ""),
+        type: String((payload && payload.type) || ""),
+        title: String((payload && payload.title) || ""),
+        reason: String((payload && payload.reason) || ""),
+        snapshot: (payload && payload.snapshot) || null,
+        operatorUid: op.uid,
+        operatorAccount: op.account,
+        operatorName: op.displayName,
+        at: FieldValue.serverTimestamp()
+      });
+    } catch (err) { /* 稽核失敗不阻斷主流程 */ }
+  }
+
+  /** 刪除公告：必填原因 + 稽核快照後才硬刪除 */
+  function openBulletinDeleteModal({ cid, bulletinId, bulletin, onDone }) {
+    const item = bulletin || {};
+    const modal = ensureModal("bulletinDeleteModal", "modal-bulletin-delete", "min(560px, 92vw)");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const chips = BULLETIN_DELETE_REASONS
+      .map((r) => `<button class="btn btn-sm" type="button" data-bd-reason="${escapeHtml(r)}">${escapeHtml(r)}</button>`)
+      .join("");
+
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="bulletinDeleteTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="bulletinDeleteTitle">刪除公告（需填寫原因）</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:grid; gap:6px; padding:12px; border:1px solid #e5e7eb; border-radius:10px; background:#f9fafb; margin-bottom:12px;">
+            <div style="display:flex; gap:8px; font-size:calc(14px * var(--fs, 1));"><span style="min-width:72px; color:#6b7280;">標題</span><strong style="word-break:break-word;">${escapeHtml(item.title || "—")}</strong></div>
+            <div style="display:flex; gap:8px; font-size:calc(14px * var(--fs, 1));"><span style="min-width:72px; color:#6b7280;">分類</span><strong>${escapeHtml(BULLETIN_TYPE_LABELS[String(item.type || "").toLowerCase()] || "公告")}</strong></div>
+          </div>
+          <div class="field">
+            <label for="bdReason">刪除原因（必填）</label>
+            <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;">${chips}</div>
+            <textarea id="bdReason" rows="3" placeholder="請說明刪除此筆公告的原因"></textarea>
+          </div>
+          <div class="status" id="bdStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+          <button class="btn btn-primary" type="button" id="bdConfirm" style="background:#d32f2f;border-color:#d32f2f;">確認刪除</button>
+        </div>
+      </div>
+    `.trim();
+
+    const reasonEl = modal.querySelector("#bdReason");
+    const statusEl = modal.querySelector("#bdStatus");
+    const btnConfirm = modal.querySelector("#bdConfirm");
+
+    modal.querySelectorAll("[data-bd-reason]").forEach((btn) => {
+      btn.onclick = () => {
+        const r = String(btn.getAttribute("data-bd-reason") || "");
+        if (!reasonEl) return;
+        reasonEl.value = reasonEl.value.trim() ? `${reasonEl.value.trim()}、${r}` : r;
+        reasonEl.focus();
+      };
+    });
+
+    if (btnConfirm) {
+      btnConfirm.onclick = async () => {
+        const reason = String(reasonEl ? reasonEl.value : "").trim();
+        if (!reason) {
+          if (statusEl) {
+            statusEl.textContent = "請填寫刪除原因後再確認。";
+            statusEl.hidden = false;
+            statusEl.classList.add("error");
+          }
+          if (reasonEl) reasonEl.focus();
+          return;
+        }
+        btnConfirm.disabled = true;
+        try {
+          await writeBulletinAudit(cid, {
+            action: "delete",
+            bulletinId,
+            type: item.type || "",
+            title: item.title || "",
+            reason,
+            snapshot: {
+              title: item.title || "",
+              subtitle: item.subtitle || "",
+              content: item.content || "",
+              type: item.type || "",
+              isPinned: Boolean(item.isPinned),
+              isImportant: Boolean(item.isImportant),
+              images: Array.isArray(item.images) ? item.images : [],
+              attachment: item.attachment || null,
+              createdAt: formatDate(item.createdAt)
+            }
+          });
+          await db.collection("communities").doc(cid).collection("bulletins").doc(bulletinId).delete();
+          modal.hidden = true;
+          detach();
+          if (typeof onDone === "function") onDone();
+        } catch (err) {
+          if (statusEl) {
+            statusEl.textContent = "刪除失敗：" + (err && err.message ? err.message : "未知錯誤");
+            statusEl.hidden = false;
+            statusEl.classList.add("error");
+          }
+        } finally {
+          btnConfirm.disabled = false;
+        }
+      };
+    }
+
+    modal.hidden = false;
+  }
+
   function renderBulletinModule() {
+    stopBulletinsSubscription();
     const cid = resolveActiveCommunityId();
+    subscribeBulletinReadCounts(cid);
     const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
     
     // 从哈希路由中获取当前页面
     const raw = String(location.hash || "").replace(/^#/, "").trim();
     const parts = raw.split("/");
-    let currentPage = "community"; // "community", "finance", "meeting", "repair"
+    let currentPage = "overview"; // "overview", "community", "finance", "meeting", "repair"
     if (parts.length >= 3 && parts[0] === "community" && parts[1] === "bulletin") {
       const pageParam = parts[2];
-      if (["community", "finance", "meeting", "repair"].includes(pageParam)) {
+      if (["overview", "community", "finance", "meeting", "repair"].includes(pageParam)) {
         currentPage = pageParam;
       }
     }
     
-    let unsubscribeBulletins = null;
-    let bulletinData = [];
-
     // 渲染 subnav 按钮的函数
     const renderSubnav = () => {
       if (!subnavEl) return;
       
       subnavEl.innerHTML = `
+        <button class="btn btn-sm ${currentPage === "overview" ? "btn-primary" : ""}" type="button" data-bulletin-page="overview">總覽</button>
         <button class="btn btn-sm ${currentPage === "community" ? "btn-primary" : ""}" type="button" data-bulletin-page="community">社區園地</button>
         <button class="btn btn-sm ${currentPage === "finance" ? "btn-primary" : ""}" type="button" data-bulletin-page="finance">財務報表</button>
         <button class="btn btn-sm ${currentPage === "meeting" ? "btn-primary" : ""}" type="button" data-bulletin-page="meeting">會議紀錄</button>
@@ -8780,10 +9044,10 @@
       // 绑定按钮点击事件
       subnavEl.querySelectorAll("[data-bulletin-page]").forEach(btn => {
         btn.addEventListener("click", () => {
-          currentPage = btn.getAttribute("data-bulletin-page");
-          // 更新哈希路由
-          location.hash = `#community/bulletin/${currentPage}`;
-          renderPage();
+          const nextPage = btn.getAttribute("data-bulletin-page");
+          if (nextPage === currentPage) return;
+          // 只更新哈希路由，交由 hashchange → handleHashRoute 統一重新渲染（避免重複監聽與雙重渲染）
+          location.hash = `#community/bulletin/${nextPage}`;
         });
       });
     };
@@ -8792,7 +9056,9 @@
     const renderPage = () => {
       renderSubnav();
       
-      if (currentPage === "community") {
+      if (currentPage === "overview") {
+        renderBulletinOverview();
+      } else if (currentPage === "community") {
         renderCommunityGarden();
       } else if (currentPage === "finance") {
         renderFinanceReport();
@@ -8815,6 +9081,135 @@
       return `${y}-${m}-${da} ${h}:${mi}`;
     };
 
+    // 取得時間毫秒（相容 Firestore Timestamp / Date / 數字 / 字串）
+    const toTime = (value) => {
+      if (!value) return 0;
+      if (typeof value.toMillis === "function") return value.toMillis();
+      if (value instanceof Date) return value.getTime();
+      const t = new Date(value).getTime();
+      return Number.isFinite(t) ? t : 0;
+    };
+
+    // 公告排序：置頂 → 重要 → 建立時間（新到舊）
+    const bulletinSort = (a, b) => {
+      const pinned = (x) => (x && x.isPinned ? 1 : 0);
+      const important = (x) => (x && x.isImportant ? 1 : 0);
+      if (pinned(a) !== pinned(b)) return pinned(b) - pinned(a);
+      if (important(a) !== important(b)) return important(b) - important(a);
+      return toTime(b && b.createdAt) - toTime(a && a.createdAt);
+    };
+
+    // 渲染公告總覽
+    const renderBulletinOverview = () => {
+      contentEl.innerHTML = `
+        <section class="card">
+          <div class="card-hd">
+            <div class="left">
+              <div class="chip" aria-hidden="true">${iconSvg("bulletin")}</div>
+              <div style="min-width:0;">
+                <h2>公告系統</h2>
+                <p>全部公告統計</p>
+              </div>
+            </div>
+          </div>
+          <div class="card-bd">
+            <div class="bulletin-overview" id="bulletinOverview">
+              <div class="status">讀取中...</div>
+            </div>
+          </div>
+        </section>
+      `.trim();
+
+      const paintOverview = (rows, err) => {
+        const box = document.getElementById("bulletinOverview");
+        if (!box) return;
+        if (err) {
+          box.innerHTML = `<div class="status">讀取失敗：${escapeHtml(err.message || "")}</div>`;
+          return;
+        }
+
+        const typeLabelMap = {
+          community: "社區園地",
+          finance: "財務報表",
+          meeting: "會議紀錄",
+          repair: "修繕報告",
+        };
+        const typeOf = (item) => String((item && item.type) || "").toLowerCase();
+        // 只列出四類正式公告，略過無分類的殘留資料
+        const list = (Array.isArray(rows) ? rows : []).filter((item) => Boolean(typeLabelMap[typeOf(item)]));
+        const createdMs = (item) => toTime(item && item.createdAt);
+        const now = new Date();
+        const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+        const fmtDate = (value) => {
+          const ms = toTime(value);
+          return ms ? formatDate(new Date(ms)) : "";
+        };
+        const typeCard = (label, type, tone) => {
+          const items = list.filter((item) => typeOf(item) === type);
+          const weekNew = items.filter((item) => createdMs(item) >= weekStart.getTime()).length;
+          return { label, value: items.length, sub: `本週新增 ${weekNew} 則`, tone };
+        };
+
+        const cards = [
+          typeCard("社區園地", "community", ""),
+          typeCard("財務報表", "finance", "info"),
+          typeCard("會議紀錄", "meeting", "success"),
+          typeCard("修繕報告", "repair", "warning"),
+        ];
+
+        const latest = list.slice(0, 5);
+
+        box.innerHTML = `
+          <div class="bulletin-overview-head">
+            <strong>公告總覽</strong>
+            <span>共 ${list.length} 則公告</span>
+          </div>
+          <div class="bulletin-overview-grid">
+            ${cards.map((c) => `
+              <div class="bo-card ${c.tone ? `tone-${c.tone}` : ""}">
+                <div class="bo-label">${escapeHtml(c.label)}</div>
+                <div class="bo-value">${c.value}<span class="bo-unit">則</span></div>
+                <div class="bo-sub">${escapeHtml(c.sub)}</div>
+              </div>
+            `.trim()).join("")}
+          </div>
+          <div class="bulletin-latest">
+            <div class="bulletin-overview-head">
+              <strong>最新公告</strong>
+              <span>${latest.length ? `顯示最近 ${latest.length} 則` : "目前沒有公告"}</span>
+            </div>
+            ${latest.length ? `
+              <div class="bulletin-latest-list">
+                ${latest.map((item) => `
+                  <div class="bulletin-latest-item">
+                    <div class="bulletin-latest-title">${escapeHtml(item.title || "（無標題）")}</div>
+                    <div class="bulletin-latest-meta">
+                      ${item.isPinned ? `<span class="tag red">置頂</span>` : ""}
+                      ${item.isImportant ? `<span class="tag yellow">重要</span>` : ""}
+                      <span class="tag">${escapeHtml(typeLabelMap[typeOf(item)] || "公告")}</span>
+                      <span>已讀 ${Number(bulletinReadCounts[String(item.id || "")] || 0)} 人</span>
+                      <span>${escapeHtml(fmtDate(item.createdAt) || "—")}</span>
+                    </div>
+                  </div>
+                `.trim()).join("")}
+              </div>
+            ` : `<div class="status">目前沒有公告</div>`}
+          </div>
+        `.trim();
+      };
+
+      bulletinRenderListRef = () => {
+        if (!bulletinData.length) return;
+        paintOverview(bulletinData, null);
+      };
+
+      subscribeBulletins("", (rows, err) => {
+        bulletinData = rows || [];
+        paintOverview(rows, err);
+      });
+    };
+
     // 渲染公告列表
     const renderBulletinList = (listEl, type) => {
       if (!listEl) return;
@@ -8828,6 +9223,7 @@
       listEl.innerHTML = bulletinData.map((item) => {
         const tagColor = item.isPinned ? "red" : (item.isImportant ? "yellow" : "green");
         const tagText = item.isPinned ? "置頂" : (item.isImportant ? "重要" : "最新");
+        const readCount = Number(bulletinReadCounts[String(item.id || "")] || 0);
         
         const imagesHtml = item.images && item.images.length 
           ? `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
@@ -8855,6 +9251,7 @@
                 <p style="margin:0; font-size:calc(14px * var(--fs, 1));">${escapeHtml(item.subtitle || "")}</p>
               </div>
               <div class="bulletin-head-actions">
+                <span class="tag" title="已讀人數">已讀 ${readCount}</span>
                 <span class="tag ${tagColor}">${tagText}</span>
                 <button class="icon-btn sm" type="button" data-bulletin-edit="${escapeHtml(item.id)}" aria-label="編輯" title="編輯">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -8892,24 +9289,16 @@
       });
 
       listEl.querySelectorAll("[data-bulletin-delete]").forEach((btn) => {
-        btn.addEventListener("click", async () => {
+        btn.addEventListener("click", () => {
           const id = String(btn.getAttribute("data-bulletin-delete") || "").trim();
           const item = bulletinData.find((entry) => String(entry.id || "") === id);
           if (!id || !item) return;
-          const ok = await (window.nwConfirm ? window.nwConfirm({
-            title: "刪除公告",
-            message: `是否刪除「${String(item.title || "").trim() || "此筆公告"}」？`,
-            okText: "確認刪除",
-            cancelText: "取消",
-            danger: true
-          }) : Promise.resolve(confirm("是否刪除此筆公告？")));
-          if (!ok) return;
-          try {
-            await db.collection("communities").doc(cid).collection("bulletins").doc(id).delete();
-            toast("已刪除");
-          } catch (err) {
-            toast(`刪除失敗：${err.message}`);
-          }
+          openBulletinDeleteModal({
+            cid,
+            bulletinId: id,
+            bulletin: item,
+            onDone: () => toast("已刪除")
+          });
         });
       });
 
@@ -8931,12 +9320,12 @@
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
-            <button class="btn btn-sm btn-ghost" type="button" id="btnNewCommunityPost" aria-label="新增公告" title="新增公告">
-              ${iconSvg("plus")}
-            </button>
           </div>
           <div class="card-bd">
             <div class="status" id="communityStatus" hidden></div>
+            <div class="row">
+              <button class="btn btn-sm danger" type="button" id="btnNewCommunityPost">新增公告</button>
+            </div>
             <div id="communityList" style="display:flex; flex-direction:column; gap:12px; width:100%;">
               <div class="status">讀取中...</div>
             </div>
@@ -8968,12 +9357,12 @@
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
-            <button class="btn btn-sm btn-ghost" type="button" id="btnNewFinanceReport" aria-label="上傳報表" title="上傳報表">
-              ${iconSvg("plus")}
-            </button>
           </div>
           <div class="card-bd">
             <div class="status" id="financeStatus" hidden></div>
+            <div class="row">
+              <button class="btn btn-sm danger" type="button" id="btnNewFinanceReport">上傳報表</button>
+            </div>
             <div id="financeList" style="display:flex; flex-direction:column; gap:12px; width:100%;">
               <div class="status">讀取中...</div>
             </div>
@@ -9005,12 +9394,12 @@
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
-            <button class="btn btn-sm btn-ghost" type="button" id="btnNewMeetingMinutes" aria-label="新增紀錄" title="新增紀錄">
-              ${iconSvg("plus")}
-            </button>
           </div>
           <div class="card-bd">
             <div class="status" id="meetingStatus" hidden></div>
+            <div class="row">
+              <button class="btn btn-sm danger" type="button" id="btnNewMeetingMinutes">新增紀錄</button>
+            </div>
             <div id="meetingList" style="display:flex; flex-direction:column; gap:12px; width:100%;">
               <div class="status">讀取中...</div>
             </div>
@@ -9042,12 +9431,12 @@
                 <p>分類公告、置頂、閱讀回覆</p>
               </div>
             </div>
-            <button class="btn btn-sm btn-ghost" type="button" id="btnNewRepairReport" aria-label="新增報告" title="新增報告">
-              ${iconSvg("plus")}
-            </button>
           </div>
           <div class="card-bd">
             <div class="status" id="repairStatus" hidden></div>
+            <div class="row">
+              <button class="btn btn-sm danger" type="button" id="btnNewRepairReport">新增報告</button>
+            </div>
             <div id="repairList" style="display:flex; flex-direction:column; gap:12px; width:100%;">
               <div class="status">讀取中...</div>
             </div>
@@ -9067,40 +9456,45 @@
       setupBulletinsListener("repair", listEl);
     };
 
+    // 公告監聽（filterType 為空字串時監聽全部類型）
+    const subscribeBulletins = (filterType, onRows) => {
+      if (bulletinUnsubscribe) {
+        try { bulletinUnsubscribe(); } catch {}
+        bulletinUnsubscribe = null;
+      }
+
+      let query = db.collection("communities").doc(cid).collection("bulletins");
+      if (filterType) query = query.where("type", "==", filterType);
+
+      bulletinUnsubscribe = query.onSnapshot(
+        (snap) => {
+          const rows = [];
+          snap.forEach((doc) => {
+            rows.push({ id: doc.id, ...doc.data() });
+          });
+          // 在前端進行排序（置頂 → 重要 → 由新到舊）
+          rows.sort(bulletinSort);
+          onRows(rows);
+        },
+        (err) => {
+          console.error("[公告模組] 監聽器錯誤:", err);
+          onRows(null, err);
+        }
+      );
+    };
+
     // 設置公告監聽器
     const setupBulletinsListener = (type, listEl) => {
       console.log("[公告模組] 設置監聽器，type:", type, "cid:", cid);
-      if (unsubscribeBulletins) {
-        try { unsubscribeBulletins(); } catch {}
-      }
-      
-      unsubscribeBulletins = db
-        .collection("communities")
-        .doc(cid)
-        .collection("bulletins")
-        .where("type", "==", type)
-        .onSnapshot(
-          (snap) => {
-            console.log("[公告模組] 收到數據，文檔數量:", snap.size);
-            bulletinData = [];
-            snap.forEach((doc) => {
-              bulletinData.push({ id: doc.id, ...doc.data() });
-            });
-            
-            // 在前端進行排序
-            bulletinData.sort((a, b) => {
-              const tA = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : a.createdAt) : 0;
-              const tB = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : b.createdAt) : 0;
-              return tB - tA; // 降冪排序 (由新到舊)
-            });
-            
-            renderBulletinList(listEl, type);
-          },
-          (err) => {
-            console.error("[公告模組] 監聽器錯誤:", err);
-            if (listEl) listEl.innerHTML = `<div class="status">讀取失敗：${err.message}</div>`;
-          }
-        );
+      bulletinRenderListRef = () => renderBulletinList(listEl, type);
+      subscribeBulletins(type, (rows, err) => {
+        if (err) {
+          if (listEl) listEl.innerHTML = `<div class="status">讀取失敗：${err.message}</div>`;
+          return;
+        }
+        bulletinData = rows || [];
+        renderBulletinList(listEl, type);
+      });
     };
 
     // 打開新增公告彈窗
@@ -9364,13 +9758,21 @@
           return;
         }
         const filesToProcess = normalized.slice(0, remainingSlots);
+        const imageCap = BULLETIN_MAX_PAYLOAD_BYTES - 200 * 1024; // 保留內文與中介資料餘量
+        let sizeBlocked = false;
         for (const file of filesToProcess) {
           const dataUrl = await fileToImageDataUrlForBulletin(file);
-          if (dataUrl) {
-            selectedImages.push(dataUrl);
+          if (!dataUrl) continue;
+          const used = selectedImages.reduce((sum, d) => sum + dataUrlBase64Bytes(d), 0);
+          if (used + dataUrlBase64Bytes(dataUrl) > imageCap) {
+            sizeBlocked = true;
+            break;
           }
+          selectedImages.push(dataUrl);
         }
-        if (normalized.length > remainingSlots) {
+        if (sizeBlocked) {
+          setStatus("圖片總容量過大，請減少張數或改用較小的圖片。", true);
+        } else if (normalized.length > remainingSlots) {
           setStatus(`已上傳${selectedImages.length}張圖片，達到上限。`, true);
         } else {
           setStatus("", false);
@@ -9388,16 +9790,21 @@
           setStatus("僅支援 PDF 檔案。", true);
           return;
         }
-        const maxBytes = 650 * 1024;
+        const maxRawBytes = 900 * 1024;
         const bytes = Number(file.size || 0);
-        if (bytes > maxBytes) {
+        if (bytes > maxRawBytes) {
           const kb = Math.round(bytes / 1024);
-          setStatus(`PDF 檔案過大（${kb}KB），目前此功能儲存於 Firestore 有 1MB 限制，請改用較小檔案（建議 < 650KB）。`, true);
+          setStatus(`PDF 檔案過大（${kb}KB），目前此功能儲存於 Firestore 有 1MB 限制，請改用較小檔案（建議 < 600KB）。`, true);
           return;
         }
         const dataUrl = await fileToPdfDataUrlForBulletin(file);
         if (!dataUrl) {
           setStatus("PDF 讀取失敗，請重新選擇。", true);
+          return;
+        }
+        const pdfBytes = dataUrlBase64Bytes(dataUrl);
+        if (pdfBytes > BULLETIN_PDF_BUDGET_BYTES) {
+          setStatus(`PDF 附件過大（Base64 後約 ${Math.round(pdfBytes / 1024)}KB），請改用較小的 PDF（建議 < 600KB）。`, true);
           return;
         }
         try {
@@ -9464,6 +9871,12 @@
             updatedAt: FieldValue.serverTimestamp(),
           };
 
+          const payloadBytes = estimatePayloadBytes(payload);
+          if (payloadBytes > BULLETIN_MAX_PAYLOAD_BYTES) {
+            setStatus(`附件總容量過大（約 ${Math.round(payloadBytes / 1024)}KB），已超過單筆上限（約 ${Math.round(BULLETIN_MAX_PAYLOAD_BYTES / 1024)}KB）。請減少圖片張數或改用較小的附件。`, true);
+            return;
+          }
+
           if (isEditMode) {
             await db.collection("communities").doc(cid).collection("bulletins").doc(existingItem.id).update(payload);
           } else {
@@ -9493,9 +9906,6 @@
         try {
           if (form) form.removeEventListener("submit", onSubmit);
         } catch {}
-        if (unsubscribeBulletins && currentPage !== type) {
-          try { unsubscribeBulletins(); } catch {}
-        }
       };
       
       if (form) form.addEventListener("submit", onSubmit);
@@ -18149,6 +18559,7 @@
 
   function renderDashboard() {
     clearPageHeader();
+    stopDashboardClock();
     const layoutEl = document.querySelector(".layout");
     if (layoutEl) layoutEl.classList.remove("visitor-main-lock");
     if (subnavEl) subnavEl.innerHTML = "";
@@ -18156,6 +18567,7 @@
     contentEl.innerHTML = `
       <div class="grid" id="moduleGrid"></div>
     `;
+    renderDashboardMidtop();
     const grid = document.getElementById("moduleGrid");
     grid.innerHTML = orderedModules().map((m) => {
       const cfg = resolveUrl(m.id);
@@ -18167,15 +18579,12 @@
               <div class="chip" aria-hidden="true">${iconSvg(m.id)}</div>
               <div class="module-copy">
                 <h2>${m.name}</h2>
-                <p class="module-desc"><span>${m.desc}</span></p>
               </div>
             </div>
-            <a class="tag red manual-btn" data-manual="${m.id}" href="${manualViewerHref(m.id, m.name)}" target="_blank" rel="noopener" title="開啟 ${m.name} 操作手冊" aria-label="開啟 ${m.name} 操作手冊">手冊</a>
+            <p class="module-desc"><span>${m.desc}</span></p>
+            <a class="tag red manual-btn" data-manual="${m.id}" href="${manualViewerHref(m.id, m.name)}" target="_blank" rel="noopener" title="開啟 ${m.name} 操作手冊" aria-label="開啟 ${m.name} 操作手冊"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 6.6C10.6 5.3 8.6 4.6 6.2 4.6H4v13.2h2.2c2.4 0 4.4.7 5.8 2 1.4-1.3 3.4-2 5.8-2H20V4.6h-2.2c-2.4 0-4.4.7-5.8 2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 6.6v12.2" stroke="currentColor" stroke-width="1.7"/></svg></a>
           </div>
           <div class="card-bd">
-            <div class="row">
-              <div class="muted">${disabled ? "此功能已停用或未設定連結" : cfg.url}</div>
-            </div>
             <button class="btn ${disabled ? "" : "btn-primary"}" type="button" data-open ${disabled ? "disabled" : ""}>進入</button>
           </div>
         </article>
@@ -18245,7 +18654,16 @@
   let checkinUnsub = null;
   let checkinRecords = [];
   let checkinTimer = null;
-  let checkinLastNotifiedMs = 0;
+  let checkinOverdueSignature = "";
+  let checkinCommunityId = "";
+  // 報到防連點鎖
+  let careCheckinSubmitting = false;
+  let careReminderTimer = null;
+  let careReminderLastSignature = "";
+  // daily 提醒自動排程去重（id -> 上次推進時間）
+  let careReminderDailyAdvanced = {};
+  // 子分頁氣泡目前顯示的數值簽章（超時人數 | 到點提醒數）
+  let careSubnavBadgeSignature = "";
 
   function updateCareNavBadgeFromSos(activeCount) {
     const n = Number.isFinite(Number(activeCount)) ? Number(activeCount) : 0;
@@ -18275,13 +18693,7 @@
         on = !on;
         if (sosGain) sosGain.gain.value = on ? 0.25 : 0;
       }, 420);
-      // #region debug-point C:admin-sos-alarm-started
-      fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"C",location:"admin.js:startSosAlarm:ok",msg:"[DEBUG] sos alarm started",data:{ctxState:String((sosAudioCtx&&sosAudioCtx.state)||""),hasOsc:Boolean(!!sosOsc),hasGain:Boolean(!!sosGain)},ts:Date.now()})}).catch(()=>{});
-      // #endregion
     } catch (e) {
-      // #region debug-point C:admin-sos-alarm-error
-      fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"C",location:"admin.js:startSosAlarm:error",msg:"[DEBUG] sos alarm failed",data:{message:String((e&&e.message)||""),name:String((e&&e.name)||""),ctxState:String((sosAudioCtx&&sosAudioCtx.state)||"")},ts:Date.now()})}).catch(()=>{});
-      // #endregion
     }
   }
 
@@ -18311,9 +18723,6 @@
     if (houseNoEl) houseNoEl.textContent = String(r.houseNo || "").trim();
     if (nameEl) nameEl.textContent = String(r.name || "").trim();
     modal.hidden = false;
-    // #region debug-point B:admin-show-sos-modal
-    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"B",location:"admin.js:showSosAlertModal",msg:"[DEBUG] show sos modal",data:{id:String(r.id||""),community:String(r.community||""),status:String(r.status||""),createdAtMs:Number(r.createdAtMs||0)},ts:Date.now()})}).catch(()=>{});
-    // #endregion
     startSosAlarm();
   }
 
@@ -19391,9 +19800,6 @@
     if (!cid) return;
     const queryCommunityKeys = getSosQueryCommunityKeys(cid);
     if (!queryCommunityKeys.length) return;
-    // #region debug-point A:admin-sos-listener-start
-    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"A",location:"admin.js:startSosAlertsListener:start",msg:"[DEBUG] admin sos listener start",data:{cid,queryCommunityKeys,role:String(state.currentUserRole||""),userCommunity:String(state.currentUserCommunity||""),urlC:String(readUrlCommunityKey()||""),hash:String(location.hash||"")},ts:Date.now()})}).catch(()=>{});
-    // #endregion
     if (sosUnsub) sosUnsub();
     sosLastNotifiedMs = Date.now();
     const snapshotMap = new Map();
@@ -19417,9 +19823,6 @@
       const latestMs = Number((latest && latest.createdAtMs) || 0);
       const latestStatus = String((latest && latest.status) || "").trim();
       const willNotify = Boolean(latest && latestMs > sosLastNotifiedMs && latestStatus === "待處理");
-      // #region debug-point B:admin-sos-snapshot
-      fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"B",location:"admin.js:startSosAlertsListener:onSnapshot",msg:"[DEBUG] admin sos snapshot",data:{queryCommunityKeys,role:String(state.currentUserRole||""),rawCount:Number(mergedMap.size||0),listCount:Number(list.length||0),sosLastNotifiedMs:Number(sosLastNotifiedMs||0),latestMs,latestStatus,latestCommunity:String((latest&&latest.community)||""),willNotify},ts:Date.now()})}).catch(()=>{});
-      // #endregion
       list = await enrichSosRecordsWithSubUnit(list);
       sosRecords = list;
       updateCareNavBadgeFromSos(list.filter((record) => String(record.status || "").trim() !== "已完成").length);
@@ -19452,9 +19855,6 @@
         async (err) => {
           snapshotMap.set(communityKey, []);
           await applyMergedSnapshots();
-          // #region debug-point A:admin-sos-listener-error
-          fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"sos-no-ring-community",runId:"pre-fix",hypothesisId:"A",location:"admin.js:startSosAlertsListener:error",msg:"[DEBUG] admin sos listener error",data:{communityKey,queryCommunityKeys,role:String(state.currentUserRole||""),code:String((err&&err.code)||""),message:String((err&&err.message)||"")},ts:Date.now()})}).catch(()=>{});
-          // #endregion
         }
       ));
     sosUnsub = () => {
@@ -19483,7 +19883,7 @@
       <div class="modal-backdrop" data-modal-close="1"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="sosSettingsTitle">
         <div class="modal-hd">
-          <h3 class="modal-title" id="sosSettingsTitle">SOS 設定</h3>
+          <h3 class="modal-title" id="sosSettingsTitle">關懷救護設定</h3>
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <div class="modal-body">
@@ -19561,6 +19961,7 @@
             <div style="display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#fff;">
               <div id="careSubnavSettingsHint" style="color:#6b7280;">請設定社區角色可見的子分頁</div>
               ${[
+                { id: "overview", label: "總覽" },
                 { id: "sos", label: "住戶SOS" },
                 { id: "72h", label: `${currentHours}小時` },
                 { id: "reminder", label: "提醒" },
@@ -19647,7 +20048,7 @@
       });
       const hint = modal.querySelector("#careSubnavSettingsHint");
       if (hint) {
-        const any = !!(next.sos || next["72h"] || next.reminder);
+        const any = !!(next.overview || next.sos || next["72h"] || next.reminder);
         hint.textContent = any ? "至少保留一個子分頁為開啟，社區角色才會顯示子分頁列。" : "目前全部關閉：社區角色不顯示子分頁列且不可使用。";
       }
     };
@@ -19833,23 +20234,35 @@
 
   // 儲存報到記錄
   async function addCheckinRecord(communityId, residentData, method) {
+    if (careCheckinSubmitting) return false;
+    careCheckinSubmitting = true;
     try {
       const now = new Date();
+      const normalizedResident = normalizeCareResidentEntry(residentData || {}, communityId);
+      const methodKey = String(method || "manual").trim() || "manual";
+      const methodLabelMap = { nfc: "NFC感應", qr: "QR掃碼", manual: "人工報到" };
       const data = {
         communityId: String(communityId || resolveActiveCommunityId()),
-        houseNo: String(residentData.houseNo || ''),
-        subHouseNo: String(residentData.subHouseNo || residentData.subUnit || ''),
-        name: String(residentData.name || '住戶'),
-        method: String(method || 'manual'), // 'nfc', 'qr', 'manual'
+        houseNo: normalizedResident.houseNo,
+        subHouseNo: normalizedResident.subHouseNo,
+        name: normalizedResident.name,
+        residentKey: normalizedResident.residentKey,
+        checkinCode: normalizedResident.checkinCode,
+        method: methodKey,
+        methodLabel: methodLabelMap[methodKey] || methodKey,
         createdAt: FieldValue.serverTimestamp(),
         createdAtMs: Date.now(),
         datetimeText: now.toLocaleString('zh-TW')
       };
       
-      await db.collection("checkin_records").add(data);
+      await db.collection("communities").doc(String(communityId || resolveActiveCommunityId())).collection("careCheckins").add(data);
       toast("報到成功");
+      return true;
     } catch {
       toast("報到失敗");
+      return false;
+    } finally {
+      careCheckinSubmitting = false;
     }
   }
 
@@ -19858,12 +20271,16 @@
     const cid = String(communityId || resolveActiveCommunityId());
     if (!cid) return;
     
+    // 已在監聽同一社區時不重複訂閱：onSnapshot 會呼叫 renderCareModule()，
+    // 若每次都重新訂閱將形成無限重繪迴圈，導致畫面按鈕被反覆置換而無法點擊。
+    if (checkinUnsub && checkinCommunityId === cid) return;
+    
     // 停止現有的監聽和定時器
     stopCheckinListener();
+    checkinCommunityId = cid;
     
     checkinUnsub = db
-      .collection("checkin_records")
-      .where("communityId", "==", cid)
+      .collection("communities").doc(cid).collection("careCheckins")
       .orderBy("createdAtMs", "desc")
       .limit(100)
       .onSnapshot(
@@ -19900,60 +20317,21 @@
     const checkinEnabled = cfg && cfg.checkinEnabled !== false;
     if (!checkinEnabled) return;
     
-    const hours = Number(cfg.sosHours || 72) || 72;
-    const timeoutMs = hours * 60 * 60 * 1000;
     const now = Date.now();
-    
-    let residents = Array.isArray(state.currentResidents) ? state.currentResidents : [];
-    const checkinResidents = cfg.checkinResidents || [];
-    
-    // 過濾出有選擇的住戶
-    if (checkinResidents.length > 0) {
-      residents = residents.filter(resident => {
-        const houseNo = String(resident.houseNo || resident.unit || '');
-        const subHouseNo = String(resident.subHouseNo || resident.subUnit || '');
-        const name = String(resident.name || resident.displayName || '住戶');
-        return checkinResidents.some(r => 
-          r.houseNo === houseNo && 
-          r.subHouseNo === subHouseNo && 
-          r.name === name
-        );
-      });
+    const overdueResidents = getCareOverdueResidents(cfg, checkinRecords, cid, now).filter((resident) => resident.isOverdue);
+
+    // 以超時名單簽章去重：名單不變則不重複彈窗，名單變動時才再次提醒
+    const signature = overdueResidents
+      .map((resident) => String(resident.residentKey || `${resident.houseNo || ""}_${resident.subHouseNo || ""}_${resident.name || ""}`))
+      .sort()
+      .join("|");
+    if (!overdueResidents.length) {
+      checkinOverdueSignature = "";
+      return;
     }
-    
-    if (residents.length === 0) return;
-    
-    const lastCheckinMap = getLastCheckinByResident(checkinRecords);
-    const overdueResidents = [];
-    
-    // 檢查每個住戶
-    residents.forEach(resident => {
-      const houseNo = String(resident.houseNo || resident.unit || '');
-      const subHouseNo = String(resident.subHouseNo || resident.subUnit || '');
-      const name = String(resident.name || resident.displayName || '住戶');
-      const key = `${houseNo}_${subHouseNo}_${name}`;
-      const lastCheckin = lastCheckinMap.get(key);
-      const lastCheckinMs = lastCheckin ? lastCheckin.createdAtMs : 0;
-      const timeSinceLastCheckin = now - lastCheckinMs;
-      
-      // 如果從未報到或已超過時數
-      if (lastCheckinMs === 0 || timeSinceLastCheckin > timeoutMs) {
-        overdueResidents.push({
-          houseNo,
-          subHouseNo,
-          name,
-          lastCheckin
-        });
-      }
-    });
-    
-    // 如果有超時的住戶，顯示提醒
-    if (overdueResidents.length > 0) {
-      if (now - checkinLastNotifiedMs > 60000) { // 每分鐘最多提醒一次
-        checkinLastNotifiedMs = now;
-        showCheckinTimeoutAlert(overdueResidents);
-      }
-    }
+    if (signature === checkinOverdueSignature) return;
+    checkinOverdueSignature = signature;
+    showCheckinTimeoutAlert(overdueResidents);
   }
   
   // 打開新增住戶報到彈窗
@@ -19963,22 +20341,6 @@
     let detach = () => {};
     detach = bindModalClose(modal, () => detach());
     
-    const cfg = loadConfig(cid) || {};
-    const currentCheckinResidents = cfg.checkinResidents || [];
-    const allResidents = Array.isArray(state.currentResidents) ? state.currentResidents : [];
-    
-    // 過濾出尚未選擇的住戶
-    const availableResidents = allResidents.filter(resident => {
-      const houseNo = String(resident.houseNo || resident.unit || '');
-      const subHouseNo = String(resident.subHouseNo || resident.subUnit || '');
-      const name = String(resident.name || resident.displayName || '住戶');
-      return !currentCheckinResidents.some(r => 
-        r.houseNo === houseNo && 
-        r.subHouseNo === subHouseNo && 
-        r.name === name
-      );
-    });
-    
     modal.innerHTML = `
       <div class="modal-backdrop" data-modal-close="1"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="addCheckinResidentTitle">
@@ -19986,40 +20348,67 @@
           <h3 class="modal-title" id="addCheckinResidentTitle">選擇需要報到服務的住戶</h3>
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
-        <div class="modal-body">
-          ${allResidents.length === 0 ? `
-            <div class="status">請先至「住戶」頁面載入住戶資料</div>
-          ` : availableResidents.length === 0 ? `
-            <div class="status">所有住戶都已選擇</div>
-          ` : `
-            <div class="list">
-              ${availableResidents.map(resident => {
-                const houseNo = String(resident.houseNo || resident.unit || '');
-                const subHouseNo = String(resident.subHouseNo || resident.subUnit || '');
-                const name = String(resident.name || resident.displayName || '住戶');
-                return `
-                  <label class="list-item" style="cursor:pointer;display:flex;align-items:center;gap:12px;">
-                    <input type="checkbox" data-add-checkin-resident="${encodeURIComponent(JSON.stringify({ houseNo, subHouseNo, name }))}" />
-                    <div style="flex:1;">
-                      <strong>${escapeHtml(name)}</strong>
-                      <div class="muted">
-                        ${houseNo ? escapeHtml(houseNo) : ''}${subHouseNo ? '-' + escapeHtml(subHouseNo) : ''}
-                      </div>
-                    </div>
-                  </label>
-                `;
-              }).join('')}
-            </div>
-          `}
+        <div class="modal-body" id="addCheckinResidentBody">
+          <div class="status">載入住戶資料中…</div>
         </div>
         <div class="modal-ft">
           <button class="btn" type="button" data-modal-close="1">關閉</button>
-          ${availableResidents.length > 0 ? `
-            <button class="btn btn-primary" type="button" id="btnSaveAddCheckinResidents">確認新增</button>
-          ` : ''}
+          <button class="btn btn-primary" type="button" id="btnSaveAddCheckinResidents" hidden>確認新增</button>
         </div>
       </div>
     `.trim();
+    modal.hidden = false;
+
+    // 依目前報到名單與最新住戶資料（含子戶號帳戶）繪製可勾選清單
+    const renderChoices = (allResidents) => {
+      const bodyEl = modal.querySelector("#addCheckinResidentBody");
+      const saveBtnEl = modal.querySelector("#btnSaveAddCheckinResidents");
+      if (!bodyEl) return;
+      const cfgData = loadConfig(cid) || {};
+      const currentCheckinResidents = getConfiguredCareResidents(cfgData, cid);
+      const currentKeys = new Set(currentCheckinResidents.map((resident) => resident.residentKey));
+      const availableResidents = allResidents.filter((resident) => !currentKeys.has(resident.residentKey));
+
+      if (!allResidents.length) {
+        bodyEl.innerHTML = `<div class="status">尚無住戶資料，請先至「住戶造冊」新增住戶。</div>`;
+      } else if (!availableResidents.length) {
+        bodyEl.innerHTML = `<div class="status">所有住戶都已加入報到服務名單。</div>`;
+      } else {
+        bodyEl.innerHTML = `
+          <div class="list">
+            ${availableResidents.map((resident) => {
+              const unit = formatCareResidentUnit(resident);
+              const name = String(resident.name || "住戶");
+              const payload = encodeURIComponent(JSON.stringify({
+                houseNo: String(resident.houseNo || ""),
+                subHouseNo: String(resident.subHouseNo || ""),
+                name,
+              }));
+              return `
+                <label class="list-item" style="cursor:pointer;display:flex;align-items:center;gap:12px;">
+                  <input type="checkbox" data-add-checkin-resident="${payload}" />
+                  <div style="flex:1;">
+                    <strong>${escapeHtml(name)}</strong>
+                    <div class="muted">${escapeHtml(unit)}</div>
+                  </div>
+                </label>
+              `;
+            }).join("")}
+          </div>
+        `;
+      }
+      if (saveBtnEl) saveBtnEl.hidden = availableResidents.length === 0;
+    };
+
+    // 先用既有快取立即顯示，再向資料庫載入最新住戶（含子戶號帳戶）
+    if (String(state.currentResidentsCommunityId || "") === cid) {
+      const cachedResidents = getCareResidentsSource();
+      if (cachedResidents.length) renderChoices(cachedResidents);
+    }
+    loadCareResidentChoices(cid).then((list) => {
+      if (modal.hidden) return;
+      renderChoices(list);
+    });
     
     // 儲存按鈕事件
     const saveBtn = modal.querySelector("#btnSaveAddCheckinResidents");
@@ -20039,10 +20428,13 @@
           
           // 獲取當前設定
           const currentConfig = loadConfig(cid) || {};
-          const currentCheckinResidents = currentConfig.checkinResidents || [];
+          const currentCheckinResidents = getConfiguredCareResidents(currentConfig, cid);
           
           // 合併新舊住戶
-          const updatedCheckinResidents = [...currentCheckinResidents, ...residentsToAdd];
+          const updatedCheckinResidents = [
+            ...currentCheckinResidents,
+            ...residentsToAdd.map((resident) => normalizeCareResidentEntry(resident, cid))
+          ];
           
           // 儲存設定
           const configDoc = configDocRef(cid);
@@ -20067,14 +20459,11 @@
     try {
       // 獲取當前設定
       const currentConfig = loadConfig(cid) || {};
-      let currentCheckinResidents = currentConfig.checkinResidents || [];
+      const residentKey = createCareResidentKey(residentData || {});
+      let currentCheckinResidents = getConfiguredCareResidents(currentConfig, cid);
       
       // 過濾掉要移除的住戶
-      currentCheckinResidents = currentCheckinResidents.filter(r => 
-        !(r.houseNo === residentData.houseNo && 
-          r.subHouseNo === residentData.subHouseNo && 
-          r.name === residentData.name)
-      );
+      currentCheckinResidents = currentCheckinResidents.filter((resident) => resident.residentKey !== residentKey);
       
       // 儲存設定
       const configDoc = configDocRef(cid);
@@ -20115,8 +20504,9 @@
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉" style="color:white;">×</button>
         </div>
         <div class="modal-body">
+          ${overdueResidents.length > 10 ? `<div class="muted">僅顯示前 10 位，共 ${overdueResidents.length} 位超時未報到。</div>` : ''}
           <div class="list">
-            ${overdueResidents.map(resident => {
+            ${overdueResidents.slice(0, 10).map(resident => {
               const houseNo = resident.houseNo;
               const subHouseNo = resident.subHouseNo;
               const name = resident.name;
@@ -20135,6 +20525,7 @@
           </div>
         </div>
         <div class="modal-ft">
+          ${overdueResidents.length > 10 ? `<button class="btn" type="button" data-modal-close="1" onclick="stopSosAlarm();location.hash='#community/care/72h'">查看全部（${overdueResidents.length}）</button>` : ''}
           <button class="btn" type="button" data-modal-close="1" onclick="stopSosAlarm()">關閉</button>
         </div>
       </div>
@@ -20151,6 +20542,9 @@
       clearInterval(checkinTimer);
       checkinTimer = null;
     }
+    checkinCommunityId = "";
+    checkinRecords = [];
+    checkinOverdueSignature = "";
   }
 
   // 取得每個住戶的最後報到記錄
@@ -20165,198 +20559,1117 @@
     return lastCheckinMap;
   }
 
+  function careResidentText(value) {
+    return String(value || "").trim();
+  }
+
+  function createCareResidentKey(residentData) {
+    const houseNo = careResidentText(residentData && (residentData.houseNo || residentData.unit));
+    const subHouseNo = careResidentText(residentData && (residentData.subHouseNo || residentData.subUnit));
+    const name = careResidentText(residentData && (residentData.name || residentData.displayName)) || "住戶";
+    return `${houseNo}__${subHouseNo}__${name}`;
+  }
+
+  function formatCareResidentUnit(residentData) {
+    const houseNo = careResidentText(residentData && (residentData.houseNo || residentData.unit));
+    const subHouseNo = careResidentText(residentData && (residentData.subHouseNo || residentData.subUnit));
+    return houseNo ? `${houseNo}${subHouseNo ? `-${subHouseNo}` : ""}` : "未設定戶號";
+  }
+
+  function formatCareDateTime(value) {
+    const ms = Number(value || 0);
+    if (!ms) return "—";
+    const d = new Date(ms);
+    if (Number.isNaN(d.getTime())) return "—";
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  }
+
+  function formatCareRelativeMs(value) {
+    const ms = Number(value || 0);
+    if (!ms) return "—";
+    const diff = ms - Date.now();
+    const absMs = Math.abs(diff);
+    const absMinutes = Math.floor(absMs / 60000);
+    const absHours = Math.floor(absMinutes / 60);
+    const absDays = Math.floor(absHours / 24);
+    const label = absDays > 0
+      ? `${absDays} 天`
+      : (absHours > 0 ? `${absHours} 小時` : `${Math.max(absMinutes, 1)} 分鐘`);
+    return diff >= 0 ? `${label}後` : `${label}前`;
+  }
+
+  function formatCareDatetimeInputValue(value) {
+    const ms = Number(value || 0);
+    if (!ms) return "";
+    const d = new Date(ms);
+    if (Number.isNaN(d.getTime())) return "";
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  }
+
+  function generateCareCheckinCode(communityId) {
+    const cid = careResidentText(communityId || resolveActiveCommunityId() || "default") || "default";
+    return `nwcare:${cid}:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function getCareResidentsSource() {
+    const allResidents = Array.isArray(state.currentResidents) ? state.currentResidents : [];
+    const map = new Map();
+    allResidents.forEach((resident) => {
+      const houseNo = careResidentText(resident && (resident.houseNo || resident.unit));
+      const subHouseNo = careResidentText(resident && (resident.subHouseNo || resident.subUnit));
+      const name = careResidentText(resident && (resident.name || resident.displayName)) || "住戶";
+      const item = {
+        houseNo,
+        subHouseNo,
+        name,
+        residentKey: createCareResidentKey({ houseNo, subHouseNo, name }),
+      };
+      if (!map.has(item.residentKey)) map.set(item.residentKey, item);
+    });
+    return Array.from(map.values()).sort((a, b) => {
+      const unitCompare = formatCareResidentUnit(a).localeCompare(formatCareResidentUnit(b), "zh-Hant");
+      if (unitCompare !== 0) return unitCompare;
+      return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
+    });
+  }
+
+  // 將 users 文件轉為報到名單格式（含子戶號帳戶）
+  function careResidentsFromDocs(docs) {
+    const map = new Map();
+    (Array.isArray(docs) ? docs : []).forEach((doc) => {
+      const v = doc && typeof doc.data === "function" ? (doc.data() || {}) : {};
+      if (!isResidentRole(v.role)) return;
+      if (String(v.status || "") === "pending") return;
+      const houseNo = careResidentText(v.houseNo || v.unit);
+      if (!houseNo) return;
+      const subHouseNo = careResidentText(v.subHouseNo || v.subUnit);
+      const name = careResidentText(v.name || v.displayName) || "住戶";
+      const item = {
+        houseNo,
+        subHouseNo,
+        name,
+        residentKey: createCareResidentKey({ houseNo, subHouseNo, name }),
+      };
+      if (!map.has(item.residentKey)) map.set(item.residentKey, item);
+    });
+    return Array.from(map.values()).sort((a, b) => {
+      const unitCompare = formatCareResidentUnit(a).localeCompare(formatCareResidentUnit(b), "zh-Hant");
+      if (unitCompare !== 0) return unitCompare;
+      return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
+    });
+  }
+
+  // 向資料庫載入住戶清單（同時涵蓋 community 與 communityIds 子戶號帳戶），等兩筆查詢都回傳後定案
+  function loadCareResidentChoices(communityId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    return new Promise((resolve) => {
+      let finished = false;
+      let latest = [];
+      let unsub = () => {};
+      let settleTimer = null;
+      let hardTimer = null;
+      const done = () => {
+        if (finished) return;
+        finished = true;
+        if (settleTimer) clearTimeout(settleTimer);
+        if (hardTimer) clearTimeout(hardTimer);
+        try { unsub(); } catch {}
+        resolve(latest);
+      };
+      const onDocs = (docs) => {
+        latest = careResidentsFromDocs(docs);
+        if (settleTimer) clearTimeout(settleTimer);
+        settleTimer = setTimeout(done, 500);
+      };
+      try {
+        unsub = subscribeUsersByCommunityMembership(cid, onDocs, () => {
+          if (settleTimer) clearTimeout(settleTimer);
+          done();
+        });
+      } catch {
+        done();
+        return;
+      }
+      hardTimer = setTimeout(done, 8000);
+    });
+  }
+
+  function normalizeCareResidentEntry(entry, communityId) {
+    const houseNo = careResidentText(entry && (entry.houseNo || entry.unit));
+    const subHouseNo = careResidentText(entry && (entry.subHouseNo || entry.subUnit));
+    const name = careResidentText(entry && (entry.name || entry.displayName)) || "住戶";
+    return {
+      houseNo,
+      subHouseNo,
+      name,
+      residentKey: createCareResidentKey({ houseNo, subHouseNo, name }),
+      checkinCode: careResidentText(entry && entry.checkinCode) || generateCareCheckinCode(communityId),
+      enabled: Boolean(entry && entry.enabled === true),
+      enabledAtMs: Number(entry && entry.enabledAtMs) || 0,
+    };
+  }
+
+  function getConfiguredCareResidents(cfg, communityId) {
+    const list = cfg && Array.isArray(cfg.checkinResidents) ? cfg.checkinResidents : [];
+    const map = new Map();
+    list.forEach((entry) => {
+      const normalized = normalizeCareResidentEntry(entry, communityId);
+      if (!map.has(normalized.residentKey)) map.set(normalized.residentKey, normalized);
+    });
+    return Array.from(map.values());
+  }
+
+  function normalizeCareReminderEntry(entry) {
+    const remindAtMs = Number(entry && entry.remindAtMs) || 0;
+    const nextAtMs = Number(entry && entry.nextAtMs) || remindAtMs;
+    const repeat = String((entry && entry.repeat) || "once").trim() === "daily" ? "daily" : "once";
+    const houseNo = careResidentText(entry && entry.houseNo);
+    const subHouseNo = careResidentText(entry && entry.subHouseNo);
+    const name = careResidentText(entry && entry.name) || "住戶";
+    return {
+      id: careResidentText(entry && entry.id) || `careReminder_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+      houseNo,
+      subHouseNo,
+      name,
+      residentKey: createCareResidentKey({ houseNo, subHouseNo, name }),
+      title: careResidentText(entry && entry.title) || "人工提醒",
+      note: careResidentText(entry && entry.note),
+      repeat,
+      remindAtMs,
+      nextAtMs,
+      enabled: entry && Object.prototype.hasOwnProperty.call(entry, "enabled") ? entry.enabled !== false : true,
+      doneAtMs: Number(entry && entry.doneAtMs) || 0,
+    };
+  }
+
+  function getConfiguredCareReminders(cfg) {
+    const list = cfg && Array.isArray(cfg.careReminders) ? cfg.careReminders : [];
+    return list
+      .map((entry) => normalizeCareReminderEntry(entry))
+      .sort((a, b) => Number(a.nextAtMs || 0) - Number(b.nextAtMs || 0));
+  }
+
+  function advanceDailyReminder(nextAtMs, nowMs) {
+    const dayMs = 24 * 60 * 60 * 1000;
+    let next = Number(nextAtMs || 0);
+    if (!next) next = nowMs + dayMs;
+    while (next <= nowMs) next += dayMs;
+    return next;
+  }
+
+  function getCareReminderStatus(reminder, nowMs) {
+    const now = Number(nowMs || Date.now());
+    if (!reminder || reminder.enabled === false) return { key: "paused", label: "已停用", tone: "#6b7280" };
+    if (String(reminder.repeat || "once") === "once" && Number(reminder.doneAtMs || 0) > 0) {
+      return { key: "done", label: "已完成", tone: "#16a34a" };
+    }
+    if (Number(reminder.nextAtMs || 0) <= now) return { key: "due", label: "待提醒", tone: "#dc2626" };
+    return { key: "upcoming", label: "待排程", tone: "#2563eb" };
+  }
+
+  function getCareReminderBuckets(cfg, nowMs) {
+    const now = Number(nowMs || Date.now());
+    const due = [];
+    const upcoming = [];
+    const done = [];
+    const paused = [];
+    getConfiguredCareReminders(cfg).forEach((reminder) => {
+      const status = getCareReminderStatus(reminder, now);
+      const item = { ...reminder, status };
+      if (status.key === "due") due.push(item);
+      else if (status.key === "upcoming") upcoming.push(item);
+      else if (status.key === "done") done.push(item);
+      else paused.push(item);
+    });
+    return { due, upcoming, done, paused, all: [...due, ...upcoming, ...done, ...paused] };
+  }
+
+  function ensureCareConfigShape(cid, cfg) {
+    const nextCfg = cfg && typeof cfg === "object" ? cfg : {};
+    const residents = getConfiguredCareResidents(nextCfg, cid);
+    const reminders = getConfiguredCareReminders(nextCfg);
+    const residentChanged = JSON.stringify(residents) !== JSON.stringify(nextCfg.checkinResidents || []);
+    const reminderChanged = JSON.stringify(reminders) !== JSON.stringify(nextCfg.careReminders || []);
+    if (state.config && typeof state.config === "object") {
+      state.config.checkinResidents = residents;
+      state.config.careReminders = reminders;
+    }
+    if ((residentChanged || reminderChanged) && cid) {
+      configDocRef(cid).set({
+        checkinResidents: residents,
+        careReminders: reminders,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true }).catch(() => {});
+    }
+    return { residents, reminders };
+  }
+
+  function getCareOverdueResidents(cfg, records, communityId, nowMs) {
+    const now = Number(nowMs || Date.now());
+    const hours = Number(cfg && cfg.sosHours || 72) || 72;
+    const timeoutMs = hours * 60 * 60 * 1000;
+    const selectedResidents = getConfiguredCareResidents(cfg, communityId);
+    const lastCheckinMap = getLastCheckinByResident(Array.isArray(records) ? records : []);
+    return selectedResidents.map((resident) => {
+      const key = `${resident.houseNo || ""}_${resident.subHouseNo || ""}_${resident.name || ""}`;
+      const lastCheckin = lastCheckinMap.get(key) || null;
+      const lastCheckinMs = Number(lastCheckin && lastCheckin.createdAtMs || 0);
+      // 未啟用不列入計時；啟用後以「最後報到時間」或「啟用時間」為起算點
+      const enabled = resident.enabled === true;
+      const enabledAtMs = Number(resident.enabledAtMs || 0);
+      const baseMs = lastCheckinMs || enabledAtMs;
+      const isNeverCheckedIn = !lastCheckinMs;
+      const isOverdue = enabled && baseMs > 0 && (now - baseMs > timeoutMs);
+      const deadlineMs = enabled && baseMs > 0 ? baseMs + timeoutMs : 0;
+      return {
+        ...resident,
+        enabled,
+        enabledAtMs,
+        lastCheckin,
+        lastCheckinMs,
+        baseMs,
+        deadlineMs,
+        timeoutMs,
+        isNeverCheckedIn,
+        isOverdue,
+      };
+    });
+  }
+
+  // 啟用／關閉個別住戶的關懷計時（關閉後停止計時，重新啟用則重新起算）
+  async function setCareResidentEnabled(communityId, residentKey, enabled) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const key = careResidentText(residentKey);
+    if (!key) return;
+    try {
+      const cfgData = loadConfig(cid) || {};
+      const updated = getConfiguredCareResidents(cfgData, cid).map((resident) => {
+        if (resident.residentKey !== key) return resident;
+        const nextEnabled = Boolean(enabled);
+        return {
+          ...resident,
+          enabled: nextEnabled,
+          enabledAtMs: nextEnabled ? Date.now() : 0,
+        };
+      });
+      await configDocRef(cid).set({
+        checkinResidents: updated,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      toast(enabled ? "已啟用關懷計時" : "已關閉關懷計時");
+    } catch {
+      toast("設定失敗");
+    }
+  }
+
+  function stopCareReminderWatcher(resetSignature) {
+    if (careReminderTimer) {
+      clearInterval(careReminderTimer);
+      careReminderTimer = null;
+    }
+    if (resetSignature !== false) careReminderLastSignature = "";
+  }
+
+  function openCareReminderAlertModal(reminders) {
+    const list = Array.isArray(reminders) ? reminders : [];
+    if (!list.length) return;
+    startSosAlarm();
+    const modal = ensureModal("careReminderAlertModal", "modal-care-reminder-alert", "min(720px, 92vw)");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => {
+      stopSosAlarm();
+      detach();
+    });
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="careReminderAlertTitle">
+        <div class="modal-hd" style="background:#dc2626;color:#fff;">
+          <h3 class="modal-title" id="careReminderAlertTitle">提醒到點通知</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉" style="color:#fff;">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="list">
+            ${list.slice(0, 8).map((item) => `
+              <div class="list-item">
+                <strong>${escapeHtml(item.title || "人工提醒")}</strong>
+                <div class="muted">${escapeHtml(item.name || "住戶")} · ${escapeHtml(formatCareResidentUnit(item))} · ${escapeHtml(formatCareDateTime(item.nextAtMs))}</div>
+                ${item.note ? `<div class="muted" style="margin-top:4px;">${escapeHtml(item.note)}</div>` : ""}
+              </div>
+            `).join("")}
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">稍後處理</button>
+          <button class="btn btn-primary" type="button" id="btnOpenCareReminderPage">查看提醒</button>
+        </div>
+      </div>
+    `.trim();
+    const openBtn = modal.querySelector("#btnOpenCareReminderPage");
+    if (openBtn) {
+      openBtn.onclick = () => {
+        stopSosAlarm();
+        modal.hidden = true;
+        detach();
+        location.hash = "#community/care/reminder";
+      };
+    }
+    modal.hidden = false;
+  }
+
+  // 超時／到點提醒會隨時間變動，定時器偵測到數值改變時重繪子分頁氣泡
+  function refreshCareSubnavBadge() {
+    if (!String(location.hash || "").includes("#community/care")) return;
+    const cid = String(resolveActiveCommunityId() || "");
+    const cfg = loadConfig(cid) || {};
+    const overdueCount = getCareOverdueResidents(cfg, getCheckinRecords(), cid, Date.now())
+      .filter((resident) => resident.isOverdue).length;
+    const dueCount = getCareReminderBuckets(cfg, Date.now()).due.length;
+    const signature = `${overdueCount}|${dueCount}`;
+    if (signature === careSubnavBadgeSignature) return;
+    careSubnavBadgeSignature = signature;
+    renderCareModule();
+  }
+
+  function startCareReminderWatcher(cid) {
+    stopCareReminderWatcher(false);
+    const checkDue = () => {
+      if (!String(location.hash || "").includes("#community/care")) return;
+      const cfg = loadConfig(cid) || {};
+      const now = Date.now();
+      const due = getCareReminderBuckets(cfg, now).due;
+      const signature = due.map((item) => String(item.id || "")).sort().join("|");
+      if (!due.length) {
+        careReminderLastSignature = "";
+      } else if (signature !== careReminderLastSignature) {
+        careReminderLastSignature = signature;
+        openCareReminderAlertModal(due);
+      }
+      // daily 提醒到點後自動排下一次，避免永久停留在「待提醒」
+      const dailyDue = due.filter((item) => String(item.repeat || "once") === "daily");
+      if (dailyDue.length) {
+        const pending = dailyDue.filter((item) => now - Number(careReminderDailyAdvanced[String(item.id || "")] || 0) > 30000);
+        if (pending.length) {
+          const ids = new Set(pending.map((item) => String(item.id || "")));
+          let changed = false;
+          const next = getConfiguredCareReminders(cfg).map((reminder) => {
+            if (!ids.has(String(reminder.id || ""))) return reminder;
+            changed = true;
+            careReminderDailyAdvanced[String(reminder.id || "")] = now;
+            return { ...reminder, nextAtMs: advanceDailyReminder(reminder.nextAtMs || reminder.remindAtMs, now) };
+          });
+          if (changed) saveCareReminderEntries(cid, next).catch(() => {});
+        }
+      }
+      refreshCareSubnavBadge();
+    };
+    checkDue();
+    careReminderTimer = setInterval(checkDue, 60000);
+  }
+
+  async function saveCareReminderEntries(communityId, reminders) {
+    await configDocRef(communityId).set({
+      careReminders: Array.isArray(reminders) ? reminders : [],
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+
+  async function markCareReminderDone(communityId, reminderId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const current = getConfiguredCareReminders(loadConfig(cid) || {});
+    const now = Date.now();
+    const next = current.map((reminder) => {
+      if (String(reminder.id || "") !== String(reminderId || "")) return reminder;
+      if (String(reminder.repeat || "once") === "daily") {
+        return {
+          ...reminder,
+          doneAtMs: now,
+          nextAtMs: advanceDailyReminder(reminder.nextAtMs || reminder.remindAtMs, now),
+          enabled: true,
+        };
+      }
+      return {
+        ...reminder,
+        doneAtMs: now,
+        enabled: false,
+      };
+    });
+    await saveCareReminderEntries(cid, next);
+    toast("已完成提醒");
+  }
+
+  async function snoozeCareReminder(communityId, reminderId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const current = getConfiguredCareReminders(loadConfig(cid) || {});
+    const now = Date.now();
+    const next = current.map((reminder) => (
+      String(reminder.id || "") !== String(reminderId || "")
+        ? reminder
+        : { ...reminder, nextAtMs: now + (60 * 60 * 1000), enabled: true }
+    ));
+    await saveCareReminderEntries(cid, next);
+    toast("已延後 1 小時");
+  }
+
+  async function deleteCareReminder(communityId, reminderId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const current = getConfiguredCareReminders(loadConfig(cid) || {});
+    await saveCareReminderEntries(cid, current.filter((reminder) => String(reminder.id || "") !== String(reminderId || "")));
+    toast("已刪除提醒");
+  }
+
+  async function resetCareResidentCode(communityId, residentData) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const residentKey = createCareResidentKey(residentData || {});
+    const current = getConfiguredCareResidents(loadConfig(cid) || {}, cid);
+    const next = current.map((resident) => (
+      resident.residentKey !== residentKey
+        ? resident
+        : { ...resident, checkinCode: generateCareCheckinCode(cid) }
+    ));
+    await configDocRef(cid).set({
+      checkinResidents: next,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    toast("已重設 QR/NFC 碼");
+  }
+
+  function openCareResidentCodeModal({ communityId, resident }) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const item = normalizeCareResidentEntry(resident || {}, cid);
+    const modal = ensureModal("careResidentCodeModal", "modal-care-resident-code", "min(720px, 92vw)");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(String(item.checkinCode || ""))}`;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="careResidentCodeTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="careResidentCodeTitle">QR / NFC 感應碼</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:18px;">
+          <div style="padding:16px;border:1px solid rgba(17,24,39,.08);border-radius:16px;background:#f9fafb;">
+            <div style="font-size:calc(18px * var(--fs, 1));font-weight:800;color:#111827;">${escapeHtml(item.name || "住戶")}</div>
+            <div class="muted" style="margin-top:6px;">${escapeHtml(formatCareResidentUnit(item))}</div>
+            <div class="muted" style="margin-top:8px;">此住戶的 QR code 與 NFC 感應碼相同，任一方式完成一次報到後即重新開始計時。</div>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(220px,260px) minmax(0,1fr);gap:20px;align-items:center;">
+            <div style="display:flex;justify-content:center;">
+              <img src="${escapeHtml(qrSrc)}" alt="住戶報到 QR Code" style="width:240px;height:240px;max-width:100%;display:block;border-radius:16px;border:1px solid rgba(17,24,39,.08);background:#fff;padding:10px;">
+            </div>
+            <div style="display:grid;gap:10px;">
+              <div style="font-size:calc(13px * var(--fs, 1));font-weight:700;color:#6b7280;">同碼字串</div>
+              <textarea id="careResidentCodeText" rows="4" readonly style="width:100%;border-radius:14px;border:1px solid rgba(17,24,39,.12);padding:12px 14px;background:#fff;resize:none;">${escapeHtml(item.checkinCode || "")}</textarea>
+              <div class="muted">可列印 QR code，或將相同字串寫入 NFC 標籤。</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+          <button class="btn" type="button" id="btnCopyCareResidentCode">複製代碼</button>
+          <button class="btn btn-primary" type="button" id="btnResetCareResidentCode">重設代碼</button>
+        </div>
+      </div>
+    `.trim();
+    const copyBtn = modal.querySelector("#btnCopyCareResidentCode");
+    if (copyBtn) {
+      copyBtn.onclick = async () => {
+        const val = String(item.checkinCode || "").trim();
+        if (!val) return;
+        try {
+          if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+            await navigator.clipboard.writeText(val);
+            toast("已複製");
+            return;
+          }
+        } catch {}
+        try { window.prompt("複製內容", val); } catch {}
+      };
+    }
+    const resetBtn = modal.querySelector("#btnResetCareResidentCode");
+    if (resetBtn) {
+      resetBtn.onclick = async () => {
+        await resetCareResidentCode(cid, item);
+        modal.hidden = true;
+        detach();
+        if (String(location.hash || "").includes("#community/care")) renderCareModule();
+      };
+    }
+    modal.hidden = false;
+  }
+
+  function extractNfcRecordText(record) {
+    if (!record) return "";
+    try {
+      if (record.recordType === "text" || record.recordType === "url") {
+        return String(new TextDecoder(record.encoding || "utf-8").decode(record.data || new Uint8Array()) || "").trim();
+      }
+    } catch {}
+    try {
+      return String(new TextDecoder("utf-8").decode(record.data || new Uint8Array()) || "").trim();
+    } catch {}
+    return "";
+  }
+
+  function findCareResidentByToken(communityId, token) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const cfg = loadConfig(cid) || {};
+    const code = String(token || "").trim();
+    if (!code) return null;
+    const residents = getConfiguredCareResidents(cfg, cid);
+    const shortCode = code.includes(":") ? code.split(":").pop() : code;
+    return residents.find((resident) => {
+      const residentCode = String(resident.checkinCode || "").trim();
+      if (!residentCode) return false;
+      return residentCode === code || residentCode.split(":").pop() === shortCode;
+    }) || null;
+  }
+
+  function openCareCheckinScannerModal({ communityId, method }) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const scanMethod = String(method || "qr").trim() === "nfc" ? "nfc" : "qr";
+    const title = scanMethod === "nfc" ? "NFC 感應報到" : "QR Code 掃碼報到";
+    const modal = ensureModal("careCheckinScannerModal", "modal-care-checkin-scanner", "min(760px, 92vw)");
+    let scanner = null;
+    let nfcAbort = null;
+    let detach = () => {};
+    const setStatus = (msg, isError) => {
+      const statusEl = modal.querySelector("#careCheckinScanStatus");
+      if (!statusEl) return;
+      const text = String(msg || "").trim();
+      statusEl.hidden = !text;
+      statusEl.textContent = text;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+    const stopScanner = async () => {
+      if (scanner) {
+        try { await scanner.stop(); } catch {}
+        try { await scanner.clear(); } catch {}
+        scanner = null;
+      }
+      if (nfcAbort) {
+        try { nfcAbort.abort(); } catch {}
+        nfcAbort = null;
+      }
+    };
+    let processing = false;
+    const processToken = async (token) => {
+      if (processing) return;
+      processing = true;
+      const resident = findCareResidentByToken(cid, token);
+      if (!resident) {
+        setStatus("找不到對應住戶，請確認 QR / NFC 感應碼。", true);
+        processing = false;
+        return;
+      }
+      await addCheckinRecord(cid, resident, scanMethod);
+      await stopScanner();
+      modal.hidden = true;
+      detach();
+      if (String(location.hash || "").includes("#community/care")) renderCareModule();
+    };
+    detach = bindModalClose(modal, async () => {
+      await stopScanner();
+      detach();
+    });
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="careCheckinScannerTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="careCheckinScannerTitle">${escapeHtml(title)}</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:14px;">
+          <div class="muted">${scanMethod === "qr" ? "請將住戶 QR code 對準鏡頭，或直接輸入同碼字串。" : "若裝置支援 Web NFC，請將標籤靠近感應；若不支援，可由感應器輸入同碼字串。"}</div>
+          <div class="field">
+            <label for="careCheckinCodeInput">感應碼 / QR 字串</label>
+            <input id="careCheckinCodeInput" type="text" autocomplete="off" placeholder="可直接貼上或由感應器輸入" />
+          </div>
+          ${scanMethod === "qr" ? `<div id="careCheckinQrReader" style="width:100%;max-width:360px;margin:0 auto;border-radius:14px;overflow:hidden;aspect-ratio:1/1;background:#111827;"></div>` : ""}
+          <div class="status" id="careCheckinScanStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+          ${scanMethod === "qr" ? `<button class="btn btn-primary" type="button" id="btnRestartCareQr">重新掃描</button>` : `<button class="btn btn-primary" type="button" id="btnStartCareNfc">開始感應</button>`}
+        </div>
+      </div>
+    `.trim();
+    const inputEl = modal.querySelector("#careCheckinCodeInput");
+    if (inputEl) {
+      inputEl.addEventListener("keydown", (e) => {
+        if (!e || e.key !== "Enter") return;
+        try { e.preventDefault(); } catch {}
+        const value = String(inputEl.value || "").trim();
+        inputEl.value = "";
+        processToken(value);
+      });
+    }
+    const startQr = async () => {
+      await stopScanner();
+      setStatus("啟動相機中...", false);
+      try {
+        scanner = new Html5Qrcode("careCheckinQrReader");
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 20,
+            qrbox: (w, h) => {
+              const size = Math.min(w, h) * 0.82;
+              return { width: size, height: size };
+            },
+            aspectRatio: 1.0,
+            disableFlip: false,
+            experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+          },
+          (decodedText) => {
+            const value = String(decodedText || "").trim();
+            if (!value) return;
+            stopScanner().finally(() => processToken(value));
+          },
+          () => {}
+        );
+        setStatus("", false);
+      } catch {
+        setStatus("相機啟動失敗，請確認權限或改用手動輸入。", true);
+      }
+    };
+    const startNfc = async () => {
+      await stopScanner();
+      if (!("NDEFReader" in window)) {
+        setStatus("此裝置不支援 Web NFC，可改用外接感應器輸入同碼字串。", true);
+        return;
+      }
+      try {
+        nfcAbort = new AbortController();
+        const reader = new NDEFReader();
+        await reader.scan({ signal: nfcAbort.signal });
+        setStatus("請將 NFC 標籤靠近裝置感應區。", false);
+        reader.onreading = (event) => {
+          const records = event && event.message && Array.isArray(event.message.records) ? event.message.records : [];
+          const found = records.map((record) => extractNfcRecordText(record)).find(Boolean);
+          if (found) {
+            stopScanner().finally(() => processToken(found));
+          }
+        };
+        reader.onreadingerror = () => setStatus("NFC 讀取失敗，請重試。", true);
+      } catch {
+        setStatus("NFC 啟動失敗，請確認裝置已開啟 NFC 或改用手動輸入。", true);
+      }
+    };
+    const qrBtn = modal.querySelector("#btnRestartCareQr");
+    if (qrBtn) qrBtn.onclick = () => startQr();
+    const nfcBtn = modal.querySelector("#btnStartCareNfc");
+    if (nfcBtn) nfcBtn.onclick = () => startNfc();
+    modal.hidden = false;
+    requestAnimationFrame(() => {
+      if (scanMethod === "qr") startQr();
+      else startNfc();
+    });
+  }
+
+  function openCareReminderModal({ communityId, reminder }) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const item = reminder ? normalizeCareReminderEntry(reminder) : null;
+    const modal = ensureModal("careReminderEditModal", "modal-care-reminder-edit", "min(760px, 92vw)");
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+    // 提醒對象：先放即時可用的名單，再向資料庫載入全部住戶（含子戶號帳戶）
+    const residentTargetKey = item ? item.residentKey : "";
+    const residentPayloadOf = (resident) => encodeURIComponent(JSON.stringify({
+      houseNo: resident.houseNo,
+      subHouseNo: resident.subHouseNo,
+      name: resident.name,
+    }));
+    const residentKeyOfPayload = (value) => {
+      try { return createCareResidentKey(JSON.parse(decodeURIComponent(String(value || "")))); } catch { return ""; }
+    };
+    const syncResidentOptions = (() => {
+      const source = getConfiguredCareResidents(loadConfig(cid) || {}, cid);
+      if (source.length) return source;
+      return getCareResidentsSource();
+    })();
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="careReminderEditTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="careReminderEditTitle">${item ? "編輯提醒" : "新增提醒"}</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body" style="display:grid;gap:16px;">
+          <div class="field">
+            <label for="careReminderResident">提醒對象</label>
+            <select id="careReminderResident">
+              <option value="">請選擇住戶</option>
+              ${syncResidentOptions.map((resident) => {
+                return `<option value="${residentPayloadOf(resident)}" ${residentTargetKey && residentTargetKey === resident.residentKey ? "selected" : ""}>${escapeHtml(resident.name)}｜${escapeHtml(formatCareResidentUnit(resident))}</option>`;
+              }).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label for="careReminderTitle">提醒項目</label>
+            <input id="careReminderTitle" type="text" maxlength="60" value="${escapeHtml(item ? item.title : "")}" placeholder="例如：量血壓、服藥提醒、電話關懷" />
+          </div>
+          <div class="grid cols-2" style="gap:12px;">
+            <div class="field">
+              <label for="careReminderAt">提醒時間</label>
+              <input id="careReminderAt" type="datetime-local" value="${escapeHtml(formatCareDatetimeInputValue(item ? (item.remindAtMs || item.nextAtMs) : Date.now() + 3600000))}" />
+            </div>
+            <div class="field">
+              <label for="careReminderRepeat">重複方式</label>
+              <select id="careReminderRepeat">
+                <option value="once" ${!item || item.repeat === "once" ? "selected" : ""}>一次性</option>
+                <option value="daily" ${item && item.repeat === "daily" ? "selected" : ""}>每天同時段</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="careReminderNote">備註</label>
+            <textarea id="careReminderNote" rows="4" placeholder="可填寫提醒內容、注意事項或追蹤狀況">${escapeHtml(item ? item.note : "")}</textarea>
+          </div>
+          <div class="status" id="careReminderEditStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+          <button class="btn btn-primary" type="button" id="btnSaveCareReminder">${item ? "儲存" : "新增"}</button>
+        </div>
+      </div>
+    `.trim();
+    // 提醒對象下拉：向資料庫載入全部住戶帳號（含子戶號），並保留目前選取與編輯中的住戶
+    const residentSelectEl = modal.querySelector("#careReminderResident");
+    const renderResidentOptions = (list) => {
+      if (!residentSelectEl) return;
+      const desiredKey = residentKeyOfPayload(residentSelectEl.value) || residentTargetKey;
+      const map = new Map();
+      if (item && !(list || []).some((resident) => resident.residentKey === item.residentKey)) {
+        map.set(item.residentKey, { houseNo: item.houseNo, subHouseNo: item.subHouseNo, name: item.name });
+      }
+      (list || []).forEach((resident) => {
+        if (!map.has(resident.residentKey)) map.set(resident.residentKey, resident);
+      });
+      const sorted = Array.from(map.values()).sort((a, b) => {
+        const unitCompare = formatCareResidentUnit(a).localeCompare(formatCareResidentUnit(b), "zh-Hant");
+        if (unitCompare !== 0) return unitCompare;
+        return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
+      });
+      residentSelectEl.innerHTML = `<option value="">請選擇住戶</option>`
+        + sorted.map((resident) => `<option value="${residentPayloadOf(resident)}"${desiredKey && desiredKey === createCareResidentKey(resident) ? " selected" : ""}>${escapeHtml(resident.name)}｜${escapeHtml(formatCareResidentUnit(resident))}</option>`).join("");
+    };
+    renderResidentOptions(syncResidentOptions);
+    loadCareResidentChoices(cid).then((list) => {
+      if (modal.hidden) return;
+      renderResidentOptions(list);
+    });
+    const statusEl = modal.querySelector("#careReminderEditStatus");
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const text = String(msg || "").trim();
+      statusEl.hidden = !text;
+      statusEl.textContent = text;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+    const saveBtn = modal.querySelector("#btnSaveCareReminder");
+    if (saveBtn) {
+      saveBtn.onclick = async () => {
+        try {
+          const residentRaw = String(modal.querySelector("#careReminderResident")?.value || "").trim();
+          const title = String(modal.querySelector("#careReminderTitle")?.value || "").trim();
+          const repeat = String(modal.querySelector("#careReminderRepeat")?.value || "once").trim() === "daily" ? "daily" : "once";
+          const note = String(modal.querySelector("#careReminderNote")?.value || "").trim();
+          const remindAtRaw = String(modal.querySelector("#careReminderAt")?.value || "").trim();
+          if (!residentRaw) { setStatus("請先選擇提醒住戶。", true); return; }
+          if (!title) { setStatus("請輸入提醒項目。", true); return; }
+          const remindAtMs = new Date(remindAtRaw).getTime();
+          if (!Number.isFinite(remindAtMs)) { setStatus("請選擇提醒時間。", true); return; }
+          const residentData = JSON.parse(decodeURIComponent(residentRaw));
+          const current = getConfiguredCareReminders(loadConfig(cid) || {});
+          const payload = {
+            id: item ? item.id : `careReminder_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+            houseNo: careResidentText(residentData.houseNo),
+            subHouseNo: careResidentText(residentData.subHouseNo),
+            name: careResidentText(residentData.name) || "住戶",
+            title,
+            note,
+            repeat,
+            remindAtMs,
+            nextAtMs: remindAtMs,
+            enabled: true,
+            doneAtMs: 0,
+          };
+          const next = item
+            ? current.map((reminderEntry) => String(reminderEntry.id || "") === String(item.id || "") ? payload : reminderEntry)
+            : current.concat([payload]);
+          await saveCareReminderEntries(cid, next);
+          toast(item ? "已更新提醒" : "已新增提醒");
+          modal.hidden = true;
+          detach();
+          if (String(location.hash || "").includes("#community/care")) renderCareModule();
+        } catch {
+          setStatus("儲存失敗，請稍後再試。", true);
+        }
+      };
+    }
+    modal.hidden = false;
+  }
+
+  function renderCareOverviewContent(cid, cfg) {
+    const activeSos = getSosRecords().filter((record) => String(record.status || "").trim() !== "已完成");
+    const careResidents = getConfiguredCareResidents(cfg, cid);
+    const overdueResidents = getCareOverdueResidents(cfg, getCheckinRecords(), cid, Date.now()).filter((resident) => resident.isOverdue);
+    const reminderBuckets = getCareReminderBuckets(cfg, Date.now());
+    const latestSos = activeSos.slice(0, 5);
+    const latestDueReminders = reminderBuckets.due.slice(0, 5);
+    const latestOverdue = overdueResidents.slice(0, 5);
+    const cards = [
+      { label: "待處理 SOS", value: activeSos.length, sub: "住戶即時求助", tone: "tone-warning" },
+      { label: "關懷住戶", value: careResidents.length, sub: "已建立 QR / NFC 碼", tone: "tone-info" },
+      { label: "超時未報到", value: overdueResidents.length, sub: "需立即追蹤", tone: overdueResidents.length ? "tone-warning" : "tone-success" },
+      { label: "待提醒項目", value: reminderBuckets.due.length, sub: "人工提醒待處理", tone: reminderBuckets.due.length ? "tone-warning" : "tone-success" },
+    ];
+    const renderSimpleList = (items, renderer, emptyText) => items.length
+      ? `<div class="list">${items.map(renderer).join("")}</div>`
+      : `<div class="status">${emptyText}</div>`;
+    return `
+      <div class="care-overview">
+        <div class="care-overview-head">
+          <strong>關懷總覽</strong>
+          <span>預設顯示重點指標與待處理名單</span>
+        </div>
+        <div class="care-overview-grid">
+          ${cards.map((card) => `
+            <div class="co-card ${card.tone}">
+              <div class="co-label">${escapeHtml(card.label)}</div>
+              <div class="co-value">${card.value}<span class="co-unit">項</span></div>
+              <div class="co-sub">${escapeHtml(card.sub)}</div>
+            </div>
+          `).join("")}
+        </div>
+        <div class="grid cols-2" style="gap:12px;">
+          <section class="card" style="margin:0;">
+            <div class="card-bd">
+              <div class="care-overview-head"><strong>待處理 SOS</strong><span>${activeSos.length} 筆</span></div>
+              ${renderSimpleList(latestSos, (item) => `
+                <div class="list-item">
+                  <strong>${escapeHtml(item.name || "住戶")}</strong>
+                  <div class="muted">${escapeHtml(item.houseNo || "-")}${item.subHouseNo ? `-${escapeHtml(item.subHouseNo)}` : ""} · ${escapeHtml(item.datetimeText || "")}</div>
+                </div>
+              `, "目前沒有待處理 SOS")}
+            </div>
+          </section>
+          <section class="card" style="margin:0;">
+            <div class="card-bd">
+              <div class="care-overview-head"><strong>待提醒項目</strong><span>${reminderBuckets.due.length} 筆</span></div>
+              ${renderSimpleList(latestDueReminders, (item) => `
+                <div class="list-item">
+                  <strong>${escapeHtml(item.title || "人工提醒")}</strong>
+                  <div class="muted">${escapeHtml(item.name || "住戶")} · ${escapeHtml(formatCareResidentUnit(item))} · ${escapeHtml(formatCareDateTime(item.nextAtMs))}</div>
+                </div>
+              `, "目前沒有到點提醒")}
+            </div>
+          </section>
+        </div>
+        <section class="card" style="margin:0;">
+          <div class="card-bd">
+            <div class="care-overview-head"><strong>超時未報到住戶</strong><span>${overdueResidents.length} 位</span></div>
+            ${renderSimpleList(latestOverdue, (resident) => `
+              <div class="list-item">
+                <strong>${escapeHtml(resident.name || "住戶")}</strong>
+                <div class="muted">${escapeHtml(formatCareResidentUnit(resident))} · ${resident.lastCheckin ? `最後報到 ${escapeHtml(formatCareDateTime(resident.lastCheckin.createdAtMs))}` : "尚未報到"}</div>
+              </div>
+            `, "目前沒有超時名單")}
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  function renderCareReminderPageContent(cid, cfg) {
+    const buckets = getCareReminderBuckets(cfg, Date.now());
+    const cards = [
+      { label: "待提醒", value: buckets.due.length, sub: "到點待人工提醒", tone: buckets.due.length ? "tone-warning" : "tone-success" },
+      { label: "即將到點", value: buckets.upcoming.length, sub: "已排程", tone: "tone-info" },
+      { label: "已完成", value: buckets.done.length, sub: "一次性或今日已完成", tone: "tone-success" },
+    ];
+    const renderSection = (title, items, emptyText) => `
+      <section class="card" style="margin:0;">
+        <div class="card-bd">
+          <div class="care-overview-head"><strong>${escapeHtml(title)}</strong><span>${items.length} 筆</span></div>
+          ${items.length ? `
+            <div class="list">
+              ${items.map((item) => `
+                <div class="list-item" style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;">
+                  <div style="flex:1;min-width:0;">
+                    <strong>${escapeHtml(item.title || "人工提醒")}</strong>
+                    <div class="muted" style="margin-top:4px;">${escapeHtml(item.name || "住戶")} · ${escapeHtml(formatCareResidentUnit(item))} · ${escapeHtml(formatCareDateTime(item.nextAtMs))}（${escapeHtml(formatCareRelativeMs(item.nextAtMs))}）</div>
+                    <div class="muted" style="margin-top:4px;">${item.repeat === "daily" ? "每天同時間提醒" : "一次性提醒"}</div>
+                    ${item.note ? `<div class="muted" style="margin-top:6px;">${escapeHtml(item.note)}</div>` : ""}
+                  </div>
+                  <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;flex-shrink:0;">
+                    <span style="display:inline-flex;align-items:center;height:34px;padding:0 12px;border-radius:999px;background:rgba(17,24,39,.06);font-weight:800;color:${item.status.tone};">${escapeHtml(item.status.label)}</span>
+                    ${item.status.key !== "done" ? `<button class="btn btn-sm" type="button" data-care-reminder-done="${escapeHtml(String(item.id || ""))}">完成</button>` : ""}
+                    ${item.status.key !== "done" ? `<button class="btn btn-sm" type="button" data-care-reminder-snooze="${escapeHtml(String(item.id || ""))}">延後1小時</button>` : ""}
+                    <button class="btn btn-sm" type="button" data-care-reminder-edit="${escapeHtml(String(item.id || ""))}">編輯</button>
+                    <button class="btn btn-sm danger" type="button" data-care-reminder-delete="${escapeHtml(String(item.id || ""))}">刪除</button>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          ` : `<div class="status">${escapeHtml(emptyText)}</div>`}
+        </div>
+      </section>
+    `;
+    return `
+      <div class="row" style="align-items:center;justify-content:space-between;gap:12px;">
+        <div>
+          <div style="font-size:calc(16px * var(--fs, 1));font-weight:800;color:#111827;">人工提醒服務</div>
+          <div class="muted">像鬧鐘一樣替管理中心排出提醒項目，到點後可完成人工提醒、延後或重新排程。</div>
+        </div>
+        <button class="btn danger" type="button" id="btnAddCareReminder">新增提醒</button>
+      </div>
+      <div class="care-overview-grid" style="margin-top:12px;">
+        ${cards.map((card) => `
+          <div class="co-card ${card.tone}">
+            <div class="co-label">${escapeHtml(card.label)}</div>
+            <div class="co-value">${card.value}<span class="co-unit">筆</span></div>
+            <div class="co-sub">${escapeHtml(card.sub)}</div>
+          </div>
+        `).join("")}
+      </div>
+      <div class="grid cols-1" style="gap:12px;margin-top:12px;">
+        ${renderSection("到點提醒", buckets.due, "目前沒有到點提醒")}
+        ${renderSection("即將到點", buckets.upcoming, "目前沒有排程中的提醒")}
+        ${renderSection("已完成", buckets.done, "目前沒有完成紀錄")}
+      </div>
+    `;
+  }
+
   // 渲染72小時頁面內容
   function render72hPageContent(cid, cfg) {
     const checkinEnabled = cfg.checkinEnabled !== false;
     const hours = Number(cfg.sosHours || 72) || 72;
     const methods = cfg.checkinMethods || { nfc: true, qr: true, manual: true };
-    const checkinResidents = cfg.checkinResidents || [];
-    
+    const residents = getConfiguredCareResidents(cfg, cid);
+    const records = getCheckinRecords();
+    const overdueResidents = getCareOverdueResidents(cfg, records, cid, Date.now());
+    const overdueCount = overdueResidents.filter((resident) => resident.isOverdue).length;
+
     if (!checkinEnabled) {
       return `
-        <div class="row"><div class="muted">報到功能尚未啟用，請至SOS設定中開啟。</div></div>
-        <div class="list" style="margin-top:12px;">
-          <div class="list-item"><strong>物資清單</strong><div class="muted">飲水、照明、急救包、通訊設備</div></div>
-          <div class="list-item"><strong>避難資訊</strong><div class="muted">集合點、樓層疏散路線、聯絡方式</div></div>
-          <div class="list-item"><strong>應變任務</strong><div class="muted">巡查、廣播、支援、回報</div></div>
-        </div>
+        <div class="status">報到功能尚未啟用，請至「設定」開啟並設定小時數。</div>
+        <div class="muted" style="margin-top:12px;">啟用後，可為每位需要關懷的住戶建立一組 QR / NFC 同碼，並在 ${hours} 小時倒數內完成一次掃碼、感應或人工報到。</div>
       `;
     }
-    
-    const records = getCheckinRecords();
-    const lastCheckinMap = getLastCheckinByResident(records);
-    const allResidents = Array.isArray(state.currentResidents) ? state.currentResidents : [];
-    const now = Date.now();
-    const timeoutMs = hours * 60 * 60 * 1000;
-    
-    // 過濾出有選擇的住戶
-    let residents = allResidents;
-    if (checkinResidents.length > 0) {
-      residents = allResidents.filter(resident => {
-        const houseNo = String(resident.houseNo || resident.unit || '');
-        const subHouseNo = String(resident.subHouseNo || resident.subUnit || '');
-        const name = String(resident.name || resident.displayName || '住戶');
-        return checkinResidents.some(r => 
-          r.houseNo === houseNo && 
-          r.subHouseNo === subHouseNo && 
-          r.name === name
-        );
-      });
-    }
-    
+
     return `
-      <div class="row">
-        <div style="font-size:calc(16px * var(--fs, 1));font-weight:800;color:#111827;margin-bottom:8px;">住戶報到</div>
-        <div class="muted">住戶需在 ${hours} 小時內完成報到，超過時間未報到將發出響鈴提醒。</div>
+      <div class="row" style="align-items:flex-start;justify-content:space-between;gap:12px;">
+        <div>
+          <div style="font-size:calc(16px * var(--fs, 1));font-weight:800;color:#111827;">關懷報到機制</div>
+          <div class="muted">每位住戶會有一組專屬 QR / NFC 同碼；任一方式完成一次報到後，${hours} 小時計時會重新開始。</div>
+        </div>
       </div>
-      
+      <div class="care-overview-grid" style="margin-top:12px;">
+        <div class="co-card tone-info"><div class="co-label">關懷住戶</div><div class="co-value">${residents.length}<span class="co-unit">位</span></div><div class="co-sub">已建立追蹤名單</div></div>
+        <div class="co-card ${overdueCount ? "tone-warning" : "tone-success"}"><div class="co-label">超時未報到</div><div class="co-value">${overdueCount}<span class="co-unit">位</span></div><div class="co-sub">超過 ${hours} 小時</div></div>
+        <div class="co-card tone-success"><div class="co-label">近期報到</div><div class="co-value">${records.length}<span class="co-unit">筆</span></div><div class="co-sub">保留最近 100 筆紀錄</div></div>
+      </div>
       <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;">
-        ${methods.nfc ? `
-          <button class="btn btn-primary" type="button" id="btnCheckinNfc">
-            <span style="margin-right:8px;">📡</span>
-            NFC IC感應
-          </button>
-        ` : ''}
-        ${methods.qr ? `
-          <button class="btn btn-primary" type="button" id="btnCheckinQr">
-            <span style="margin-right:8px;">📱</span>
-            QR Code掃碼
-          </button>
-        ` : ''}
-        ${methods.manual ? `
-          <button class="btn btn-primary" type="button" id="btnCheckinManual">
-            <span style="margin-right:8px;">👆</span>
-            手動報到
-          </button>
-        ` : ''}
-        <button class="btn" type="button" id="btnAddCheckinResident">
-          <span style="margin-right:8px;">➕</span>
-          新增
-        </button>
+        ${methods.nfc ? `<button class="btn btn-primary" type="button" id="btnCheckinNfc">NFC 感應</button>` : ""}
+        ${methods.qr ? `<button class="btn btn-primary" type="button" id="btnCheckinQr">QR Code 掃碼</button>` : ""}
+        ${methods.manual ? `<button class="btn btn-primary" type="button" id="btnCheckinManual">人工報到</button>` : ""}
+        <button class="btn danger" type="button" id="btnAddCheckinResident">新增住戶</button>
       </div>
-      
-      <div style="margin-top:24px;">
-        <div style="font-size:calc(14px * var(--fs, 1));font-weight:700;color:#111827;margin-bottom:12px;">住戶報到狀態</div>
-        ${allResidents.length === 0 ? `
-          <div style="text-align:center;padding:24px;color:#9ca3af;">請先至「住戶」頁面載入住戶資料</div>
-        ` : residents.length === 0 ? `
-          <div style="text-align:center;padding:24px;color:#9ca3af;">請點擊「新增」按鈕選擇需要報到服務的住戶</div>
-        ` : `
-          <div class="list">
-            ${residents.map(resident => {
-              const houseNo = String(resident.houseNo || resident.unit || '');
-              const subHouseNo = String(resident.subHouseNo || resident.subUnit || '');
-              const name = String(resident.name || resident.displayName || '住戶');
-              const key = `${houseNo}_${subHouseNo}_${name}`;
-              const lastCheckin = lastCheckinMap.get(key);
-              const lastCheckinMs = lastCheckin ? lastCheckin.createdAtMs : 0;
-              const timeSinceLastCheckin = now - lastCheckinMs;
-              const isOverdue = lastCheckinMs > 0 && timeSinceLastCheckin > timeoutMs;
-              const isNeverCheckedIn = lastCheckinMs === 0;
-              
-              let statusText = '';
-              let statusColor = '';
-              if (isNeverCheckedIn) {
-                statusText = '尚未報到';
-                statusColor = '#f59e0b';
-              } else if (isOverdue) {
-                statusText = '已超時';
-                statusColor = '#dc2626';
-              } else {
-                statusText = '已報到';
-                statusColor = '#16a34a';
-              }
-              
-              const lastCheckinText = lastCheckin ? lastCheckin.datetimeText || '' : '';
-              const methodText = lastCheckin ? lastCheckin.method || '' : '';
-              
-              return `
-                <div class="list-item" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
-                  <div style="flex:1;min-width:0;">
-                    <strong>${escapeHtml(name)}</strong>
-                    <div class="muted" style="font-size:calc(13px * var(--fs, 1));">
-                      ${houseNo ? escapeHtml(houseNo) : ''}${subHouseNo ? '-' + escapeHtml(subHouseNo) : ''}
-                      ${lastCheckinText ? ' | 最後報到：' + escapeHtml(lastCheckinText) : ''}
-                      ${methodText ? ' (' + escapeHtml(methodText) + ')' : ''}
+      <section class="card" style="margin-top:16px;">
+        <div class="card-bd">
+          <div class="care-overview-head"><strong>關懷住戶名單</strong><span>${residents.length} 位</span></div>
+          ${residents.length ? `
+            <div class="list">
+              ${overdueResidents.map((resident) => {
+                const statusText = !resident.enabled
+                  ? "未啟用"
+                  : (resident.isOverdue ? "已超時" : (resident.isNeverCheckedIn ? "等待首次報到" : "正常"));
+                const statusColor = !resident.enabled
+                  ? "#6b7280"
+                  : (resident.isOverdue ? "#dc2626" : (resident.isNeverCheckedIn ? "#f59e0b" : "#16a34a"));
+                return `
+                  <div class="list-item" style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;">
+                    <div style="flex:1;min-width:0;">
+                      <strong>${escapeHtml(resident.name || "住戶")}</strong>
+                      <div class="muted" style="margin-top:4px;">${escapeHtml(formatCareResidentUnit(resident))}</div>
+                      <div class="muted" style="margin-top:4px;">${resident.lastCheckin ? `最後報到：${escapeHtml(formatCareDateTime(resident.lastCheckin.createdAtMs))}（${escapeHtml(resident.lastCheckin.methodLabel || resident.lastCheckin.method || "")}）` : "尚未建立任何報到紀錄"}</div>
+                      ${resident.enabled
+                        ? `<div class="muted" style="margin-top:4px;">下次報到期限：${escapeHtml(formatCareDateTime(resident.deadlineMs))}（${escapeHtml(formatCareRelativeMs(resident.deadlineMs))}）</div>`
+                        : `<div class="muted" style="margin-top:4px;">尚未啟用，開始計時後才會列入超時判定</div>`}
+                      <div class="muted" style="margin-top:4px;">QR / NFC 同碼：<code>${escapeHtml(String(resident.checkinCode || ""))}</code></div>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center;flex-shrink:0;">
+                      <label class="switch" title="${resident.enabled ? "關閉後停止計時" : `開啟後開始 ${hours} 小時倒數`}">
+                        <input type="checkbox" data-toggle-checkin-resident="${encodeURIComponent(resident.residentKey)}"${resident.enabled ? " checked" : ""} />
+                        <span class="slider"></span>
+                      </label>
+                      <span style="display:inline-flex;align-items:center;height:34px;padding:0 12px;border-radius:999px;background:rgba(17,24,39,.06);font-weight:800;color:${statusColor};">${escapeHtml(statusText)}</span>
+                      <button class="btn btn-sm" type="button" data-care-show-code="${encodeURIComponent(JSON.stringify(resident))}">QR/NFC碼</button>
+                      ${methods.manual ? `<button class="btn btn-sm" type="button" data-manual-checkin="${encodeURIComponent(JSON.stringify(resident))}">報到</button>` : ""}
+                      <button class="btn btn-sm danger" type="button" data-remove-checkin-resident="${encodeURIComponent(JSON.stringify(resident))}">移除</button>
                     </div>
                   </div>
-                  <div style="flex-shrink:0;display:flex;align-items:center;gap:8px;">
-                    <span style="font-weight:700;color:${statusColor};">${statusText}</span>
-                    ${methods.manual ? `
-                      <button class="btn btn-sm" type="button" data-manual-checkin="${encodeURIComponent(JSON.stringify({ houseNo, subHouseNo, name }))}" style="padding:6px 12px;">
-                        報到
-                      </button>
-                    ` : ''}
-                    <button class="btn btn-sm btn-danger" type="button" data-remove-checkin-resident="${encodeURIComponent(JSON.stringify({ houseNo, subHouseNo, name }))}" style="padding:6px 12px;">
-                      移除
-                    </button>
-                  </div>
+                `;
+              }).join("")}
+            </div>
+          ` : `<div class="status">請先點擊「新增住戶」，建立需要關懷的追蹤名單。</div>`}
+        </div>
+      </section>
+      <section class="card" style="margin-top:16px;">
+        <div class="card-bd">
+          <div class="care-overview-head"><strong>最近報到紀錄</strong><span>${records.length} 筆</span></div>
+          ${records.length ? `
+            <div class="list">
+              ${records.slice(0, 20).map((record) => `
+                <div class="list-item">
+                  <strong>${escapeHtml(record.name || "住戶")}</strong>
+                  <div class="muted">${escapeHtml(formatCareResidentUnit(record))} · ${escapeHtml(record.datetimeText || formatCareDateTime(record.createdAtMs))} · ${escapeHtml(record.methodLabel || record.method || "")}</div>
                 </div>
-              `;
-            }).join('')}
-          </div>
-        `}
-      </div>
-      
-      <div style="margin-top:24px;">
-        <div style="font-size:calc(14px * var(--fs, 1));font-weight:700;color:#111827;margin-bottom:12px;">報到記錄</div>
-        ${records.length === 0 ? `
-          <div style="text-align:center;padding:24px;color:#9ca3af;">暫無報到記錄</div>
-        ` : `
-          <div class="list">
-            ${records.map(r => `
-              <div class="list-item">
-                <strong>${r.name || '住戶'}</strong>
-                <div class="muted">${r.houseNo || ''} ${r.datetimeText || ''} - ${r.method || ''}</div>
-              </div>
-            `).join('')}
-          </div>
-        `}
-      </div>
+              `).join("")}
+            </div>
+          ` : `<div class="status">目前沒有報到紀錄</div>`}
+        </div>
+      </section>
     `;
   }
 
   function renderCareModule() {
     const cid = resolveActiveCommunityId();
-    const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
     const raw = String(location.hash || "").replace(/^#/, "").trim();
     const parts = raw.split("/");
-    let currentPage = "sos";
+    let currentPage = "overview";
     if (parts.length >= 3 && parts[0] === "community" && parts[1] === "care") {
       const pageParam = parts[2];
-      if (["sos", "72h", "reminder"].includes(pageParam)) currentPage = pageParam;
+      if (["overview", "sos", "72h", "reminder"].includes(pageParam)) currentPage = pageParam;
     }
 
     const cfg = loadConfig(cid) || {};
+    ensureCareConfigShape(cid, cfg);
+    startCareReminderWatcher(cid);
     const hoursValue = Number(cfg.sosHours || 72) || 72;
 
     const pageMap = {
+      overview: {
+        label: "總覽",
+        title: "總覽",
+        desc: "關懷總覽、超時報到與待提醒項目。",
+      },
       sos: {
         label: "住戶SOS",
         title: "住戶SOS",
         desc: "緊急求助、即時通報與聯絡資訊整合。",
-        tag: "緊急",
-        body: ""
       },
       "72h": {
         label: `${hoursValue}小時`,
         title: `${hoursValue}小時`,
-        desc: "災防物資、緊急清單與應變資訊彙整。",
-        tag: "防災",
-        body: ""
+        desc: "關懷住戶報到、QR / NFC 同碼與倒數追蹤。",
       },
       reminder: {
         label: "提醒",
         title: "提醒",
-        desc: "關懷通知、用藥提醒與定期追蹤紀錄。",
-        tag: "關懷",
-        body: `
-          <div class="row"><div class="muted">可放入住戶追蹤提醒、關懷排程、通知發送與回覆紀錄。</div></div>
-          <div class="grid cols-2" style="margin-top:12px;">
-            <div class="card" style="margin:0;"><div class="card-bd"><strong>今日提醒</strong><div class="muted">-- 筆待發送</div></div></div>
-            <div class="card" style="margin:0;"><div class="card-bd"><strong>本週追蹤</strong><div class="muted">-- 位待聯繫</div></div></div>
-          </div>
-        `
+        desc: "人工提醒、到點通知與追蹤處理。",
       }
     };
 
@@ -20364,17 +21677,20 @@
       if (!subnavEl) return;
       const isAdmin = isCurrentSystemAdmin();
       const careTabs = getCareSubnavCommunityTabs();
+      const activeSosCount = getSosRecords().filter((record) => String(record.status || "").trim() !== "已完成").length;
+      const overdueCheckinCount = getCareOverdueResidents(cfg, getCheckinRecords(), cid, Date.now())
+        .filter((resident) => resident.isOverdue).length;
+      const dueReminderCount = getCareReminderBuckets(cfg, Date.now()).due.length;
+      careSubnavBadgeSignature = `${overdueCheckinCount}|${dueReminderCount}`;
       const showSubnav = isAdmin || isCareSubnavEnabledForCommunity();
-      
       if (!showSubnav) {
         subnavEl.innerHTML = "";
         return;
       }
-      
-      const activeSosCount = getSosRecords().filter((record) => String(record.status || "").trim() !== "已完成").length;
       let buttonsHtml = "";
-      
-      // 住戶SOS
+      if (isAdmin || careTabs.overview) {
+        buttonsHtml += `<button class="btn btn-sm ${currentPage === "overview" ? "btn-primary" : ""}" type="button" data-care-page="overview">總覽</button>`;
+      }
       if (isAdmin || careTabs.sos) {
         buttonsHtml += `
           <button class="btn btn-sm ${currentPage === "sos" ? "btn-primary" : ""}" type="button" data-care-page="sos">
@@ -20383,25 +21699,26 @@
           </button>
         `;
       }
-      
-      // 72小時
       if (isAdmin || careTabs["72h"]) {
         buttonsHtml += `
-          <button class="btn btn-sm ${currentPage === "72h" ? "btn-primary" : ""}" type="button" data-care-page="72h">${hoursValue}小時</button>
+          <button class="btn btn-sm ${currentPage === "72h" ? "btn-primary" : ""}" type="button" data-care-page="72h">
+            <span class="badge-inline" ${overdueCheckinCount === 0 ? "hidden" : ""}>${overdueCheckinCount}</span>
+            ${hoursValue}小時
+          </button>
         `;
       }
-      
-      // 提醒
       if (isAdmin || careTabs.reminder) {
         buttonsHtml += `
-          <button class="btn btn-sm ${currentPage === "reminder" ? "btn-primary" : ""}" type="button" data-care-page="reminder">提醒</button>
+          <button class="btn btn-sm ${currentPage === "reminder" ? "btn-primary" : ""}" type="button" data-care-page="reminder">
+            <span class="badge-inline" ${dueReminderCount === 0 ? "hidden" : ""}>${dueReminderCount}</span>
+            提醒
+          </button>
         `;
       }
-      
-      subnavEl.innerHTML = buttonsHtml.trim();
+      subnavEl.innerHTML = `${buttonsHtml.trim()}<button class="btn btn-sm" type="button" id="btnSosSettings" aria-label="設定" title="設定">設定</button>`;
       subnavEl.querySelectorAll("[data-care-page]").forEach((btn) => {
         btn.addEventListener("click", () => {
-          const nextPage = String(btn.getAttribute("data-care-page") || "sos");
+          const nextPage = String(btn.getAttribute("data-care-page") || "overview");
           if (nextPage === currentPage) return;
           location.hash = `#community/care/${nextPage}`;
         });
@@ -20410,13 +21727,9 @@
 
     const renderPage = () => {
       renderSubnav();
-      
       const isAdmin = isCurrentSystemAdmin();
       const careTabs = getCareSubnavCommunityTabs();
-      
-      // 檢查是否有任何子分頁可用
       const hasAnySubnav = isAdmin || isCareSubnavEnabledForCommunity();
-      
       if (!hasAnySubnav) {
         contentEl.innerHTML = `
           <section class="card">
@@ -20437,31 +21750,26 @@
         updateFooterActiveNav();
         return;
       }
-      
-      // 檢查是否有權限訪問當前頁面
       const hasPermission = isAdmin || (
+        (currentPage === "overview" && careTabs.overview) ||
         (currentPage === "sos" && careTabs.sos) ||
         (currentPage === "72h" && careTabs["72h"]) ||
         (currentPage === "reminder" && careTabs.reminder)
       );
-      
-      // 如果沒有權限，預設顯示第一個可用的子分頁
       let targetPage = currentPage;
       if (!hasPermission && !isAdmin) {
-        if (careTabs.sos) targetPage = "sos";
+        if (careTabs.overview) targetPage = "overview";
+        else if (careTabs.sos) targetPage = "sos";
         else if (careTabs["72h"]) targetPage = "72h";
         else if (careTabs.reminder) targetPage = "reminder";
       }
-      
-      const page = pageMap[targetPage] || pageMap.sos;
-      
-      let bodyContent = page.body;
-      if (targetPage === "sos") {
-        bodyContent = `${renderSosFilterBar()}${renderSosRecordsTable(sosStatusFilter)}`;
-      } else if (targetPage === "72h") {
-        bodyContent = render72hPageContent(cid, cfg);
-      }
-      
+      const page = pageMap[targetPage] || pageMap.overview;
+      let bodyContent = "";
+      if (targetPage === "overview") bodyContent = renderCareOverviewContent(cid, cfg);
+      else if (targetPage === "sos") bodyContent = `${renderSosFilterBar()}${renderSosRecordsTable(sosStatusFilter)}`;
+      else if (targetPage === "72h") bodyContent = render72hPageContent(cid, cfg);
+      else if (targetPage === "reminder") bodyContent = renderCareReminderPageContent(cid, cfg);
+
       contentEl.innerHTML = `
         <section class="card">
           <div class="card-hd">
@@ -20472,25 +21780,18 @@
                 <p>${page.desc}</p>
               </div>
             </div>
-            <div style="display:flex; gap:8px; align-items:center;">
-              <button class="btn btn-sm btn-ghost" type="button" id="btnSosSettings" aria-label="SOS設定" title="SOS設定">
-                ${iconSvg("settings")}
-              </button>
-            </div>
           </div>
           <div class="card-bd">
             <div class="row">
               <div>
                 <div style="font-size:calc(18px * var(--fs, 1)); font-weight:800; color:#111827;">${page.title}</div>
-                ${!["sos", "72h"].includes(targetPage) ? `<div class="muted" style="margin-top:4px;">此子分頁目前為示意版，可再接實際資料與功能。</div>` : ''}
               </div>
             </div>
             ${bodyContent}
           </div>
         </section>
       `.trim();
-      
-      // 如果是 SOS 页面，添加表格按钮事件监听
+
       if (targetPage === "sos") {
         contentEl.querySelectorAll("[data-sos-filter]").forEach((btn) => {
           btn.addEventListener("click", () => {
@@ -20498,95 +21799,116 @@
             renderPage();
           });
         });
-        contentEl.querySelectorAll('[data-action]').forEach(btn => {
+        contentEl.querySelectorAll('[data-action]').forEach((btn) => {
           btn.addEventListener('click', () => {
             const action = btn.getAttribute('data-action');
             const id = btn.getAttribute('data-id');
-            
-            if (action === 'process') {
-              updateSosRecordStatus(id, '處理中');
-            } else if (action === 'resolve') {
-              updateSosRecordStatus(id, '已完成');
-            } else if (action === 'delete') {
-              deleteSosRecord(id);
-            }
+            if (action === 'process') updateSosRecordStatus(id, '處理中');
+            else if (action === 'resolve') updateSosRecordStatus(id, '已完成');
+            else if (action === 'delete') deleteSosRecord(id);
           });
         });
       }
 
       const btnSosSettings = document.getElementById("btnSosSettings");
       if (btnSosSettings) {
-        btnSosSettings.addEventListener("click", () => {
-          openSosSettingsModal({ communityId: cid });
-        });
+        btnSosSettings.addEventListener("click", () => openSosSettingsModal({ communityId: cid }));
       }
-      
-      // 72h 頁面報到功能的事件監聽
+
       if (targetPage === "72h") {
         const btnCheckinManual = document.getElementById("btnCheckinManual");
-        if (btnCheckinManual) {
-          btnCheckinManual.addEventListener("click", () => {
-            openSelectResidentForCheckinModal(cid);
-          });
-        }
-        
+        if (btnCheckinManual) btnCheckinManual.addEventListener("click", () => openSelectResidentForCheckinModal(cid));
         const btnCheckinNfc = document.getElementById("btnCheckinNfc");
-        if (btnCheckinNfc) {
-          btnCheckinNfc.addEventListener("click", () => {
-            toast("NFC 感應功能（開發中）");
-          });
-        }
-        
+        if (btnCheckinNfc) btnCheckinNfc.addEventListener("click", () => openCareCheckinScannerModal({ communityId: cid, method: "nfc" }));
         const btnCheckinQr = document.getElementById("btnCheckinQr");
-        if (btnCheckinQr) {
-          btnCheckinQr.addEventListener("click", () => {
-            toast("QR Code 掃碼功能（開發中）");
-          });
-        }
-        
-        // 新增按鈕
+        if (btnCheckinQr) btnCheckinQr.addEventListener("click", () => openCareCheckinScannerModal({ communityId: cid, method: "qr" }));
         const btnAddCheckinResident = document.getElementById("btnAddCheckinResident");
-        if (btnAddCheckinResident) {
-          btnAddCheckinResident.addEventListener("click", () => {
-            openAddCheckinResidentModal(cid);
-          });
-        }
-        
-        // 個別住戶的手動報到按鈕
-        const manualCheckinButtons = contentEl.querySelectorAll("[data-manual-checkin]");
-        manualCheckinButtons.forEach(btn => {
-          btn.addEventListener("click", () => {
+        if (btnAddCheckinResident) btnAddCheckinResident.addEventListener("click", () => openAddCheckinResidentModal(cid));
+        contentEl.querySelectorAll("[data-manual-checkin]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            if (btn.disabled) return;
+            btn.disabled = true;
             try {
-              const dataStr = decodeURIComponent(btn.getAttribute("data-manual-checkin") || "");
-              const residentData = JSON.parse(dataStr);
-              addCheckinRecord(cid, residentData, "manual");
-            } catch (e) {
+              const residentData = JSON.parse(decodeURIComponent(btn.getAttribute("data-manual-checkin") || ""));
+              await addCheckinRecord(cid, residentData, "manual");
+            } catch {
               toast("報到失敗");
+            } finally {
+              btn.disabled = false;
             }
           });
         });
-        
-        // 移除住戶按鈕
-        const removeCheckinResidentButtons = contentEl.querySelectorAll("[data-remove-checkin-resident]");
-        removeCheckinResidentButtons.forEach(btn => {
+        contentEl.querySelectorAll("[data-care-show-code]").forEach((btn) => {
           btn.addEventListener("click", () => {
             try {
-              const dataStr = decodeURIComponent(btn.getAttribute("data-remove-checkin-resident") || "");
-              const residentData = JSON.parse(dataStr);
+              const residentData = JSON.parse(decodeURIComponent(btn.getAttribute("data-care-show-code") || ""));
+              openCareResidentCodeModal({ communityId: cid, resident: residentData });
+            } catch {
+              toast("無法開啟住戶代碼");
+            }
+          });
+        });
+        contentEl.querySelectorAll("[data-remove-checkin-resident]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            try {
+              const residentData = JSON.parse(decodeURIComponent(btn.getAttribute("data-remove-checkin-resident") || ""));
               removeCheckinResident(cid, residentData);
-            } catch (e) {
+            } catch {
               toast("移除失敗");
             }
           });
         });
+        contentEl.querySelectorAll("[data-toggle-checkin-resident]").forEach((input) => {
+          input.addEventListener("change", async () => {
+            const key = decodeURIComponent(input.getAttribute("data-toggle-checkin-resident") || "");
+            input.disabled = true;
+            await setCareResidentEnabled(cid, key, input.checked);
+            input.disabled = false;
+            if (String(location.hash || "").includes("#community/care")) renderCareModule();
+          });
+        });
       }
-      
+
+      if (targetPage === "reminder") {
+        const addBtn = document.getElementById("btnAddCareReminder");
+        if (addBtn) addBtn.addEventListener("click", () => openCareReminderModal({ communityId: cid }));
+        contentEl.querySelectorAll("[data-care-reminder-edit]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const reminderId = String(btn.getAttribute("data-care-reminder-edit") || "").trim();
+            const reminder = getConfiguredCareReminders(loadConfig(cid) || {}).find((item) => String(item.id || "") === reminderId);
+            if (reminder) openCareReminderModal({ communityId: cid, reminder });
+          });
+        });
+        contentEl.querySelectorAll("[data-care-reminder-delete]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const reminderId = String(btn.getAttribute("data-care-reminder-delete") || "").trim();
+            await deleteCareReminder(cid, reminderId);
+            if (String(location.hash || "").includes("#community/care")) renderCareModule();
+          });
+        });
+        contentEl.querySelectorAll("[data-care-reminder-done]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const reminderId = String(btn.getAttribute("data-care-reminder-done") || "").trim();
+            await markCareReminderDone(cid, reminderId);
+            if (String(location.hash || "").includes("#community/care")) renderCareModule();
+          });
+        });
+        contentEl.querySelectorAll("[data-care-reminder-snooze]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const reminderId = String(btn.getAttribute("data-care-reminder-snooze") || "").trim();
+            await snoozeCareReminder(cid, reminderId);
+            if (String(location.hash || "").includes("#community/care")) renderCareModule();
+          });
+        });
+      }
+
       updateFooterActiveNav();
     };
 
-    if (currentPage === "72h" && cfg.checkinEnabled !== false) startCheckinListener(cid);
+    // 進入關懷救護任一子分頁即訂閱報到紀錄，確保總覽超時統計與超時監控在整個模組生效
+    if (cfg.checkinEnabled !== false) startCheckinListener(cid);
     else stopCheckinListener();
-    
+
     renderPage();
   }
 
@@ -20597,7 +21919,7 @@
     let detach = () => {};
     detach = bindModalClose(modal, () => detach());
     
-    const residents = Array.isArray(state.currentResidents) ? state.currentResidents : [];
+    const residents = getConfiguredCareResidents(loadConfig(cid) || {}, cid);
     
     modal.innerHTML = `
       <div class="modal-backdrop" data-modal-close="1"></div>
@@ -20608,13 +21930,13 @@
         </div>
         <div class="modal-body">
           ${residents.length === 0 ? `
-            <div class="status">請先至「住戶」頁面載入住戶資料</div>
+            <div class="status">請先於 ${Number((loadConfig(cid) || {}).sosHours || 72) || 72} 小時子分頁新增需要關懷的住戶</div>
           ` : `
             <div class="list">
               ${residents.map(resident => {
-                const houseNo = String(resident.houseNo || resident.unit || '');
-                const subHouseNo = String(resident.subHouseNo || resident.subUnit || '');
-                const name = String(resident.name || resident.displayName || '住戶');
+                const houseNo = String(resident.houseNo || '');
+                const subHouseNo = String(resident.subHouseNo || '');
+                const name = String(resident.name || '住戶');
                 return `
                   <div class="list-item" style="cursor:pointer;" data-select-resident-checkin="${encodeURIComponent(JSON.stringify({ houseNo, subHouseNo, name }))}">
                     <strong>${escapeHtml(name)}</strong>
@@ -20649,6 +21971,2778 @@
         }
       });
     });
+  }
+
+  // 報到投票模組
+  const checkinVoteState = {
+    cid: "",
+    loaded: false,
+    loadingPromise: null,
+    projects: [],
+    activeProjectId: "",
+    roster: [],
+    topics: [],
+    documents: [],
+  };
+  const CHECKIN_VOTE_FILE_LIMIT = 450 * 1024;
+
+  function cvRefProjects(communityId) {
+    return db.collection("communities").doc(String(communityId || "default")).collection("checkinVoteProjects");
+  }
+
+  function cvRefProject(communityId, projectId) {
+    return cvRefProjects(communityId).doc(String(projectId || "").trim());
+  }
+
+  function cvRefRoster(communityId, projectId) {
+    return cvRefProject(communityId, projectId).collection("roster");
+  }
+
+  function cvRefTopics(communityId, projectId) {
+    return cvRefProject(communityId, projectId).collection("topics");
+  }
+
+  function cvRefDocuments(communityId, projectId) {
+    return cvRefProject(communityId, projectId).collection("documents");
+  }
+
+  function cvMakeId(prefix) {
+    return `${String(prefix || "cv").trim() || "cv"}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function cvMakeToken(prefix) {
+    return `${String(prefix || "cv").trim() || "cv"}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36)}`;
+  }
+
+  function cvNow() {
+    return Date.now();
+  }
+
+  function cvToDateTimeInput(ms) {
+    const n = Number(ms || 0);
+    if (!n) return "";
+    const d = new Date(n);
+    const y = d.getFullYear();
+    const m = pad2(d.getMonth() + 1);
+    const day = pad2(d.getDate());
+    const hh = pad2(d.getHours());
+    const mm = pad2(d.getMinutes());
+    return `${y}-${m}-${day}T${hh}:${mm}`;
+  }
+
+  function cvParseDateTimeInput(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return 0;
+    const ms = Date.parse(raw);
+    return Number.isFinite(ms) ? ms : 0;
+  }
+
+  function cvFormatDateTime(ms) {
+    const n = Number(ms || 0);
+    if (!n) return "—";
+    const d = new Date(n);
+    return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  }
+
+  function cvFormatUnit(item) {
+    const houseNo = String((item && (item.houseNo || item.unit)) || "").trim();
+    const subHouseNo = String((item && (item.subHouseNo || item.subUnit)) || "").trim();
+    return [houseNo, subHouseNo].filter(Boolean).join("-") || "—";
+  }
+
+  // 姓名顯示：依專案設定決定全名或隱藏中間名
+  function cvMaskName(name) {
+    const text = String(name || "").trim();
+    if (text.length < 3) return text;
+    return `${text.slice(0, 1)}${"○".repeat(text.length - 2)}${text.slice(-1)}`;
+  }
+
+  function cvDisplayName(entry) {
+    const name = String((entry && entry.name) || "").trim();
+    if (!name) return "";
+    const settings = cvNormalizeProjectSettings(cvActiveProject() ? cvActiveProject().settings : {});
+    return settings.nameDisplay === "mask" ? cvMaskName(name) : name;
+  }
+
+  // 區分所有權人分組鍵（同一位所有權人合併文件時使用）
+  function cvOwnerGroupKey(entry) {
+    return String((entry && entry.name) || "").trim().replace(/\s+/g, "");
+  }
+
+  function cvGroupRosterByOwner(list) {
+    const groups = [];
+    const map = new Map();
+    (Array.isArray(list) ? list : []).forEach((entry) => {
+      const key = cvOwnerGroupKey(entry);
+      if (!key) {
+        groups.push({ key: `__solo_${groups.length}`, name: String(entry && entry.name || "").trim(), entries: [entry] });
+        return;
+      }
+      if (!map.has(key)) {
+        const group = { key, name: String(entry.name || "").trim(), entries: [] };
+        map.set(key, group);
+        groups.push(group);
+      }
+      map.get(key).entries.push(entry);
+    });
+    return groups;
+  }
+
+  function cvGroupOwnershipTotal(group) {
+    return (Array.isArray(group && group.entries) ? group.entries : []).reduce((sum, entry) => {
+      const n = parseFloat(String((entry && entry.ownership) || "").replace(/[^\d.\-]/g, ""));
+      return sum + (Number.isFinite(n) ? n : 0);
+    }, 0);
+  }
+
+  function cvCurrentActorName() {
+    const user = auth && auth.currentUser ? auth.currentUser : null;
+    return String(
+      (user && (user.displayName || user.email))
+      || state.currentUserRole
+      || "管理員"
+    ).trim() || "管理員";
+  }
+
+  function cvCurrentActorUid() {
+    const user = auth && auth.currentUser ? auth.currentUser : null;
+    return String((user && user.uid) || state.currentUserUid || "").trim();
+  }
+
+  // 通過門檻百分比：限定 0～100 的整數，空值或無效值回退預設
+  function cvClampPct(value, fallback) {
+    if (value === null || value === undefined || String(value).trim() === "") return fallback;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(100, Math.max(0, Math.round(n)));
+  }
+
+  // 議題層級門檻：允許留空（null）表示沿用專案預設
+  function cvOptionalPct(value) {
+    if (value === null || value === undefined || String(value).trim() === "") return null;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return Math.min(100, Math.max(0, Math.round(n)));
+  }
+
+  function cvNormalizeProjectSettings(input) {
+    const v = input && typeof input === "object" ? input : {};
+    return {
+      allowManualCheckin: v.allowManualCheckin !== false,
+      allowQrCheckin: v.allowQrCheckin !== false,
+      allowManualVote: v.allowManualVote !== false,
+      allowQrVote: v.allowQrVote !== false,
+      requireCheckinBeforeVote: v.requireCheckinBeforeVote === true,
+      defaultSingleChoice: v.defaultSingleChoice !== false,
+      showResultCount: v.showResultCount !== false,
+      nameDisplay: String(v.nameDisplay || "").trim() === "mask" ? "mask" : "full",
+      // 通過門檻：報到與議題皆需「戶數（人數）」與「區分所有權比例」同時達標
+      checkinTargetCountPct: cvClampPct(v.checkinTargetCountPct, 50),
+      checkinTargetSharePct: cvClampPct(v.checkinTargetSharePct, 50),
+      topicPassCountPct: cvClampPct(v.topicPassCountPct, 50),
+      topicPassSharePct: cvClampPct(v.topicPassSharePct, 50),
+    };
+  }
+
+  function cvNormalizeProject(data, id) {
+    const v = data && typeof data === "object" ? data : {};
+    return {
+      id: String(id || v.id || "").trim(),
+      name: String(v.name || "").trim() || "未命名專案",
+      description: String(v.description || "").trim(),
+      meetingAtMs: Number(v.meetingAtMs || 0) || 0,
+      archived: v.archived === true,
+      isActive: v.isActive === true,
+      createdAtMs: Number(v.createdAtMs || 0) || 0,
+      updatedAtMs: Number(v.updatedAtMs || 0) || 0,
+      settings: cvNormalizeProjectSettings(v.settings),
+    };
+  }
+
+  function cvNormalizeVotes(votes) {
+    const input = votes && typeof votes === "object" ? votes : {};
+    const out = {};
+    Object.keys(input).forEach((topicId) => {
+      const v = input[topicId] && typeof input[topicId] === "object" ? input[topicId] : {};
+      const optionIds = Array.isArray(v.optionIds)
+        ? v.optionIds.map((x) => String(x || "").trim()).filter(Boolean)
+        : [];
+      out[String(topicId || "").trim()] = {
+        optionIds,
+        updatedAtMs: Number(v.updatedAtMs || 0) || 0,
+        method: String(v.method || "").trim() || "manual",
+        operatorUid: String(v.operatorUid || "").trim(),
+        operatorName: String(v.operatorName || "").trim(),
+      };
+    });
+    return out;
+  }
+
+  function cvNormalizeRosterEntry(data, id) {
+    const v = data && typeof data === "object" ? data : {};
+    return {
+      id: String(id || v.id || "").trim(),
+      residentUid: String(v.residentUid || "").trim(),
+      residentKey: String(v.residentKey || "").trim() || createCareResidentKey({
+        houseNo: String(v.houseNo || "").trim(),
+        subHouseNo: String(v.subHouseNo || "").trim(),
+        name: String(v.name || "").trim(),
+      }),
+      houseNo: String(v.houseNo || "").trim(),
+      subHouseNo: String(v.subHouseNo || "").trim(),
+      name: String(v.name || "").trim() || "住戶",
+      phone: String(v.phone || "").trim(),
+      email: String(v.email || "").trim(),
+      note: String(v.note || "").trim(),
+      address: String(v.address || "").trim(),
+      building: String(v.building || "").trim(),
+      area: String(v.area || "").trim(),
+      ownership: String(v.ownership || "").trim(),
+      weight: Math.max(1, Number(v.weight || 1) || 1),
+      qrToken: String(v.qrToken || "").trim() || cvMakeToken("cvp"),
+      checkedIn: v.checkedIn === true,
+      checkedInAtMs: Number(v.checkedInAtMs || 0) || 0,
+      checkedInMethod: String(v.checkedInMethod || "").trim(),
+      checkedInByUid: String(v.checkedInByUid || "").trim(),
+      checkedInByName: String(v.checkedInByName || "").trim(),
+      votes: cvNormalizeVotes(v.votes),
+      createdAtMs: Number(v.createdAtMs || 0) || 0,
+      updatedAtMs: Number(v.updatedAtMs || 0) || 0,
+    };
+  }
+
+  function cvNormalizeTopic(data, id, project) {
+    const v = data && typeof data === "object" ? data : {};
+    const defaults = cvNormalizeProjectSettings(project && project.settings ? project.settings : {});
+    const options = Array.isArray(v.options) ? v.options : [];
+    return {
+      id: String(id || v.id || "").trim(),
+      title: String(v.title || "").trim() || "未命名議題",
+      description: String(v.description || "").trim(),
+      enabled: v.enabled !== false,
+      singleChoice: Object.prototype.hasOwnProperty.call(v, "singleChoice")
+        ? v.singleChoice !== false
+        : defaults.defaultSingleChoice !== false,
+      order: Number(v.order || 0) || 0,
+      options: options.map((opt, index) => ({
+        id: String((opt && opt.id) || cvMakeId(`opt${index + 1}`)).trim(),
+        label: String((opt && opt.label) || "").trim() || `選項 ${index + 1}`,
+        description: String((opt && opt.description) || "").trim(),
+        qrToken: String((opt && opt.qrToken) || "").trim() || cvMakeToken("cvo"),
+      })),
+      // 各議題可覆寫的通過門檻；null 表示沿用專案預設
+      passCountPct: cvOptionalPct(v.passCountPct),
+      passSharePct: cvOptionalPct(v.passSharePct),
+      createdAtMs: Number(v.createdAtMs || 0) || 0,
+      updatedAtMs: Number(v.updatedAtMs || 0) || 0,
+    };
+  }
+
+  function cvNormalizeDocument(data, id) {
+    const v = data && typeof data === "object" ? data : {};
+    const kindRaw = String(v.kind || "link").trim();
+    const kind = ["link", "note", "file"].includes(kindRaw) ? kindRaw : "link";
+    return {
+      id: String(id || v.id || "").trim(),
+      title: String(v.title || "").trim() || "未命名文件",
+      kind,
+      url: String(v.url || "").trim(),
+      content: String(v.content || "").trim(),
+      fileName: String(v.fileName || "").trim(),
+      fileDataUrl: String(v.fileDataUrl || "").trim(),
+      mimeType: String(v.mimeType || "").trim(),
+      createdAtMs: Number(v.createdAtMs || 0) || 0,
+      updatedAtMs: Number(v.updatedAtMs || 0) || 0,
+    };
+  }
+
+  function cvActiveProject() {
+    const id = String(checkinVoteState.activeProjectId || "").trim();
+    return checkinVoteState.projects.find((item) => String(item.id || "") === id) || null;
+  }
+
+  function cvFindRosterEntry(entryId) {
+    const id = String(entryId || "").trim();
+    return checkinVoteState.roster.find((item) => String(item.id || "") === id) || null;
+  }
+
+  function cvFindTopic(topicId) {
+    const id = String(topicId || "").trim();
+    return checkinVoteState.topics.find((item) => String(item.id || "") === id) || null;
+  }
+
+  function cvTopicParticipationCount(topic, roster) {
+    const tid = String(topic && topic.id || "").trim();
+    return (Array.isArray(roster) ? roster : []).filter((entry) => {
+      const vote = entry && entry.votes ? entry.votes[tid] : null;
+      return vote && Array.isArray(vote.optionIds) && vote.optionIds.length > 0;
+    }).length;
+  }
+
+  // 區分所有權比例（%）：名單未填時視為 0，不計入區分所有權總額
+  function cvOwnershipValue(entry) {
+    const n = parseFloat(String((entry && entry.ownership) || "").replace(/[^\d.\-]/g, ""));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  function cvOwnershipSum(list) {
+    return (Array.isArray(list) ? list : []).reduce((sum, entry) => sum + cvOwnershipValue(entry), 0);
+  }
+
+  function cvPct(part, whole) {
+    if (!whole) return 0;
+    return (part / whole) * 100;
+  }
+
+  function cvFormatPct(value) {
+    return `${Math.round(Number(value) || 0)}%`;
+  }
+
+  /* 報到統計：同時涵蓋「戶數（人數）」與「區分所有權比例」，
+     兩者皆達專案設定門檻才算報到通過。 */
+  function cvCheckinStats(project, roster) {
+    const list = Array.isArray(roster) ? roster : [];
+    const settings = cvNormalizeProjectSettings(project && project.settings ? project.settings : {});
+    const totalCount = list.length;
+    const doneList = list.filter((entry) => entry && entry.checkedIn);
+    const doneCount = doneList.length;
+    const totalShare = cvOwnershipSum(list);
+    const doneShare = cvOwnershipSum(doneList);
+    const shareKnown = totalShare > 0;
+    const countRatePct = cvPct(doneCount, totalCount);
+    const shareRatePct = cvPct(doneShare, totalShare);
+    const targetCountPct = settings.checkinTargetCountPct;
+    const targetSharePct = settings.checkinTargetSharePct;
+    const countPassed = countRatePct >= targetCountPct;
+    const sharePassed = !shareKnown || shareRatePct >= targetSharePct;
+    return {
+      totalCount,
+      doneCount,
+      missCount: Math.max(0, totalCount - doneCount),
+      totalShare,
+      doneShare,
+      shareKnown,
+      countRatePct,
+      shareRatePct,
+      targetCountPct,
+      targetSharePct,
+      countPassed,
+      sharePassed,
+      passed: totalCount > 0 && countPassed && sharePassed,
+    };
+  }
+
+  /* 議題統計：各選項同時以「戶數（人數）」與「區分所有權比例」計算得票率，
+     兩者皆達門檻（議題自訂，未設定則沿用專案預設）才算該選項通過。 */
+  function cvTopicStats(topic, project, roster) {
+    const list = Array.isArray(roster) ? roster : [];
+    const settings = cvNormalizeProjectSettings(project && project.settings ? project.settings : {});
+    const tid = String(topic && topic.id || "").trim();
+    /* 有報到才能投票：議題一律以「實際報到人數」為分母 */
+    const checkedList = list.filter((entry) => entry && entry.checkedIn);
+    const totalCount = checkedList.length;
+    const totalShare = cvOwnershipSum(checkedList);
+    const shareKnown = totalShare > 0;
+    const usingDefaultCount = !(topic && topic.passCountPct !== null && topic.passCountPct !== undefined);
+    const usingDefaultShare = !(topic && topic.passSharePct !== null && topic.passSharePct !== undefined);
+    const passCountPct = usingDefaultCount ? settings.topicPassCountPct : Number(topic.passCountPct);
+    const passSharePct = usingDefaultShare ? settings.topicPassSharePct : Number(topic.passSharePct);
+    const voters = checkedList.filter((entry) => {
+      const vote = entry && entry.votes ? entry.votes[tid] : null;
+      return vote && Array.isArray(vote.optionIds) && vote.optionIds.length > 0;
+    });
+    const options = (Array.isArray(topic && topic.options) ? topic.options : []).map((opt) => {
+      const optId = String((opt && opt.id) || "").trim();
+      const picked = voters.filter((entry) => {
+        const vote = entry && entry.votes ? entry.votes[tid] : null;
+        return vote && Array.isArray(vote.optionIds) && vote.optionIds.indexOf(optId) !== -1;
+      });
+      const count = picked.length;
+      const share = cvOwnershipSum(picked);
+      const countRatePct = cvPct(count, totalCount);
+      const shareRatePct = cvPct(share, totalShare);
+      return {
+        id: optId,
+        label: String((opt && opt.label) || "").trim(),
+        count,
+        share,
+        countRatePct,
+        shareRatePct,
+        countPassed: countRatePct >= passCountPct,
+        sharePassed: !shareKnown || shareRatePct >= passSharePct,
+        passed: totalCount > 0 && countRatePct >= passCountPct && (!shareKnown || shareRatePct >= passSharePct),
+      };
+    });
+    return {
+      id: tid,
+      totalCount,
+      totalShare,
+      shareKnown,
+      voterCount: voters.length,
+      participantCountPct: cvPct(voters.length, totalCount),
+      participantSharePct: cvPct(cvOwnershipSum(voters), totalShare),
+      passCountPct,
+      passSharePct,
+      usingDefaultCount,
+      usingDefaultShare,
+      options,
+      passedCount: options.filter((item) => item.passed).length,
+    };
+  }
+
+  function cvResidentVoteCount(entry) {
+    const votes = entry && entry.votes && typeof entry.votes === "object" ? entry.votes : {};
+    return Object.values(votes).filter((item) => item && Array.isArray(item.optionIds) && item.optionIds.length > 0).length;
+  }
+
+  function cvResidentVoteSummaryHtml(entry, topics) {
+    const voteMap = entry && entry.votes && typeof entry.votes === "object" ? entry.votes : {};
+    const parts = [];
+    Object.keys(voteMap).forEach((topicId) => {
+      const vote = voteMap[topicId];
+      if (!vote || !Array.isArray(vote.optionIds) || !vote.optionIds.length) return;
+      const topic = (Array.isArray(topics) ? topics : []).find((item) => String(item.id || "") === topicId);
+      if (!topic) return;
+      const labels = vote.optionIds.map((optionId) => {
+        const option = (topic.options || []).find((item) => String(item.id || "") === optionId);
+        return option ? String(option.label || "") : "";
+      }).filter(Boolean);
+      if (!labels.length) return;
+      parts.push(`<div class="muted" style="margin-top:4px;">${escapeHtml(topic.title)}：${escapeHtml(labels.join("、"))}</div>`);
+    });
+    return parts.join("");
+  }
+
+  function cvPersonQrPayload(projectId, entry) {
+    return `nwcv:person:${String(projectId || "").trim()}:${String(entry && entry.id || "").trim()}:${String(entry && entry.qrToken || "").trim()}`;
+  }
+
+  function cvOptionQrPayload(projectId, topic, option) {
+    return `nwcv:option:${String(projectId || "").trim()}:${String(topic && topic.id || "").trim()}:${String(option && option.id || "").trim()}:${String(option && option.qrToken || "").trim()}`;
+  }
+
+  function cvQrImageUrl(payload) {
+    return `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(String(payload || "").trim())}`;
+  }
+
+  async function ensureCheckinVoteDataLoaded(communityId, options) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const opts = options && typeof options === "object" ? options : {};
+    const requestedProjectId = String(opts.activeProjectId || "").trim();
+    if (
+      checkinVoteState.loadingPromise
+      && checkinVoteState.cid === cid
+      && (!requestedProjectId || requestedProjectId === checkinVoteState.activeProjectId)
+      && !opts.force
+    ) {
+      return checkinVoteState.loadingPromise;
+    }
+    if (
+      checkinVoteState.loaded
+      && checkinVoteState.cid === cid
+      && (!requestedProjectId || requestedProjectId === checkinVoteState.activeProjectId)
+      && !opts.force
+    ) {
+      return checkinVoteState;
+    }
+    checkinVoteState.loadingPromise = (async () => {
+      const cfg = loadConfig(cid) || {};
+      const projectSnap = await cvRefProjects(cid).get().catch(() => null);
+      const projects = (projectSnap && Array.isArray(projectSnap.docs) ? projectSnap.docs : [])
+        .map((doc) => cvNormalizeProject(doc.data(), doc.id))
+        .sort((a, b) => {
+          const activeA = a.isActive ? 1 : 0;
+          const activeB = b.isActive ? 1 : 0;
+          if (activeA !== activeB) return activeB - activeA;
+          const archivedA = a.archived ? 1 : 0;
+          const archivedB = b.archived ? 1 : 0;
+          if (archivedA !== archivedB) return archivedA - archivedB;
+          return Number(b.updatedAtMs || 0) - Number(a.updatedAtMs || 0);
+        });
+      let activeProjectId = requestedProjectId
+        || String(cfg.checkinVoteActiveProjectId || "").trim()
+        || String(checkinVoteState.activeProjectId || "").trim();
+      if (!projects.some((item) => item.id === activeProjectId)) {
+        const activeProject = projects.find((item) => item.isActive && !item.archived)
+          || projects.find((item) => !item.archived)
+          || projects[0]
+          || null;
+        activeProjectId = activeProject ? activeProject.id : "";
+      }
+      const project = projects.find((item) => item.id === activeProjectId) || null;
+      let roster = [];
+      let topics = [];
+      let documents = [];
+      if (project) {
+        const [rosterSnap, topicSnap, documentSnap] = await Promise.all([
+          cvRefRoster(cid, project.id).get().catch(() => null),
+          cvRefTopics(cid, project.id).get().catch(() => null),
+          cvRefDocuments(cid, project.id).get().catch(() => null),
+        ]);
+        roster = (rosterSnap && Array.isArray(rosterSnap.docs) ? rosterSnap.docs : [])
+          .map((doc) => cvNormalizeRosterEntry(doc.data(), doc.id))
+          .sort((a, b) => {
+            const unitCompare = cvFormatUnit(a).localeCompare(cvFormatUnit(b), "zh-Hant");
+            if (unitCompare !== 0) return unitCompare;
+            return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
+          });
+        topics = (topicSnap && Array.isArray(topicSnap.docs) ? topicSnap.docs : [])
+          .map((doc) => cvNormalizeTopic(doc.data(), doc.id, project))
+          .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+        documents = (documentSnap && Array.isArray(documentSnap.docs) ? documentSnap.docs : [])
+          .map((doc) => cvNormalizeDocument(doc.data(), doc.id))
+          .sort((a, b) => Number(b.updatedAtMs || 0) - Number(a.updatedAtMs || 0));
+      }
+      checkinVoteState.cid = cid;
+      checkinVoteState.loaded = true;
+      checkinVoteState.projects = projects;
+      checkinVoteState.activeProjectId = activeProjectId;
+      checkinVoteState.roster = roster;
+      checkinVoteState.topics = topics;
+      checkinVoteState.documents = documents;
+      if (activeProjectId && String(cfg.checkinVoteActiveProjectId || "").trim() !== activeProjectId) {
+        configDocRef(cid).set({
+          checkinVoteActiveProjectId: activeProjectId,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true }).catch(() => {});
+      }
+      return checkinVoteState;
+    })().finally(() => {
+      checkinVoteState.loadingPromise = null;
+    });
+    return checkinVoteState.loadingPromise;
+  }
+
+  async function cvReloadAndMaybeRender(options) {
+    const opts = options && typeof options === "object" ? options : {};
+    const cid = String(opts.communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    await ensureCheckinVoteDataLoaded(cid, {
+      force: opts.force === true,
+      activeProjectId: String(opts.activeProjectId || checkinVoteState.activeProjectId || "").trim(),
+    });
+    if (String(location.hash || "").includes("#community/checkin-vote")) {
+      renderCheckinVoteModule();
+    }
+  }
+
+  async function cvSetActiveProject(communityId, projectId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const targetId = String(projectId || "").trim();
+    if (!targetId) return;
+    const snap = await cvRefProjects(cid).get();
+    const batch = db.batch();
+    (snap && Array.isArray(snap.docs) ? snap.docs : []).forEach((doc) => {
+      batch.set(doc.ref, {
+        isActive: doc.id === targetId,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedAtMs: cvNow(),
+      }, { merge: true });
+    });
+    await batch.commit();
+    await configDocRef(cid).set({
+      checkinVoteActiveProjectId: targetId,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    checkinVoteState.activeProjectId = targetId;
+    await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: targetId });
+  }
+
+  async function cvDeleteProjectDeep(communityId, projectId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    if (!pid) return;
+    const ok = window.confirm("刪除此專案後，名單、投票、文件都會一併移除，是否繼續？");
+    if (!ok) return;
+    const [rosterSnap, topicSnap, documentSnap] = await Promise.all([
+      cvRefRoster(cid, pid).get().catch(() => null),
+      cvRefTopics(cid, pid).get().catch(() => null),
+      cvRefDocuments(cid, pid).get().catch(() => null),
+    ]);
+    const batch = db.batch();
+    (rosterSnap && Array.isArray(rosterSnap.docs) ? rosterSnap.docs : []).forEach((doc) => batch.delete(doc.ref));
+    (topicSnap && Array.isArray(topicSnap.docs) ? topicSnap.docs : []).forEach((doc) => batch.delete(doc.ref));
+    (documentSnap && Array.isArray(documentSnap.docs) ? documentSnap.docs : []).forEach((doc) => batch.delete(doc.ref));
+    batch.delete(cvRefProject(cid, pid));
+    await batch.commit();
+    const cfg = loadConfig(cid) || {};
+    if (String(cfg.checkinVoteActiveProjectId || "").trim() === pid) {
+      await configDocRef(cid).set({
+        checkinVoteActiveProjectId: "",
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+    toast("專案已刪除");
+    await cvReloadAndMaybeRender({ communityId: cid, force: true });
+  }
+
+  async function cvSaveRosterEntry(communityId, projectId, entryId, payload) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    if (!pid) return;
+    const ref = entryId ? cvRefRoster(cid, pid).doc(String(entryId || "").trim()) : cvRefRoster(cid, pid).doc();
+    const now = cvNow();
+    const data = {
+      residentUid: String(payload.residentUid || "").trim(),
+      residentKey: String(payload.residentKey || "").trim() || createCareResidentKey({
+        houseNo: String(payload.houseNo || "").trim(),
+        subHouseNo: String(payload.subHouseNo || "").trim(),
+        name: String(payload.name || "").trim(),
+      }),
+      houseNo: String(payload.houseNo || "").trim(),
+      subHouseNo: String(payload.subHouseNo || "").trim(),
+      name: String(payload.name || "").trim() || "住戶",
+      phone: String(payload.phone || "").trim(),
+      email: String(payload.email || "").trim(),
+      note: String(payload.note || "").trim(),
+      address: String(payload.address || "").trim(),
+      building: String(payload.building || "").trim(),
+      area: String(payload.area || "").trim(),
+      ownership: String(payload.ownership || "").trim(),
+      weight: Math.max(1, Number(payload.weight || 1) || 1),
+      qrToken: String(payload.qrToken || "").trim() || cvMakeToken("cvp"),
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedAtMs: now,
+    };
+    if (!entryId) {
+      data.createdAt = FieldValue.serverTimestamp();
+      data.createdAtMs = now;
+      data.checkedIn = false;
+      data.checkedInAtMs = 0;
+      data.checkedInMethod = "";
+      data.checkedInByUid = "";
+      data.checkedInByName = "";
+      data.votes = {};
+    }
+    await ref.set(data, { merge: true });
+    await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: pid });
+  }
+
+  async function cvCheckinRosterEntry(communityId, projectId, entryId, method, options) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    const eid = String(entryId || "").trim();
+    const opts = options && typeof options === "object" ? options : {};
+    if (!pid || !eid) return;
+    const now = cvNow();
+    await cvRefRoster(cid, pid).doc(eid).set({
+      checkedIn: true,
+      checkedInAtMs: now,
+      checkedInMethod: String(method || "manual").trim() || "manual",
+      checkedInByUid: cvCurrentActorUid(),
+      checkedInByName: cvCurrentActorName(),
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedAtMs: now,
+    }, { merge: true });
+    const local = cvFindRosterEntry(eid);
+    if (local) {
+      local.checkedIn = true;
+      local.checkedInAtMs = now;
+      local.checkedInMethod = String(method || "manual").trim() || "manual";
+      local.checkedInByUid = cvCurrentActorUid();
+      local.checkedInByName = cvCurrentActorName();
+      local.updatedAtMs = now;
+    }
+    if (opts.rerender !== false && String(location.hash || "").includes("#community/checkin-vote") && !String(location.hash || "").includes("/scan")) {
+      renderCheckinVoteModule();
+    }
+  }
+
+  async function cvUndoRosterCheckin(communityId, projectId, entryId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    const eid = String(entryId || "").trim();
+    if (!pid || !eid) return;
+    const ok = window.confirm("要取消這位住戶的報到狀態嗎？");
+    if (!ok) return;
+    const now = cvNow();
+    await cvRefRoster(cid, pid).doc(eid).set({
+      checkedIn: false,
+      checkedInAtMs: 0,
+      checkedInMethod: "",
+      checkedInByUid: "",
+      checkedInByName: "",
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedAtMs: now,
+    }, { merge: true });
+    await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: pid });
+  }
+
+  async function cvSaveResidentVote(communityId, projectId, entryId, topicId, optionIds, method, options) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    const eid = String(entryId || "").trim();
+    const tid = String(topicId || "").trim();
+    const opts = options && typeof options === "object" ? options : {};
+    const entry = cvFindRosterEntry(eid);
+    const topic = cvFindTopic(tid);
+    const project = cvActiveProject();
+    if (!entry || !topic || !project) return;
+    if (project.settings.requireCheckinBeforeVote && !entry.checkedIn) {
+      toast("此專案設定需先報到才能投票");
+      return;
+    }
+    const normalizedOptionIds = Array.isArray(optionIds)
+      ? optionIds.map((x) => String(x || "").trim()).filter(Boolean)
+      : [];
+    if (!normalizedOptionIds.length) {
+      toast("請至少選擇一個選項");
+      return;
+    }
+    const finalOptionIds = topic.singleChoice ? [normalizedOptionIds[0]] : Array.from(new Set(normalizedOptionIds));
+    const now = cvNow();
+    const votes = { ...(entry.votes || {}) };
+    votes[tid] = {
+      optionIds: finalOptionIds,
+      updatedAtMs: now,
+      method: String(method || "manual").trim() || "manual",
+      operatorUid: cvCurrentActorUid(),
+      operatorName: cvCurrentActorName(),
+    };
+    await cvRefRoster(cid, pid).doc(eid).set({
+      votes,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedAtMs: now,
+    }, { merge: true });
+    entry.votes = votes;
+    entry.updatedAtMs = now;
+    if (opts.rerender !== false && String(location.hash || "").includes("#community/checkin-vote") && !String(location.hash || "").includes("/scan")) {
+      renderCheckinVoteModule();
+    }
+  }
+
+  async function cvClearResidentVote(communityId, projectId, entryId, topicId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    const eid = String(entryId || "").trim();
+    const tid = String(topicId || "").trim();
+    const entry = cvFindRosterEntry(eid);
+    if (!entry) return;
+    const ok = window.confirm("要清除此住戶在本議題的投票嗎？");
+    if (!ok) return;
+    const votes = { ...(entry.votes || {}) };
+    delete votes[tid];
+    const now = cvNow();
+    await cvRefRoster(cid, pid).doc(eid).set({
+      votes,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedAtMs: now,
+    }, { merge: true });
+    await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: pid });
+  }
+
+  async function cvSaveTopic(communityId, projectId, topicId, payload) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    if (!pid) return;
+    const ref = topicId ? cvRefTopics(cid, pid).doc(String(topicId || "").trim()) : cvRefTopics(cid, pid).doc();
+    const project = cvActiveProject();
+    const current = topicId ? (cvFindTopic(topicId) || null) : null;
+    const currentOptions = current && Array.isArray(current.options) ? current.options : [];
+    const inputOptions = Array.isArray(payload.options) ? payload.options : [];
+    const options = inputOptions.map((opt, index) => {
+      const prev = currentOptions[index] || null;
+      return {
+        id: String((prev && prev.id) || opt.id || cvMakeId(`opt${index + 1}`)).trim(),
+        label: String(opt.label || "").trim() || `選項 ${index + 1}`,
+        description: String(opt.description || "").trim(),
+        qrToken: String((prev && prev.qrToken) || opt.qrToken || cvMakeToken("cvo")).trim(),
+      };
+    });
+    const now = cvNow();
+    const topicPayload = {
+      title: String(payload.title || "").trim() || "未命名議題",
+      description: String(payload.description || "").trim(),
+      enabled: payload.enabled !== false,
+      singleChoice: Object.prototype.hasOwnProperty.call(payload, "singleChoice")
+        ? payload.singleChoice !== false
+        : cvNormalizeProjectSettings(project && project.settings ? project.settings : {}).defaultSingleChoice !== false,
+      order: Math.max(0, Number(payload.order || 0) || 0),
+      options,
+      passCountPct: cvOptionalPct(payload.passCountPct),
+      passSharePct: cvOptionalPct(payload.passSharePct),
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedAtMs: now,
+    };
+    if (!current) {
+      topicPayload.createdAt = FieldValue.serverTimestamp();
+      topicPayload.createdAtMs = now;
+    }
+    await ref.set(topicPayload, { merge: true });
+    if (current) {
+      const validOptionIds = new Set(options.map((item) => String(item.id || "").trim()).filter(Boolean));
+      const updates = [];
+      checkinVoteState.roster.forEach((entry) => {
+        const vote = entry && entry.votes ? entry.votes[String(current.id || "").trim()] : null;
+        if (!vote || !Array.isArray(vote.optionIds)) return;
+        const nextOptionIds = vote.optionIds.filter((item) => validOptionIds.has(String(item || "").trim()));
+        if (nextOptionIds.length === vote.optionIds.length) return;
+        const votes = { ...(entry.votes || {}) };
+        if (nextOptionIds.length) {
+          votes[String(current.id || "").trim()] = {
+            ...vote,
+            optionIds: nextOptionIds,
+            updatedAtMs: now,
+          };
+        } else {
+          delete votes[String(current.id || "").trim()];
+        }
+        updates.push(cvRefRoster(cid, pid).doc(String(entry.id || "").trim()).set({
+          votes,
+          updatedAt: FieldValue.serverTimestamp(),
+          updatedAtMs: now,
+        }, { merge: true }));
+      });
+      if (updates.length) await Promise.all(updates);
+    }
+    await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: pid });
+  }
+
+  async function cvDeleteTopic(communityId, projectId, topicId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    const tid = String(topicId || "").trim();
+    if (!pid || !tid) return;
+    const ok = window.confirm("刪除此議題後，該議題的投票結果也會一併清除，是否繼續？");
+    if (!ok) return;
+    await cvRefTopics(cid, pid).doc(tid).delete();
+    const updates = [];
+    checkinVoteState.roster.forEach((entry) => {
+      const votes = { ...(entry.votes || {}) };
+      if (!Object.prototype.hasOwnProperty.call(votes, tid)) return;
+      delete votes[tid];
+      updates.push(cvRefRoster(cid, pid).doc(String(entry.id || "").trim()).set({
+        votes,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedAtMs: cvNow(),
+      }, { merge: true }));
+    });
+    if (updates.length) await Promise.all(updates);
+    await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: pid });
+  }
+
+  async function cvReadFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      if (!file) {
+        resolve(null);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("read-failed"));
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function cvSaveDocument(communityId, projectId, documentId, payload) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    if (!pid) return;
+    const ref = documentId ? cvRefDocuments(cid, pid).doc(String(documentId || "").trim()) : cvRefDocuments(cid, pid).doc();
+    const now = cvNow();
+    const data = {
+      title: String(payload.title || "").trim() || "未命名文件",
+      kind: String(payload.kind || "link").trim() || "link",
+      url: String(payload.url || "").trim(),
+      content: String(payload.content || "").trim(),
+      fileName: String(payload.fileName || "").trim(),
+      fileDataUrl: String(payload.fileDataUrl || "").trim(),
+      mimeType: String(payload.mimeType || "").trim(),
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedAtMs: now,
+    };
+    if (!documentId) {
+      data.createdAt = FieldValue.serverTimestamp();
+      data.createdAtMs = now;
+    }
+    await ref.set(data, { merge: true });
+    await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: pid });
+  }
+
+  async function cvDeleteDocument(communityId, projectId, documentId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    const did = String(documentId || "").trim();
+    if (!pid || !did) return;
+    const ok = window.confirm("要刪除此文件嗎？");
+    if (!ok) return;
+    await cvRefDocuments(cid, pid).doc(did).delete();
+    await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: pid });
+  }
+
+  function cvRenderProjectPicker(projects, activeProjectId) {
+    const list = Array.isArray(projects) ? projects : [];
+    if (!list.length) return `<div class="status">目前尚未建立任何專案，請先到「備存」新增。</div>`;
+    return `
+      <div class="row" style="align-items:center; gap:12px; margin-bottom:14px;">
+        <div class="muted">目前專案</div>
+        <select id="cvActiveProjectSelect" style="min-width:220px;">
+          ${list.map((project) => `<option value="${escapeHtml(project.id)}"${project.id === activeProjectId ? " selected" : ""}>${escapeHtml(project.name)}${project.archived ? "（封存）" : ""}</option>`).join("")}
+        </select>
+      </div>
+    `;
+  }
+
+  function cvRenderOverviewContent(project, roster, topics, documents) {
+    if (!project) {
+      return `
+        <div class="status">目前尚未建立專案，請先到「備存」新增報到投票專案。</div>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn danger" type="button" id="btnCvCreateProjectEmpty">新增專案</button>
+        </div>
+      `;
+    }
+    const checkedInCount = roster.filter((item) => item.checkedIn).length;
+    const votedResidents = roster.filter((item) => cvResidentVoteCount(item) > 0).length;
+    const enabledTopics = topics.filter((item) => item.enabled !== false);
+    const ck = cvCheckinStats(project, roster);
+    return `
+      <div class="row" style="justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:14px;">
+        <div>
+          <div style="font-size:calc(18px * var(--fs, 1)); font-weight:800; color:#111827;">${escapeHtml(project.name)}</div>
+          <div class="muted" style="margin-top:6px;">${escapeHtml(project.description || "可在此專案進行報到、投票、文件與 QR 管理。")}</div>
+          <div class="muted" style="margin-top:6px;">會議時間：${escapeHtml(cvFormatDateTime(project.meetingAtMs))}</div>
+        </div>
+        <div class="row" style="gap:8px;">
+          <button class="btn" type="button" data-cv-go="scan">前往掃碼</button>
+          <button class="btn" type="button" data-cv-go="archive">專案備存</button>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:16px;">
+        <div class="co-card tone-success"><div class="co-label">名單總數</div><div class="co-value">${roster.length}<span class="co-unit">人</span></div><div class="co-sub">本專案獨立名單</div></div>
+        <div class="co-card ${checkedInCount ? "tone-success" : "tone-muted"}"><div class="co-label">已報到</div><div class="co-value">${checkedInCount}<span class="co-unit">人</span></div><div class="co-sub">戶數 ${cvFormatPct(ck.countRatePct)}｜區分所有權 ${ck.shareKnown ? cvFormatPct(ck.shareRatePct) : "—"}</div></div>
+        <div class="co-card ${ck.passed ? "tone-success" : "tone-muted"}"><div class="co-label">報到結果</div><div class="co-value">${ck.passed ? "通過" : "未通過"}</div><div class="co-sub">門檻 戶數 ${ck.targetCountPct}%／區分所有權 ${ck.targetSharePct}%</div></div>
+        <div class="co-card ${votedResidents ? "tone-success" : "tone-muted"}"><div class="co-label">已投票</div><div class="co-value">${votedResidents}<span class="co-unit">人</span></div><div class="co-sub">投票率 ${checkedInCount ? Math.round((votedResidents / checkedInCount) * 100) : 0}%（以實際報到 ${checkedInCount} 人為分母）</div></div>
+        <div class="co-card tone-primary"><div class="co-label">議題數</div><div class="co-value">${enabledTopics.length}<span class="co-unit">題</span></div><div class="co-sub">文件 ${documents.length} 筆</div></div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <div style="flex:1 1 320px;">
+          <div class="care-overview-head"><strong>報到概況</strong><span>${checkedInCount}/${roster.length}</span></div>
+          ${roster.length ? roster.map((entry) => `
+            <div class="list-item">
+              <div>
+                <div style="font-weight:700;">${escapeHtml(entry.name)}<span class="muted" style="margin-left:8px;">${escapeHtml(cvFormatUnit(entry))}</span></div>
+                <div class="muted" style="margin-top:4px;">${entry.checkedIn ? `已於 ${escapeHtml(cvFormatDateTime(entry.checkedInAtMs))} 報到` : "尚未報到"}</div>
+              </div>
+              <div><span class="status-chip ${entry.checkedIn ? "success" : "warning"}">${entry.checkedIn ? "已報到" : "待報到"}</span></div>
+            </div>
+          `).join("") : `<div class="status">目前沒有名單資料</div>`}
+        </div>
+        <div style="flex:1 1 320px;">
+          <div class="care-overview-head"><strong>投票概況</strong><span>${enabledTopics.length} 題</span></div>
+          ${enabledTopics.length ? enabledTopics.map((topic) => {
+            const participation = cvTopicParticipationCount(topic, roster);
+            return `
+              <div class="list-item" style="display:block;">
+                <div style="display:flex; justify-content:space-between; gap:12px; align-items:center;">
+                  <div style="font-weight:700;">${escapeHtml(topic.title)}</div>
+                  <span class="status-chip ${participation ? "success" : "gray"}">${participation}/${checkedInCount}</span>
+                </div>
+                <div class="muted" style="margin-top:6px;">${escapeHtml(topic.description || (topic.singleChoice ? "單選題" : "多選題"))}</div>
+              </div>
+            `;
+          }).join("") : `<div class="status">目前尚未建立投票議題</div>`}
+        </div>
+      </div>
+    `;
+  }
+
+  function cvRenderCheckinContent(project, roster) {
+    if (!project) return `<div class="status">請先新增專案。</div>`;
+    if (!roster.length) {
+      return `
+        <div class="status">此專案目前沒有名單，請先到「名單」建立或帶入住戶資料。</div>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn" type="button" data-cv-go="roster">前往名單</button>
+        </div>
+      `;
+    }
+    const ck = cvCheckinStats(project, roster);
+    return `
+      <div class="list-item" style="display:block; margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
+          <div style="font-weight:700;">報到進度：戶數 ${cvFormatPct(ck.countRatePct)}（${ck.doneCount}/${ck.totalCount} 戶）${ck.shareKnown ? `｜區分所有權比例 ${cvFormatPct(ck.shareRatePct)}` : "｜區分所有權比例未填"}</div>
+          <span class="status-chip ${ck.passed ? "success" : "warning"}">${ck.passed ? "已達通過門檻" : "未達通過門檻"}</span>
+        </div>
+        <div class="muted" style="margin-top:6px;">通過門檻：戶數 ${ck.targetCountPct}%／區分所有權比例 ${ck.targetSharePct}%（兩者皆須達標）｜未到 ${ck.missCount} 戶</div>
+      </div>
+      <div class="row" style="justify-content:space-between; gap:12px; margin-bottom:14px;">
+        <div class="muted">可用方式：${project.settings.allowManualCheckin ? "人工" : ""}${project.settings.allowManualCheckin && project.settings.allowQrCheckin ? "、" : ""}${project.settings.allowQrCheckin ? "QR" : ""}</div>
+        <div class="row" style="gap:8px;">
+          ${project.settings.allowQrCheckin ? `<button class="btn btn-primary" type="button" data-cv-go="scan">掃碼報到</button>` : ""}
+          <button class="btn" type="button" data-cv-go="roster">管理名單</button>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        ${roster.map((entry) => `
+          <div class="list-item" style="display:block;">
+            <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap;">
+              <div>
+                <div style="font-size:calc(16px * var(--fs, 1)); font-weight:800; color:#111827;">${escapeHtml(cvDisplayName(entry))}</div>
+                <div class="muted" style="margin-top:4px;">${escapeHtml(cvFormatUnit(entry))}${entry.phone ? `｜${escapeHtml(entry.phone)}` : ""}</div>
+                <div class="muted" style="margin-top:4px;">${entry.checkedIn ? `已於 ${escapeHtml(cvFormatDateTime(entry.checkedInAtMs))} 透過 ${escapeHtml(entry.checkedInMethod || "manual")} 報到` : "尚未報到"}</div>
+              </div>
+              <div class="row" style="gap:8px; align-items:center;">
+                <span class="status-chip ${entry.checkedIn ? "success" : "warning"}">${entry.checkedIn ? "已報到" : "待報到"}</span>
+                <button class="btn btn-sm" type="button" data-cv-person-qr="${escapeHtml(entry.id)}">QR</button>
+                ${project.settings.allowManualCheckin ? (entry.checkedIn
+                  ? `<button class="btn btn-sm" type="button" data-cv-undo-checkin="${escapeHtml(entry.id)}">取消報到</button>`
+                  : `<button class="btn btn-sm btn-primary" type="button" data-cv-checkin="${escapeHtml(entry.id)}">人工報到</button>`) : ""}
+              </div>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function cvRenderVoteContent(project, roster, topics) {
+    if (!project) return `<div class="status">請先新增專案。</div>`;
+    return `
+      <div class="row" style="justify-content:space-between; gap:12px; margin-bottom:14px;">
+        <div class="muted">可用方式：${project.settings.allowManualVote ? "人工投票" : ""}${project.settings.allowManualVote && project.settings.allowQrVote ? "、" : ""}${project.settings.allowQrVote ? "QR 掃碼投票" : ""}${project.settings.requireCheckinBeforeVote ? "｜需先報到" : ""}</div>
+        <div class="row" style="gap:8px;">
+          <button class="btn danger" type="button" id="btnCvAddTopic">新增議題</button>
+          ${project.settings.allowQrVote ? `<button class="btn btn-primary" type="button" data-cv-go="scan">掃碼投票</button>` : ""}
+        </div>
+      </div>
+      ${topics.length ? topics.map((topic) => {
+        const stats = cvTopicStats(topic, project, roster);
+        return `
+          <div class="card" style="margin-bottom:12px;">
+            <div class="card-hd">
+              <div class="left">
+                <div style="min-width:0;">
+                  <h2 style="font-size:calc(22px * var(--fs, 1));">${escapeHtml(topic.title)}</h2>
+                  <p>${escapeHtml(topic.description || (topic.singleChoice ? "單選題" : "多選題"))}</p>
+                </div>
+              </div>
+              <div class="row" style="gap:8px;">
+                <span class="status-chip ${stats.passedCount ? "success" : "gray"}">${stats.passedCount ? `通過 ${stats.passedCount} 項` : "尚無選項通過"}</span>
+                <span class="status-chip ${topic.enabled ? "success" : "gray"}">${topic.enabled ? "啟用" : "停用"}</span>
+                <button class="btn btn-sm" type="button" data-cv-edit-topic="${escapeHtml(topic.id)}">編輯</button>
+                <button class="btn btn-sm danger" type="button" data-cv-delete-topic="${escapeHtml(topic.id)}">刪除</button>
+              </div>
+            </div>
+            <div class="card-bd">
+              <div class="row" style="justify-content:space-between; margin-bottom:6px;">
+                <div class="muted">投票 ${stats.voterCount}/${stats.totalCount} 戶（以報到數為分母，戶數 ${cvFormatPct(stats.participantCountPct)}${stats.shareKnown ? `／區分所有權 ${cvFormatPct(stats.participantSharePct)}` : ""}）</div>
+                <div class="row" style="gap:8px;">
+                  ${project.settings.allowManualVote ? `<button class="btn btn-sm btn-primary" type="button" data-cv-cast-topic="${escapeHtml(topic.id)}">人工投票</button>` : ""}
+                </div>
+              </div>
+              <div class="muted" style="margin-bottom:10px;">通過門檻：得票戶數 ${stats.passCountPct}%／得票區分所有權 ${stats.passSharePct}%（兩者皆須達標）${stats.usingDefaultCount || stats.usingDefaultShare ? "｜沿用專案預設" : "｜本議題自訂"}</div>
+              <div style="display:flex; flex-direction:column; gap:10px;">
+                ${(topic.options || []).map((option) => {
+                  const opt = stats.options.find((item) => item.id === String(option.id || "").trim())
+                    || { count: 0, countRatePct: 0, shareRatePct: 0, passed: false };
+                  return `
+                  <div class="list-item">
+                    <div>
+                      <div style="font-weight:700;">${escapeHtml(option.label)}</div>
+                      <div class="muted" style="margin-top:4px;">${opt.count} 票｜戶數 ${cvFormatPct(opt.countRatePct)}／區分所有權 ${stats.shareKnown ? cvFormatPct(opt.shareRatePct) : "—"}</div>
+                    </div>
+                    <div class="row" style="gap:8px;">
+                      <span class="status-chip ${opt.passed ? "success" : "gray"}">${opt.passed ? "通過" : "未達門檻"}</span>
+                      <button class="btn btn-sm" type="button" data-cv-option-qr="${escapeHtml(`${topic.id}::${option.id}`)}">QR</button>
+                    </div>
+                  </div>
+                `;
+                }).join("")}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("") : `<div class="status">尚未建立任何投票議題</div>`}
+    `;
+  }
+
+  function cvRenderRosterContent(project, roster, topics) {
+    if (!project) return `<div class="status">請先新增專案。</div>`;
+    return `
+      <div class="row" style="justify-content:space-between; gap:12px; margin-bottom:14px;">
+        <div class="muted">此名單為本專案獨立資料，不會直接覆蓋住戶造冊。</div>
+        <div class="row" style="gap:8px;">
+          <button class="btn" type="button" id="btnCvImportResidents">帶入住戶造冊</button>
+          <button class="btn danger" type="button" id="btnCvAddRosterEntry">新增名單</button>
+        </div>
+      </div>
+      ${roster.length ? `
+        <div class="cv-roster-table-wrap">
+          <table class="cv-roster-table">
+            <thead>
+              <tr>
+                <th>QR code碼</th>
+                <th>戶號</th>
+                <th>姓名</th>
+                <th>地址</th>
+                <th>坪數</th>
+                <th>區分所有權比例</th>
+                <th>報到</th>
+                <th>投票</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${roster.map((entry) => `
+                <tr>
+                  <td data-label="QR code碼"><span class="cv-roster-qr" title="${escapeHtml(entry.qrToken)}">${escapeHtml(entry.qrToken)}</span></td>
+                  <td data-label="戶號">${escapeHtml(cvFormatUnit(entry))}</td>
+                  <td data-label="姓名">${escapeHtml(cvDisplayName(entry))}</td>
+                  <td data-label="地址">${escapeHtml(entry.address || "—")}</td>
+                  <td data-label="坪數">${escapeHtml(entry.area || "—")}</td>
+                  <td data-label="區分所有權比例">${entry.ownership ? `${escapeHtml(entry.ownership)}%` : "—"}</td>
+                  <td data-label="報到">${entry.checkedIn ? `<span class="status-chip success">已報到</span>` : `<span class="status-chip gray">未報到</span>`}</td>
+                  <td data-label="投票">${cvResidentVoteCount(entry)}/${topics.length}</td>
+                  <td data-label="操作">
+                    <div class="row" style="gap:8px; flex-wrap:wrap;">
+                      <button class="btn btn-sm" type="button" data-cv-person-qr="${escapeHtml(entry.id)}">QR</button>
+                      <button class="btn btn-sm" type="button" data-cv-edit-roster="${escapeHtml(entry.id)}">編輯</button>
+                      <button class="btn btn-sm danger" type="button" data-cv-delete-roster="${escapeHtml(entry.id)}">刪除</button>
+                    </div>
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      ` : `<div class="status">此專案目前沒有名單</div>`}
+    `;
+  }
+
+  // ==== 文件產生器（報到單 / 投票單）====
+  const cvDocPrefs = {
+    checkin: { layout: "personal", targetId: "__all__", perPage: 10, mergeOwner: false },
+    vote: { layout: "single", targetId: "__all__", topicId: "__all__", mergeOwner: false },
+  };
+  const cvDocPageCss = `
+    .cv-doc-page { width: 210mm; height: 297mm; box-sizing: border-box; padding: 18mm 16mm; background: #fff; color: #111827; display: flex; flex-direction: column; font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif; overflow: hidden; }
+    .cv-doc-hd { border-bottom: 3px solid #d32f2f; padding-bottom: 10px; margin-bottom: 16px; }
+    .cv-doc-hd h1 { margin: 0; font-size: 26px; letter-spacing: 2px; font-weight: 800; }
+    .cv-doc-sub { margin: 6px 0 0; font-size: 15px; color: #374151; }
+    .cv-doc-meta { margin: 4px 0 0; font-size: 13px; color: #6b7280; }
+    .cv-doc-bd { flex: 1; }
+    .cv-doc-ft { border-top: 1px solid #e5e7eb; padding-top: 8px; margin-top: 12px; display: flex; justify-content: space-between; font-size: 12px; color: #9ca3af; }
+    .cv-doc-info { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    .cv-doc-info th, .cv-doc-info td { border: 1px solid #d1d5db; padding: 10px 12px; font-size: 14px; text-align: left; }
+    .cv-doc-info th { background: #f9fafb; width: 88px; font-weight: 700; }
+    .cv-doc-table { width: 100%; border-collapse: collapse; }
+    .cv-doc-table th, .cv-doc-table td { border: 1px solid #d1d5db; padding: 9px 10px; font-size: 14px; }
+    .cv-doc-table th { background: #f9fafb; }
+    .cv-doc-table td { height: 34px; }
+    .cv-doc-qr { text-align: center; margin: 20px 0; }
+    .cv-doc-qr img { width: 150px; height: 150px; }
+    .cv-doc-qr-cap { font-size: 12px; color: #6b7280; margin-top: 6px; }
+    .cv-doc-qr-list { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 18px; }
+    .cv-doc-qr-item { text-align: center; }
+    .cv-doc-qr-item img { width: 110px; height: 110px; }
+    .cv-doc-qr-item .cv-doc-qr-cap { font-size: 11px; }
+    .cv-doc-note { border: 1px dashed #d1d5db; border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #4b5563; line-height: 1.7; }
+    .cv-doc-topic { border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+    .cv-doc-topic-title { font-size: 16px; font-weight: 800; }
+    .cv-doc-topic-desc { font-size: 13px; color: #6b7280; margin-top: 6px; }
+    .cv-doc-options { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-direction: column; gap: 10px; }
+    .cv-doc-options li { display: flex; align-items: center; gap: 12px; }
+    .cv-doc-box { width: 18px; height: 18px; border: 2px solid #374151; border-radius: 3px; flex: 0 0 auto; }
+    .cv-doc-opt-label { font-size: 15px; flex: 1; }
+    .cv-doc-opt-qr { width: 64px; height: 64px; border: 1px solid #e5e7eb; padding: 2px; }
+    .cv-doc-sign { margin-top: 22px; display: flex; gap: 28px; font-size: 14px; }
+    .cv-doc-sign span { flex: 1; border-bottom: 1px solid #374151; padding-bottom: 28px; }
+  `;
+  const cvDocPrintCss = `
+    @page { size: A4 portrait; margin: 0; }
+    html, body { margin: 0; padding: 0; background: #fff; }
+    .cv-doc-page { page-break-after: always; }
+    .cv-doc-page:last-child { page-break-after: auto; }
+  `;
+
+  function cvEnsureDocCss() {
+    if (document.getElementById("cvDocStyle")) return;
+    const style = document.createElement("style");
+    style.id = "cvDocStyle";
+    style.textContent = cvDocPageCss;
+    document.head.appendChild(style);
+  }
+
+  function cvDocCommunityName() {
+    const el = document.getElementById("communityNameSub");
+    const text = el ? String(el.textContent || "").trim() : "";
+    return text || "社區";
+  }
+
+  function cvDocDefaultHeader(project, kind) {
+    const isVote = kind === "vote";
+    return {
+      title: `${cvDocCommunityName()} ${isVote ? "投票單" : "報到單"}`,
+      subtitle: String(project && project.name || "").trim(),
+      meetingLine: project && project.meetingAtMs ? `會議時間：${cvFormatDateTime(project.meetingAtMs)}` : "",
+      note: isVote
+        ? "請於選項方格內打勾（或掃描選項 QR code），並於下方簽名確認。"
+        : "請於報到時出示個人 QR code 或於名冊簽名，以完成報到手續。",
+      showQr: true,
+    };
+  }
+
+  function cvDocPickTargets(roster, targetId) {
+    const list = Array.isArray(roster) ? roster : [];
+    const id = String(targetId || "__all__").trim();
+    if (!id || id === "__all__") return list.slice();
+    return list.filter((entry) => String(entry.id || "") === id);
+  }
+
+  function cvDocEnabledTopics() {
+    return (Array.isArray(checkinVoteState.topics) ? checkinVoteState.topics : [])
+      .filter((topic) => topic && topic.enabled !== false)
+      .sort((a, b) => (Number(a.order || 0) - Number(b.order || 0)) || String(a.title || "").localeCompare(String(b.title || ""), "zh-Hant"));
+  }
+
+  function cvDocVoteEntryTable(entry) {
+    return `
+      <table class="cv-doc-info">
+        <tr><th>戶號</th><td>${escapeHtml(cvFormatUnit(entry))}</td><th>姓名</th><td>${escapeHtml(cvDisplayName(entry))}</td></tr>
+        <tr><th>投票時間</th><td></td><th>簽名</th><td></td></tr>
+      </table>
+    `;
+  }
+
+  // 合併同一區分所有權人的多戶資料表（用於合併報到單／投票單）
+  function cvDocOwnerUnitsTable(group, withTimeLabel) {
+    const entries = Array.isArray(group && group.entries) ? group.entries : [];
+    const total = cvGroupOwnershipTotal(group);
+    return `
+      <table class="cv-doc-info">
+        <tr><th>姓名</th><td colspan="3">${escapeHtml(cvDisplayName({ name: group && group.name }))}</td></tr>
+      </table>
+      <table class="cv-doc-table">
+        <thead>
+          <tr>
+            <th style="width:56px;">序號</th>
+            <th style="width:120px;">戶號</th>
+            <th>地址</th>
+            <th style="width:80px;">坪數</th>
+            <th style="width:110px;">區分所有權比例</th>
+            <th style="width:110px;">${escapeHtml(withTimeLabel || "報到時間")}</th>
+            <th style="width:110px;">簽名</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${entries.map((entry, index) => `
+            <tr>
+              <td>${index + 1}</td>
+              <td>${escapeHtml(cvFormatUnit(entry))}</td>
+              <td>${escapeHtml(entry.address || "")}</td>
+              <td>${escapeHtml(entry.area || "")}</td>
+              <td>${entry.ownership ? `${escapeHtml(entry.ownership)}%` : ""}</td>
+              <td></td>
+              <td></td>
+            </tr>
+          `).join("")}
+          <tr>
+            <td colspan="4" style="text-align:right;font-weight:700;">合計</td>
+            <td style="font-weight:700;">${entries.length} 戶${total > 0 ? `｜${total.toFixed(2).replace(/\.00$/, "")}%` : ""}</td>
+            <td></td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+  }
+
+  function cvDocOwnerQrBlock(group, project) {
+    const entries = Array.isArray(group && group.entries) ? group.entries : [];
+    if (!entries.length) return "";
+    return `
+      <div class="cv-doc-qr-list">
+        ${entries.map((entry) => `
+          <div class="cv-doc-qr-item">
+            <img src="${escapeHtml(cvQrImageUrl(cvPersonQrPayload(project.id, entry)))}" alt="QR" />
+            <div class="cv-doc-qr-cap">${escapeHtml(cvFormatUnit(entry))} 報到 QR</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function cvDocTopicBlock(topic, index, project) {
+    const options = Array.isArray(topic.options) ? topic.options : [];
+    return `
+      <div class="cv-doc-topic">
+        <div class="cv-doc-topic-title">議題 ${index}：${escapeHtml(topic.title)}（${topic.singleChoice ? "單選" : "可多選"}）</div>
+        ${topic.description ? `<div class="cv-doc-topic-desc">${escapeHtml(topic.description)}</div>` : ""}
+        ${options.length ? `
+          <ul class="cv-doc-options">
+            ${options.map((opt) => `
+              <li>
+                <span class="cv-doc-box"></span>
+                <span class="cv-doc-opt-label">${escapeHtml(opt.label)}</span>
+                <img class="cv-doc-opt-qr" src="${escapeHtml(cvQrImageUrl(cvOptionQrPayload(project.id, topic, opt)))}" alt="QR" />
+              </li>
+            `).join("")}
+          </ul>
+        ` : `<div class="cv-doc-topic-desc">此議題尚未設定選項。</div>`}
+      </div>
+    `;
+  }
+
+  function cvDocSignHtml() {
+    return `
+      <div class="cv-doc-sign">
+        <span>投票人簽名</span>
+        <span>日期</span>
+      </div>
+    `;
+  }
+
+  function cvDocPageHtml(page, project, header, pageNo, totalPages) {
+    let body = "";
+    if (page.kind === "checkin-personal") {
+      const entry = page.entry;
+      body = `
+        <table class="cv-doc-info">
+          <tr><th>戶號</th><td>${escapeHtml(cvFormatUnit(entry))}</td><th>姓名</th><td>${escapeHtml(cvDisplayName(entry))}</td></tr>
+          <tr><th>報到時間</th><td></td><th>簽名</th><td></td></tr>
+        </table>
+        ${header.showQr ? `
+          <div class="cv-doc-qr">
+            <img src="${escapeHtml(cvQrImageUrl(cvPersonQrPayload(project.id, entry)))}" alt="QR" />
+            <div class="cv-doc-qr-cap">個人報到 QR code</div>
+          </div>
+        ` : ""}
+        <div class="cv-doc-note">${escapeHtml(header.note)}</div>
+      `;
+    } else if (page.kind === "checkin-owner") {
+      body = `
+        ${cvDocOwnerUnitsTable(page.group, "報到時間")}
+        ${header.showQr ? cvDocOwnerQrBlock(page.group, project) : ""}
+        <div class="cv-doc-note">${escapeHtml(header.note)}</div>
+      `;
+    } else if (page.kind === "checkin-roster") {
+      body = `
+        <table class="cv-doc-table">
+          <thead>
+            <tr>
+              <th style="width:64px;">序號</th>
+              <th style="width:130px;">戶號</th>
+              <th>姓名</th>
+              <th style="width:140px;">報到時間</th>
+              <th style="width:140px;">簽名</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${page.rows.map((entry, index) => `
+              <tr>
+                <td>${page.startIndex + index}</td>
+                <td>${escapeHtml(cvFormatUnit(entry))}</td>
+                <td>${escapeHtml(cvDisplayName(entry))}</td>
+                <td></td>
+                <td></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+        <div class="cv-doc-note" style="margin-top:16px;">${escapeHtml(header.note)}</div>
+      `;
+    } else if (page.kind === "vote-single") {
+      body = cvDocVoteEntryTable(page.entry) + cvDocTopicBlock(page.topic, 1, project) + cvDocSignHtml();
+    } else if (page.kind === "vote-multi") {
+      body = cvDocVoteEntryTable(page.entry)
+        + page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project)).join("")
+        + cvDocSignHtml();
+    } else if (page.kind === "vote-owner-single") {
+      body = cvDocOwnerUnitsTable(page.group, "投票時間")
+        + cvDocTopicBlock(page.topic, 1, project)
+        + cvDocSignHtml();
+    } else if (page.kind === "vote-owner-multi") {
+      body = cvDocOwnerUnitsTable(page.group, "投票時間")
+        + page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project)).join("")
+        + cvDocSignHtml();
+    }
+    return `
+      <section class="cv-doc-page">
+        <header class="cv-doc-hd">
+          <h1>${escapeHtml(header.title)}</h1>
+          ${header.subtitle ? `<p class="cv-doc-sub">${escapeHtml(header.subtitle)}</p>` : ""}
+          ${header.meetingLine ? `<p class="cv-doc-meta">${escapeHtml(header.meetingLine)}</p>` : ""}
+        </header>
+        <div class="cv-doc-bd">${body}</div>
+        <footer class="cv-doc-ft">
+          <span>${escapeHtml(cvDocCommunityName())}</span>
+          <span>第 ${pageNo} / ${totalPages} 頁</span>
+        </footer>
+      </section>
+    `;
+  }
+
+  function cvDocBuildPageList(kind, project, header, prefs) {
+    if (!project) return [];
+    const roster = Array.isArray(checkinVoteState.roster) ? checkinVoteState.roster : [];
+    const targets = cvDocPickTargets(roster, prefs.targetId);
+    const mergeOwner = prefs.mergeOwner === true;
+    const groups = mergeOwner ? cvGroupRosterByOwner(targets) : [];
+    const pageItems = [];
+    if (kind === "checkin") {
+      if (mergeOwner) {
+        groups.forEach((group) => pageItems.push({ kind: "checkin-owner", group }));
+      } else if (prefs.layout === "roster") {
+        const per = Math.max(4, Math.min(20, Number(prefs.perPage) || 10));
+        for (let i = 0; i < targets.length; i += per) {
+          pageItems.push({ kind: "checkin-roster", rows: targets.slice(i, i + per), startIndex: i + 1 });
+        }
+      } else {
+        targets.forEach((entry) => pageItems.push({ kind: "checkin-personal", entry }));
+      }
+    } else {
+      const enabledTopics = cvDocEnabledTopics();
+      const pickedTopics = prefs.topicId && prefs.topicId !== "__all__"
+        ? enabledTopics.filter((topic) => String(topic.id || "") === String(prefs.topicId).trim())
+        : enabledTopics;
+      if (mergeOwner) {
+        if (prefs.layout === "multi") {
+          groups.forEach((group) => pageItems.push({ kind: "vote-owner-multi", group, topics: pickedTopics }));
+        } else {
+          groups.forEach((group) => pickedTopics.forEach((topic) => pageItems.push({ kind: "vote-owner-single", group, topic })));
+        }
+      } else if (prefs.layout === "multi") {
+        targets.forEach((entry) => pageItems.push({ kind: "vote-multi", entry, topics: pickedTopics }));
+      } else {
+        targets.forEach((entry) => pickedTopics.forEach((topic) => pageItems.push({ kind: "vote-single", entry, topic })));
+      }
+    }
+    return pageItems.map((page, index) => cvDocPageHtml(page, project, header, index + 1, pageItems.length));
+  }
+
+  function cvDocSafeFileName(text) {
+    return String(text || "document").replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, "").slice(0, 60) || "document";
+  }
+
+  function cvDocOpenPrintWindow(header, pageList) {
+    if (!pageList.length) {
+      toast("目前沒有可列印的內容");
+      return;
+    }
+    const win = window.open("", "_blank");
+    if (!win) {
+      toast("請允許彈出視窗以列印文件");
+      return;
+    }
+    win.document.write(`<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(header.title)}</title>
+<style>${cvDocPageCss}${cvDocPrintCss}</style>
+</head>
+<body onload="window.print();"><div class="cv-doc-print-root">${pageList.join("")}</div></body>
+</html>`);
+    win.document.close();
+  }
+
+  function cvDocDownloadHtml(header, pageList) {
+    if (!pageList.length) {
+      toast("目前沒有可下載的內容");
+      return;
+    }
+    const html = `<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(header.title)}</title>
+<style>${cvDocPageCss}</style>
+</head>
+<body><div class="cv-doc-print-root">${pageList.join("")}</div></body>
+</html>`;
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${cvDocSafeFileName(header.title)}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    toast("文件已下載（可用瀏覽器開啟後列印為 PDF）");
+  }
+
+  function cvOpenDocPreviewModal(kind, project) {
+    if (!project) {
+      toast("請先新增專案");
+      return;
+    }
+    cvEnsureDocCss();
+    const prefs = kind === "vote" ? cvDocPrefs.vote : cvDocPrefs.checkin;
+    const header = cvDocDefaultHeader(project, kind);
+    const pageList = cvDocBuildPageList(kind, project, header, prefs);
+    const modal = ensureModal("checkinVoteDocPreviewModal", "modal-checkin-vote-doc-preview", "min(1180px, 96vw)");
+    bindModalClose(modal);
+    const renderPreview = () => `
+      ${pageList.length
+        ? pageList.map((html) => `<div class="cv-doc-slot">${html}</div>`).join("")
+        : `<div class="status">沒有可產生的內容，請先確認名單、議題與選項是否已建立。</div>`}
+    `;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinVoteDocPreviewTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="checkinVoteDocPreviewTitle">${escapeHtml(kind === "vote" ? "投票單" : "報到單")}｜生成、編輯、列印與下載</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="cv-doc-editor">
+            <label>文件標題<input id="cvDocInputTitle" type="text" value="${escapeHtml(header.title)}" /></label>
+            <label>副標題<input id="cvDocInputSubtitle" type="text" value="${escapeHtml(header.subtitle)}" /></label>
+            <label>會議時間<input id="cvDocInputMeeting" type="text" value="${escapeHtml(header.meetingLine)}" /></label>
+            <label>備註說明<textarea id="cvDocInputNote" rows="2">${escapeHtml(header.note)}</textarea></label>
+            ${kind === "checkin" ? `<label class="cv-doc-inline"><input id="cvDocInputShowQr" type="checkbox"${header.showQr ? " checked" : ""} />個人式報到單顯示 QR code</label>` : ""}
+          </div>
+          <div class="muted" style="margin:10px 0;">共 ${pageList.length} 頁（A4 直式）。可直接編輯上方文字，預覽與列印內容會同步更新。</div>
+          <div class="cv-doc-preview" id="cvDocPreviewArea">${renderPreview()}</div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" id="btnCvDocPrint">列印</button>
+          <button class="btn danger" type="button" id="btnCvDocDownload">下載</button>
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    modal.hidden = false;
+
+    const syncHeader = () => {
+      header.title = String(modal.querySelector("#cvDocInputTitle").value || "").trim() || "未命名文件";
+      header.subtitle = String(modal.querySelector("#cvDocInputSubtitle").value || "").trim();
+      header.meetingLine = String(modal.querySelector("#cvDocInputMeeting").value || "").trim();
+      header.note = String(modal.querySelector("#cvDocInputNote").value || "").trim();
+      const qrInput = modal.querySelector("#cvDocInputShowQr");
+      if (qrInput) header.showQr = qrInput.checked === true;
+      const next = cvDocBuildPageList(kind, project, header, prefs);
+      pageList.length = 0;
+      next.forEach((html) => pageList.push(html));
+      const area = modal.querySelector("#cvDocPreviewArea");
+      if (area) area.innerHTML = renderPreview();
+    };
+
+    ["#cvDocInputTitle", "#cvDocInputSubtitle", "#cvDocInputMeeting", "#cvDocInputNote"].forEach((sel) => {
+      const input = modal.querySelector(sel);
+      if (input) input.addEventListener("input", syncHeader);
+    });
+    const qrToggle = modal.querySelector("#cvDocInputShowQr");
+    if (qrToggle) qrToggle.addEventListener("change", syncHeader);
+
+    modal.querySelector("#btnCvDocPrint").addEventListener("click", () => cvDocOpenPrintWindow(header, pageList));
+    modal.querySelector("#btnCvDocDownload").addEventListener("click", () => cvDocDownloadHtml(header, pageList));
+  }
+
+  function cvDocTargetOptionsHtml(roster, selectedId) {
+    const list = Array.isArray(roster) ? roster : [];
+    const current = String(selectedId || "__all__").trim() || "__all__";
+    return [
+      `<option value="__all__"${current === "__all__" ? " selected" : ""}>全部名單（${list.length} 人）</option>`,
+      ...list.map((entry) => `<option value="${escapeHtml(entry.id)}"${current === String(entry.id) ? " selected" : ""}>${escapeHtml(entry.name)}（${escapeHtml(cvFormatUnit(entry))}）</option>`),
+    ].join("");
+  }
+
+  function cvRenderFilesContent(project, documents, roster) {
+    if (!project) return `<div class="status">請先新增專案。</div>`;
+    const residentList = Array.isArray(roster) ? roster : [];
+    const enabledTopics = cvDocEnabledTopics();
+    const checkinPrefs = cvDocPrefs.checkin;
+    const votePrefs = cvDocPrefs.vote;
+    return `
+      <div class="cv-doc-gen">
+        <div class="cv-doc-gen-card">
+          <div class="cv-doc-gen-hd">報到單</div>
+          <div class="cv-doc-gen-bd">
+            <label>版式
+              <select id="cvCheckinLayout">
+                <option value="personal"${checkinPrefs.layout === "personal" ? " selected" : ""}>個人式（一人一頁 A4 直式）</option>
+                <option value="roster"${checkinPrefs.layout === "roster" ? " selected" : ""}>名冊式（多人一頁 A4 直式）</option>
+              </select>
+            </label>
+            <label>對象
+              <select id="cvCheckinTarget">${cvDocTargetOptionsHtml(residentList, checkinPrefs.targetId)}</select>
+            </label>
+            <label id="cvCheckinPerPageWrap"${checkinPrefs.layout === "roster" ? "" : " hidden"}>每頁人數
+              <input id="cvCheckinPerPage" type="number" min="4" max="20" step="1" value="${Number(checkinPrefs.perPage) || 10}" />
+            </label>
+            <label id="cvCheckinMergeWrap"${checkinPrefs.layout === "roster" ? " hidden" : ""} style="display:flex; flex-direction:row; align-items:center; gap:8px;">
+              <input id="cvCheckinMergeOwner" type="checkbox"${checkinPrefs.mergeOwner ? " checked" : ""} style="width:auto; height:auto;" />
+              <span>合併同一區分所有權人（多戶合併為一頁）</span>
+            </label>
+            <div class="row" style="gap:8px;">
+              <button class="btn danger" type="button" id="btnCvGenCheckinDoc">生成報到單</button>
+            </div>
+          </div>
+        </div>
+        <div class="cv-doc-gen-card">
+          <div class="cv-doc-gen-hd">投票單</div>
+          <div class="cv-doc-gen-bd">
+            <label>版式
+              <select id="cvVoteLayout">
+                <option value="single"${votePrefs.layout === "single" ? " selected" : ""}>個人式・一個議題一頁 A4 直式</option>
+                <option value="multi"${votePrefs.layout === "multi" ? " selected" : ""}>個人式・多個議題一頁 A4 直式</option>
+              </select>
+            </label>
+            <label>對象
+              <select id="cvVoteTarget">${cvDocTargetOptionsHtml(residentList, votePrefs.targetId)}</select>
+            </label>
+            <label id="cvVoteTopicWrap"${votePrefs.layout === "single" ? "" : " hidden"}>議題
+              <select id="cvVoteTopic">
+                <option value="__all__"${votePrefs.topicId === "__all__" ? " selected" : ""}>全部議題（各一頁）</option>
+                ${enabledTopics.map((topic) => `<option value="${escapeHtml(topic.id)}"${String(votePrefs.topicId) === String(topic.id) ? " selected" : ""}>${escapeHtml(topic.title)}</option>`).join("")}
+              </select>
+            </label>
+            <label style="display:flex; flex-direction:row; align-items:center; gap:8px;">
+              <input id="cvVoteMergeOwner" type="checkbox"${votePrefs.mergeOwner ? " checked" : ""} style="width:auto; height:auto;" />
+              <span>合併同一區分所有權人（多戶合併為一頁）</span>
+            </label>
+            <div class="row" style="gap:8px;">
+              <button class="btn danger" type="button" id="btnCvGenVoteDoc">生成投票單</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row" style="justify-content:space-between; gap:12px; margin:18px 0 14px;">
+        <div class="muted">可另外儲存連結、備註文字，或小型檔案（建議 450KB 以下）。</div>
+        <div class="row" style="gap:8px;">
+          <button class="btn danger" type="button" id="btnCvAddDocument">新增文件</button>
+        </div>
+      </div>
+      ${documents.length ? documents.map((doc) => `
+        <div class="list-item" style="margin-bottom:10px;">
+          <div>
+            <div style="font-weight:800;">${escapeHtml(doc.title)}</div>
+            <div class="muted" style="margin-top:4px;">${escapeHtml(doc.kind === "link" ? "連結" : (doc.kind === "file" ? "檔案" : "備註"))}｜更新 ${escapeHtml(cvFormatDateTime(doc.updatedAtMs || doc.createdAtMs))}</div>
+          </div>
+          <div class="row" style="gap:8px;">
+            <button class="btn btn-sm" type="button" data-cv-open-document="${escapeHtml(doc.id)}">開啟</button>
+            <button class="btn btn-sm" type="button" data-cv-edit-document="${escapeHtml(doc.id)}">編輯</button>
+            <button class="btn btn-sm danger" type="button" data-cv-delete-document="${escapeHtml(doc.id)}">刪除</button>
+          </div>
+        </div>
+      `).join("") : `<div class="status">目前沒有文件資料</div>`}
+    `;
+  }
+
+  function cvRenderArchiveContent(projects, activeProjectId) {
+    return `
+      <div class="row" style="justify-content:space-between; gap:12px; margin-bottom:14px;">
+        <div class="muted">所有報到與投票資料都以專案為主，各專案互相獨立，可儲存與切換檢視。</div>
+        <div class="row" style="gap:8px;">
+          <button class="btn danger" type="button" id="btnCvCreateProject">新增專案</button>
+        </div>
+      </div>
+      ${projects.length ? projects.map((project) => `
+        <div class="list-item" style="margin-bottom:10px;">
+          <div>
+            <div style="font-size:calc(16px * var(--fs, 1)); font-weight:800; color:#111827;">${escapeHtml(project.name)}</div>
+            <div class="muted" style="margin-top:4px;">${escapeHtml(project.description || "無專案說明")}｜${escapeHtml(cvFormatDateTime(project.meetingAtMs))}</div>
+            <div class="muted" style="margin-top:4px;">建立 ${escapeHtml(cvFormatDateTime(project.createdAtMs))}</div>
+          </div>
+          <div class="row" style="gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+            <span class="status-chip ${project.archived ? "gray" : "success"}">${project.archived ? "封存" : "進行中"}</span>
+            ${project.id === activeProjectId ? `<span class="status-chip success">目前專案</span>` : `<button class="btn btn-sm" type="button" data-cv-set-active="${escapeHtml(project.id)}">設為目前專案</button>`}
+            <button class="btn btn-sm" type="button" data-cv-open-project="${escapeHtml(project.id)}">檢視</button>
+            <button class="btn btn-sm" type="button" data-cv-edit-project="${escapeHtml(project.id)}">編輯</button>
+            <button class="btn btn-sm" type="button" data-cv-toggle-archive="${escapeHtml(project.id)}">${project.archived ? "解除封存" : "封存"}</button>
+            <button class="btn btn-sm danger" type="button" data-cv-delete-project="${escapeHtml(project.id)}">刪除</button>
+          </div>
+        </div>
+      `).join("") : `<div class="status">目前尚未建立任何專案</div>`}
+    `;
+  }
+
+  function cvOpenScanWindow(project) {
+    if (!project) {
+      toast("請先新增專案後再使用掃碼");
+      return false;
+    }
+    const cid = String(checkinVoteState.cid || resolveActiveCommunityId() || "default").trim() || "default";
+    const url = `qrcode-scan.html?c=${encodeURIComponent(cid)}&p=${encodeURIComponent(project.id)}`;
+    const width = 430;
+    const height = 860;
+    const left = Math.max(0, Math.round((Number(window.screen && window.screen.width) || width) - width) / 2);
+    const top = Math.max(0, Math.round((Number(window.screen && window.screen.height) || height) - height) / 2);
+    const opened = window.open(url, "nwCheckinVoteScan", `popup=yes,width=${width},height=${height},left=${Math.round(left)},top=${Math.round(top)}`);
+    if (!opened) {
+      toast("請允許彈出視窗以開啟掃碼頁面");
+      return false;
+    }
+    try { opened.focus(); } catch {}
+    return true;
+  }
+
+  function cvOpenShareWindow(project) {
+    if (!project) {
+      toast("請先新增專案後再使用分享");
+      return false;
+    }
+    const cid = String(checkinVoteState.cid || resolveActiveCommunityId() || "default").trim() || "default";
+    const url = `checkin-vote-share.html?c=${encodeURIComponent(cid)}&p=${encodeURIComponent(project.id)}`;
+    const opened = window.open(url, "_blank");
+    if (!opened) {
+      toast("請允許彈出視窗以開啟分享頁面");
+      return false;
+    }
+    try { opened.focus(); } catch {}
+    return true;
+  }
+
+  function cvRenderScanContent(project, roster, topics) {
+    if (!project) return `<div class="status">請先新增專案後再使用掃碼。</div>`;
+    const checkedCount = roster.filter((item) => item.checkedIn).length;
+    return `
+      <div class="cv-scan-launch">
+        <div class="cv-scan-launch-title">掃碼作業（獨立視窗）</div>
+        <div class="muted" style="margin-top:8px;">掃碼已改為獨立的直式手機畫面，點選下方按鈕，或再按一次子分頁「掃碼」即可開啟。</div>
+        <div class="scan-results-preview" style="margin-top:14px;">
+          <div class="scan-result-item"><span>專案</span><span>${escapeHtml(project.name)}</span></div>
+          <div class="scan-result-item"><span>名單</span><span>${roster.length} 人（已報到 ${checkedCount} 人）</span></div>
+          <div class="scan-result-item"><span>議題</span><span>${topics.length} 題</span></div>
+        </div>
+        <div class="row" style="gap:8px; margin-top:16px;">
+          <button class="btn danger" type="button" id="btnCvOpenScanWindow">開啟掃碼視窗</button>
+          <button class="btn" type="button" data-cv-go="roster">管理名單</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function cvRenderSettingsContent(project) {
+    if (!project) return `<div class="status">請先新增專案。</div>`;
+    const settings = cvNormalizeProjectSettings(project.settings);
+    return `
+      <form id="cvSettingsForm">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px;">
+          <label class="field" style="display:block;">
+            <span>人工報到</span>
+            <select id="cvAllowManualCheckin">
+              <option value="yes"${settings.allowManualCheckin ? " selected" : ""}>開啟</option>
+              <option value="no"${settings.allowManualCheckin ? "" : " selected"}>關閉</option>
+            </select>
+          </label>
+          <label class="field" style="display:block;">
+            <span>QR 報到</span>
+            <select id="cvAllowQrCheckin">
+              <option value="yes"${settings.allowQrCheckin ? " selected" : ""}>開啟</option>
+              <option value="no"${settings.allowQrCheckin ? "" : " selected"}>關閉</option>
+            </select>
+          </label>
+          <label class="field" style="display:block;">
+            <span>人工投票</span>
+            <select id="cvAllowManualVote">
+              <option value="yes"${settings.allowManualVote ? " selected" : ""}>開啟</option>
+              <option value="no"${settings.allowManualVote ? "" : " selected"}>關閉</option>
+            </select>
+          </label>
+          <label class="field" style="display:block;">
+            <span>QR 投票</span>
+            <select id="cvAllowQrVote">
+              <option value="yes"${settings.allowQrVote ? " selected" : ""}>開啟</option>
+              <option value="no"${settings.allowQrVote ? "" : " selected"}>關閉</option>
+            </select>
+          </label>
+          <label class="field" style="display:block;">
+            <span>投票前需先報到</span>
+            <select id="cvRequireCheckinBeforeVote">
+              <option value="yes"${settings.requireCheckinBeforeVote ? " selected" : ""}>是</option>
+              <option value="no"${settings.requireCheckinBeforeVote ? "" : " selected"}>否</option>
+            </select>
+          </label>
+          <label class="field" style="display:block;">
+            <span>預設題型</span>
+            <select id="cvDefaultSingleChoice">
+              <option value="single"${settings.defaultSingleChoice ? " selected" : ""}>單選</option>
+              <option value="multi"${settings.defaultSingleChoice ? "" : " selected"}>多選</option>
+            </select>
+          </label>
+          <label class="field" style="display:block;">
+            <span>姓名顯示</span>
+            <select id="cvNameDisplay">
+              <option value="full"${settings.nameDisplay === "full" ? " selected" : ""}>全名顯示</option>
+              <option value="mask"${settings.nameDisplay === "mask" ? " selected" : ""}>隱藏中間名（王小明 → 王○明）</option>
+            </select>
+          </label>
+        </div>
+        <div class="muted" style="margin:18px 0 8px; font-weight:800;">通過門檻</div>
+        <div class="muted" style="margin-bottom:10px;">報到與各議題皆須「戶數（人數）」與「區分所有權比例」同時達到門檻，才算通過。</div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px;">
+          <label class="field" style="display:block;">
+            <span>報到通過｜戶數（人數）%</span>
+            <input id="cvCheckinTargetCountPct" type="number" min="0" max="100" step="1" value="${escapeHtml(String(settings.checkinTargetCountPct))}" />
+          </label>
+          <label class="field" style="display:block;">
+            <span>報到通過｜區分所有權比例%</span>
+            <input id="cvCheckinTargetSharePct" type="number" min="0" max="100" step="1" value="${escapeHtml(String(settings.checkinTargetSharePct))}" />
+          </label>
+          <label class="field" style="display:block;">
+            <span>議題預設通過｜得票戶數%</span>
+            <input id="cvTopicPassCountPct" type="number" min="0" max="100" step="1" value="${escapeHtml(String(settings.topicPassCountPct))}" />
+          </label>
+          <label class="field" style="display:block;">
+            <span>議題預設通過｜得票區分所有權%</span>
+            <input id="cvTopicPassSharePct" type="number" min="0" max="100" step="1" value="${escapeHtml(String(settings.topicPassSharePct))}" />
+          </label>
+        </div>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn btn-primary" type="submit">儲存設定</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function cvOpenQrModal(title, payload, hint) {
+    const modal = ensureModal("checkinVoteQrModal", "modal-checkin-vote-qr", "min(720px, 92vw)");
+    bindModalClose(modal);
+    const qrSrc = cvQrImageUrl(payload);
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinVoteQrTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="checkinVoteQrTitle">${escapeHtml(title || "QR Code")}</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="visitor-qr-box">
+            <div class="visitor-qr-img"><img src="${escapeHtml(qrSrc)}" alt="QR Code" /></div>
+          </div>
+          <div class="muted" style="margin-top:10px;">${escapeHtml(hint || "請掃描此 QR code")}</div>
+          <textarea readonly rows="4" style="width:100%;margin-top:10px;border-radius:14px;border:1px solid rgba(17,24,39,.12);padding:12px 14px;background:#fff;resize:none;">${escapeHtml(payload || "")}</textarea>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    modal.hidden = false;
+  }
+
+  function cvOpenProjectModal(communityId, project) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const current = project || null;
+    const modal = ensureModal("checkinVoteProjectModal", "modal-checkin-vote-project", "min(720px, 92vw)");
+    bindModalClose(modal);
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinVoteProjectTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="checkinVoteProjectTitle">${escapeHtml(current ? "編輯專案" : "新增專案")}</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="checkinVoteProjectForm">
+          <div class="modal-body">
+            <div class="field">
+              <label for="cvProjectName">專案名稱</label>
+              <input id="cvProjectName" type="text" value="${escapeHtml(current ? current.name : "")}" placeholder="例如：114 年區分所有權人會議" required />
+            </div>
+            <div class="field">
+              <label for="cvProjectDesc">專案說明</label>
+              <textarea id="cvProjectDesc" rows="3" placeholder="輸入本次報到投票用途">${escapeHtml(current ? current.description : "")}</textarea>
+            </div>
+            <div class="field">
+              <label for="cvProjectMeetingAt">會議時間</label>
+              <input id="cvProjectMeetingAt" type="datetime-local" value="${escapeHtml(cvToDateTimeInput(current ? current.meetingAtMs : 0))}" />
+            </div>
+            <label class="field" style="display:flex;align-items:center;gap:10px;">
+              <input id="cvProjectSetActive" type="checkbox"${current && current.isActive ? " checked" : (!current && !checkinVoteState.projects.length ? " checked" : "")} />
+              <span>設為目前專案</span>
+            </label>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">取消</button>
+            <button class="btn btn-primary" type="submit">儲存</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    const form = modal.querySelector("#checkinVoteProjectForm");
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const name = String(modal.querySelector("#cvProjectName")?.value || "").trim();
+      if (!name) {
+        toast("請輸入專案名稱");
+        return;
+      }
+      const ref = current ? cvRefProject(cid, current.id) : cvRefProjects(cid).doc();
+      const now = cvNow();
+      const savePayload = {
+        name,
+        description: String(modal.querySelector("#cvProjectDesc")?.value || "").trim(),
+        meetingAtMs: cvParseDateTimeInput(modal.querySelector("#cvProjectMeetingAt")?.value || ""),
+        archived: current ? current.archived === true : false,
+        isActive: current ? current.isActive === true : false,
+        settings: current ? cvNormalizeProjectSettings(current.settings) : cvNormalizeProjectSettings({}),
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedAtMs: now,
+      };
+      if (!current) {
+        savePayload.createdAt = FieldValue.serverTimestamp();
+        savePayload.createdAtMs = now;
+      }
+      await ref.set(savePayload, { merge: true });
+      modal.hidden = true;
+      if (modal.querySelector("#cvProjectSetActive")?.checked) {
+        await cvSetActiveProject(cid, ref.id);
+      } else {
+        await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: current ? current.id : ref.id });
+      }
+      toast(current ? "專案已更新" : "專案已建立");
+    };
+    modal.hidden = false;
+  }
+
+  function cvOpenRosterModal(communityId, projectId, entry) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    const current = entry || null;
+    const modal = ensureModal("checkinVoteRosterModal", "modal-checkin-vote-roster", "min(760px, 92vw)");
+    bindModalClose(modal);
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinVoteRosterTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="checkinVoteRosterTitle">${escapeHtml(current ? "編輯名單" : "新增名單")}</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="checkinVoteRosterForm">
+          <div class="modal-body" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px;">
+            <label class="field" style="display:block;"><span>姓名</span><input id="cvRosterName" type="text" value="${escapeHtml(current ? current.name : "")}" required /></label>
+            <label class="field" style="display:block;"><span>戶號</span><input id="cvRosterHouseNo" type="text" value="${escapeHtml(current ? current.houseNo : "")}" /></label>
+            <label class="field" style="display:block;"><span>子戶號</span><input id="cvRosterSubHouseNo" type="text" value="${escapeHtml(current ? current.subHouseNo : "")}" /></label>
+            <label class="field" style="display:block; grid-column:1/-1;"><span>地址</span><input id="cvRosterAddress" type="text" value="${escapeHtml(current ? current.address : "")}" /></label>
+            <label class="field" style="display:block;"><span>坪數</span><input id="cvRosterArea" type="text" value="${escapeHtml(current ? current.area : "")}" /></label>
+            <label class="field" style="display:block;"><span>區分所有權比例（%）</span><input id="cvRosterOwnership" type="text" value="${escapeHtml(current ? current.ownership : "")}" /></label>
+            <label class="field" style="display:block;"><span>電話</span><input id="cvRosterPhone" type="text" value="${escapeHtml(current ? current.phone : "")}" /></label>
+            <label class="field" style="display:block;"><span>Email</span><input id="cvRosterEmail" type="email" value="${escapeHtml(current ? current.email : "")}" /></label>
+            <label class="field" style="display:block;"><span>權重</span><input id="cvRosterWeight" type="number" min="1" step="1" value="${escapeHtml(String(current ? current.weight : 1))}" /></label>
+            <label class="field" style="display:block; grid-column:1/-1;"><span>備註</span><textarea id="cvRosterNote" rows="3">${escapeHtml(current ? current.note : "")}</textarea></label>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">取消</button>
+            <button class="btn btn-primary" type="submit">儲存</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    modal.querySelector("#checkinVoteRosterForm").onsubmit = async (e) => {
+      e.preventDefault();
+      await cvSaveRosterEntry(cid, pid, current ? current.id : "", {
+        residentUid: current ? current.residentUid : "",
+        residentKey: current ? current.residentKey : "",
+        houseNo: modal.querySelector("#cvRosterHouseNo")?.value || "",
+        subHouseNo: modal.querySelector("#cvRosterSubHouseNo")?.value || "",
+        name: modal.querySelector("#cvRosterName")?.value || "",
+        address: modal.querySelector("#cvRosterAddress")?.value || "",
+        area: modal.querySelector("#cvRosterArea")?.value || "",
+        ownership: modal.querySelector("#cvRosterOwnership")?.value || "",
+        phone: modal.querySelector("#cvRosterPhone")?.value || "",
+        email: modal.querySelector("#cvRosterEmail")?.value || "",
+        note: modal.querySelector("#cvRosterNote")?.value || "",
+        weight: modal.querySelector("#cvRosterWeight")?.value || 1,
+        qrToken: current ? current.qrToken : "",
+      });
+      modal.hidden = true;
+      toast(current ? "名單已更新" : "名單已新增");
+    };
+    modal.hidden = false;
+  }
+
+  function cvOpenImportResidentsModal(communityId, projectId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    const modal = ensureModal("checkinVoteImportResidentsModal", "modal-checkin-vote-import", "min(880px, 94vw)");
+    bindModalClose(modal);
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinVoteImportResidentsTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="checkinVoteImportResidentsTitle">帶入住戶造冊</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="status">載入住戶中...</div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+          <button class="btn btn-primary" type="button" id="btnCvConfirmImportResidents" disabled>帶入</button>
+        </div>
+      </div>
+    `.trim();
+    modal.hidden = false;
+    cvLoadImportCandidates(cid).then((candidates) => {
+      const body = modal.querySelector(".modal-body");
+      const confirmBtn = modal.querySelector("#btnCvConfirmImportResidents");
+      if (!candidates.length) {
+        body.innerHTML = `<div class="status">目前沒有可帶入的新戶號資料，請先到「住戶造冊」建立戶號與區分所有權人。</div>`;
+        return;
+      }
+      body.innerHTML = `
+        <div class="muted" style="margin-bottom:10px;">來源為「住戶造冊」戶號資料（含區分所有權人、地址、坪數、區分所有權比例）。名單建立後即為本專案獨立資料，可再個別調整，不會回寫住戶造冊。</div>
+        <div style="display:flex; flex-direction:column; gap:10px; max-height:52vh; overflow:auto;">
+          ${candidates.map((item, index) => `
+            <label class="list-item" style="cursor:pointer;">
+              <div>
+                <div style="font-weight:700;">${escapeHtml(item.name || "住戶")}<span class="muted" style="margin-left:8px;">${escapeHtml(cvFormatUnit(item))}</span></div>
+                <div class="muted" style="margin-top:4px;">${escapeHtml(item.address || "無地址")}${item.area ? `｜坪數 ${escapeHtml(item.area)}` : ""}${item.ownership ? `｜比例 ${escapeHtml(item.ownership)}%` : ""}</div>
+              </div>
+              <div><input type="checkbox" data-cv-import-idx="${index}" /></div>
+            </label>
+          `).join("")}
+        </div>
+      `;
+      confirmBtn.disabled = false;
+      confirmBtn.onclick = async () => {
+        const selected = Array.from(modal.querySelectorAll("[data-cv-import-idx]:checked"))
+          .map((input) => Number(input.getAttribute("data-cv-import-idx")))
+          .filter((idx) => Number.isInteger(idx) && idx >= 0);
+        if (!selected.length) {
+          toast("請至少選擇一筆戶號");
+          return;
+        }
+        const batch = db.batch();
+        selected
+          .map((idx) => candidates[idx])
+          .filter(Boolean)
+          .forEach((item) => {
+            const ref = cvRefRoster(cid, pid).doc();
+            const now = cvNow();
+            batch.set(ref, {
+              residentUid: "",
+              residentKey: String(item.residentKey || "").trim(),
+              houseNo: String(item.houseNo || "").trim(),
+              subHouseNo: "",
+              name: String(item.name || "").trim() || "住戶",
+              phone: "",
+              email: "",
+              note: "",
+              address: String(item.address || "").trim(),
+              building: String(item.building || "").trim(),
+              area: String(item.area || "").trim(),
+              ownership: String(item.ownership || "").trim(),
+              weight: 1,
+              qrToken: String(item.qrToken || "").trim() || cvMakeToken("cvp"),
+              checkedIn: false,
+              checkedInAtMs: 0,
+              checkedInMethod: "",
+              checkedInByUid: "",
+              checkedInByName: "",
+              votes: {},
+              createdAt: FieldValue.serverTimestamp(),
+              createdAtMs: now,
+              updatedAt: FieldValue.serverTimestamp(),
+              updatedAtMs: now,
+            }, { merge: true });
+          });
+        await batch.commit();
+        modal.hidden = true;
+        toast(`已帶入 ${selected.length} 筆戶號`);
+        await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: pid });
+      };
+    }).catch(() => {
+      const body = modal.querySelector(".modal-body");
+      if (body) body.innerHTML = `<div class="status error">載入住戶造冊失敗</div>`;
+    });
+  }
+
+  // 帶入來源：住戶造冊（communities/{cid}.units），若無戶號資料才回退使用者帳號名單
+  async function cvLoadImportCandidates(communityId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const existingKeys = new Set(
+      (Array.isArray(checkinVoteState.roster) ? checkinVoteState.roster : [])
+        .map((item) => String(item.houseNo || "").trim())
+        .filter(Boolean)
+    );
+    let units = [];
+    try {
+      const snap = await db.collection("communities").doc(cid).get();
+      const v = snap && snap.exists ? (snap.data() || {}) : {};
+      units = Array.isArray(v.units) ? v.units : [];
+    } catch {
+      units = [];
+    }
+    const list = units.map((unit) => {
+      const houseNo = String((unit && (unit.id || unit.houseNo)) || "").trim();
+      const name = String((unit && (unit.ownerName || unit.owner)) || "").trim() || "住戶";
+      return {
+        houseNo,
+        name,
+        address: String((unit && unit.address) || "").trim(),
+        building: String((unit && unit.building) || "").trim(),
+        area: String((unit && unit.area) || "").trim(),
+        ownership: String((unit && unit.ownership) || "").trim(),
+        qrToken: String((unit && (unit.qrToken || unit.qr || unit.qrCode)) || "").trim(),
+        residentKey: createCareResidentKey({ houseNo, subHouseNo: "", name }),
+      };
+    }).filter((item) => item.houseNo && !existingKeys.has(item.houseNo));
+
+    if (list.length) return list;
+
+    const fallback = await loadCareResidentChoices(cid).catch(() => []);
+    return (Array.isArray(fallback) ? fallback : [])
+      .filter((item) => !existingKeys.has(String(item.houseNo || "").trim()))
+      .map((item) => ({
+        houseNo: String(item.houseNo || "").trim(),
+        name: String(item.name || "").trim() || "住戶",
+        address: "",
+        building: "",
+        area: "",
+        ownership: "",
+        qrToken: "",
+        residentKey: String(item.residentKey || "").trim(),
+      }));
+  }
+
+  function cvOpenTopicModal(communityId, projectId, topic) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    const project = cvActiveProject();
+    const current = topic || null;
+    const optionText = current && Array.isArray(current.options) && current.options.length
+      ? current.options.map((item) => String(item.label || "").trim()).filter(Boolean).join("\n")
+      : "同意\n不同意";
+    const modal = ensureModal("checkinVoteTopicModal", "modal-checkin-vote-topic", "min(760px, 92vw)");
+    bindModalClose(modal);
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinVoteTopicTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="checkinVoteTopicTitle">${escapeHtml(current ? "編輯議題" : "新增議題")}</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="checkinVoteTopicForm">
+          <div class="modal-body">
+            <div class="field">
+              <label for="cvTopicName">議題名稱</label>
+              <input id="cvTopicName" type="text" value="${escapeHtml(current ? current.title : "")}" required />
+            </div>
+            <div class="field">
+              <label for="cvTopicDesc">議題說明</label>
+              <textarea id="cvTopicDesc" rows="3">${escapeHtml(current ? current.description : "")}</textarea>
+            </div>
+            <div class="field">
+              <label for="cvTopicOptions">選項（每行一個）</label>
+              <textarea id="cvTopicOptions" rows="6" placeholder="例如：同意&#10;不同意">${escapeHtml(optionText)}</textarea>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px;">
+              <label class="field" style="display:block;">
+                <span>題型</span>
+                <select id="cvTopicSingleChoice">
+                  <option value="single"${current ? (current.singleChoice ? " selected" : "") : (cvNormalizeProjectSettings(project && project.settings ? project.settings : {}).defaultSingleChoice ? " selected" : "")}>單選</option>
+                  <option value="multi"${current ? (current.singleChoice ? "" : " selected") : (cvNormalizeProjectSettings(project && project.settings ? project.settings : {}).defaultSingleChoice ? "" : " selected")}>多選</option>
+                </select>
+              </label>
+              <label class="field" style="display:block;">
+                <span>排序</span>
+                <input id="cvTopicOrder" type="number" min="0" step="1" value="${escapeHtml(String(current ? current.order : checkinVoteState.topics.length + 1))}" />
+              </label>
+              <label class="field" style="display:flex; align-items:center; gap:10px; margin-top:24px;">
+                <input id="cvTopicEnabled" type="checkbox"${current ? (current.enabled ? " checked" : "") : " checked"} />
+                <span>啟用議題</span>
+              </label>
+            </div>
+            <div class="muted" style="margin:14px 0 8px; font-weight:800;">通過門檻（留空則沿用專案預設）</div>
+            <div class="muted" style="margin-bottom:10px;">得票率以「本專案名單總數」為分母，戶數與區分所有權比例需同時達標。</div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px;">
+              <label class="field" style="display:block;">
+                <span>得票戶數（人數）%</span>
+                <input id="cvTopicPassCountPct" type="number" min="0" max="100" step="1" placeholder="沿用專案預設" value="${current && current.passCountPct !== null && current.passCountPct !== undefined ? escapeHtml(String(current.passCountPct)) : ""}" />
+              </label>
+              <label class="field" style="display:block;">
+                <span>得票區分所有權比例%</span>
+                <input id="cvTopicPassSharePct" type="number" min="0" max="100" step="1" placeholder="沿用專案預設" value="${current && current.passSharePct !== null && current.passSharePct !== undefined ? escapeHtml(String(current.passSharePct)) : ""}" />
+              </label>
+            </div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">取消</button>
+            <button class="btn btn-primary" type="submit">儲存</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    modal.querySelector("#checkinVoteTopicForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const title = String(modal.querySelector("#cvTopicName")?.value || "").trim();
+      const optionLines = String(modal.querySelector("#cvTopicOptions")?.value || "")
+        .split(/\r?\n/)
+        .map((item) => String(item || "").trim())
+        .filter(Boolean);
+      if (!title) {
+        toast("請輸入議題名稱");
+        return;
+      }
+      if (optionLines.length < 2) {
+        toast("請至少輸入兩個選項");
+        return;
+      }
+      await cvSaveTopic(cid, pid, current ? current.id : "", {
+        title,
+        description: modal.querySelector("#cvTopicDesc")?.value || "",
+        options: optionLines.map((label) => ({ label })),
+        singleChoice: String(modal.querySelector("#cvTopicSingleChoice")?.value || "single") !== "multi",
+        order: Number(modal.querySelector("#cvTopicOrder")?.value || 0) || 0,
+        enabled: modal.querySelector("#cvTopicEnabled")?.checked !== false,
+        passCountPct: modal.querySelector("#cvTopicPassCountPct")?.value,
+        passSharePct: modal.querySelector("#cvTopicPassSharePct")?.value,
+      });
+      modal.hidden = true;
+      toast(current ? "議題已更新" : "議題已新增");
+    };
+    modal.hidden = false;
+  }
+
+  function cvOpenVoteModal(communityId, projectId, topic, residentId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    const targetTopic = typeof topic === "string" ? cvFindTopic(topic) : topic;
+    if (!targetTopic) {
+      toast("找不到議題");
+      return;
+    }
+    const roster = Array.isArray(checkinVoteState.roster) ? checkinVoteState.roster : [];
+    if (!roster.length) {
+      toast("請先建立名單");
+      return;
+    }
+    const modal = ensureModal("checkinVoteCastModal", "modal-checkin-vote-cast", "min(760px, 92vw)");
+    bindModalClose(modal);
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinVoteCastTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="checkinVoteCastTitle">${escapeHtml(targetTopic.title)}｜人工投票</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="checkinVoteCastForm">
+          <div class="modal-body">
+            <div class="field">
+              <label for="cvVoteResident">投票人</label>
+              <select id="cvVoteResident">
+                ${roster.map((entry) => `<option value="${escapeHtml(entry.id)}"${String(entry.id || "") === String(residentId || "").trim() ? " selected" : ""}>${escapeHtml(entry.name)}（${escapeHtml(cvFormatUnit(entry))}）</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>${escapeHtml(targetTopic.singleChoice ? "請選擇一個選項" : "可選擇多個選項")}</label>
+              <div style="display:flex; flex-direction:column; gap:10px;">
+                ${(targetTopic.options || []).map((option) => `
+                  <label class="list-item" style="cursor:pointer;">
+                    <div>${escapeHtml(option.label)}</div>
+                    <div><input type="${targetTopic.singleChoice ? "radio" : "checkbox"}" name="cvVoteOption" value="${escapeHtml(option.id)}" /></div>
+                  </label>
+                `).join("")}
+              </div>
+            </div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">取消</button>
+            <button class="btn" type="button" id="btnCvClearVoteInModal">清除此議題投票</button>
+            <button class="btn btn-primary" type="submit">儲存投票</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    const form = modal.querySelector("#checkinVoteCastForm");
+    const residentSelect = modal.querySelector("#cvVoteResident");
+    const syncCurrentVote = () => {
+      const entry = cvFindRosterEntry(residentSelect ? residentSelect.value : "");
+      const vote = entry && entry.votes ? entry.votes[String(targetTopic.id || "").trim()] : null;
+      const selectedIds = vote && Array.isArray(vote.optionIds) ? vote.optionIds : [];
+      modal.querySelectorAll('[name="cvVoteOption"]').forEach((input) => {
+        input.checked = selectedIds.includes(String(input.value || "").trim());
+      });
+    };
+    if (residentSelect) residentSelect.addEventListener("change", syncCurrentVote);
+    syncCurrentVote();
+    modal.querySelector("#btnCvClearVoteInModal").onclick = async () => {
+      const entryId = String(residentSelect ? residentSelect.value : "").trim();
+      if (!entryId) return;
+      await cvClearResidentVote(cid, pid, entryId, targetTopic.id);
+      modal.hidden = true;
+    };
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const entryId = String(residentSelect ? residentSelect.value : "").trim();
+      const optionIds = Array.from(modal.querySelectorAll('[name="cvVoteOption"]:checked'))
+        .map((input) => String(input.value || "").trim())
+        .filter(Boolean);
+      await cvSaveResidentVote(cid, pid, entryId, targetTopic.id, optionIds, "manual");
+      modal.hidden = true;
+      toast("投票已儲存");
+    };
+    modal.hidden = false;
+  }
+
+  function cvOpenDocumentModal(communityId, projectId, documentItem) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    const current = documentItem || null;
+    const modal = ensureModal("checkinVoteDocumentModal", "modal-checkin-vote-document", "min(760px, 92vw)");
+    bindModalClose(modal);
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinVoteDocumentTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="checkinVoteDocumentTitle">${escapeHtml(current ? "編輯文件" : "新增文件")}</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="checkinVoteDocumentForm">
+          <div class="modal-body">
+            <div class="field">
+              <label for="cvDocumentTitle">文件標題</label>
+              <input id="cvDocumentTitle" type="text" value="${escapeHtml(current ? current.title : "")}" required />
+            </div>
+            <div class="field">
+              <label for="cvDocumentKind">文件類型</label>
+              <select id="cvDocumentKind">
+                <option value="link"${current && current.kind === "link" ? " selected" : ""}>連結</option>
+                <option value="note"${current && current.kind === "note" ? " selected" : ""}>備註文字</option>
+                <option value="file"${current && current.kind === "file" ? " selected" : ""}>小型檔案</option>
+              </select>
+            </div>
+            <div class="field" id="cvDocumentUrlField">
+              <label for="cvDocumentUrl">文件連結</label>
+              <input id="cvDocumentUrl" type="url" value="${escapeHtml(current ? current.url : "")}" placeholder="https://..." />
+            </div>
+            <div class="field" id="cvDocumentContentField">
+              <label for="cvDocumentContent">備註內容</label>
+              <textarea id="cvDocumentContent" rows="6">${escapeHtml(current ? current.content : "")}</textarea>
+            </div>
+            <div class="field" id="cvDocumentFileField">
+              <label for="cvDocumentFile">選擇檔案</label>
+              <input id="cvDocumentFile" type="file" accept="image/*,application/pdf,text/plain" />
+              <div class="muted" style="margin-top:6px;">單檔建議 450KB 以下；若較大請改存外部連結。</div>
+            </div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">取消</button>
+            <button class="btn btn-primary" type="submit">儲存</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    const kindEl = modal.querySelector("#cvDocumentKind");
+    const urlField = modal.querySelector("#cvDocumentUrlField");
+    const contentField = modal.querySelector("#cvDocumentContentField");
+    const fileField = modal.querySelector("#cvDocumentFileField");
+    const syncKind = () => {
+      const kind = String(kindEl ? kindEl.value : "link").trim();
+      if (urlField) urlField.style.display = kind === "link" ? "" : "none";
+      if (contentField) contentField.style.display = kind === "note" ? "" : "none";
+      if (fileField) fileField.style.display = kind === "file" ? "" : "none";
+    };
+    if (kindEl) kindEl.addEventListener("change", syncKind);
+    syncKind();
+    modal.querySelector("#checkinVoteDocumentForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const kind = String(kindEl ? kindEl.value : "link").trim() || "link";
+      const fileInput = modal.querySelector("#cvDocumentFile");
+      let fileDataUrl = current ? current.fileDataUrl : "";
+      let fileName = current ? current.fileName : "";
+      let mimeType = current ? current.mimeType : "";
+      if (kind === "file" && fileInput && fileInput.files && fileInput.files[0]) {
+        const file = fileInput.files[0];
+        if (Number(file.size || 0) > CHECKIN_VOTE_FILE_LIMIT) {
+          toast("檔案太大，請改用連結或縮小檔案");
+          return;
+        }
+        fileDataUrl = await cvReadFileAsDataUrl(file);
+        fileName = String(file.name || "").trim();
+        mimeType = String(file.type || "").trim();
+      }
+      await cvSaveDocument(cid, pid, current ? current.id : "", {
+        title: modal.querySelector("#cvDocumentTitle")?.value || "",
+        kind,
+        url: modal.querySelector("#cvDocumentUrl")?.value || "",
+        content: modal.querySelector("#cvDocumentContent")?.value || "",
+        fileName,
+        fileDataUrl,
+        mimeType,
+      });
+      modal.hidden = true;
+      toast(current ? "文件已更新" : "文件已新增");
+    };
+    modal.hidden = false;
+  }
+
+  function cvOpenDocumentViewer(documentItem) {
+    const doc = documentItem || null;
+    if (!doc) return;
+    if (doc.kind === "link" && doc.url) {
+      window.open(doc.url, "_blank", "noopener");
+      return;
+    }
+    if (doc.kind === "file" && doc.fileDataUrl) {
+      const link = document.createElement("a");
+      link.href = doc.fileDataUrl;
+      link.download = doc.fileName || `${doc.title || "document"}`;
+      document.body.appendChild(link);
+      try { link.click(); } catch {}
+      if (link.parentNode) link.parentNode.removeChild(link);
+      return;
+    }
+    const modal = ensureModal("checkinVoteDocumentViewerModal", "modal-checkin-vote-doc-view", "min(760px, 92vw)");
+    bindModalClose(modal);
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinVoteDocumentViewerTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="checkinVoteDocumentViewerTitle">${escapeHtml(doc.title || "文件內容")}</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div style="white-space:pre-wrap; line-height:1.7; color:#111827;">${escapeHtml(doc.content || "沒有內容")}</div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    modal.hidden = false;
+  }
+
+  async function renderCheckinVoteModule() {
+    const cid = String(resolveActiveCommunityId() || "default").trim() || "default";
+    const raw = String(location.hash || "").replace(/^#/, "").trim();
+    const parts = raw.split("/");
+    let currentPage = "overview";
+    if (parts.length >= 3 && parts[0] === "community" && parts[1] === "checkin-vote") {
+      const pageParam = parts[2];
+      if (["overview", "checkin", "vote", "roster", "files", "archive", "scan", "settings"].includes(pageParam)) currentPage = pageParam;
+    }
+    await ensureCheckinVoteDataLoaded(cid, {});
+    const project = cvActiveProject();
+    const pageMap = {
+      overview: { label: "總覽", title: "總覽", desc: "報到與投票統計、目前專案總覽。" },
+      checkin: { label: "報到", title: "報到", desc: "人工報到、QR 報到與報到進度管理。" },
+      vote: { label: "投票", title: "投票", desc: "議題建立、人工投票、結果統計與選項 QR。" },
+      roster: { label: "名單", title: "名單", desc: "本專案獨立名單，可從住戶造冊帶入後再個別維護。" },
+      files: { label: "文件", title: "文件", desc: "報到單與投票單生成、編輯、列印、下載，並保存專案文件。" },
+      archive: { label: "備存", title: "備存", desc: "多個專案分開保存、切換與檢視。" },
+      scan: { label: "掃碼", title: "掃碼", desc: "開啟相機掃描個人與選項 QR code，完成報到與投票。" },
+      settings: { label: "設定", title: "設定", desc: "本專案各項設定與投票規則。" },
+    };
+    if (subnavEl) {
+      subnavEl.innerHTML = Object.keys(pageMap).map((pageKey) => `
+        <button class="btn btn-sm ${currentPage === pageKey ? "btn-primary" : ""}" type="button" data-cv-page="${pageKey}">${pageMap[pageKey].label}</button>
+      ${pageKey === "scan" ? `<button class="btn btn-sm" type="button" id="btnCvShare" title="將本專案另開視窗顯示">分享</button>` : ""}`).join("");
+      subnavEl.querySelectorAll("[data-cv-page]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const nextPage = String(btn.getAttribute("data-cv-page") || "overview").trim() || "overview";
+          if (nextPage === "scan") {
+            if (nextPage !== currentPage) location.hash = `#community/checkin-vote/scan`;
+            cvOpenScanWindow(project);
+            return;
+          }
+          if (nextPage === currentPage) return;
+          location.hash = `#community/checkin-vote/${nextPage}`;
+        });
+      });
+      const shareBtn = subnavEl.querySelector("#btnCvShare");
+      if (shareBtn) shareBtn.addEventListener("click", () => cvOpenShareWindow(project));
+    }
+    let bodyContent = "";
+    if (currentPage === "overview") bodyContent = cvRenderOverviewContent(project, checkinVoteState.roster, checkinVoteState.topics, checkinVoteState.documents);
+    else if (currentPage === "checkin") bodyContent = cvRenderCheckinContent(project, checkinVoteState.roster);
+    else if (currentPage === "vote") bodyContent = cvRenderVoteContent(project, checkinVoteState.roster, checkinVoteState.topics);
+    else if (currentPage === "roster") bodyContent = cvRenderRosterContent(project, checkinVoteState.roster, checkinVoteState.topics);
+    else if (currentPage === "files") bodyContent = cvRenderFilesContent(project, checkinVoteState.documents, checkinVoteState.roster);
+    else if (currentPage === "archive") bodyContent = cvRenderArchiveContent(checkinVoteState.projects, checkinVoteState.activeProjectId);
+    else if (currentPage === "scan") bodyContent = cvRenderScanContent(project, checkinVoteState.roster, checkinVoteState.topics);
+    else if (currentPage === "settings") bodyContent = cvRenderSettingsContent(project);
+
+    contentEl.innerHTML = `
+      <section class="card">
+        <div class="card-hd">
+          <div class="left">
+            <div class="chip" aria-hidden="true">${iconSvg("checkin-vote")}</div>
+            <div style="min-width:0;">
+              <h2>報到投票</h2>
+              <p>${escapeHtml(pageMap[currentPage].desc)}</p>
+            </div>
+          </div>
+        </div>
+        <div class="card-bd">
+          ${cvRenderProjectPicker(checkinVoteState.projects, checkinVoteState.activeProjectId)}
+          <div class="row" style="margin-bottom:14px;">
+            <div style="font-size:calc(18px * var(--fs, 1)); font-weight:800; color:#111827;">${escapeHtml(pageMap[currentPage].title)}</div>
+          </div>
+          ${bodyContent}
+        </div>
+      </section>
+    `.trim();
+
+    const activeProjectSelect = document.getElementById("cvActiveProjectSelect");
+    if (activeProjectSelect) {
+      activeProjectSelect.addEventListener("change", async () => {
+        const nextId = String(activeProjectSelect.value || "").trim();
+        if (!nextId || nextId === checkinVoteState.activeProjectId) return;
+        await cvSetActiveProject(cid, nextId);
+      });
+    }
+
+    contentEl.querySelectorAll("[data-cv-go]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const page = String(btn.getAttribute("data-cv-go") || "overview").trim() || "overview";
+        if (page === "scan") {
+          if (currentPage !== "scan") location.hash = "#community/checkin-vote/scan";
+          cvOpenScanWindow(project);
+          return;
+        }
+        location.hash = `#community/checkin-vote/${page}`;
+      });
+    });
+
+    const btnCvCreateProjectEmpty = document.getElementById("btnCvCreateProjectEmpty");
+    if (btnCvCreateProjectEmpty) btnCvCreateProjectEmpty.addEventListener("click", () => cvOpenProjectModal(cid, null));
+
+    if (currentPage === "archive") {
+      const createBtn = document.getElementById("btnCvCreateProject");
+      if (createBtn) createBtn.addEventListener("click", () => cvOpenProjectModal(cid, null));
+      contentEl.querySelectorAll("[data-cv-open-project]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const projectId = String(btn.getAttribute("data-cv-open-project") || "").trim();
+          if (!projectId) return;
+          await cvSetActiveProject(cid, projectId);
+          location.hash = "#community/checkin-vote/overview";
+        });
+      });
+      contentEl.querySelectorAll("[data-cv-set-active]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const projectId = String(btn.getAttribute("data-cv-set-active") || "").trim();
+          if (!projectId) return;
+          await cvSetActiveProject(cid, projectId);
+          toast("已切換目前專案");
+        });
+      });
+      contentEl.querySelectorAll("[data-cv-edit-project]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const projectId = String(btn.getAttribute("data-cv-edit-project") || "").trim();
+          const target = checkinVoteState.projects.find((item) => String(item.id || "") === projectId) || null;
+          if (target) cvOpenProjectModal(cid, target);
+        });
+      });
+      contentEl.querySelectorAll("[data-cv-toggle-archive]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const projectId = String(btn.getAttribute("data-cv-toggle-archive") || "").trim();
+          const target = checkinVoteState.projects.find((item) => String(item.id || "") === projectId) || null;
+          if (!target) return;
+          await cvRefProject(cid, projectId).set({
+            archived: !target.archived,
+            updatedAt: FieldValue.serverTimestamp(),
+            updatedAtMs: cvNow(),
+          }, { merge: true });
+          toast(target.archived ? "已解除封存" : "已封存");
+          await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: projectId });
+        });
+      });
+      contentEl.querySelectorAll("[data-cv-delete-project]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const projectId = String(btn.getAttribute("data-cv-delete-project") || "").trim();
+          await cvDeleteProjectDeep(cid, projectId);
+        });
+      });
+    }
+
+    if (currentPage === "roster" && project) {
+      const addBtn = document.getElementById("btnCvAddRosterEntry");
+      const importBtn = document.getElementById("btnCvImportResidents");
+      if (addBtn) addBtn.addEventListener("click", () => cvOpenRosterModal(cid, project.id, null));
+      if (importBtn) importBtn.addEventListener("click", () => cvOpenImportResidentsModal(cid, project.id));
+      contentEl.querySelectorAll("[data-cv-edit-roster]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const entry = cvFindRosterEntry(btn.getAttribute("data-cv-edit-roster") || "");
+          if (entry) cvOpenRosterModal(cid, project.id, entry);
+        });
+      });
+      contentEl.querySelectorAll("[data-cv-delete-roster]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const entryId = String(btn.getAttribute("data-cv-delete-roster") || "").trim();
+          const ok = window.confirm("要刪除此名單資料嗎？");
+          if (!ok) return;
+          await cvRefRoster(cid, project.id).doc(entryId).delete();
+          toast("名單已刪除");
+          await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: project.id });
+        });
+      });
+    }
+
+    if ((currentPage === "roster" || currentPage === "checkin") && project) {
+      contentEl.querySelectorAll("[data-cv-person-qr]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const entry = cvFindRosterEntry(btn.getAttribute("data-cv-person-qr") || "");
+          if (!entry) return;
+          cvOpenQrModal(`${entry.name}｜個人 QR`, cvPersonQrPayload(project.id, entry), "此 QR code 可用於報到與投票人識別。");
+        });
+      });
+    }
+
+    if (currentPage === "checkin" && project) {
+      contentEl.querySelectorAll("[data-cv-checkin]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const entryId = String(btn.getAttribute("data-cv-checkin") || "").trim();
+          if (!entryId) return;
+          await cvCheckinRosterEntry(cid, project.id, entryId, "manual", { rerender: true });
+          toast("已完成報到");
+        });
+      });
+      contentEl.querySelectorAll("[data-cv-undo-checkin]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const entryId = String(btn.getAttribute("data-cv-undo-checkin") || "").trim();
+          if (!entryId) return;
+          await cvUndoRosterCheckin(cid, project.id, entryId);
+        });
+      });
+    }
+
+    if (currentPage === "vote" && project) {
+      const addTopicBtn = document.getElementById("btnCvAddTopic");
+      if (addTopicBtn) addTopicBtn.addEventListener("click", () => cvOpenTopicModal(cid, project.id, null));
+      contentEl.querySelectorAll("[data-cv-edit-topic]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const topic = cvFindTopic(btn.getAttribute("data-cv-edit-topic") || "");
+          if (topic) cvOpenTopicModal(cid, project.id, topic);
+        });
+      });
+      contentEl.querySelectorAll("[data-cv-delete-topic]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const topicId = String(btn.getAttribute("data-cv-delete-topic") || "").trim();
+          if (!topicId) return;
+          await cvDeleteTopic(cid, project.id, topicId);
+        });
+      });
+      contentEl.querySelectorAll("[data-cv-cast-topic]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const topicId = String(btn.getAttribute("data-cv-cast-topic") || "").trim();
+          cvOpenVoteModal(cid, project.id, topicId, "");
+        });
+      });
+      contentEl.querySelectorAll("[data-cv-option-qr]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const rawKey = String(btn.getAttribute("data-cv-option-qr") || "").trim();
+          const [topicId, optionId] = rawKey.split("::");
+          const topic = cvFindTopic(topicId);
+          const option = topic && Array.isArray(topic.options) ? topic.options.find((item) => String(item.id || "") === String(optionId || "").trim()) : null;
+          if (!topic || !option) return;
+          cvOpenQrModal(`${topic.title}｜${option.label}`, cvOptionQrPayload(project.id, topic, option), "此 QR code 為議題選項碼，投票掃碼時請先掃描投票人，再掃描選項。");
+        });
+      });
+    }
+
+    if (currentPage === "files" && project) {
+      const addDocumentBtn = document.getElementById("btnCvAddDocument");
+      if (addDocumentBtn) addDocumentBtn.addEventListener("click", () => cvOpenDocumentModal(cid, project.id, null));
+
+      const checkinLayoutSel = document.getElementById("cvCheckinLayout");
+      if (checkinLayoutSel) checkinLayoutSel.addEventListener("change", () => {
+        cvDocPrefs.checkin.layout = String(checkinLayoutSel.value || "personal").trim() === "roster" ? "roster" : "personal";
+        renderCheckinVoteModule();
+      });
+      const checkinTargetSel = document.getElementById("cvCheckinTarget");
+      if (checkinTargetSel) checkinTargetSel.addEventListener("change", () => {
+        cvDocPrefs.checkin.targetId = String(checkinTargetSel.value || "__all__").trim() || "__all__";
+      });
+      const checkinPerPageInput = document.getElementById("cvCheckinPerPage");
+      if (checkinPerPageInput) checkinPerPageInput.addEventListener("change", () => {
+        cvDocPrefs.checkin.perPage = Math.max(4, Math.min(20, Number(checkinPerPageInput.value) || 10));
+      });
+      const checkinMergeInput = document.getElementById("cvCheckinMergeOwner");
+      if (checkinMergeInput) checkinMergeInput.addEventListener("change", () => {
+        cvDocPrefs.checkin.mergeOwner = checkinMergeInput.checked === true;
+      });
+      const genCheckinBtn = document.getElementById("btnCvGenCheckinDoc");
+      if (genCheckinBtn) genCheckinBtn.addEventListener("click", () => {
+        if (!checkinVoteState.roster.length) {
+          toast("請先到「名單」建立或帶入住戶資料");
+          return;
+        }
+        if (checkinMergeInput) cvDocPrefs.checkin.mergeOwner = checkinMergeInput.checked === true;
+        cvOpenDocPreviewModal("checkin", project);
+      });
+
+      const voteLayoutSel = document.getElementById("cvVoteLayout");
+      if (voteLayoutSel) voteLayoutSel.addEventListener("change", () => {
+        cvDocPrefs.vote.layout = String(voteLayoutSel.value || "single").trim() === "multi" ? "multi" : "single";
+        renderCheckinVoteModule();
+      });
+      const voteTargetSel = document.getElementById("cvVoteTarget");
+      if (voteTargetSel) voteTargetSel.addEventListener("change", () => {
+        cvDocPrefs.vote.targetId = String(voteTargetSel.value || "__all__").trim() || "__all__";
+      });
+      const voteTopicSel = document.getElementById("cvVoteTopic");
+      if (voteTopicSel) voteTopicSel.addEventListener("change", () => {
+        cvDocPrefs.vote.topicId = String(voteTopicSel.value || "__all__").trim() || "__all__";
+      });
+      const voteMergeInput = document.getElementById("cvVoteMergeOwner");
+      if (voteMergeInput) voteMergeInput.addEventListener("change", () => {
+        cvDocPrefs.vote.mergeOwner = voteMergeInput.checked === true;
+      });
+      const genVoteBtn = document.getElementById("btnCvGenVoteDoc");
+      if (genVoteBtn) genVoteBtn.addEventListener("click", () => {
+        if (!checkinVoteState.roster.length) {
+          toast("請先到「名單」建立或帶入住戶資料");
+          return;
+        }
+        if (!cvDocEnabledTopics().length) {
+          toast("請先到「投票」建立議題與選項");
+          return;
+        }
+        if (voteMergeInput) cvDocPrefs.vote.mergeOwner = voteMergeInput.checked === true;
+        cvOpenDocPreviewModal("vote", project);
+      });
+
+      contentEl.querySelectorAll("[data-cv-open-document]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const docId = String(btn.getAttribute("data-cv-open-document") || "").trim();
+          const doc = checkinVoteState.documents.find((item) => String(item.id || "") === docId) || null;
+          if (doc) cvOpenDocumentViewer(doc);
+        });
+      });
+      contentEl.querySelectorAll("[data-cv-edit-document]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const docId = String(btn.getAttribute("data-cv-edit-document") || "").trim();
+          const doc = checkinVoteState.documents.find((item) => String(item.id || "") === docId) || null;
+          if (doc) cvOpenDocumentModal(cid, project.id, doc);
+        });
+      });
+      contentEl.querySelectorAll("[data-cv-delete-document]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const docId = String(btn.getAttribute("data-cv-delete-document") || "").trim();
+          await cvDeleteDocument(cid, project.id, docId);
+        });
+      });
+    }
+
+    if (currentPage === "settings" && project) {
+      const settingsForm = document.getElementById("cvSettingsForm");
+      if (settingsForm) {
+        settingsForm.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          await cvRefProject(cid, project.id).set({
+            settings: cvNormalizeProjectSettings({
+              allowManualCheckin: String(document.getElementById("cvAllowManualCheckin")?.value || "yes") !== "no",
+              allowQrCheckin: String(document.getElementById("cvAllowQrCheckin")?.value || "yes") !== "no",
+              allowManualVote: String(document.getElementById("cvAllowManualVote")?.value || "yes") !== "no",
+              allowQrVote: String(document.getElementById("cvAllowQrVote")?.value || "yes") !== "no",
+              requireCheckinBeforeVote: String(document.getElementById("cvRequireCheckinBeforeVote")?.value || "no") === "yes",
+              defaultSingleChoice: String(document.getElementById("cvDefaultSingleChoice")?.value || "single") !== "multi",
+              nameDisplay: String(document.getElementById("cvNameDisplay")?.value || "full") === "mask" ? "mask" : "full",
+              checkinTargetCountPct: document.getElementById("cvCheckinTargetCountPct")?.value,
+              checkinTargetSharePct: document.getElementById("cvCheckinTargetSharePct")?.value,
+              topicPassCountPct: document.getElementById("cvTopicPassCountPct")?.value,
+              topicPassSharePct: document.getElementById("cvTopicPassSharePct")?.value,
+            }),
+            updatedAt: FieldValue.serverTimestamp(),
+            updatedAtMs: cvNow(),
+          }, { merge: true });
+          toast("設定已儲存");
+          await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: project.id });
+        });
+      }
+    }
+
+    if (currentPage === "scan") {
+      const openScanBtn = document.getElementById("btnCvOpenScanWindow");
+      if (openScanBtn) openScanBtn.addEventListener("click", () => cvOpenScanWindow(project));
+    }
+
+    updateFooterActiveNav();
   }
 
   function ensureLiveMeetingSettingsModal80() {
@@ -22239,7 +26333,8 @@
     if (moduleId !== "visitor") stopVisitorElevatorCardConfigSubscription();
     if (moduleId !== "residents") stopResidentsSubscription();
     if (moduleId !== "parcel") { stopParcelsSubscription(); stopParcelStatsSubscription80(); }
-    if (moduleId !== "care") stopCheckinListener();
+    if (moduleId !== "care") { stopCheckinListener(); stopCareReminderWatcher(); }
+    if (moduleId !== "bulletin") stopBulletinsSubscription();
     if (moduleId !== "finance" && typeof window.__nwFinanceCleanup === "function") {
       try { window.__nwFinanceCleanup(); } catch {}
     }
@@ -22271,6 +26366,10 @@
     }
     if (moduleId === "care") {
       renderCareModule();
+      return;
+    }
+    if (moduleId === "checkin-vote") {
+      renderCheckinVoteModule();
       return;
     }
     if (moduleId === "live-meeting") {
@@ -22445,6 +26544,15 @@
       const isAlreadyInActivity = contentEl && contentEl.querySelector("[data-activity-tab]");
       if (isAlreadyInActivity) {
         renderActivityModule();
+        return true;
+      }
+    }
+
+    if (moduleId === "checkin-vote") {
+      const contentEl = document.getElementById("content");
+      const isAlreadyInCheckinVote = contentEl && contentEl.querySelector("[data-cv-page]");
+      if (isAlreadyInCheckinVote) {
+        renderCheckinVoteModule();
         return true;
       }
     }
