@@ -1,4 +1,4 @@
-const CACHE_VERSION = "nwapp-v607";
+const CACHE_VERSION = "nwapp-v608";
 const IS_LOCALHOST = ["localhost", "127.0.0.1"].includes(String(self.location && self.location.hostname || "").trim().toLowerCase());
 const PRECACHE = Array.from(new Set([
   "./",
@@ -42,7 +42,7 @@ const PRECACHE = Array.from(new Set([
   "./js/parking-view.js?v=11",
   "./js/facility.js?v=8",
   "./js/parcel.js?v=19",
-  "./js/visitor.js?v=16",
+  "./js/visitor.js?v=17",
   "./js/visitor-history.js?v=1",
   "./js/visitor-resident.js?v=9",
   "./js/ads-footer.js?v=16",

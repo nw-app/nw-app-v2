@@ -17,7 +17,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script defer src="./js/firebase-config.js"></script>
     <script defer src="./js/pwa.js?v=12"></script>
-    <script defer src="./js/visitor.js?v=16"></script>
+    <script defer src="./js/visitor.js?v=17"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
       body { background: var(--bg); }
@@ -131,7 +131,7 @@
         </form>
 
             <div id="resultBox" hidden>
-              <div class="hint" id="resultMsg">已送出登記，等待授權。</div>
+              <div class="hint" id="resultMsg" aria-live="polite">資料已送出，請勿關閉此頁面，等待核發「訪客證」，謝謝！</div>
               <div class="qr-box" id="passBox" hidden>
                 <img id="passQrImg" alt="QR Code" />
                 <div class="hint" id="passHint">請出示此 QR code 作為訪客證。</div>

@@ -94,6 +94,7 @@
     const STORAGE_KEY_PREFIX = `nwapp_v2_visitor_${cKey}`;
     const FORM_CACHE_KEY = `${STORAGE_KEY_PREFIX}_form`;
     const PASS_CACHE_KEY = `${STORAGE_KEY_PREFIX}_pass`;
+    const WAIT_MSG = "資料已送出，請勿關閉此頁面，等待核發「訪客證」，謝謝！";
 
     const saveFormCache = () => {
       const formData = {
@@ -307,21 +308,39 @@
       }));
     };
 
+    // 隱藏訪客證
+    const hidePass = () => {
+      current.shownPassVid = "";
+      show(passBox, false);
+    };
+
+    // 送出後保留「等待核發」提示（不提供關閉）
+    const showWaiting = () => {
+      hidePass();
+      show(form, false);
+      if (btnFooterSubmit) show(btnFooterSubmit, false);
+      show(resultBox, true);
+      if (resultMsg) {
+        resultMsg.textContent = WAIT_MSG;
+        show(resultMsg, true);
+      }
+    };
+
+    // 核准後關閉等待提示，改為顯示訪客證
+    const showApprovedPass = (pass) => {
+      show(form, false);
+      if (btnFooterSubmit) show(btnFooterSubmit, false);
+      show(resultBox, true);
+      if (resultMsg) show(resultMsg, false);
+      showPass(pass);
+    };
+
     // 已授權時自動顯示訪客證（不需再手動點按）
     const revealPass = () => {
       if (!current.vid) return;
       if (current.shownPassVid === current.vid) return;
       current.shownPassVid = current.vid;
-      const pass = buildPassPayload({ cid: current.cid, vid: current.vid });
-      show(form, false);
-      if (btnFooterSubmit) show(btnFooterSubmit, false);
-      show(resultBox, true);
-      showPass(pass);
-    };
-
-    const hidePass = () => {
-      current.shownPassVid = "";
-      show(passBox, false);
+      showApprovedPass(buildPassPayload({ cid: current.cid, vid: current.vid }));
     };
 
     const setPassReady = (ready) => {
@@ -354,14 +373,12 @@
           const authorized = Boolean(data && (data.passAuthorized === true || data.status === "approved"));
           current.passAuthorized = authorized;
           setPassReady(authorized);
-          if (resultMsg) {
-            resultMsg.textContent = authorized ? "已授權，已顯示訪客證。" : "已送出登記，等待授權。";
-          }
-          if (authorized && current.vid) {
-            // 如果已授權，自動顯示訪客證並更新暫存
-            revealPass();
-          } else if (!authorized) {
-            hidePass();
+          if (authorized) {
+            // 後台核准後：關閉等待提示，顯示訪客證
+            if (current.vid) revealPass();
+          } else {
+            // 尚未核准：持續保留送出提示
+            showWaiting();
           }
         },
         () => {
@@ -381,11 +398,8 @@
             current.vid = data.vid;
             // 先用暫存內容顯示訪客證，避免因網路或權限問題而看不到
             if (data.deep) {
-              show(form, false);
-              if (btnFooterSubmit) show(btnFooterSubmit, false);
-              show(resultBox, true);
               current.shownPassVid = data.vid;
-              showPass({ deep: data.deep, qr: data.qr || "" });
+              showApprovedPass({ deep: data.deep, qr: data.qr || "" });
             }
             // 重新掛載監聽以確保狀態同步
             const docRef = db.collection("communities").doc(cid).collection("visitors").doc(data.vid);
@@ -410,10 +424,7 @@
           return;
         }
         setStatus("", false);
-        const pass = buildPassPayload({ cid: current.cid, vid: current.vid });
-        show(form, false);
-        show(resultBox, true);
-        showPass(pass);
+        showApprovedPass(buildPassPayload({ cid: current.cid, vid: current.vid }));
       });
     }
 
@@ -534,11 +545,7 @@
         current.shownPassVid = "";
         setPassReady(false);
         attachDoc(docRef);
-        show(form, false);
-        if (btnFooterSubmit) show(btnFooterSubmit, false);
-        show(resultBox, true);
-        hidePass();
-        if (resultMsg) resultMsg.textContent = "已送出登記，等待授權。";
+        showWaiting();
         setStatus("", false);
       } catch (err) {
         const code = String(err && err.code ? err.code : "");
