@@ -986,7 +986,8 @@ a { color: inherit; text-decoration: none; }
   color: var(--muted);
   font-weight: 900;
 }
-.history-toolbar select {
+.history-toolbar select,
+.history-toolbar input[type="date"] {
   height: 36px;
   border-radius: 12px;
   border: 1px solid var(--border);
@@ -994,8 +995,11 @@ a { color: inherit; text-decoration: none; }
   background: #fff;
   width: 100%;
   min-width: 160px;
+  color: inherit;
+  font: inherit;
 }
-.history-toolbar select:focus {
+.history-toolbar select:focus,
+.history-toolbar input[type="date"]:focus {
   outline: none;
   box-shadow: 0 0 0 4px rgba(211, 47, 47, 0.14);
   border-color: rgba(211, 47, 47, 0.42);
@@ -1003,13 +1007,14 @@ a { color: inherit; text-decoration: none; }
 .history-toolbar-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
   flex: 0 0 auto;
 }
 @media (max-width: 768px) {
   .history-toolbar { align-items: stretch; }
   .history-toolbar .field { flex: 1 1 100%; }
   .history-toolbar-actions { flex: 1 1 100%; }
-  .history-toolbar-actions .btn { flex: 1; }
+  .history-toolbar-actions .btn { flex: 1 1 calc(50% - 4px); }
 }
 .visitor-total {
   font-size: calc(12px * var(--fs));
@@ -4060,10 +4065,15 @@ a { color: inherit; text-decoration: none; }
     overflow-x: hidden;
   }
   
+  /* 按鈕維持左右排列（與 .visitor-toolbar 一致），僅欄位各自換行 */
   .parcel-filter-bar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
+    align-items: flex-end;
+    gap: 6px;
+  }
+  .parcel-filter-bar .btn {
+    flex: 1 1 0;
+    min-width: 0;
+    white-space: nowrap;
   }
   
   .resident-item {
@@ -4466,6 +4476,22 @@ a { color: inherit; text-decoration: none; }
 .modal-checkin-vote-doc-preview .modal-dialog {
   width: min(1180px, 96vw);
   max-width: none;
+}
+
+/* 歷史訪客紀錄：A4 直式預覽彈窗（確認後才下載 PDF／列印） */
+.modal-history-doc-preview .modal-dialog {
+  width: min(1180px, 96vw);
+  max-width: none;
+}
+
+.modal-history-doc-preview .modal-ft {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .modal-history-doc-preview .modal-ft .btn {
+    flex: 1 1 calc(50% - 5px);
+  }
 }
 
 .modal-checkin-vote-log .modal-dialog {

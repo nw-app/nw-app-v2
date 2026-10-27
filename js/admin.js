@@ -16617,9 +16617,19 @@
               <label for="visitorHistoryUnit">戶號</label>
               <select id="visitorHistoryUnit"></select>
             </div>
+            <div class="field">
+              <label for="visitorHistoryFrom">起始日期</label>
+              <input id="visitorHistoryFrom" type="date" />
+            </div>
+            <div class="field">
+              <label for="visitorHistoryTo">結束日期</label>
+              <input id="visitorHistoryTo" type="date" />
+            </div>
             <div class="history-toolbar-actions">
               <button class="btn btn-sm" type="button" id="btnHistoryBrowse">手機版瀏覽</button>
               <button class="btn btn-sm btn-ghost" type="button" id="btnHistoryExcel">下載 Excel</button>
+              <button class="btn btn-sm btn-primary" type="button" id="btnHistoryPdf">下載 PDF</button>
+              <button class="btn btn-sm btn-success" type="button" id="btnHistoryPrint">列印</button>
             </div>
           </div>
           <div class="history-toolbar" id="visitorSettingsToolbar" hidden>
@@ -16653,6 +16663,40 @@
     const historyUnitEl = document.getElementById("visitorHistoryUnit");
     const historyBrowseBtn = document.getElementById("btnHistoryBrowse");
     const historyExcelBtn = document.getElementById("btnHistoryExcel");
+    const historyFromEl = document.getElementById("visitorHistoryFrom");
+    const historyToEl = document.getElementById("visitorHistoryTo");
+    const historyPdfBtn = document.getElementById("btnHistoryPdf");
+    const historyPrintBtn = document.getElementById("btnHistoryPrint");
+
+    /* 歷史訪客「日期區間」：畫面篩選與 PDF／列印匯出共用同一組條件 */
+    const historyRangeValues = () => ({
+      from: String(historyFromEl && historyFromEl.value ? historyFromEl.value : "").trim(),
+      to: String(historyToEl && historyToEl.value ? historyToEl.value : "").trim(),
+    });
+    const historyRangeError = () => {
+      const r = historyRangeValues();
+      return r.from && r.to && r.from > r.to ? "起始日期不可晚於結束日期。" : "";
+    };
+    const historyRangeLabel = () => {
+      const r = historyRangeValues();
+      if (!r.from && !r.to) return "全部期間";
+      return (r.from ? r.from.replace(/-/g, "/") : "最早") + " ~ " + (r.to ? r.to.replace(/-/g, "/") : "最新");
+    };
+    const historyDayKey = (v) => {
+      let d = toDate(v);
+      if (!d && typeof v === "number" && Number.isFinite(v)) d = new Date(v);
+      if (!d) return "";
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    };
+    const inHistoryRange = (v) => {
+      const r = historyRangeValues();
+      if (!r.from && !r.to) return true;
+      const k = historyDayKey(v && (v.inAt || v.createdAt));
+      if (!k) return false;
+      if (r.from && k < r.from) return false;
+      if (r.to && k > r.to) return false;
+      return true;
+    };
     const addElevatorCardBtn = document.getElementById("btnAddElevatorCard");
     const openElevatorCardNameSettingsBtn = document.getElementById("btnOpenElevatorCardNameSettings");
 
@@ -16899,6 +16943,7 @@
       } else if (currentFilter === 'history') {
         filtered = filtered.filter(isHistoryVisitor);
         if (historyUnit) filtered = filtered.filter((x) => String(x.unit || "").trim() === historyUnit);
+        if (historyRangeError() === "") filtered = filtered.filter(inHistoryRange);
       }
       
       // 日期筛选
@@ -16930,7 +16975,7 @@
           currentFilter === 'pending' ? '尚無待審訪客。' :
           currentFilter === 'approved' ? '尚無核准訪客。' :
           currentFilter === 'inside' ? '尚無入內訪客。' :
-          '尚無歷史訪客。';
+          (historyRangeValues().from || historyRangeValues().to ? `所選日期區間（${historyRangeLabel()}）內沒有歷史訪客。` : '尚無歷史訪客。');
         listEl.innerHTML = `<div class="status">${emptyText}</div>`;
         return;
       }
@@ -17198,6 +17243,292 @@
       });
       XLSX.writeFile(wb, `歷史訪客_${cname || visitorCommunitySlug || "社區"}_${currentMonthKey().replace("-", "")}.xlsx`);
     };
+
+    /* ------------------------------------------------------------------ */
+    /* 歷史訪客：A4 直式 PDF 下載與列印                                    */
+    /* ------------------------------------------------------------------ */
+
+    /* A4 直式頁面樣式：預覽（畫面）與列印／PDF 共用，確保所見即所得 */
+    const HISTORY_PAGE_CSS = `
+.hv-page{width:210mm;min-height:297mm;padding:14mm 12mm 12mm;box-sizing:border-box;background:#fff;color:#111827;font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;}
+.hv-page *{box-sizing:border-box;}
+.hv-hd{border-bottom:2.2pt solid #b91c1c;padding-bottom:3.5mm;margin-bottom:4mm;}
+.hv-community{font-size:11pt;font-weight:700;color:#6b7280;letter-spacing:.4pt;}
+.hv-doc-title{font-size:19pt;font-weight:800;color:#b91c1c;letter-spacing:2pt;margin-top:1mm;}
+.hv-meta{margin-top:2.5mm;font-size:9.5pt;color:#374151;line-height:1.6;}
+.hv-table{width:100%;border-collapse:collapse;table-layout:fixed;}
+.hv-table th,.hv-table td{border:.6pt solid #cbd5e1;padding:1.5mm 1.2mm;font-size:9pt;line-height:1.35;text-align:left;vertical-align:top;word-break:break-all;}
+.hv-table th{background:#f3f4f6;color:#374151;font-weight:700;text-align:center;}
+.hv-table .c-no,.hv-table .c-num{text-align:center;}
+.hv-empty{text-align:center;color:#6b7280;padding:10mm 0;}
+.hv-ft{margin-top:4mm;padding-top:3mm;border-top:.6pt solid #e5e7eb;font-size:8.5pt;color:#6b7280;line-height:1.6;}
+`;
+
+    /* 預覽彈窗內縮放顯示（與報到投票文件預覽一致的呈現方式） */
+    const HISTORY_PREVIEW_CSS = `
+.hv-preview{background:#f0f2f5;border-radius:12px;padding:16px;max-height:min(72vh,780px);overflow:auto;display:flex;flex-direction:column;align-items:center;gap:16px;}
+.hv-preview .hv-slot{width:calc(210mm * 0.62);height:calc(297mm * 0.62);flex:0 0 auto;overflow:hidden;box-shadow:0 10px 26px rgba(0,0,0,.14);}
+.hv-preview .hv-slot > .hv-page{transform:scale(.62);transform-origin:top left;}
+@media (max-width: 720px){
+  .hv-preview{padding:10px;max-height:52vh;}
+  .hv-preview .hv-slot{width:calc(210mm * 0.42);height:calc(297mm * 0.42);}
+  .hv-preview .hv-slot > .hv-page{transform:scale(.42);}
+}
+`;
+
+    const HISTORY_PRINT_CSS = `
+@media print{
+  @page{size:A4 portrait;margin:0;}
+  html,body{margin:0;padding:0;background:#fff;}
+  .hv-page{min-height:0;height:296mm;page-break-after:always;box-shadow:none;overflow:hidden;}
+  .hv-page:last-child{page-break-after:auto;}
+}
+`;
+
+    const HISTORY_DOC_CSS = HISTORY_PAGE_CSS + HISTORY_PRINT_CSS;
+
+    const HISTORY_PAGE_ROWS = 22;
+
+    const historySafeFilePart = (t) =>
+      String(t == null ? "" : t).replace(/[\\/:*?"<>|\s]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+
+    const historyScopeLabel = () => {
+      const u = String(historyUnit || "").trim();
+      if (!u) return "全部戶號";
+      const nm = String(historyUnitNames.get(u) || "").trim();
+      return nm ? `${u}（${nm}）` : u;
+    };
+
+    /* 依目前條件（戶號＋日期區間）彙整歷史訪客資料列 */
+    const collectHistoryRows = () => {
+      const unitSet = new Set(listHistoryUnits());
+      (Array.isArray(residentOptions) ? residentOptions : []).forEach((r) => {
+        const id = String(r && r.id ? r.id : "").trim();
+        if (id) unitSet.add(id);
+      });
+      const allUnits = Array.from(unitSet).sort((a, b) => String(a).localeCompare(String(b), "zh-Hant"));
+      const scope = String(historyUnit || "").trim();
+      const picked = scope ? [scope] : allUnits;
+      const rows = [];
+      picked.forEach((u) => {
+        buildHistoryRecords(u).forEach((r) => {
+          if (!inHistoryRange(r)) return;
+          rows.push({
+            unit: u,
+            name: r.name,
+            phone: r.phone,
+            plate: r.plate,
+            purpose: r.purpose,
+            partySize: r.partySize,
+            status: r.status,
+            inAt: r.inAt,
+            outAt: r.outAt,
+            createdAt: r.createdAt,
+          });
+        });
+      });
+      rows.sort((a, b) => (b.inAt || b.createdAt || 0) - (a.inAt || a.createdAt || 0));
+      return rows;
+    };
+
+    /* 產生 A4 直式分頁（每頁固定表頭、頁碼與列印資訊） */
+    const historyDocPages = (rows) => {
+      const list = Array.isArray(rows) ? rows : [];
+      const total = Math.max(1, Math.ceil(list.length / HISTORY_PAGE_ROWS));
+      const operator = String(inferUserName(auth.currentUser) || "").trim() || "—";
+      const generated = formatMs(Date.now());
+      const scopeText = escapeHtml(historyScopeLabel());
+      const rangeText = escapeHtml(historyRangeLabel());
+      const communityText = escapeHtml(String(cname || visitorCommunitySlug || "社區"));
+      const pages = [];
+      for (let p = 0; p < total; p += 1) {
+        const slice = list.slice(p * HISTORY_PAGE_ROWS, (p + 1) * HISTORY_PAGE_ROWS);
+        const body = slice.length
+          ? slice.map((r, i) => `<tr>
+      <td class="c-no">${p * HISTORY_PAGE_ROWS + i + 1}</td>
+      <td>${escapeHtml(r.name || "—")}</td>
+      <td>${escapeHtml(r.unit || "—")}</td>
+      <td>${escapeHtml(r.phone || "—")}</td>
+      <td>${escapeHtml(r.plate || "—")}</td>
+      <td>${escapeHtml(r.purpose || "—")}</td>
+      <td class="c-num">${escapeHtml(String(r.partySize || 1))}</td>
+      <td>${escapeHtml(formatMs(r.inAt) || "—")}</td>
+      <td>${escapeHtml(formatMs(r.outAt) || "—")}</td>
+    </tr>`).join("")
+          : `<tr><td class="hv-empty" colspan="9">所選條件內沒有歷史訪客紀錄。</td></tr>`;
+        pages.push(`<section class="hv-page">
+  <div class="hv-hd">
+    <div class="hv-community">${communityText}</div>
+    <div class="hv-doc-title">歷史訪客紀錄</div>
+    <div class="hv-meta">查詢戶號：${scopeText}　｜　日期區間：${rangeText}　｜　筆數：${list.length} 筆</div>
+  </div>
+  <table class="hv-table">
+    <colgroup>
+      <col style="width:7%" /><col style="width:10%" /><col style="width:9%" /><col style="width:12%" />
+      <col style="width:9%" /><col style="width:14%" /><col style="width:5%" /><col style="width:17%" /><col style="width:17%" />
+    </colgroup>
+    <thead>
+      <tr>
+        <th>序號</th><th>訪客姓名</th><th>拜訪戶號</th><th>手機</th><th>車牌</th>
+        <th>到訪事由</th><th>人數</th><th>來訪時間</th><th>離開時間</th>
+      </tr>
+    </thead>
+    <tbody>${body}</tbody>
+  </table>
+  <div class="hv-ft">列印人：${escapeHtml(operator)}　｜　列印時間：${escapeHtml(generated)}　｜　第 ${p + 1} 頁 / 共 ${total} 頁</div>
+</section>`);
+      }
+      return pages;
+    };
+
+    const historyExportName = (ext) => {
+      const r = historyRangeValues();
+      const fmt = (v) => String(v || "").replace(/-/g, "");
+      const range = !r.from && !r.to ? "全部期間" : `${r.from ? fmt(r.from) : "最早"}-${r.to ? fmt(r.to) : "最新"}`;
+      const parts = [
+        "歷史訪客",
+        historySafeFilePart(cname || visitorCommunitySlug || "社區"),
+        historySafeFilePart(historyUnit || "全部戶號"),
+        historySafeFilePart(range),
+      ].filter(Boolean);
+      return parts.join("_") + ext;
+    };
+
+    /* 依條件取得資料列與分頁；無資料或日期區間錯誤時回傳 null */
+    const historyExportContext = () => {
+      const err = historyRangeError();
+      if (err) {
+        toast(err);
+        return null;
+      }
+      const rows = collectHistoryRows();
+      if (!rows.length) {
+        toast("所選條件內沒有歷史訪客紀錄。");
+        return null;
+      }
+      return { rows, pages: historyDocPages(rows) };
+    };
+
+    /* 逐頁截圖後輸出 A4 直式 PDF（Data URL） */
+    const historyBuildPdfDataUri = async (pages) => {
+      const h2c = window.html2canvas;
+      if (!h2c) throw new Error("html2canvas 未載入");
+      const mod = await import("https://esm.sh/jspdf@2.5.1");
+      const JsPDF = mod && (mod.jsPDF || mod.default);
+      if (!JsPDF) throw new Error("jsPDF 載入失敗");
+      const host = document.createElement("div");
+      host.style.cssText = "position:fixed;left:-10000px;top:0;width:210mm;background:#fff;";
+      host.innerHTML = pages.join("");
+      document.body.appendChild(host);
+      try {
+        const nodes = Array.from(host.querySelectorAll(".hv-page"));
+        if (!nodes.length) throw new Error("no-page-node");
+        const pdf = new JsPDF({ orientation: "p", unit: "mm", format: "a4" });
+        for (let i = 0; i < nodes.length; i += 1) {
+          const canvas = await h2c(nodes[i], { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+          if (i > 0) pdf.addPage();
+          pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, 297);
+        }
+        return pdf.output("datauristring");
+      } finally {
+        host.remove();
+      }
+    };
+
+    const historyDownloadPdf = async () => {
+      const ctx = historyExportContext();
+      if (!ctx) return;
+      historyPdfBtn.disabled = true;
+      toast("PDF 產生中，請稍候…");
+      try {
+        const dataUri = await historyBuildPdfDataUri(ctx.pages);
+        const a = document.createElement("a");
+        a.href = dataUri;
+        a.download = historyExportName(".pdf");
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        toast("PDF 已下載");
+      } catch (error) {
+        console.warn("[visitor] 歷史訪客 PDF 產生失敗", error);
+        toast("PDF 產生失敗，已改為開啟列印視窗");
+        historyOpenPrintWindow(ctx.pages);
+      } finally {
+        historyPdfBtn.disabled = false;
+      }
+    };
+
+    /* 以新視窗套用 A4 直式列印樣式後直接叫用列印 */
+    function historyOpenPrintWindow(pages) {
+      const title = historyExportName("").replace(/_+$/, "") || "歷史訪客紀錄";
+      const win = window.open("", "_blank");
+      if (!win) {
+        toast("請允許彈出視窗以列印文件");
+        return;
+      }
+      win.document.write(`<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(title)}</title>
+<style>${HISTORY_DOC_CSS}</style>
+</head>
+<body onload="window.print();"><div class="hv-doc">${pages.join("")}</div></body>
+</html>`);
+      win.document.close();
+    }
+
+    /* 預覽樣式只注入一次（不含 @media print，避免影響 admin 頁面列印） */
+    const historyEnsurePreviewStyle = () => {
+      if (document.getElementById("historyDocPreviewStyle")) return;
+      const style = document.createElement("style");
+      style.id = "historyDocPreviewStyle";
+      style.textContent = HISTORY_PAGE_CSS + HISTORY_PREVIEW_CSS;
+      document.head.appendChild(style);
+    };
+
+    /* 先開 A4 直式預覽，確認後才下載 PDF 或列印 */
+    function historyOpenDocPreview() {
+      const ctx = historyExportContext();
+      if (!ctx) return;
+      historyEnsurePreviewStyle();
+      const modal = ensureModal("historyDocPreviewModal", "modal-history-doc-preview", "min(1180px, 96vw)");
+      let detach = () => {};
+      detach = bindModalClose(modal, () => detach());
+      const close = () => {
+        modal.hidden = true;
+        detach();
+      };
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-modal-close="1"></div>
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="historyDocPreviewTitle">
+          <div class="modal-hd">
+            <h3 class="modal-title" id="historyDocPreviewTitle">歷史訪客紀錄｜預覽、列印與下載 PDF</h3>
+            <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          </div>
+          <div class="modal-body">
+            <div class="hv-preview" id="historyDocPreviewArea">${ctx.pages.map((html) => `<div class="hv-slot">${html}</div>`).join("")}</div>
+            <div class="muted">共 ${ctx.pages.length} 頁（A4 直式）｜查詢戶號：${escapeHtml(historyScopeLabel())}｜日期區間：${escapeHtml(historyRangeLabel())}｜筆數：${ctx.rows.length} 筆</div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn btn-primary" type="button" id="btnHistoryDocDownload">確認下載 PDF</button>
+            <button class="btn btn-success" type="button" id="btnHistoryDocPrint">確認列印</button>
+            <button class="btn" type="button" data-modal-close="1">關閉</button>
+          </div>
+        </div>
+      `.trim();
+      modal.hidden = false;
+      const downloadBtn = modal.querySelector("#btnHistoryDocDownload");
+      const printBtn = modal.querySelector("#btnHistoryDocPrint");
+      if (downloadBtn) downloadBtn.addEventListener("click", () => {
+        close();
+        historyDownloadPdf();
+      });
+      if (printBtn) printBtn.addEventListener("click", () => {
+        close();
+        historyOpenPrintWindow(ctx.pages);
+      });
+    }
 
     const applyLocalVisitorPatch = (id, patch) => {
       const idx = visitors.findIndex((x) => String(x.id || "") === String(id || ""));
@@ -18204,6 +18535,12 @@
       });
     }
     if (historyExcelBtn) historyExcelBtn.addEventListener("click", exportHistoryExcel);
+    /* PDF／列印皆先開預覽，確認後才執行 */
+    if (historyPdfBtn) historyPdfBtn.addEventListener("click", historyOpenDocPreview);
+    if (historyPrintBtn) historyPrintBtn.addEventListener("click", historyOpenDocPreview);
+    [historyFromEl, historyToEl].forEach((el) => {
+      if (el) el.addEventListener("change", () => renderList());
+    });
 
     if (addBtn) addBtn.addEventListener("click", () => openVisitorEditor("create"));
     if (addElevatorCardBtn) addElevatorCardBtn.addEventListener("click", () => openElevatorCardEditor("create"));
@@ -22202,6 +22539,8 @@
       defaultSingleChoice: v.defaultSingleChoice !== false,
       showResultCount: v.showResultCount !== false,
       nameDisplay: String(v.nameDisplay || "").trim() === "mask" ? "mask" : "full",
+      // 區分所有權顯示：預設開啟；關閉時報到與投票僅以票數（戶數）為準
+      showOwnership: v.showOwnership !== false,
       // 通過門檻：報到與議題皆需「戶數（人數）」與「區分所有權比例」同時達標
       checkinTargetCountPct: cvClampPct(v.checkinTargetCountPct, 50),
       checkinTargetSharePct: cvClampPct(v.checkinTargetSharePct, 50),
@@ -22516,8 +22855,10 @@
     const shareRatePct = cvPct(doneShare, totalShare);
     const targetCountPct = settings.checkinTargetCountPct;
     const targetSharePct = settings.checkinTargetSharePct;
+    const showOwnership = settings.showOwnership;
     const countPassed = countRatePct >= targetCountPct;
-    const sharePassed = !shareKnown || shareRatePct >= targetSharePct;
+    // 關閉「區分所有權顯示」時，僅以戶數（票數）判定，不納入區分所有權比例
+    const sharePassed = !showOwnership || !shareKnown || shareRatePct >= targetSharePct;
     return {
       totalCount,
       doneCount,
@@ -22529,6 +22870,7 @@
       shareRatePct,
       targetCountPct,
       targetSharePct,
+      showOwnership,
       countPassed,
       sharePassed,
       passed: totalCount > 0 && countPassed && sharePassed,
@@ -22545,6 +22887,8 @@
     const totalCount = voteBase.length;
     const totalShare = cvOwnershipSum(voteBase);
     const shareKnown = totalShare > 0;
+    // 關閉「區分所有權顯示」時，僅以票數（戶數）判定
+    const showOwnership = settings.showOwnership;
     const usingDefaultCount = !(topic && topic.passCountPct !== null && topic.passCountPct !== undefined);
     const usingDefaultShare = !(topic && topic.passSharePct !== null && topic.passSharePct !== undefined);
     const passCountPct = usingDefaultCount ? settings.topicPassCountPct : Number(topic.passCountPct);
@@ -22571,8 +22915,9 @@
         countRatePct,
         shareRatePct,
         countPassed: countRatePct >= passCountPct,
-        sharePassed: !shareKnown || shareRatePct >= passSharePct,
-        passed: totalCount > 0 && countRatePct >= passCountPct && (!shareKnown || shareRatePct >= passSharePct),
+        sharePassed: !showOwnership || !shareKnown || shareRatePct >= passSharePct,
+        passed: totalCount > 0 && countRatePct >= passCountPct
+          && (!showOwnership || !shareKnown || shareRatePct >= passSharePct),
       };
     });
     return {
@@ -22580,6 +22925,7 @@
       totalCount,
       totalShare,
       shareKnown,
+      showOwnership,
       voterCount: voters.length,
       participantCountPct: cvPct(voters.length, totalCount),
       participantSharePct: cvPct(cvOwnershipSum(voters), totalShare),
@@ -23716,6 +24062,12 @@
     const votedResidents = voteBase.filter((item) => cvResidentVoteCount(item) > 0).length;
     const enabledTopics = topics.filter((item) => item.enabled !== false);
     const ck = cvCheckinStats(project, roster);
+    const ckOwnershipText = ck.showOwnership
+      ? `戶數 ${cvFormatPct(ck.countRatePct)}｜區分所有權 ${ck.shareKnown ? cvFormatPct(ck.shareRatePct) : "—"}`
+      : `戶數 ${cvFormatPct(ck.countRatePct)}`;
+    const ckTargetText = ck.showOwnership
+      ? `門檻 戶數 ${ck.targetCountPct}%／區分所有權 ${ck.targetSharePct}%`
+      : `門檻 戶數 ${ck.targetCountPct}%`;
     return `
       <div class="row" style="justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:14px;">
         <div>
@@ -23730,8 +24082,8 @@
       </div>
       <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:16px;">
         <div class="co-card tone-success"><div class="co-label">名單總數</div><div class="co-value">${roster.length}<span class="co-unit">人</span></div><div class="co-sub">本專案獨立名單</div></div>
-        <div class="co-card ${checkedInCount ? "tone-success" : "tone-muted"}"><div class="co-label">已報到</div><div class="co-value">${checkedInCount}<span class="co-unit">人</span></div><div class="co-sub">戶數 ${cvFormatPct(ck.countRatePct)}｜區分所有權 ${ck.shareKnown ? cvFormatPct(ck.shareRatePct) : "—"}</div></div>
-        <div class="co-card ${ck.passed ? "tone-success" : "tone-muted"}"><div class="co-label">報到結果</div><div class="co-value">${ck.passed ? "通過" : "未通過"}</div><div class="co-sub">門檻 戶數 ${ck.targetCountPct}%／區分所有權 ${ck.targetSharePct}%</div></div>
+        <div class="co-card ${checkedInCount ? "tone-success" : "tone-muted"}"><div class="co-label">已報到</div><div class="co-value">${checkedInCount}<span class="co-unit">人</span></div><div class="co-sub">${ckOwnershipText}</div></div>
+        <div class="co-card ${ck.passed ? "tone-success" : "tone-muted"}"><div class="co-label">報到結果</div><div class="co-value">${ck.passed ? "通過" : "未通過"}</div><div class="co-sub">${ckTargetText}</div></div>
         <div class="co-card ${votedResidents ? "tone-success" : "tone-muted"}"><div class="co-label">已投票</div><div class="co-value">${votedResidents}<span class="co-unit">人</span></div><div class="co-sub">投票率 ${voteBaseCount ? Math.round((votedResidents / voteBaseCount) * 100) : 0}%（以實際報到 ${voteBaseCount} 人為分母）</div></div>
         <div class="co-card tone-primary"><div class="co-label">議題數</div><div class="co-value">${enabledTopics.length}<span class="co-unit">題</span></div><div class="co-sub">文件 ${documents.length} 筆</div></div>
       </div>
@@ -23781,10 +24133,10 @@
     return `
       <div class="list-item" style="display:block; margin-bottom:14px;">
         <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
-          <div style="font-weight:700;">報到進度：戶數 ${cvFormatPct(ck.countRatePct)}（${ck.doneCount}/${ck.totalCount} 戶）${ck.shareKnown ? `｜區分所有權比例 ${cvFormatPct(ck.shareRatePct)}` : "｜區分所有權比例未填"}</div>
+          <div style="font-weight:700;">報到進度：戶數 ${cvFormatPct(ck.countRatePct)}（${ck.doneCount}/${ck.totalCount} 戶）${ck.showOwnership ? (ck.shareKnown ? `｜區分所有權比例 ${cvFormatPct(ck.shareRatePct)}` : "｜區分所有權比例未填") : ""}</div>
           <span class="status-chip ${ck.passed ? "success" : "warning"}">${ck.passed ? "已達通過門檻" : "未達通過門檻"}</span>
         </div>
-        <div class="muted" style="margin-top:6px;">通過門檻：戶數 ${ck.targetCountPct}%／區分所有權比例 ${ck.targetSharePct}%（兩者皆須達標）｜未到 ${ck.missCount} 戶</div>
+        <div class="muted" style="margin-top:6px;">通過門檻：${ck.showOwnership ? `戶數 ${ck.targetCountPct}%／區分所有權比例 ${ck.targetSharePct}%（兩者皆須達標）` : `戶數 ${ck.targetCountPct}%`}｜未到 ${ck.missCount} 戶</div>
       </div>
       <div class="row" style="justify-content:space-between; gap:12px; margin-bottom:14px;">
         <div class="muted">可用方式：${project.settings.allowManualCheckin ? "人工" : ""}${project.settings.allowManualCheckin && project.settings.allowQrCheckin ? "、" : ""}${project.settings.allowQrCheckin ? "QR" : ""}</div>
@@ -23850,12 +24202,12 @@
             </div>
             <div class="card-bd">
               <div class="row" style="justify-content:space-between; margin-bottom:6px;">
-                <div class="muted">投票 ${stats.voterCount}/${stats.totalCount} 戶（以報到數為分母，戶數 ${cvFormatPct(stats.participantCountPct)}${stats.shareKnown ? `／區分所有權 ${cvFormatPct(stats.participantSharePct)}` : ""}）</div>
+                <div class="muted">投票 ${stats.voterCount}/${stats.totalCount} 戶（以報到數為分母，戶數 ${cvFormatPct(stats.participantCountPct)}${stats.showOwnership && stats.shareKnown ? `／區分所有權 ${cvFormatPct(stats.participantSharePct)}` : ""}）</div>
                 <div class="row" style="gap:8px;">
                   ${project.settings.allowManualVote ? `<button class="btn btn-sm btn-primary" type="button" data-cv-cast-topic="${escapeHtml(topic.id)}">人工投票</button>` : ""}
                 </div>
               </div>
-              <div class="muted" style="margin-bottom:10px;">通過門檻：得票戶數 ${stats.passCountPct}%／得票區分所有權 ${stats.passSharePct}%（兩者皆須達標）${stats.usingDefaultCount || stats.usingDefaultShare ? "｜沿用專案預設" : "｜本議題自訂"}</div>
+              <div class="muted" style="margin-bottom:10px;">通過門檻：${stats.showOwnership ? `得票戶數 ${stats.passCountPct}%／得票區分所有權 ${stats.passSharePct}%（兩者皆須達標）` : `得票戶數 ${stats.passCountPct}%`}${(stats.showOwnership ? (stats.usingDefaultCount || stats.usingDefaultShare) : stats.usingDefaultCount) ? "｜沿用專案預設" : "｜本議題自訂"}</div>
               <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap:10px;">
                 ${(topic.options || []).map((option) => {
                   const opt = stats.options.find((item) => item.id === String(option.id || "").trim())
@@ -23864,7 +24216,7 @@
                   <div class="list-item" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:var(--panel-2);">
                     <div style="min-width:0;">
                       <div style="font-weight:700;">${escapeHtml(option.label)}</div>
-                      <div class="muted" style="margin-top:4px;">${opt.count} 票｜戶數 ${cvFormatPct(opt.countRatePct)}／區分所有權 ${stats.shareKnown ? cvFormatPct(opt.shareRatePct) : "—"}</div>
+                      <div class="muted" style="margin-top:4px;">${opt.count} 票｜戶數 ${cvFormatPct(opt.countRatePct)}${stats.showOwnership ? `／區分所有權 ${stats.shareKnown ? cvFormatPct(opt.shareRatePct) : "—"}` : ""}</div>
                     </div>
                     <div style="flex:0 0 auto;">
                       <span class="status-chip ${opt.passed ? "success" : "gray"}">${opt.passed ? "通過" : "未達門檻"}</span>
@@ -25247,7 +25599,7 @@
       return false;
     }
     const cid = String(checkinVoteState.cid || resolveActiveCommunityId() || "default").trim() || "default";
-    const url = `checkin-vote-share.html?v=36&c=${encodeURIComponent(cid)}&p=${encodeURIComponent(project.id)}`;
+    const url = `checkin-vote-share.html?v=37&c=${encodeURIComponent(cid)}&p=${encodeURIComponent(project.id)}`;
     const opened = window.open(url, "_blank");
     if (!opened) {
       toast("請允許彈出視窗以開啟分享頁面");
@@ -25353,26 +25705,36 @@
               <option value="mask"${settings.nameDisplay === "mask" ? " selected" : ""}>隱藏中間名（王小明 → 王○明）</option>
             </select>
           </label>
+          <label class="field" style="display:block;">
+            <span>區分所有權顯示</span>
+            <select id="cvShowOwnership">
+              <option value="yes"${settings.showOwnership ? " selected" : ""}>開啟</option>
+              <option value="no"${settings.showOwnership ? "" : " selected"}>關閉</option>
+            </select>
+            <span class="muted" style="display:block;margin-top:6px;">關閉後，報到與投票僅以票數（戶數）為準，不計算也不顯示區分所有權比例。</span>
+          </label>
         </div>
-        <div class="muted" style="margin:18px 0 8px; font-weight:800;">通過門檻</div>
-        <div class="muted" style="margin-bottom:10px;">報到與各議題皆須「戶數（人數）」與「區分所有權比例」同時達到門檻，才算通過。</div>
-        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px;">
-          <label class="field" style="display:block;">
-            <span>報到通過｜戶數（人數）%</span>
-            <input id="cvCheckinTargetCountPct" type="number" min="0" max="100" step="1" value="${escapeHtml(String(settings.checkinTargetCountPct))}" />
-          </label>
-          <label class="field" style="display:block;">
-            <span>報到通過｜區分所有權比例%</span>
-            <input id="cvCheckinTargetSharePct" type="number" min="0" max="100" step="1" value="${escapeHtml(String(settings.checkinTargetSharePct))}" />
-          </label>
-          <label class="field" style="display:block;">
-            <span>議題預設通過｜得票戶數%</span>
-            <input id="cvTopicPassCountPct" type="number" min="0" max="100" step="1" value="${escapeHtml(String(settings.topicPassCountPct))}" />
-          </label>
-          <label class="field" style="display:block;">
-            <span>議題預設通過｜得票區分所有權%</span>
-            <input id="cvTopicPassSharePct" type="number" min="0" max="100" step="1" value="${escapeHtml(String(settings.topicPassSharePct))}" />
-          </label>
+        <div id="cvOwnershipThreshold"${settings.showOwnership ? "" : ' style="display:none;"'}>
+          <div class="muted" style="margin:18px 0 8px; font-weight:800;">通過門檻</div>
+          <div class="muted" style="margin-bottom:10px;">報到與各議題皆須「戶數（人數）」與「區分所有權比例」同時達到門檻，才算通過。</div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px;">
+            <label class="field" style="display:block;">
+              <span>報到通過｜戶數（人數）%</span>
+              <input id="cvCheckinTargetCountPct" type="number" min="0" max="100" step="1" value="${escapeHtml(String(settings.checkinTargetCountPct))}" />
+            </label>
+            <label class="field" style="display:block;">
+              <span>報到通過｜區分所有權比例%</span>
+              <input id="cvCheckinTargetSharePct" type="number" min="0" max="100" step="1" value="${escapeHtml(String(settings.checkinTargetSharePct))}" />
+            </label>
+            <label class="field" style="display:block;">
+              <span>議題預設通過｜得票戶數%</span>
+              <input id="cvTopicPassCountPct" type="number" min="0" max="100" step="1" value="${escapeHtml(String(settings.topicPassCountPct))}" />
+            </label>
+            <label class="field" style="display:block;">
+              <span>議題預設通過｜得票區分所有權%</span>
+              <input id="cvTopicPassSharePct" type="number" min="0" max="100" step="1" value="${escapeHtml(String(settings.topicPassSharePct))}" />
+            </label>
+          </div>
         </div>
         <div class="row" style="margin-top:16px;">
           <button class="btn btn-primary" type="submit">儲存設定</button>
@@ -25696,6 +26058,7 @@
     const pid = String(projectId || "").trim();
     if (cvBlockIfArchived(pid)) return;
     const project = cvActiveProject();
+    const showOwnership = cvNormalizeProjectSettings(project && project.settings ? project.settings : {}).showOwnership;
     const current = topic || null;
     const optionText = current && Array.isArray(current.options) && current.options.length
       ? current.options.map((item) => String(item.label || "").trim()).filter(Boolean).join("\n")
@@ -25755,15 +26118,16 @@
               <input id="cvTopicMaxChoices" type="number" min="0" step="1" value="${escapeHtml(String(current ? current.maxChoices || 0 : 0))}" />
             </div>
             <div class="muted" style="margin:18px 0 8px; font-weight:800;">通過門檻（留空則沿用專案預設）</div>
-            <div class="muted" style="margin-bottom:10px;">得票率以「實際報到戶數」為分母，戶數與區分所有權比例需同時達標。</div>
+            <div class="muted" style="margin-bottom:10px;">${showOwnership ? "得票率以「實際報到戶數」為分母，戶數與區分所有權比例需同時達標。" : "得票率以「實際報到戶數」為分母，以得票戶數達門檻即通過。"}</div>
             <div class="field" style="display:block;">
               <span>得票戶數（人數）%</span>
               <input id="cvTopicPassCountPct" type="number" min="0" max="100" step="1" placeholder="沿用專案預設" value="${current && current.passCountPct !== null && current.passCountPct !== undefined ? escapeHtml(String(current.passCountPct)) : ""}" />
             </div>
+            ${showOwnership ? `
             <div class="field" style="display:block;">
               <span>得票區分所有權比例%</span>
               <input id="cvTopicPassSharePct" type="number" min="0" max="100" step="1" placeholder="沿用專案預設" value="${current && current.passSharePct !== null && current.passSharePct !== undefined ? escapeHtml(String(current.passSharePct)) : ""}" />
-            </div>
+            </div>` : ""}
           </div>
           <div class="modal-ft">
             <button class="btn" type="button" data-modal-close="1">取消</button>
@@ -26493,6 +26857,14 @@
     }
 
     if (currentPage === "settings" && project) {
+      const showOwnershipSelect = document.getElementById("cvShowOwnership");
+      const ownershipThreshold = document.getElementById("cvOwnershipThreshold");
+      const syncOwnershipThreshold = () => {
+        if (!ownershipThreshold) return;
+        ownershipThreshold.style.display = String(showOwnershipSelect && showOwnershipSelect.value || "yes") === "yes" ? "" : "none";
+      };
+      if (showOwnershipSelect) showOwnershipSelect.addEventListener("change", syncOwnershipThreshold);
+      if (ownershipThreshold) syncOwnershipThreshold();
       const settingsForm = document.getElementById("cvSettingsForm");
       if (settingsForm) {
         settingsForm.addEventListener("submit", async (e) => {
@@ -26507,6 +26879,7 @@
               requireCheckinBeforeVote: String(document.getElementById("cvRequireCheckinBeforeVote")?.value || "no") === "yes",
               defaultSingleChoice: String(document.getElementById("cvDefaultSingleChoice")?.value || "single") !== "multi",
               nameDisplay: String(document.getElementById("cvNameDisplay")?.value || "full") === "mask" ? "mask" : "full",
+              showOwnership: String(document.getElementById("cvShowOwnership")?.value || "yes") === "yes",
               checkinTargetCountPct: document.getElementById("cvCheckinTargetCountPct")?.value,
               checkinTargetSharePct: document.getElementById("cvCheckinTargetSharePct")?.value,
               topicPassCountPct: document.getElementById("cvTopicPassCountPct")?.value,
@@ -27013,8 +27386,6 @@
     const HIST_PAGE_SIZE = 6;
 
     const renderHistoryPage = () => {
-      const rightBtnHtml = `<button class="btn btn-sm btn-ghost" type="button" id="hist-new-btn" aria-label="新增影片" title="新增影片">${iconSvg("plus")}</button>`;
-
       contentEl.innerHTML = `
         <section class="card">
           <div class="card-hd">
@@ -27025,9 +27396,11 @@
                 <p>過往直播錄影檔案</p>
               </div>
             </div>
-            ${rightBtnHtml}
           </div>
           <div class="card-bd" style="display:flex;flex-direction:column;gap:16px;">
+            <div style="display:flex;justify-content:flex-end;">
+              <button class="btn btn-sm btn-primary" type="button" id="hist-new-btn" title="新增影片" aria-label="新增影片">新增影片</button>
+            </div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
               <input id="hist-search" type="search" placeholder="搜尋影片標題或日期（例：管委會、113-08）" value="${escapeHtml(histSearch)}" style="flex:1 1 240px;min-width:0;padding:10px 14px;border:1px solid rgba(17,24,39,0.18);border-radius:12px;font-size:calc(14px * var(--fs, 1));">
               <div id="hist-count" style="font-size:calc(13px * var(--fs, 1));color:#6b7280;flex:0 0 auto;"></div>
