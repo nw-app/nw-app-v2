@@ -1,11 +1,11 @@
-const CACHE_VERSION = "nwapp-v480";
+const CACHE_VERSION = "nwapp-v607";
 const IS_LOCALHOST = ["localhost", "127.0.0.1"].includes(String(self.location && self.location.hostname || "").trim().toLowerCase());
 const PRECACHE = Array.from(new Set([
   "./",
   "./index.html",
   "./system.html",
   "./admin.html",
-  "./member.html?v=12",
+  "./member.html?v=13",
   "./parking.html?v=8",
   "./parking-view.html?v=11",
   "./facility.html?v=8",
@@ -17,26 +17,27 @@ const PRECACHE = Array.from(new Set([
   "./bulletin-meeting.html?v=9",
   "./bulletin-repair.html?v=9",
   "./bulletin-clean.html?v=9",
-  "./bulletin-activity.html?v=8",
+  "./bulletin-activity.html?v=9",
   "./visitor.html",
   "./visitor-history.html?v=1",
   "./fee-notice.html?v=1",
   "./visitor-resident.html?v=8",
-  "./live-meeting.html?v=30",
+  "./live-meeting.html?v=31",
   "./qai.html?v=15",
-  "./qrcode-scan.html?v=1",
-  "./checkin-vote-share.html?v=30",
+  "./qrcode-scan.html?v=10",
+  "./election-count.html?v=17",
+  "./checkin-vote-share.html?v=36",
   "./css/parcel.css?v=5",
   "./css/ads-footer.css?v=16",
   "./css/system.css?v=9",
   "./css/admin.css?v=63",
-  "./css/member.css",
+  "./css/member.css?v=7",
   "./js/index.js?v=9",
   "./js/system.js?v=41",
-  "./js/admin.js?v=274",
-  "./js/finance.js?v=33",
+  "./js/admin.js?v=390",
+  "./js/finance.js?v=34",
   "./js/fee-notice.js?v=3",
-  "./js/member.js?v=66",
+  "./js/member.js?v=68",
   "./js/parking.js?v=30",
   "./js/parking-view.js?v=11",
   "./js/facility.js?v=8",
@@ -46,9 +47,11 @@ const PRECACHE = Array.from(new Set([
   "./js/visitor-resident.js?v=9",
   "./js/ads-footer.js?v=16",
   "./js/bulletin-clean.js?v=2",
-  "./js/bulletin-activity.js?v=2",
+  "./js/bulletin-activity.js?v=3",
   "./js/bulletin-repair.js?v=5",
-  "./js/live-meeting.js?v=24",
+  "./js/live-shared.js?v=1",
+  "./js/activity-shared.js?v=1",
+  "./js/live-meeting.js?v=26",
   "./js/pwa.js?v=12",
   "./css/pwa.css?v=3",
   "./css/pwa.css",
@@ -94,8 +97,8 @@ try {
       const community = String(data.community || "").trim();
       const toRole = String(data.toRole || "").trim();
       const url = resolveAppUrl(String(data.url || "").trim() || "./");
-      const title = String(data.title || "生活網｜來電").trim() || "生活網｜來電";
-      const body = String(data.body || "點此開啟生活網接聽/拒接").trim();
+      const title = String(data.title || "QAi生活網｜來電").trim() || "QAi生活網｜來電";
+      const body = String(data.body || "點此開啟QAi生活網接聽/拒接").trim();
       const autoOpen = String(data.autoOpen || "").trim() === "1";
 
       const tag = callId ? `intercom_${callId}` : "intercom_call";

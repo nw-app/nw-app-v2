@@ -481,7 +481,7 @@
 | **Firebase 設定 + 權限 Rules** | `js/firebase-config.js`<br>`firebase/firebase.rules` | Auth 登入驗證 / Firestore 資料庫初始化；**權限規則只維護這一份**（`firebase.json` 的 `firestore.rules` 指向此檔），勿再另存副本以免不同步 |
 | **PDF 檢視器** | `pdf-viewer.html` + `js/pdf-viewer.js` + `js/pdf-viewer-launcher.js?v=3` | 所有公告附件 PDF（財報/會議手冊/合約）線上直接檢視，不需強制下載 |
 | **全站 CSS 主題** | `css/system.css?v=6`、`css/admin.css?v=5`、`css/member.css`、`css/index.css` | 主色 `#d32f2f`（深紅）、卡片/按鈕/表單共用樣式、響應式（手機/平板/桌機）|
-| **PWA 設定檔** | `manifest.webmanifest` | App 名稱（生活網）、主題色、Icon（192px/512px SVG）、手機安裝用 |
+| **PWA 設定檔** | `manifest.webmanifest` | App 名稱（QAi生活網）、主題色、Icon（192px/512px SVG）、手機安裝用 |
 
 ---
 

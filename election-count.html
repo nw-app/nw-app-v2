@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>人工計票｜報到投票</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg?v=5" />
+    <meta name="theme-color" content="#d32f2f" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <style>
+      * { box-sizing: border-box; }
+      :root { --brand: #d32f2f; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        font-family: "Noto Sans TC", "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
+        background: #0f172a;
+        color: #e5e7eb;
+        height: 100dvh;
+        overflow: hidden;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .ec-app {
+        display: flex;
+        flex-direction: column;
+        height: 100dvh;
+        padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+        gap: 8px;
+      }
+      .ec-hd { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+      .ec-title { font-size: 18px; font-weight: 800; color: #fff; white-space: nowrap; }
+      .ec-sub {
+        flex: 1;
+        min-width: 0;
+        font-size: 12px;
+        font-weight: 700;
+        color: #94a3b8;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ec-close {
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        background: transparent;
+        color: #e5e7eb;
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .ec-chips {
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        padding-bottom: 2px;
+        flex: 0 0 auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .ec-chip {
+        flex: 0 0 auto;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.06);
+        color: #e5e7eb;
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-size: 13px;
+        font-weight: 700;
+        font-family: inherit;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .ec-chip.is-on { background: var(--brand); border-color: var(--brand); color: #fff; }
+      .ec-meta {
+        flex: 0 0 auto;
+        font-size: 12px;
+        line-height: 1.55;
+        color: #cbd5e1;
+        background: rgba(255, 255, 255, 0.06);
+        border-left: 4px solid var(--brand);
+        border-radius: 8px;
+        padding: 6px 10px;
+      }
+      .ec-meta b { color: #fff; font-variant-numeric: tabular-nums; }
+      .ec-sec { display: flex; flex-direction: column; gap: 6px; min-height: 0; flex: 1 1 auto; }
+      .ec-sec-hd {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        font-size: 12px;
+        font-weight: 800;
+        color: #94a3b8;
+        flex: 0 0 auto;
+      }
+      .ec-sec-hd .tally-total { color: #e5e7eb; font-variant-numeric: tabular-nums; }
+      .ec-cands {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 6px;
+        overflow: auto;
+        flex: 1 1 auto;
+        min-height: 0;
+        align-content: start;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+      }
+      .ec-cand {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        align-items: center;
+        gap: 8px;
+        height: 78px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+        padding: 8px;
+        color: #e5e7eb;
+        font-size: 13px;
+        overflow: hidden;
+      }
+      .ec-cand-info {
+        display: grid;
+        grid-template-rows: auto auto;
+        align-content: center;
+        gap: 3px;
+        min-width: 0;
+        min-height: 0;
+      }
+      .ec-cand .nm {
+        font-weight: 800;
+        font-size: 16px;
+        line-height: 1.25;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      .ec-cand .cod { font-size: 12px; font-weight: 700; color: #94a3b8; }
+      .ec-cand-score {
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        min-width: 0;
+      }
+      .ec-cand .tally {
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1.1;
+        color: #e5e7eb;
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+        white-space: nowrap;
+      }
+      .ec-cand .tally b { color: #fff; font-size: 26px; }
+      .ec-cand.has-vote { border-color: rgba(34, 197, 94, 0.6); background: rgba(34, 197, 94, 0.12); }
+      .ec-cand-acts {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-content: center;
+        gap: 4px;
+        min-height: 0;
+      }
+      .ec-step {
+        width: 100%;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        font-family: inherit;
+        font-size: 20px;
+        font-weight: 800;
+        line-height: 1;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      .ec-step.plus { background: rgba(34, 197, 94, 0.25); border-color: rgba(34, 197, 94, 0.55); }
+      .ec-step.minus { background: rgba(239, 68, 68, 0.25); border-color: rgba(239, 68, 68, 0.55); }
+      .ec-step:disabled { opacity: 0.32; cursor: default; }
+      .ec-empty { font-size: 12px; color: #94a3b8; padding: 8px 2px; }
+      .ec-status {
+        flex: 0 0 auto;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 13px;
+        line-height: 1.45;
+        background: rgba(255, 255, 255, 0.08);
+        min-height: 38px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
+      .ec-status.success { background: #16a34a; color: #fff; }
+      .ec-status.warn { background: #ea580c; color: #fff; }
+      .ec-status.error { background: #dc2626; color: #fff; }
+      .sh-mask {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        background: rgba(2, 6, 23, 0.72);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      .sh-mask[hidden] { display: none; }
+      .sh-card {
+        width: 100%;
+        max-width: 300px;
+        background: #111827;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 14px;
+        padding: 12px;
+        display: grid;
+        gap: 8px;
+      }
+      .sh-hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .sh-hd b { font-size: 14px; color: #fff; }
+      .sh-x {
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        background: transparent;
+        color: #e5e7eb;
+        border-radius: 8px;
+        padding: 4px 10px;
+        font-size: 12px;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .sh-qr { background: #fff; border-radius: 10px; padding: 10px; }
+      .sh-qr svg { display: block; width: 100%; height: auto; }
+      .sh-qr .empty { color: #111827; font-size: 12px; text-align: center; padding: 20px 0; }
+      .sh-url {
+        font-size: 11px;
+        color: #94a3b8;
+        word-break: break-all;
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      .sh-tip { font-size: 11px; color: #cbd5e1; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <div class="ec-app">
+      <header class="ec-hd">
+        <div class="ec-title">人工計票</div>
+        <div class="ec-sub" id="projectName">載入中…</div>
+        <button class="ec-close" type="button" id="btnShare">分享</button>
+        <button class="ec-close" type="button" id="btnClose">關閉</button>
+      </header>
+
+      <div class="sh-mask" id="shareModal" hidden>
+        <div class="sh-card">
+          <div class="sh-hd">
+            <b>分享此頁</b>
+            <button class="sh-x" type="button" id="shareModalClose">關閉</button>
+          </div>
+          <div class="sh-qr" id="shareQrBox"></div>
+          <div class="sh-url" id="shareUrl"></div>
+          <div class="sh-tip">手機掃描 QR code 即可開啟本頁，無須登入即可操作。</div>
+        </div>
+      </div>
+
+      <div class="ec-chips" id="electionChips"></div>
+      <div class="ec-meta" id="electionMeta">—</div>
+
+      <div class="ec-sec">
+        <div class="ec-sec-hd">
+          <span>候選人（唱票）</span>
+          <span class="tally-total" id="pickInfo">—</span>
+        </div>
+        <div class="ec-cands" id="candidateList"></div>
+      </div>
+
+      <div class="ec-status" id="status">正在載入專案資料…</div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script>
+      (function () {
+        const params = new URLSearchParams(location.search);
+        const cid = String(params.get("c") || "").trim() || "default";
+
+        const state = {
+          projectId: String(params.get("p") || "").trim(),
+          project: null,
+          communityName: "",
+          roster: [],
+          elections: [],
+          electionId: "",
+        };
+
+        let db = null;
+        let actorUid = "";
+        let rosterUnsub = null;
+        let electionsUnsub = null;
+        const el = (id) => document.getElementById(id);
+
+        function escapeHtml(value) {
+          return String(value == null ? "" : value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+        }
+
+        function toCount(value) {
+          return Math.max(0, Math.floor(Number(value || 0) || 0));
+        }
+
+        function setStatus(text, tone) {
+          const node = el("status");
+          if (!node) return;
+          node.textContent = text || "";
+          node.className = `ec-status${tone ? ` ${tone}` : ""}`;
+        }
+
+        /* 語音提示：使用瀏覽器內建語音合成，不需連外服務 */
+        function speak(text) {
+          const phrase = String(text || "").trim();
+          if (!phrase) return;
+          try {
+            const synth = window.speechSynthesis;
+            if (!synth || typeof window.SpeechSynthesisUtterance !== "function") return;
+            const utter = new window.SpeechSynthesisUtterance(phrase);
+            utter.lang = "zh-TW";
+            utter.rate = 1.05;
+            utter.pitch = 1;
+            synth.speak(utter);
+          } catch {}
+        }
+
+        function electionsRef() {
+          return db.collection("communities").doc(cid).collection("checkinVoteProjects").doc(state.projectId).collection("elections");
+        }
+
+        function rosterRef() {
+          return db.collection("communities").doc(cid).collection("checkinVoteProjects").doc(state.projectId).collection("roster");
+        }
+
+        function activeElections() {
+          return state.elections.filter((election) => election.enabled !== false);
+        }
+
+        function currentElection() {
+          return activeElections().find((election) => election.id === state.electionId) || null;
+        }
+
+        function candidateHouseNo(candidate) {
+          const own = String(candidate && candidate.houseNo || "").trim();
+          if (own) return own;
+          const name = String(candidate && candidate.name || "").trim();
+          const building = String(candidate && candidate.building || "").trim();
+          if (!name) return "";
+          const list = Array.isArray(state.roster) ? state.roster : [];
+          const exact = list.find((entry) => String(entry.name || "").trim() === name && String(entry.building || "").trim() === building);
+          if (exact && String(exact.houseNo || "").trim()) return String(exact.houseNo || "").trim();
+          const byName = list.find((entry) => String(entry.name || "").trim() === name);
+          return byName ? String(byName.houseNo || "").trim() : "";
+        }
+
+        function electionResolvedScope(election) {
+          if (String((election && election.scope) || "").trim() === "building") {
+            const explicitBuildings = Array.isArray(election && election.scopeBuildings)
+              ? election.scopeBuildings.map((x) => String(x || "").trim()).filter(Boolean)
+              : [];
+            if (explicitBuildings.length) return { scope: "building", buildings: explicitBuildings };
+          }
+          const candidateBuildings = Array.from(new Set(
+            (Array.isArray(election && election.candidates) ? election.candidates : [])
+              .map((cand) => String((cand && cand.building) || "").trim())
+              .filter(Boolean)
+          ));
+          if (candidateBuildings.length) return { scope: "building", buildings: candidateBuildings };
+          return { scope: "all", buildings: [] };
+        }
+
+        /* 投票權範圍：全部住戶，或僅指定棟別的已報到住戶 */
+        function scopeRoster(election) {
+          const base = state.roster.filter((entry) => entry.checkedIn === true);
+          const resolved = electionResolvedScope(election);
+          if (resolved.scope !== "building") return base;
+          const buildings = new Set(resolved.buildings);
+          if (!buildings.size) return base;
+          return base.filter((entry) => buildings.has(String(entry.building || "").trim()));
+        }
+
+        function maxVotesOf(election) {
+          const per = Math.max(1, Number(election && election.votesPerHousehold || 1) || 1);
+          return scopeRoster(election).length * per;
+        }
+
+        function tallyOf(election) {
+          const source = election && election.tally && typeof election.tally === "object" ? election.tally : {};
+          const out = {};
+          (election && election.candidates ? election.candidates : []).forEach((cand) => {
+            out[cand.id] = toCount(source[cand.id]);
+          });
+          return out;
+        }
+
+        function castTotal(tally) {
+          return Object.keys(tally || {}).reduce((sum, key) => sum + toCount(tally[key]), 0);
+        }
+
+        function normalizeRoster(doc) {
+          const v = doc.data() || {};
+          return {
+            id: doc.id,
+            name: String(v.name || "").trim() || "住戶",
+            houseNo: String(v.houseNo || "").trim(),
+            building: String(v.building || "").trim(),
+            rosterNo: String(v.rosterNo || "").trim(),
+            checkedIn: v.checkedIn === true,
+          };
+        }
+
+        function normalizeElection(doc) {
+          const v = doc.data() || {};
+          const candidates = Array.isArray(v.candidates) ? v.candidates : [];
+          const tally = v.tally && typeof v.tally === "object" ? v.tally : {};
+          return {
+            id: doc.id,
+            title: String(v.title || "").trim() || "未命名選舉",
+            code: String(v.code || "").trim(),
+            enabled: v.enabled !== false,
+            seats: Math.max(1, Number(v.seats || 0) || 1),
+            alternates: Math.max(0, Number(v.alternates || 0) || 0),
+            votesPerHousehold: Math.max(1, Number(v.votesPerHousehold || 0) || 1),
+            scope: String(v.scope || "").trim() === "building" ? "building" : "all",
+            scopeBuildings: Array.isArray(v.scopeBuildings) ? v.scopeBuildings.map((x) => String(x || "").trim()).filter(Boolean) : [],
+            order: Number(v.order || 0) || 0,
+            candidates: candidates.map((cand, index) => ({
+              id: String((cand && cand.id) || `cand${index + 1}`).trim(),
+              name: String((cand && cand.name) || "").trim() || `候選人 ${index + 1}`,
+              code: String((cand && cand.code) || "").trim(),
+              houseNo: String((cand && cand.houseNo) || "").trim(),
+              building: String((cand && cand.building) || "").trim(),
+            })),
+            tally: candidates.reduce((out, cand, index) => {
+              const candId = String((cand && cand.id) || `cand${index + 1}`).trim();
+              out[candId] = toCount(tally[candId]);
+              return out;
+            }, {}),
+          };
+        }
+
+        function renderChips() {
+          const list = activeElections();
+          const box = el("electionChips");
+          if (!list.length) {
+            box.innerHTML = `<div class="ec-empty">此專案尚無啟用的選舉</div>`;
+            return;
+          }
+          box.innerHTML = list.map((election) => `
+            <button class="ec-chip${election.id === state.electionId ? " is-on" : ""}" type="button" data-election="${escapeHtml(election.id)}">
+              ${escapeHtml(election.title)}${String(election.code || "").trim() ? `（${escapeHtml(String(election.code).trim())}）` : ""}
+            </button>
+          `).join("");
+        }
+
+        function renderMeta() {
+          const election = currentElection();
+          const box = el("electionMeta");
+          if (!election) {
+            box.textContent = "請先於後台新增選舉並設定候選人。";
+            return;
+          }
+          const base = scopeRoster(election);
+          const tally = tallyOf(election);
+          const cap = maxVotesOf(election);
+          const resolvedScope = electionResolvedScope(election);
+          const scopeText = resolvedScope.scope === "building" && resolvedScope.buildings.length
+            ? `指定棟別：${resolvedScope.buildings.join("、")}`
+            : "全部住戶";
+          box.innerHTML = `應選 ${election.seats} 名／候補 ${election.alternates || "不限"}｜投票權範圍：${escapeHtml(scopeText)}<br />`
+            + `報到 <b>${base.length}</b> 人 × 每戶 ${election.votesPerHousehold} 票＝總票數上限 <b>${cap}</b> 票<br />`
+            + `已計票 <b>${castTotal(tally)}</b>/${cap} 票`;
+        }
+
+        function renderCandidates() {
+          const election = currentElection();
+          const box = el("candidateList");
+          const info = el("pickInfo");
+          if (!election) {
+            box.innerHTML = `<div class="ec-empty">尚無選舉</div>`;
+            info.textContent = "—";
+            return;
+          }
+          const tally = tallyOf(election);
+          const cap = maxVotesOf(election);
+          const used = castTotal(tally);
+          info.textContent = `已計票 ${used}/${cap} 票`;
+          if (!(election.candidates || []).length) {
+            box.innerHTML = `<div class="ec-empty">此選舉尚無候選人</div>`;
+            return;
+          }
+          const baseCount = scopeRoster(election).length;
+          // 排序：票數高至低，其次依候選人編號（A、B、C…）
+          const ordered = election.candidates
+            .map((cand, index) => ({ cand, index }))
+            .sort((a, b) => {
+              const diff = (tally[b.cand.id] || 0) - (tally[a.cand.id] || 0);
+              if (diff) return diff;
+              const codeA = String(a.cand.code || "").trim();
+              const codeB = String(b.cand.code || "").trim();
+              if (codeA && codeB && codeA !== codeB) return codeA.localeCompare(codeB, "en", { numeric: true });
+              return a.index - b.index;
+            })
+            .map((item) => item.cand);
+          box.innerHTML = ordered.map((cand) => {
+            const count = tally[cand.id] || 0;
+            const canPlus = used < cap;
+            const canMinus = count > 0;
+            const candId = escapeHtml(cand.id);
+            return `
+              <div class="ec-cand${count > 0 ? " has-vote" : ""}">
+                <div class="ec-cand-info">
+                  <span class="nm">${escapeHtml(cand.name)}</span>
+                  ${[candidateHouseNo(cand), String(cand.building || "").trim()].filter(Boolean).length ? `<span class="cod">${escapeHtml([candidateHouseNo(cand), String(cand.building || "").trim()].filter(Boolean).join("｜"))}</span>` : ""}
+                </div>
+                <div class="ec-cand-score">
+                  <span class="tally"><b>${count}</b> 票</span>
+                </div>
+                <div class="ec-cand-acts">
+                  <button class="ec-step plus" type="button" data-cand-plus="${candId}" aria-label="增加一票"${canPlus ? "" : " disabled"}>＋</button>
+                  <button class="ec-step minus" type="button" data-cand-minus="${candId}" aria-label="減少一票"${canMinus ? "" : " disabled"}>−</button>
+                </div>
+              </div>
+            `;
+          }).join("");
+        }
+
+        function renderAll() {
+          renderChips();
+          renderMeta();
+          renderCandidates();
+        }
+
+        async function writeTally(electionId, tally) {
+          const map = {};
+          Object.keys(tally || {}).forEach((key) => { map[key] = toCount(tally[key]); });
+          const now = Date.now();
+          await electionsRef().doc(String(electionId || "").trim()).set({
+            tally: map,
+            tallyUpdatedAtMs: now,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAtMs: now,
+          }, { merge: true });
+        }
+
+        /* 按下＋／− 時先同步更新本機票數（畫面立即回饋、連續按也不會讀到舊值），
+           再把「絕對票數快照」依序寫入 Firestore；每筆都覆蓋整份 tally，
+           因此排隊寫入的最後一筆即為正確結果。 */
+        let writeChain = Promise.resolve();
+        let pendingWrites = 0;
+        let writeSeq = 0;
+        let localTally = null; // { electionId, tally, seq }
+
+        function queueTallyWrite(electionId, tally, rollback) {
+          const seq = ++writeSeq;
+          pendingWrites += 1;
+          const run = async () => {
+            try {
+              await writeTally(electionId, tally);
+            } catch (error) {
+              console.warn("[election-count] 唱票寫入失敗", error);
+              // 只有最新一筆失敗才需要還原，避免覆蓋後續已排入的票數
+              if (localTally && localTally.seq === seq) {
+                const target = state.elections.find((item) => item.id === electionId);
+                if (target) target.tally = { ...rollback.prev };
+                localTally = { electionId, tally: { ...rollback.prev }, seq };
+                renderAll();
+              }
+              setStatus(`寫入失敗：${(error && error.message) || "請確認網路與權限"}`, "error");
+            } finally {
+              pendingWrites = Math.max(0, pendingWrites - 1);
+              if (pendingWrites === 0) localTally = null;
+            }
+          };
+          writeChain = writeChain.then(run, run);
+        }
+
+        function stepCandidate(candidateId, delta) {
+          const election = currentElection();
+          if (!election) {
+            setStatus("請先選擇選舉", "warn");
+            return;
+          }
+          if (state.project && state.project.archived) {
+            speak("此專案已封存，無法計票");
+            setStatus("此專案已封存，無法計票，請先解除封存", "error");
+            return;
+          }
+          const cand = (election.candidates || []).find((item) => item.id === candidateId);
+          if (!cand) return;
+          const tally = tallyOf(election);
+          const count = tally[candidateId] || 0;
+          const cap = maxVotesOf(election);
+          const used = castTotal(tally);
+          if (delta > 0) {
+            if (used >= cap) {
+              speak("已達總票數上限");
+              setStatus(`總票數已達上限 ${cap} 票，不可大於報到人數可投的票數`, "warn");
+              return;
+            }
+          } else if (count <= 0) {
+            return;
+          }
+          const next = { ...tally, [candidateId]: count + (delta > 0 ? 1 : -1) };
+          const seq = writeSeq + 1;
+          localTally = { electionId: election.id, tally: next, seq };
+          election.tally = next;
+          renderAll();
+          speak(delta > 0 ? `${cand.name} 一票` : `${cand.name} 修正減少一票`);
+          setStatus(
+            delta > 0
+              ? `已記錄：${cand.name} 第 ${next[candidateId]} 票（總票數 ${castTotal(next)}/${cap}）`
+              : `已修正減少：${cand.name} 剩 ${next[candidateId]} 票（總票數 ${castTotal(next)}/${cap}）`,
+            delta > 0 ? "success" : "warn"
+          );
+          queueTallyWrite(election.id, next, { prev: tally });
+        }
+
+        el("electionChips").addEventListener("click", (event) => {
+          const btn = event.target.closest("[data-election]");
+          if (!btn) return;
+          state.electionId = String(btn.getAttribute("data-election") || "").trim();
+          renderAll();
+        });
+
+        el("candidateList").addEventListener("click", (event) => {
+          const plus = event.target.closest("[data-cand-plus]");
+          if (plus) {
+            stepCandidate(String(plus.getAttribute("data-cand-plus") || "").trim(), 1);
+            return;
+          }
+          const minus = event.target.closest("[data-cand-minus]");
+          if (minus) stepCandidate(String(minus.getAttribute("data-cand-minus") || "").trim(), -1);
+        });
+
+        el("btnClose").addEventListener("click", () => window.close());
+
+        /* 分享：產生本頁網址的 QR code，掃描者無須登入即可操作 */
+        function renderShareQr() {
+          const url = location.href;
+          el("shareUrl").textContent = url;
+          const box = el("shareQrBox");
+          if (typeof qrcode !== "function") {
+            box.innerHTML = `<div class="empty">QR code 元件載入失敗</div>`;
+            return;
+          }
+          try {
+            const qr = qrcode(0, "M");
+            qr.addData(url);
+            qr.make();
+            const count = qr.getModuleCount();
+            const quiet = 2;
+            const size = count + quiet * 2;
+            let path = "";
+            for (let r = 0; r < count; r += 1) {
+              for (let c = 0; c < count; c += 1) {
+                if (qr.isDark(r, c)) path += `M${c + quiet} ${r + quiet}h1v1h-1z`;
+              }
+            }
+            box.innerHTML = `<svg viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges" role="img" aria-label="本頁 QR code"><rect width="${size}" height="${size}" fill="#fff" /><path d="${path}" fill="#111827" /></svg>`;
+          } catch {
+            box.innerHTML = `<div class="empty">QR code 產生失敗</div>`;
+          }
+        }
+
+        el("btnShare").addEventListener("click", () => {
+          renderShareQr();
+          el("shareModal").hidden = false;
+        });
+
+        el("shareModalClose").addEventListener("click", () => {
+          el("shareModal").hidden = true;
+        });
+
+        el("shareModal").addEventListener("click", (event) => {
+          if (event.target === el("shareModal")) el("shareModal").hidden = true;
+        });
+
+        window.addEventListener("beforeunload", () => {
+          if (rosterUnsub) rosterUnsub();
+          if (electionsUnsub) electionsUnsub();
+        });
+
+        async function loadProject() {
+          const cfgSnap = await db.collection("communities").doc(cid).get();
+          const cfg = cfgSnap && cfgSnap.exists ? (cfgSnap.data() || {}) : {};
+          state.communityName = String(cfg.name || "").trim() || cid;
+          if (!state.projectId) {
+            state.projectId = String(cfg.checkinVoteActiveProjectId || "").trim();
+          }
+          if (!state.projectId) throw new Error("此社區尚未設定目前專案");
+          const snap = await db.collection("communities").doc(cid).collection("checkinVoteProjects").doc(state.projectId).get();
+          if (!snap.exists) throw new Error("找不到指定專案");
+          const v = snap.data() || {};
+          state.project = { id: snap.id, name: String(v.name || "").trim() || "未命名專案", archived: v.archived === true };
+          el("projectName").textContent = `社區：${state.communityName}｜${state.project.name}${state.project.archived ? "（封存）" : ""}`;
+        }
+
+        function subscribeCollections() {
+          rosterUnsub = rosterRef().onSnapshot((snap) => {
+            state.roster = (snap && snap.docs ? snap.docs : []).map(normalizeRoster);
+            renderAll();
+          }, () => setStatus("名單載入失敗，請確認權限", "error"));
+          electionsUnsub = electionsRef().onSnapshot((snap) => {
+            const list = (snap && snap.docs ? snap.docs : []).map(normalizeElection)
+              .sort((a, b) => (a.order - b.order));
+            list.forEach((election, index) => {
+              if (!String(election.code || "").trim()) election.code = `E${String(index + 1).padStart(2, "0")}`;
+            });
+            // 寫入尚未回寫前，以本機票數為準，避免畫面閃回舊值
+            if (localTally) {
+              const target = list.find((item) => item.id === localTally.electionId);
+              if (target) target.tally = { ...localTally.tally };
+            }
+            state.elections = list;
+            if (!state.electionId || !list.some((item) => item.id === state.electionId)) {
+              state.electionId = list.length ? list[0].id : "";
+            }
+            renderAll();
+          }, () => setStatus("選舉載入失敗，請確認權限", "error"));
+        }
+
+        function boot() {
+          try {
+            firebase.initializeApp(window.FIREBASE_CONFIG);
+            db = firebase.firestore();
+          } catch {
+            setStatus("Firebase 初始化失敗", "error");
+            return;
+          }
+          firebase.auth().onAuthStateChanged((user) => {
+            actorUid = user ? String(user.uid || "") : "";
+            if (!user) setStatus("尚未登入，唱票結果將無法寫入", "warn");
+          });
+          renderAll();
+          loadProject()
+            .then(() => {
+              subscribeCollections();
+              setStatus("請選擇選舉，再按候選人右側「＋」唱票（按「−」修正減少）。");
+            })
+            .catch((e) => {
+              setStatus(`載入失敗：${(e && e.message) || e}`, "error");
+            });
+        }
+
+        boot();
+      })();
+    </script>
+  </body>
+</html>

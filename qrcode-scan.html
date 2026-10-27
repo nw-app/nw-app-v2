@@ -33,7 +33,8 @@
       .scan-sub {
         flex: 1;
         min-width: 0;
-        font-size: 12px;
+        font-size: 16px;
+        font-weight: 700;
         color: #94a3b8;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -49,20 +50,6 @@
         font-family: inherit;
         cursor: pointer;
       }
-      .scan-modes { display: flex; gap: 8px; }
-      .mode-btn {
-        flex: 1;
-        height: 40px;
-        border-radius: 10px;
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        background: rgba(255, 255, 255, 0.06);
-        color: #e5e7eb;
-        font-size: 14px;
-        font-weight: 700;
-        font-family: inherit;
-        cursor: pointer;
-      }
-      .mode-btn.is-active { background: var(--brand); border-color: var(--brand); color: #fff; }
       .scan-stage {
         position: relative;
         flex: 1;
@@ -71,15 +58,21 @@
         overflow: hidden;
         background: #000;
       }
-      #reader { width: 100%; height: 100%; }
-      #reader video { width: 100% !important; height: 100% !important; object-fit: cover; }
+      #reader { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+      /* 重要：不可用 CSS 強制 video 的 width / height 為 100%（或 object-fit: cover）。
+         html5-qrcode 以 scaleX = videoWidth / video.clientWidth、scaleY = videoHeight / video.clientHeight
+         換算掃描區域；函式庫本身只設定 video 的寬度、高度維持自然比例，
+         此時 scaleX 與 scaleY 相等，取樣區域不變形。
+         一旦用 CSS 把 video 拉成容器大小（容器與鏡頭比例不同），scaleX ≠ scaleY，
+         取樣區域會被拉扁變形 → 永遠無法辨識（在 PWA 獨立視窗的長版面最明顯）。 */
+      #reader video { object-fit: fill; margin: 0 auto; }
       .scan-frame { position: absolute; inset: 0; pointer-events: none; }
       .scan-frame::after {
         content: "";
         position: absolute;
         left: 50%;
         top: 50%;
-        width: min(60%, 210px);
+        width: var(--scan-box, min(60%, 210px));
         aspect-ratio: 1;
         transform: translate(-50%, -50%);
         border: 3px solid rgba(255, 255, 255, 0.9);
@@ -87,6 +80,62 @@
         box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.28);
       }
       .scan-info { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+      /* 掃碼槍輸入列：掃碼槍以鍵盤模擬輸入，聚焦此欄位即可直接掃描 */
+      .scan-gun {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.06);
+        border-left: 4px solid var(--brand);
+        padding: 6px 10px;
+      }
+      .scan-gun-label { font-size: 12px; font-weight: 800; color: #94a3b8; white-space: nowrap; }
+      .scan-gun-input {
+        flex: 1;
+        min-width: 0;
+        height: 36px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(2, 6, 23, 0.5);
+        color: #e5e7eb;
+        font-size: 14px;
+        font-weight: 700;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        padding: 0 10px;
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      .scan-gun-input::placeholder { color: #64748b; font-weight: 600; font-family: inherit; }
+      .scan-gun-input:focus { outline: none; border-color: var(--brand); }
+      .scan-last {
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.06);
+        border-left: 4px solid rgba(255, 255, 255, 0.24);
+        padding: 6px 10px;
+        font-size: 12px;
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+      }
+      .scan-last.success { border-left-color: #16a34a; }
+      .scan-last.warn { border-left-color: #ea580c; }
+      .scan-last.error { border-left-color: #dc2626; }
+      .last-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+      .last-time { color: #94a3b8; font-weight: 700; font-variant-numeric: tabular-nums; }
+      .last-result { font-weight: 800; color: #e5e7eb; white-space: nowrap; }
+      .scan-last.success .last-result { color: #4ade80; }
+      .scan-last.warn .last-result { color: #fb923c; }
+      .scan-last.error .last-result { color: #f87171; }
+      .last-detail,
+      .last-code {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #cbd5e1;
+        min-width: 0;
+      }
+      .last-code { color: #94a3b8; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
       .info-row {
         display: flex;
         justify-content: space-between;
@@ -106,10 +155,13 @@
         line-height: 1.5;
         background: rgba(255, 255, 255, 0.08);
         min-height: 44px;
+        text-align: center;
       }
-      .scan-status.success { background: rgba(22, 163, 74, 0.24); color: #bbf7d0; }
-      .scan-status.error { background: rgba(220, 38, 38, 0.26); color: #fecaca; }
-      .scan-status.warn { background: rgba(217, 119, 6, 0.26); color: #fde68a; }
+      .scan-status-title { font-size: 24px; font-weight: 800; letter-spacing: 3px; }
+      .scan-status-detail { margin-top: 2px; font-size: 13px; font-weight: 600; opacity: 0.95; }
+      .scan-status.success { background: #16a34a; color: #fff; }
+      .scan-status.warn { background: #ea580c; color: #fff; }
+      .scan-status.error { background: #dc2626; color: #fff; }
       .scan-ft { display: flex; gap: 8px; }
       .ft-btn {
         flex: 1;
@@ -124,6 +176,50 @@
         cursor: pointer;
       }
       .ft-btn[hidden] { display: none; }
+      .sh-mask {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        background: rgba(2, 6, 23, 0.72);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      .sh-mask[hidden] { display: none; }
+      .sh-card {
+        width: 100%;
+        max-width: 300px;
+        background: #111827;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 14px;
+        padding: 12px;
+        display: grid;
+        gap: 8px;
+      }
+      .sh-hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .sh-hd b { font-size: 14px; color: #fff; }
+      .sh-x {
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        background: transparent;
+        color: #e5e7eb;
+        border-radius: 8px;
+        padding: 4px 10px;
+        font-size: 12px;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .sh-qr { background: #fff; border-radius: 10px; padding: 10px; }
+      .sh-qr svg { display: block; width: 100%; height: auto; }
+      .sh-qr .empty { color: #111827; font-size: 12px; text-align: center; padding: 20px 0; }
+      .sh-url {
+        font-size: 11px;
+        color: #94a3b8;
+        word-break: break-all;
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      .sh-tip { font-size: 11px; color: #cbd5e1; line-height: 1.5; }
     </style>
   </head>
   <body>
@@ -131,17 +227,39 @@
       <header class="scan-hd">
         <div class="scan-title">掃碼</div>
         <div class="scan-sub" id="projectName">載入中…</div>
+        <button class="scan-close" type="button" id="btnShare">分享</button>
         <button class="scan-close" type="button" id="btnClose">關閉</button>
       </header>
 
-      <div class="scan-modes">
-        <button class="mode-btn" type="button" data-mode="checkin">報到掃碼</button>
-        <button class="mode-btn" type="button" data-mode="vote">投票掃碼</button>
+      <div class="sh-mask" id="shareModal" hidden>
+        <div class="sh-card">
+          <div class="sh-hd">
+            <b>分享此頁</b>
+            <button class="sh-x" type="button" id="shareModalClose">關閉</button>
+          </div>
+          <div class="sh-qr" id="shareQrBox"></div>
+          <div class="sh-url" id="shareUrl"></div>
+          <div class="sh-tip">手機掃描 QR code 即可開啟本頁，無須登入即可操作。</div>
+        </div>
       </div>
 
       <div class="scan-stage">
         <div id="reader"></div>
         <div class="scan-frame" aria-hidden="true"></div>
+      </div>
+
+      <div class="scan-gun">
+        <span class="scan-gun-label">掃碼槍</span>
+        <input class="scan-gun-input" id="gunInput" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="游標置此處，掃碼槍掃描後自動送出" />
+      </div>
+
+      <div class="scan-last" id="scanLast" hidden>
+        <div class="last-top">
+          <span class="last-time" id="lastTime">--:--:--</span>
+          <span class="last-result" id="lastResult">—</span>
+        </div>
+        <div class="last-detail" id="lastDetail">—</div>
+        <div class="last-code" id="lastCode">—</div>
       </div>
 
       <div class="scan-info">
@@ -154,7 +272,7 @@
       <div class="scan-status" id="status">正在載入專案資料…</div>
 
       <footer class="scan-ft">
-        <button class="ft-btn" type="button" id="btnRestart">重新啟動鏡頭</button>
+        <button class="ft-btn" type="button" id="btnCamera">關閉相機</button>
         <button class="ft-btn" type="button" id="btnClearVoter" hidden>清除投票人</button>
       </footer>
     </div>
@@ -163,19 +281,19 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
     <script src="js/firebase-config.js"></script>
     <script>
       (function () {
         const params = new URLSearchParams(location.search);
         const cid = String(params.get("c") || "").trim() || "default";
-        const modeParam = String(params.get("mode") || "").trim();
 
         const state = {
           projectId: String(params.get("p") || "").trim(),
           project: null,
+          communityName: "",
           roster: [],
           topics: [],
-          mode: modeParam === "vote" ? "vote" : "checkin",
           voterId: "",
           scanner: null,
           processing: false,
@@ -187,6 +305,7 @@
         let actorUid = "";
         let rosterUnsub = null;
         let topicsUnsub = null;
+        let projectUnsub = null;
         const el = (id) => document.getElementById(id);
 
         function pad2(n) { return String(n).padStart(2, "0"); }
@@ -204,11 +323,65 @@
           return [houseNo, subHouseNo].filter(Boolean).join("-") || "—";
         }
 
+        function escapeHtml(value) {
+          return String(value == null ? "" : value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+        }
+
         function setStatus(message, tone) {
           const statusEl = el("status");
           if (!statusEl) return;
           statusEl.textContent = String(message || "");
           statusEl.className = "scan-status" + (tone ? ` ${tone}` : "");
+        }
+
+        /* 語音提示：使用瀏覽器內建語音合成，不需連外服務 */
+        function speak(text) {
+          const phrase = String(text || "").trim();
+          if (!phrase) return;
+          try {
+            const synth = window.speechSynthesis;
+            if (!synth || typeof window.SpeechSynthesisUtterance !== "function") return;
+            synth.cancel();
+            const utter = new window.SpeechSynthesisUtterance(phrase);
+            utter.lang = "zh-TW";
+            utter.rate = 1.05;
+            utter.pitch = 1;
+            synth.speak(utter);
+          } catch {}
+        }
+
+        /* 掃碼結果：大字色塊顯示 ＋ 語音播報 */
+        function setResult(tone, title, detail, rawText) {
+          const statusEl = el("status");
+          const head = String(title || "").trim();
+          const sub = String(detail || "").trim();
+          if (statusEl) {
+            statusEl.className = "scan-status" + (tone ? ` ${tone}` : "");
+            statusEl.innerHTML = `<div class="scan-status-title">${escapeHtml(head)}</div>${sub ? `<div class="scan-status-detail">${escapeHtml(sub)}</div>` : ""}`;
+          }
+          renderLastScan(tone, head, sub, rawText);
+          speak(head);
+        }
+
+        /* 最近一次掃碼資訊 */
+        function renderLastScan(tone, title, detail, rawText) {
+          const box = el("scanLast");
+          if (!box) return;
+          box.hidden = false;
+          box.className = "scan-last" + (tone ? ` ${tone}` : "");
+          const now = new Date();
+          el("lastTime").textContent = `${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`;
+          el("lastResult").textContent = title || "—";
+          el("lastDetail").textContent = detail || "—";
+          const code = String(rawText || "").trim();
+          const codeEl = el("lastCode");
+          codeEl.textContent = code || "—";
+          codeEl.title = code;
         }
 
         function rosterRef() {
@@ -238,18 +411,23 @@
           };
         }
 
+        // 選項代號固定序列，與後台一致（第 1 個 T、第 2 個 F…）
+        const CV_OPTION_CODES = ["T", "F", "N", "A", "B", "C", "D", "E", "G", "H"];
+
         function normalizeTopic(doc) {
           const v = doc.data() || {};
           const options = Array.isArray(v.options) ? v.options : [];
           return {
             id: doc.id,
             title: String(v.title || "").trim() || "未命名議題",
+            code: String(v.code || "").trim(),
             enabled: v.enabled !== false,
             singleChoice: v.singleChoice !== false,
             order: Number(v.order || 0) || 0,
             options: options.map((opt, index) => ({
               id: String((opt && opt.id) || `opt${index + 1}`).trim(),
               label: String((opt && opt.label) || "").trim() || `選項 ${index + 1}`,
+              code: String((opt && opt.code) || "").trim() || CV_OPTION_CODES[index] || "",
               qrToken: String((opt && opt.qrToken) || "").trim(),
             })),
           };
@@ -258,8 +436,36 @@
         function parseScanText(rawText) {
           const text = String(rawText || "").trim();
           if (!text) return null;
-          const directEntry = state.roster.find((entry) => entry.qrToken && entry.qrToken === text);
-          if (directEntry) return { kind: "person", entryId: directEntry.id, token: directEntry.qrToken };
+          const personToken = text.endsWith("ADDT") ? text.slice(0, -4).trim() : text;
+          const directEntry = state.roster.find((entry) => entry.qrToken && entry.qrToken === personToken);
+          if (directEntry) return { kind: "person", token: directEntry.qrToken };
+          // 精簡投票碼：住戶 QR code碼 ＋ 議題代號 ＋ 選項代號（例：A001M01T）
+          const compactEntries = state.roster
+            .filter((entry) => entry.qrToken && text.startsWith(entry.qrToken))
+            .sort((a, b) => String(b.qrToken).length - String(a.qrToken).length);
+          for (let i = 0; i < compactEntries.length; i += 1) {
+            const compactEntry = compactEntries[i];
+            const rest = text.slice(String(compactEntry.qrToken).length);
+            if (!rest) continue;
+            const compactTopics = state.topics
+              .filter((topic) => String(topic.code || "").trim() && rest.startsWith(String(topic.code).trim()))
+              .sort((a, b) => String(b.code).trim().length - String(a.code).trim().length);
+            for (let j = 0; j < compactTopics.length; j += 1) {
+              const compactTopic = compactTopics[j];
+              const optionCode = rest.slice(String(compactTopic.code).trim().length);
+              const compactOption = (compactTopic.options || []).find((item) => String(item.code || "").trim() === optionCode);
+              if (compactOption) {
+                return {
+                  kind: "ballot",
+                  entryId: compactEntry.id,
+                  projectId: state.projectId,
+                  topicId: compactTopic.id,
+                  optionId: compactOption.id,
+                  token: compactOption.qrToken,
+                };
+              }
+            }
+          }
           let foundTopic = null;
           let foundOption = null;
           state.topics.some((topic) => {
@@ -275,9 +481,6 @@
             return { kind: "option", projectId: state.projectId, topicId: foundTopic.id, optionId: foundOption.id, token: foundOption.qrToken };
           }
           const parts = text.split(":");
-          if (parts.length >= 5 && parts[0] === "nwcv" && parts[1] === "person") {
-            return { kind: "person", projectId: String(parts[2] || "").trim(), entryId: String(parts[3] || "").trim(), token: String(parts[4] || "").trim() };
-          }
           if (parts.length >= 6 && parts[0] === "nwcv" && parts[1] === "option") {
             return { kind: "option", projectId: String(parts[2] || "").trim(), topicId: String(parts[3] || "").trim(), optionId: String(parts[4] || "").trim(), token: String(parts[5] || "").trim() };
           }
@@ -292,15 +495,8 @@
           el("infoTopics").textContent = `${enabledTopics.length} 題`;
           const voter = findEntry(state.voterId);
           el("infoVoter").textContent = voter ? `${voter.name}（${formatUnit(voter)}）` : "尚未選定";
-        }
-
-        function renderModes() {
-          document.querySelectorAll("[data-mode]").forEach((btn) => {
-            const isActive = String(btn.getAttribute("data-mode") || "") === state.mode;
-            btn.classList.toggle("is-active", isActive);
-          });
           const clearBtn = el("btnClearVoter");
-          if (clearBtn) clearBtn.hidden = state.mode !== "vote";
+          if (clearBtn) clearBtn.hidden = !voter;
         }
 
         async function applyCheckin(entry) {
@@ -321,106 +517,158 @@
 
         async function applyVote(entry, topic, option) {
           const now = Date.now();
-          const currentVote = entry.votes ? entry.votes[topic.id] : null;
-          const currentOptionIds = currentVote && Array.isArray(currentVote.optionIds) ? currentVote.optionIds : [];
-          const nextOptionIds = topic.singleChoice
-            ? [option.id]
-            : Array.from(new Set(currentOptionIds.concat(option.id)));
-          const votes = { ...(entry.votes || {}) };
-          votes[topic.id] = {
-            optionIds: nextOptionIds,
+          const vote = {
+            optionIds: [option.id],
             updatedAtMs: now,
             method: "qr",
             operatorUid: actorUid,
             operatorName: actorName,
           };
-          await rosterRef().doc(entry.id).set({
-            votes,
+          // 以點記法只更新「本次投票的議題」，避免多站同時投票時，
+          // 用整包 votes 覆蓋掉其他裝置剛寫入的其他議題票。
+          await rosterRef().doc(entry.id).update({
+            [`votes.${topic.id}`]: vote,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
             updatedAtMs: now,
-          }, { merge: true });
+          });
+          const votes = { ...(entry.votes || {}) };
+          votes[topic.id] = vote;
           entry.votes = votes;
           renderInfo();
         }
 
+        /* 該投票人是否已完成「全部啟用中的議題」投票 */
+        function allEnabledTopicsVoted(voter) {
+          const topics = state.topics.filter((topic) => topic.enabled !== false);
+          if (!topics.length) return false;
+          return topics.every((topic) => {
+            const vote = voter && voter.votes ? voter.votes[topic.id] : null;
+            return vote && Array.isArray(vote.optionIds) && vote.optionIds.length > 0;
+          });
+        }
+
+        function votedOptionLabels(voter, topic) {
+          const vote = voter && voter.votes ? voter.votes[topic.id] : null;
+          const ids = vote && Array.isArray(vote.optionIds) ? vote.optionIds : [];
+          const labels = ids
+            .map((id) => {
+              const found = topic.options.find((item) => item.id === id);
+              return found ? found.label : "";
+            })
+            .filter(Boolean);
+          return labels.join("、");
+        }
+
         async function handleScanText(rawText) {
           const project = state.project;
+          const code = String(rawText || "").trim();
           if (!project) {
-            setStatus("目前沒有啟用中的專案", "error");
+            setResult("error", "無法辨識", "目前沒有啟用中的專案", code);
             return;
           }
           const parsed = parseScanText(rawText);
           if (!parsed) {
-            setStatus("無法辨識此 QR code", "error");
+            setResult("error", "無法辨識", "此 QR code 不是本系統的報到戶號或投票議題", code);
+            return;
+          }
+          if (project.archived) {
+            setResult("error", "專案已封存", "此專案已封存，無法再掃碼報到或投票，請先解除封存", code);
             return;
           }
           if (parsed.projectId && parsed.projectId !== state.projectId) {
-            setStatus("掃到的是其他專案的 QR code", "error");
+            setResult("error", "無法辨識", "此 QR code 屬於其他專案", code);
             return;
           }
           if (parsed.kind === "person") {
-            const entry = findEntry(parsed.entryId);
-            if (!entry || entry.qrToken !== parsed.token) {
-              setStatus("找不到對應的名單住戶", "error");
-              return;
-            }
-            if (state.mode === "checkin") {
-              if (project.settings.allowQrCheckin === false) {
-                setStatus("此專案未開啟 QR 報到", "error");
-                return;
-              }
-              if (entry.checkedIn) {
-                setStatus(`${entry.name}（${formatUnit(entry)}）已於 ${formatDateTime(entry.checkedInAtMs)} 完成報到`, "warn");
-                return;
-              }
-              await applyCheckin(entry);
-              setStatus(`${entry.name}（${formatUnit(entry)}）已完成 QR 報到`, "success");
+            const entry = state.roster.find((item) => item.qrToken && item.qrToken === parsed.token) || null;
+            if (!entry) {
+              setResult("error", "無法辨識", "此 QR code 不屬於本專案的名單", code);
               return;
             }
             state.voterId = entry.id;
             renderInfo();
-            setStatus(`已選定投票人：${entry.name}（${formatUnit(entry)}），請掃描議題選項 QR code`, "success");
+            if (entry.checkedIn) {
+              setResult("warn", "重複報到", `${entry.name}（${formatUnit(entry)}）已於 ${formatDateTime(entry.checkedInAtMs)} 完成報到`, code);
+              return;
+            }
+            if (project.settings.allowQrCheckin === false) {
+              setResult("warn", "未開啟 QR 報到", `${entry.name}（${formatUnit(entry)}）已設為投票人`, code);
+              return;
+            }
+            await applyCheckin(entry);
+            setResult("success", "報到成功", `${entry.name}（${formatUnit(entry)}）已完成報到，請掃描議題選項 QR code`, code);
             return;
           }
-          if (state.mode !== "vote") {
-            setStatus("目前是報到掃碼模式，請先切換成投票掃碼", "error");
-            return;
+          if (parsed.kind === "ballot") {
+            const ballotEntry = state.roster.find((item) => item.id === parsed.entryId) || null;
+            if (!ballotEntry) {
+              setResult("error", "無法辨識", "此 QR code 不屬於本專案的名單", code);
+              return;
+            }
+            state.voterId = ballotEntry.id;
+            renderInfo();
           }
           if (project.settings.allowQrVote === false) {
-            setStatus("此專案未開啟 QR 投票", "error");
+            setResult("warn", "未開啟 QR 投票", "此專案未開放 QR code 投票", code);
             return;
           }
           const voter = findEntry(state.voterId);
           if (!voter) {
-            setStatus("請先掃描投票人的個人 QR code", "error");
+            setResult("warn", "請先掃描投票人", "請先掃描住戶個人 QR code，再掃描議題選項 QR code", code);
             return;
           }
-          if (project.settings.requireCheckinBeforeVote === true && !voter.checkedIn) {
-            setStatus(`${voter.name} 尚未報到，此專案需先報到才能投票`, "error");
+          if (project.settings.requireCheckinBeforeVote && !voter.checkedIn) {
+            setResult("warn", "尚未報到", `${voter.name} 尚未報到，需先完成報到才能投票`, code);
             return;
           }
           const topic = findTopic(parsed.topicId);
           const option = topic ? topic.options.find((item) => item.id === String(parsed.optionId || "").trim()) : null;
           if (!topic || !option || option.qrToken !== parsed.token) {
-            setStatus("找不到對應的議題選項", "error");
+            setResult("error", "無法辨識", "此 QR code 不屬於本專案的投票議題選項", code);
             return;
           }
+          // 只要該議題已有投票紀錄即視為已投（避免選項異動後誤判為未投票而重複計票）
+          const existingVote = voter.votes ? voter.votes[topic.id] : null;
+          if (existingVote && Array.isArray(existingVote.optionIds) && existingVote.optionIds.length > 0) {
+            const votedLabels = votedOptionLabels(voter, topic) || "原選項已異動";
+            setResult("warn", "重複投票", `${voter.name} 已對「${topic.title}」投過票（${votedLabels}）`, code);
+            return;
+          }
+          const voterName = voter.name;
           await applyVote(voter, topic, option);
-          setStatus(`${voter.name} 已投「${topic.title}」→ ${option.label}`, "success");
+          // 完成全部議題後自動清除投票人，避免下一位住戶誤記到本戶名下
+          if (allEnabledTopicsVoted(voter)) {
+            state.voterId = "";
+            renderInfo();
+            setResult("success", "投票成功", `${voterName} 已投「${topic.title}」→ ${option.label}；本戶已完成全部議題`, code);
+            return;
+          }
+          setResult("success", "投票成功", `${voterName} 已投「${topic.title}」→ ${option.label}`, code);
+        }
+
+        function renderCameraBtn() {
+          const btn = el("btnCamera");
+          if (!btn) return;
+          btn.textContent = state.scanner ? "關閉相機" : "開啟相機";
         }
 
         async function stopScanner() {
           const scanner = state.scanner;
           state.scanner = null;
-          if (!scanner) return;
+          if (!scanner) {
+            renderCameraBtn();
+            return;
+          }
           try { await scanner.stop(); } catch {}
           try { scanner.clear(); } catch {}
+          renderCameraBtn();
         }
 
         async function startScanner() {
           await stopScanner();
           if (typeof Html5Qrcode !== "function") {
             setStatus("掃碼元件尚未載入，請重新整理", "error");
+            renderCameraBtn();
             return;
           }
           let scanner = null;
@@ -428,6 +676,7 @@
             scanner = new Html5Qrcode("reader");
           } catch {
             setStatus("無法啟動掃描器", "error");
+            renderCameraBtn();
             return;
           }
           state.scanner = scanner;
@@ -436,8 +685,13 @@
               { facingMode: "environment" },
               {
                 fps: 10,
+                aspectRatio: 1.0,
+                disableFlip: false,
+                experimentalFeatures: { useBarCodeDetectorIfSupported: true },
                 qrbox: function (w, h) {
                   const size = Math.floor(Math.min(w, h, 260));
+                  // 讓白色掃描框與函式庫實際取樣的區域一致
+                  try { document.documentElement.style.setProperty("--scan-box", size + "px"); } catch {}
                   return { width: size, height: size };
                 },
               },
@@ -457,14 +711,46 @@
               function () {}
             );
           } catch {
+            state.scanner = null;
             setStatus("無法開啟相機，請確認已授權鏡頭權限", "error");
+          }
+          renderCameraBtn();
+        }
+
+        async function toggleCamera() {
+          if (state.scanner) {
+            await stopScanner();
+            setStatus("相機已關閉，可再點「開啟相機」繼續掃描。", "warn");
+            return;
+          }
+          await startScanner();
+        }
+
+        /* 掃碼槍輸入：掃碼槍以鍵盤模擬輸入並自動送出 Enter，收到後比照相機掃碼流程處理 */
+        async function handleGunInput() {
+          const input = el("gunInput");
+          if (!input) return;
+          const code = String(input.value || "").trim();
+          input.value = "";
+          if (!code) return;
+          if (state.processing) return;
+          state.processing = true;
+          try {
+            await handleScanText(code);
+          } catch (e) {
+            setStatus("掃碼處理失敗，請確認網路與權限", "error");
+          } finally {
+            state.processing = false;
+            input.focus();
           }
         }
 
         async function loadProject() {
+          const cfgSnap = await db.collection("communities").doc(cid).get();
+          const cfg = cfgSnap && cfgSnap.exists ? (cfgSnap.data() || {}) : {};
+          state.communityName = String(cfg.name || "").trim() || cid;
           if (!state.projectId) {
-            const cfgSnap = await db.collection("communities").doc(cid).get();
-            state.projectId = String(((cfgSnap.data() || {}).checkinVoteActiveProjectId) || "").trim();
+            state.projectId = String(cfg.checkinVoteActiveProjectId || "").trim();
           }
           if (!state.projectId) throw new Error("此社區尚未設定目前專案");
           const snap = await db.collection("communities").doc(cid).collection("checkinVoteProjects").doc(state.projectId).get();
@@ -473,13 +759,21 @@
           state.project = {
             id: snap.id,
             name: String(v.name || "").trim() || "未命名專案",
+            archived: v.archived === true,
             settings: {
               allowQrCheckin: !(v.settings && v.settings.allowQrCheckin === false),
               allowQrVote: !(v.settings && v.settings.allowQrVote === false),
-              requireCheckinBeforeVote: !!(v.settings && v.settings.requireCheckinBeforeVote === true),
+              // 預設沿用「需先報到」，僅在專案明確設為「否」時才放行未報到者投票
+              requireCheckinBeforeVote: !(v.settings && v.settings.requireCheckinBeforeVote === false),
             },
           };
-          el("projectName").textContent = `社區：${cid}｜${state.project.name}`;
+          renderProjectHeader();
+        }
+
+        function renderProjectHeader() {
+          const project = state.project;
+          if (!project || !el("projectName")) return;
+          el("projectName").textContent = `社區：${state.communityName}｜${project.name}${project.archived ? "（封存）" : ""}`;
         }
 
         function subscribeCollections() {
@@ -489,28 +783,52 @@
           }, () => setStatus("名單載入失敗，請確認權限", "error"));
           topicsUnsub = db.collection("communities").doc(cid).collection("checkinVoteProjects").doc(state.projectId)
             .collection("topics").onSnapshot((snap) => {
-              state.topics = (snap && snap.docs ? snap.docs : []).map(normalizeTopic)
-                .filter((topic) => topic.enabled !== false)
-                .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title, "zh-Hant"));
+              const allTopics = (snap && snap.docs ? snap.docs : []).map(normalizeTopic)
+                .sort((a, b) => (a.order - b.order));
+              // 與後台一致：未存代號時依排序序位補上（M01、M02…），確保精簡投票碼可解析
+              allTopics.forEach((topic, index) => {
+                if (!String(topic.code || "").trim()) topic.code = `M${String(index + 1).padStart(2, "0")}`;
+              });
+              state.topics = allTopics.filter((topic) => topic.enabled !== false);
               renderInfo();
             }, () => setStatus("議題載入失敗，請確認權限", "error"));
         }
 
-        document.querySelectorAll("[data-mode]").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const next = String(btn.getAttribute("data-mode") || "checkin").trim();
-            if (next === state.mode) return;
-            state.mode = next === "vote" ? "vote" : "checkin";
-            if (state.mode === "checkin") state.voterId = "";
-            renderModes();
-            renderInfo();
-            setStatus(state.mode === "checkin" ? "報到掃碼：請掃描住戶個人 QR code。" : "投票掃碼：請先掃描投票人的個人 QR code，再掃描議題選項 QR code。");
-          });
+        /* 即時監聽專案：一旦被管理端封存（或調整設定），本頁立即停止寫入 */
+        function subscribeProject() {
+          projectUnsub = db.collection("communities").doc(cid).collection("checkinVoteProjects").doc(state.projectId)
+            .onSnapshot((snap) => {
+              if (!snap || !snap.exists || !state.project) return;
+              const v = snap.data() || {};
+              state.project.archived = v.archived === true;
+              state.project.name = String(v.name || "").trim() || state.project.name;
+              state.project.settings = {
+                allowQrCheckin: !(v.settings && v.settings.allowQrCheckin === false),
+                allowQrVote: !(v.settings && v.settings.allowQrVote === false),
+                requireCheckinBeforeVote: !(v.settings && v.settings.requireCheckinBeforeVote === false),
+              };
+              renderProjectHeader();
+              if (state.project.archived) {
+                setResult("error", "專案已封存", "此專案已封存，無法再掃碼報到或投票，請先解除封存");
+              }
+            }, () => {});
+        }
+
+        el("btnCamera").addEventListener("click", () => {
+          toggleCamera();
         });
 
-        el("btnRestart").addEventListener("click", () => {
-          startScanner();
-        });
+        /* 掃碼槍：聚焦輸入框，掃描完成自動送出 Enter 即觸發處理 */
+        (function bindGunInput() {
+          const input = el("gunInput");
+          if (!input) return;
+          input.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.keyCode === 13) {
+              event.preventDefault();
+              handleGunInput();
+            }
+          });
+        })();
 
         el("btnClearVoter").addEventListener("click", () => {
           state.voterId = "";
@@ -522,9 +840,51 @@
           window.close();
         });
 
+        /* 分享：產生本頁網址的 QR code，掃描者無須登入即可操作 */
+        function renderShareQr() {
+          const url = location.href;
+          el("shareUrl").textContent = url;
+          const box = el("shareQrBox");
+          if (typeof qrcode !== "function") {
+            box.innerHTML = `<div class="empty">QR code 元件載入失敗</div>`;
+            return;
+          }
+          try {
+            const qr = qrcode(0, "M");
+            qr.addData(url);
+            qr.make();
+            const count = qr.getModuleCount();
+            const quiet = 2;
+            const size = count + quiet * 2;
+            let path = "";
+            for (let r = 0; r < count; r += 1) {
+              for (let c = 0; c < count; c += 1) {
+                if (qr.isDark(r, c)) path += `M${c + quiet} ${r + quiet}h1v1h-1z`;
+              }
+            }
+            box.innerHTML = `<svg viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges" role="img" aria-label="本頁 QR code"><rect width="${size}" height="${size}" fill="#fff" /><path d="${path}" fill="#111827" /></svg>`;
+          } catch {
+            box.innerHTML = `<div class="empty">QR code 產生失敗</div>`;
+          }
+        }
+
+        el("btnShare").addEventListener("click", () => {
+          renderShareQr();
+          el("shareModal").hidden = false;
+        });
+
+        el("shareModalClose").addEventListener("click", () => {
+          el("shareModal").hidden = true;
+        });
+
+        el("shareModal").addEventListener("click", (event) => {
+          if (event.target === el("shareModal")) el("shareModal").hidden = true;
+        });
+
         window.addEventListener("beforeunload", () => {
           if (rosterUnsub) rosterUnsub();
           if (topicsUnsub) topicsUnsub();
+          if (projectUnsub) projectUnsub();
           stopScanner();
         });
 
@@ -539,13 +899,21 @@
           firebase.auth().onAuthStateChanged((user) => {
             actorUid = user ? String(user.uid || "") : "";
             actorName = user ? String(user.displayName || user.email || "掃碼人員") : "掃碼人員";
-            if (!user) setStatus("尚未登入，掃碼結果將無法寫入", "warn");
+            // 依權限設定，免登入仍可寫入報到與投票；僅操作人會記為「掃碼人員」
+            if (!user) setStatus("未登入：仍可進行報到與投票，操作人將標記為「掃碼人員」", "warn");
           });
-          renderModes();
+          renderInfo();
           loadProject()
             .then(() => {
               subscribeCollections();
-              setStatus(state.mode === "checkin" ? "報到掃碼：請掃描住戶個人 QR code。" : "投票掃碼：請先掃描投票人的個人 QR code，再掃描議題選項 QR code。");
+              subscribeProject();
+              if (!state.project.settings.allowQrCheckin && state.project.settings.requireCheckinBeforeVote) {
+                setStatus("本專案未開放 QR 報到、且要求先報到，掃碼站無法完成報到；請改用人工報到或請管理員開啟 QR 報到。", "warn");
+              } else {
+                setStatus("請掃描住戶個人 QR code 完成報到，接著掃描議題選項 QR code 投票。");
+              }
+              const gun = el("gunInput");
+              if (gun) gun.focus();
               return startScanner();
             })
             .catch((e) => {

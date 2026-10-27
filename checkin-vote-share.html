@@ -172,6 +172,45 @@
         font-weight: 700;
       }
       .view-note:empty { display: none; }
+      /* 議題快速標籤列：點擊可捲動並標示對應議題卡 */
+      .topic-chips {
+        flex: 0 0 auto;
+        display: flex;
+        flex-wrap: nowrap;
+        gap: clamp(6px, 0.8vw, 10px);
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+        padding-bottom: 2px;
+      }
+      .topic-chip {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        border: 1px solid var(--border);
+        background: #fff;
+        color: #374151;
+        border-radius: 999px;
+        padding: clamp(4px, 0.8vh, 8px) clamp(10px, 1.2vw, 18px);
+        font-family: inherit;
+        font-size: clamp(12px, 1.2vw, 18px);
+        font-weight: 800;
+        cursor: pointer;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .topic-chip.is-active {
+        background: var(--brand);
+        border-color: var(--brand);
+        color: #fff;
+      }
+      .topic-card.is-flash { animation: topicFlash 1.2s ease; }
+      @keyframes topicFlash {
+        0% { box-shadow: 0 0 0 0 rgba(211, 47, 47, 0.6); }
+        100% { box-shadow: 0 0 0 14px rgba(211, 47, 47, 0); }
+      }
       .empty {
         display: flex;
         align-items: center;
@@ -261,6 +300,10 @@
         background: linear-gradient(90deg, #ef5350, var(--brand));
         transition: width 320ms ease;
       }
+      /* 該軌進度達到設定門檻時轉為綠色 */
+      .ck-progress > i.is-pass {
+        background: linear-gradient(90deg, #43a047, #16a34a);
+      }
 
       .ck-list-wrap {
         flex: 1;
@@ -308,6 +351,19 @@
       }
       /* 投票資訊：顯示全部議題，超出範圍時可上下捲動 */
       .vote-grid {
+        flex: 1;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-auto-rows: min-content;
+        align-content: start;
+        gap: clamp(8px, 1.4vh, 16px);
+      }
+      .election-grid {
         flex: 1;
         min-height: 0;
         overflow-x: hidden;
@@ -405,6 +461,84 @@
       .opt-row.is-pass .opt-bar > i { background: var(--ok); }
       .opt-row.is-pass .opt-count { color: var(--ok); }
       .opt-flag { font-size: clamp(14px, 1.5vw, 22px); font-weight: 800; color: var(--ok); }
+      .election-card {
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: clamp(8px, 1.2vh, 14px);
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: clamp(8px, 1.2vh, 16px);
+        min-width: 0;
+      }
+      .election-info {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: clamp(4px, 0.6vh, 8px);
+      }
+      .election-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+      .election-title {
+        font-size: clamp(22px, 2.4vw, 38px);
+        font-weight: 900;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .election-tag {
+        flex: 0 0 auto;
+        font-size: clamp(15px, 1.6vw, 24px);
+        font-weight: 800;
+        color: var(--brand);
+        background: rgba(211, 47, 47, 0.1);
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+      .election-meta { font-size: clamp(14px, 1.35vw, 22px); font-weight: 700; color: var(--muted); line-height: 1.45; }
+      .cand-list {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: clamp(8px, 1vh, 12px);
+      }
+      .cand-row {
+        min-width: 0;
+        background: #f9fafb;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: clamp(8px, 1.1vh, 14px) clamp(10px, 1.1vw, 18px);
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: clamp(8px, 1vw, 16px);
+      }
+      .cand-row.is-pass {
+        background: rgba(22, 163, 74, 0.07);
+        border-color: rgba(22, 163, 74, 0.45);
+      }
+      .cand-row.is-elect {
+        border-color: rgba(211, 47, 47, 0.35);
+        box-shadow: inset 0 0 0 1px rgba(211, 47, 47, 0.12);
+      }
+      .cand-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+      .cand-name { font-weight: 900; font-size: clamp(20px, 2.1vw, 32px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .cand-sub { font-weight: 700; color: var(--muted); font-size: clamp(12px, 1.05vw, 16px); }
+      .cand-right { text-align: right; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+      .cand-count { font-weight: 900; font-size: clamp(20px, 2vw, 32px); color: var(--ink); line-height: 1; }
+      .cand-rate { font-weight: 800; color: var(--muted); font-size: clamp(12px, 1vw, 16px); }
+      .cand-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        padding: 3px 10px;
+        font-size: clamp(12px, 1vw, 15px);
+        font-weight: 900;
+      }
+      .cand-badge.elected { color: #fff; background: var(--brand); }
+      .cand-badge.alternate { color: #854d0e; background: #fef3c7; }
+      .cand-badge.tie { color: #7c2d12; background: #ffedd5; }
+      .cand-badge.pass { color: #166534; background: #dcfce7; }
+      .cand-badge.none { color: var(--muted); background: #eef0f3; }
 
       /* 底部子分頁按鈕 */
       .share-tabs {
@@ -462,6 +596,12 @@
           column-gap: clamp(10px, 1.4vw, 24px);
           row-gap: 0;
         }
+        .election-card {
+          grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+          column-gap: clamp(10px, 1.4vw, 24px);
+          row-gap: 0;
+          align-items: start;
+        }
       }
     </style>
   </head>
@@ -511,13 +651,21 @@
 
         <section class="view view-vote" id="viewVote" aria-label="投票資訊" hidden>
           <div class="view-note" id="voteMore"></div>
+          <div class="topic-chips" id="voteChips"></div>
           <div class="vote-grid" id="voteGrid"></div>
+        </section>
+
+        <section class="view view-election" id="viewElection" aria-label="選舉資訊" hidden>
+          <div class="view-note" id="electionMore"></div>
+          <div class="topic-chips" id="electionChips"></div>
+          <div class="election-grid" id="electionGrid"></div>
         </section>
       </main>
 
       <nav class="share-tabs" aria-label="資訊分頁">
         <button class="tab-btn is-active" type="button" data-tab="checkin">報到資訊</button>
         <button class="tab-btn" type="button" data-tab="vote">投票資訊</button>
+        <button class="tab-btn" type="button" data-tab="election">選舉資訊</button>
       </nav>
     </div>
 
@@ -547,10 +695,20 @@
         const cid = String(params.get("c") || "").trim() || "default";
         let projectId = String(params.get("p") || "").trim();
 
-        const state = { communityName: cid, project: null, roster: [], topics: [], tab: "checkin" };
+        const state = {
+          communityName: cid,
+          project: null,
+          roster: [],
+          topics: [],
+          elections: [],
+          tab: "checkin",
+          voteIndex: 0,
+          electionIndex: 0,
+        };
         let db = null;
         let rosterUnsub = null;
         let topicsUnsub = null;
+        let electionsUnsub = null;
         let resizeTimer = 0;
 
         const el = (id) => document.getElementById(id);
@@ -569,6 +727,7 @@
             id: doc.id,
             name: String(v.name || "").trim() || "住戶",
             houseNo: String(v.houseNo || "").trim(),
+            building: String(v.building || "").trim(),
             subHouseNo: String(v.subHouseNo || "").trim(),
             ownership: String(v.ownership || "").trim(),
             checkedIn: v.checkedIn === true,
@@ -599,6 +758,37 @@
             })),
             passCountPct: toOptionalPct(v.passCountPct),
             passSharePct: toOptionalPct(v.passSharePct),
+          };
+        }
+
+        function normalizeElection(doc) {
+          const v = doc.data() || {};
+          const candidates = Array.isArray(v.candidates) ? v.candidates : [];
+          const tally = v.tally && typeof v.tally === "object" ? v.tally : {};
+          return {
+            id: doc.id,
+            title: String(v.title || "").trim() || "未命名選舉",
+            code: String(v.code || "").trim(),
+            enabled: v.enabled !== false,
+            order: Number(v.order || 0) || 0,
+            seats: Math.max(1, Number(v.seats || 0) || 1),
+            alternates: Math.max(0, Number(v.alternates || 0) || 0),
+            votesPerHousehold: Math.max(1, Number(v.votesPerHousehold || 0) || 1),
+            scope: String(v.scope || "").trim() === "building" ? "building" : "all",
+            scopeBuildings: Array.isArray(v.scopeBuildings) ? v.scopeBuildings.map((x) => String(x || "").trim()).filter(Boolean) : [],
+            candidates: candidates.map((cand, index) => ({
+              id: String((cand && cand.id) || `cand${index + 1}`).trim(),
+              name: String((cand && cand.name) || "").trim() || `候選人 ${index + 1}`,
+              code: String((cand && cand.code) || "").trim(),
+              houseNo: String((cand && cand.houseNo) || "").trim(),
+              building: String((cand && cand.building) || "").trim(),
+              orderIndex: index,
+            })),
+            tally: candidates.reduce((out, cand, index) => {
+              const candId = String((cand && cand.id) || `cand${index + 1}`).trim();
+              out[candId] = Math.max(0, Math.floor(Number(tally[candId] || 0) || 0));
+              return out;
+            }, {}),
           };
         }
 
@@ -665,19 +855,122 @@
           };
         }
 
+        function voteBaseRoster() {
+          const list = Array.isArray(state.roster) ? state.roster.filter(Boolean) : [];
+          return list.filter((entry) => entry.checkedIn);
+        }
+
+        function electionResolvedScope(election) {
+          if (String((election && election.scope) || "").trim() === "building") {
+            const explicitBuildings = Array.isArray(election && election.scopeBuildings)
+              ? election.scopeBuildings.map((x) => String(x || "").trim()).filter(Boolean)
+              : [];
+            if (explicitBuildings.length) return { scope: "building", buildings: explicitBuildings };
+          }
+          const candidateBuildings = Array.from(new Set(
+            (Array.isArray(election && election.candidates) ? election.candidates : [])
+              .map((cand) => String((cand && cand.building) || "").trim())
+              .filter(Boolean)
+          ));
+          if (candidateBuildings.length) return { scope: "building", buildings: candidateBuildings };
+          return { scope: "all", buildings: [] };
+        }
+
+        function electionScopeRoster(election) {
+          const base = voteBaseRoster();
+          const resolved = electionResolvedScope(election);
+          if (resolved.scope !== "building") return base;
+          const buildings = new Set(resolved.buildings);
+          if (!buildings.size) return base;
+          return base.filter((entry) => buildings.has(String((entry && entry.building) || "").trim()));
+        }
+
+        function candidateHouseNo(candidate) {
+          const own = String(candidate && candidate.houseNo || "").trim();
+          if (own) return own;
+          const name = String(candidate && candidate.name || "").trim();
+          const building = String(candidate && candidate.building || "").trim();
+          if (!name) return "";
+          const list = Array.isArray(state.roster) ? state.roster : [];
+          const exact = list.find((entry) => String(entry.name || "").trim() === name && String(entry.building || "").trim() === building);
+          if (exact && String(exact.houseNo || "").trim()) return String(exact.houseNo || "").trim();
+          const byName = list.find((entry) => String(entry.name || "").trim() === name);
+          return byName ? String(byName.houseNo || "").trim() : "";
+        }
+
+        function electionStats(election) {
+          const resolvedScope = electionResolvedScope(election);
+          const scopeRoster = electionScopeRoster(election);
+          const totalCount = scopeRoster.length;
+          const votesPerHousehold = Math.max(1, Number((election && election.votesPerHousehold) || 1) || 1);
+          const tally = election && election.tally && typeof election.tally === "object" ? election.tally : {};
+          const readCount = (candId) => Math.max(0, Math.floor(Number(tally[candId] || 0) || 0));
+          const maxVotes = totalCount * votesPerHousehold;
+          const castVotes = (Array.isArray(election && election.candidates) ? election.candidates : [])
+            .reduce((sum, cand) => sum + readCount(cand.id), 0);
+          const candidates = (Array.isArray(election && election.candidates) ? election.candidates : []).map((cand, index) => {
+            const count = readCount(cand.id);
+            const countRatePct = totalCount ? (count / totalCount) * 100 : 0;
+            return {
+              ...cand,
+              orderIndex: Number(cand.orderIndex || index) || 0,
+              count,
+              countRatePct,
+              countPassed: count > 0,
+              passed: totalCount > 0 && count > 0,
+            };
+          });
+          const ranked = candidates.slice().sort((a, b) => (b.count - a.count) || (a.orderIndex - b.orderIndex));
+          const electedCut = Math.max(0, Math.min(ranked.length, Number(election && election.seats) || 0));
+          const candidatePool = ranked.filter((item) => item.passed);
+          const elected = candidatePool.slice(0, electedCut);
+          const electedIds = new Set(elected.map((item) => item.id));
+          const alternates = (() => {
+            const tail = candidatePool.filter((item) => !electedIds.has(item.id));
+            const limit = Math.max(0, Number(election && election.alternates) || 0);
+            return limit > 0 ? tail.slice(0, limit) : tail;
+          })();
+          const alternateIds = new Set(alternates.map((item) => item.id));
+          const lastElected = elected.length ? elected[elected.length - 1].count : null;
+          const lastAlternate = alternates.length ? alternates[alternates.length - 1].count : null;
+          const enriched = ranked.map((item) => {
+            const isTie = (electedIds.has(item.id) && lastElected !== null
+              && ranked.filter((x) => x.count === lastElected).length > 1)
+              || (alternateIds.has(item.id) && lastAlternate !== null
+                && ranked.filter((x) => x.count === lastAlternate).length > 1);
+            return {
+              ...item,
+              isElected: electedIds.has(item.id),
+              isAlternate: alternateIds.has(item.id),
+              isTie,
+            };
+          });
+          return {
+            title: election.title,
+            code: election.code,
+            scope: resolvedScope.scope,
+            scopeBuildings: resolvedScope.buildings,
+            seats: Math.max(1, Number(election && election.seats) || 1),
+            alternates: Math.max(0, Number(election && election.alternates) || 0),
+            votesPerHousehold,
+            totalCount,
+            maxVotes,
+            castVotes,
+            candidates: enriched,
+          };
+        }
+
         function topicStats(topic) {
           const settings = projectSettings();
-          const list = state.roster;
-          /* 有報到才能投票：議題一律以「實際報到人數」為分母 */
-          const checkedList = list.filter((entry) => entry && entry.checkedIn);
-          const totalCount = checkedList.length;
-          const totalShare = ownershipSum(checkedList);
+          const list = voteBaseRoster();
+          const totalCount = list.length;
+          const totalShare = ownershipSum(list);
           const shareKnown = totalShare > 0;
           const usingDefaultCount = topic.passCountPct === null || topic.passCountPct === undefined;
           const usingDefaultShare = topic.passSharePct === null || topic.passSharePct === undefined;
           const passCountPct = usingDefaultCount ? settings.topicPassCountPct : Number(topic.passCountPct);
           const passSharePct = usingDefaultShare ? settings.topicPassSharePct : Number(topic.passSharePct);
-          const voters = checkedList.filter((entry) => {
+          const voters = list.filter((entry) => {
             const vote = entry.votes ? entry.votes[topic.id] : null;
             return vote && Array.isArray(vote.optionIds) && vote.optionIds.length > 0;
           });
@@ -765,55 +1058,134 @@
           const verdictCard = el("ckVerdictCard");
           verdictCard.classList.toggle("tone-pass", s.passed);
           verdictCard.classList.toggle("tone-fail", !s.passed);
-          el("ckBar").style.width = `${Math.min(100, s.countRatePct)}%`;
-          el("ckShareBar").style.width = `${Math.min(100, s.shareRatePct)}%`;
+          const countBar = el("ckBar");
+          countBar.style.width = `${Math.min(100, s.countRatePct)}%`;
+          countBar.classList.toggle("is-pass", Number(s.countRatePct || 0) >= Number(s.targetCountPct || 0));
+          const shareBar = el("ckShareBar");
+          shareBar.style.width = `${Math.min(100, s.shareRatePct)}%`;
+          shareBar.classList.toggle("is-pass", s.shareKnown && Number(s.shareRatePct || 0) >= Number(s.targetSharePct || 0));
         }
 
         function renderVote() {
           const topics = state.topics;
           const grid = el("voteGrid");
+          const chips = el("voteChips");
+          const more = el("voteMore");
 
           if (!topics.length) {
             grid.innerHTML = `<div class="empty">此專案尚無啟用中的議題</div>`;
-            el("voteMore").textContent = "";
+            if (chips) chips.innerHTML = "";
+            if (more) more.textContent = "";
             return;
           }
 
-          grid.innerHTML = topics.map((topic) => {
-            const s = topicStats(topic);
+          state.voteIndex = Math.max(0, Math.min(topics.length - 1, Number(state.voteIndex) || 0));
+          const activeIndex = state.voteIndex;
+          const topic = topics[activeIndex];
+          const s = topicStats(topic);
 
-            const rows = topic.options.map((opt) => {
-              const o = s.options.find((item) => item.id === opt.id)
-                || { count: 0, countRatePct: 0, shareRatePct: 0, passed: false };
-              return `
-                <div class="opt-row${o.passed ? " is-pass" : ""}">
-                  <div class="opt-top">
-                    <span class="opt-label">${escapeHtml(opt.label)}</span>
-                    <span class="opt-count">${o.count} 票<br />戶數 ${pctText(o.countRatePct)}${s.shareKnown ? `<br />區分所有權 ${pctText(o.shareRatePct)}` : ""}</span>
-                  </div>
-                  <div class="opt-bar"><i style="width:${Math.min(100, o.countRatePct)}%"></i></div>
-                  ${o.passed ? `<div class="opt-flag">已達通過門檻</div>` : ""}
-                </div>
-              `;
-            }).join("");
+          // 子分頁：一次只顯示一個議題
+          if (chips) {
+            chips.innerHTML = topics.map((topic, index) =>
+              `<button class="topic-chip${index === activeIndex ? " is-active" : ""}" type="button" data-topic-index="${index}">${escapeHtml(topic.title)}</button>`
+            ).join("");
+          }
 
+          const rows = topic.options.map((opt) => {
+            const o = s.options.find((item) => item.id === opt.id)
+              || { count: 0, countRatePct: 0, shareRatePct: 0, passed: false };
             return `
-              <article class="topic-card">
-                <div class="topic-info">
-                  <div class="topic-hd">
-                    <span class="topic-title">${escapeHtml(topic.title)}</span>
-                    <span class="topic-tag">${topic.singleChoice ? "單選" : "多選"}</span>
-                  </div>
-                  <div class="topic-meta">投票 ${s.voterCount}/${s.totalCount} 戶</div>
+              <div class="opt-row${o.passed ? " is-pass" : ""}">
+                <div class="opt-top">
+                  <span class="opt-label">${escapeHtml(opt.label)}</span>
+                  <span class="opt-count">${o.count} 票<br />戶數 ${pctText(o.countRatePct)}${s.shareKnown ? `<br />區分所有權 ${pctText(o.shareRatePct)}` : ""}</span>
                 </div>
-                <div class="opt-list">${rows}</div>
-              </article>
+                <div class="opt-bar"><i style="width:${Math.min(100, o.countRatePct)}%"></i></div>
+                ${o.passed ? `<div class="opt-flag">已達通過門檻</div>` : ""}
+              </div>
             `;
           }).join("");
 
-          // 議題不裁切，全部顯示；超出範圍時由上層容器提供捲動
-          const more = el("voteMore");
-          if (more) more.textContent = "";
+          grid.innerHTML = `
+            <article class="topic-card" data-topic-index="${activeIndex}">
+              <div class="topic-info">
+                <div class="topic-hd">
+                  <span class="topic-title">${escapeHtml(topic.title)}</span>
+                  <span class="topic-tag">${topic.singleChoice ? "單選" : "多選"}</span>
+                </div>
+                <div class="topic-meta">投票 ${s.voterCount}/${s.totalCount} 戶</div>
+              </div>
+              <div class="opt-list">${rows}</div>
+            </article>
+          `;
+
+          if (more) more.textContent = `子分頁 ${activeIndex + 1} / ${topics.length}`;
+        }
+
+        function renderElection() {
+          const elections = state.elections;
+          const grid = el("electionGrid");
+          const more = el("electionMore");
+          const chips = el("electionChips");
+          if (!elections.length) {
+            grid.innerHTML = `<div class="empty">此專案尚無啟用中的選舉</div>`;
+            if (chips) chips.innerHTML = "";
+            if (more) more.textContent = "";
+            return;
+          }
+
+          state.electionIndex = Math.max(0, Math.min(elections.length - 1, Number(state.electionIndex) || 0));
+          const activeIndex = state.electionIndex;
+          const election = elections[activeIndex];
+          const s = electionStats(election);
+          const metaScope = s.scope === "building" && s.scopeBuildings.length
+            ? `投票權範圍：${escapeHtml(s.scopeBuildings.join("、"))}`
+            : "投票權範圍：全部住戶";
+
+          if (chips) {
+            chips.innerHTML = elections.map((item, index) =>
+              `<button class="topic-chip${index === activeIndex ? " is-active" : ""}" type="button" data-election-index="${index}">${escapeHtml(item.title)}</button>`
+            ).join("");
+          }
+
+          const rows = s.candidates.map((cand) => {
+            let badge = `<span class="cand-badge none">未當選</span>`;
+            if (cand.isTie) badge = `<span class="cand-badge tie">同票待抽籤</span>`;
+            else if (cand.isElected) badge = `<span class="cand-badge elected">當選</span>`;
+            else if (cand.isAlternate) badge = `<span class="cand-badge alternate">候補</span>`;
+            else if (cand.passed) badge = `<span class="cand-badge pass">有票</span>`;
+            return `
+              <div class="cand-row${cand.passed ? " is-pass" : ""}${cand.isElected || cand.isAlternate ? " is-elect" : ""}">
+                <div class="cand-main">
+                  <div class="cand-name">${escapeHtml(cand.name)}</div>
+                    <div class="cand-sub">${escapeHtml([candidateHouseNo(cand), String(cand.building || "").trim()].filter(Boolean).join("｜") || "全部住戶")}</div>
+                </div>
+                <div class="cand-right">
+                  <div class="cand-count">${cand.count} 票</div>
+                  <div class="cand-rate">得票率 ${pctText(cand.countRatePct)}</div>
+                  ${badge}
+                </div>
+              </div>
+            `;
+          }).join("");
+
+          grid.innerHTML = `
+            <article class="election-card">
+              <div class="election-info">
+                <div class="election-hd">
+                  <span class="election-title">${escapeHtml(s.title)}</span>
+                  <span class="election-tag">${escapeHtml(s.code || "選舉")}</span>
+                </div>
+                <div class="election-meta">
+                  應選 ${s.seats} 名／候補 ${s.alternates || "不限"}<br />
+                  ${metaScope}<br />
+                  已計票 ${s.castVotes}/${s.maxVotes} 票｜報到 ${s.totalCount} 人 × 每戶 ${s.votesPerHousehold} 票
+                </div>
+              </div>
+              <div class="cand-list">${rows || `<div class="empty">此選舉尚無候選人</div>`}</div>
+            </article>
+          `;
+          if (more) more.textContent = `子分頁 ${activeIndex + 1} / ${elections.length}`;
         }
 
         /* 抬頭即時時鐘：日期（YYYY-MM-DD）與時間（HH:MM:SS）分兩行 */
@@ -832,11 +1204,12 @@
 
         function renderCurrent() {
           if (state.tab === "checkin") renderCheckin();
-          else renderVote();
+          else if (state.tab === "vote") renderVote();
+          else renderElection();
         }
 
         function switchTab(tab) {
-          const next = tab === "vote" ? "vote" : "checkin";
+          const next = tab === "vote" || tab === "election" ? tab : "checkin";
           if (next === state.tab) return;
           state.tab = next;
           document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -844,6 +1217,7 @@
           });
           el("viewCheckin").hidden = next !== "checkin";
           el("viewVote").hidden = next !== "vote";
+          el("viewElection").hidden = next !== "election";
           renderCurrent();
         }
 
@@ -867,11 +1241,43 @@
           }, () => {
             el("voteGrid").innerHTML = `<div class="empty">議題載入失敗，請確認權限</div>`;
           });
+
+          electionsUnsub = base().collection("elections").onSnapshot((snap) => {
+            state.elections = (snap && snap.docs ? snap.docs : [])
+              .map(normalizeElection)
+              .filter((election) => election.enabled !== false)
+              .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title, "zh-Hant"));
+            if (state.tab === "election") renderElection();
+          }, () => {
+            el("electionGrid").innerHTML = `<div class="empty">選舉載入失敗，請確認權限</div>`;
+          });
         }
 
         document.querySelectorAll(".tab-btn").forEach((btn) => {
           btn.addEventListener("click", () => switchTab(String(btn.getAttribute("data-tab") || "checkin")));
         });
+
+        // 點擊投票子分頁標籤：切換目前議題
+        const voteChipsEl = el("voteChips");
+        if (voteChipsEl) {
+          voteChipsEl.addEventListener("click", (evt) => {
+            const btn = evt.target.closest(".topic-chip");
+            if (!btn) return;
+            state.voteIndex = Math.max(0, Number(btn.getAttribute("data-topic-index") || 0) || 0);
+            renderVote();
+          });
+        }
+
+        // 點擊選舉子分頁標籤：切換目前選舉
+        const electionChipsEl = el("electionChips");
+        if (electionChipsEl) {
+          electionChipsEl.addEventListener("click", (evt) => {
+            const btn = evt.target.closest(".topic-chip");
+            if (!btn) return;
+            state.electionIndex = Math.max(0, Number(btn.getAttribute("data-election-index") || 0) || 0);
+            renderElection();
+          });
+        }
 
         window.addEventListener("resize", () => {
           window.clearTimeout(resizeTimer);
@@ -881,6 +1287,7 @@
         window.addEventListener("beforeunload", () => {
           if (rosterUnsub) rosterUnsub();
           if (topicsUnsub) topicsUnsub();
+          if (electionsUnsub) electionsUnsub();
         });
 
         /* 等待 Auth 還原完成再讀取 Firestore，避免以未登入身分發出請求而被規則拒絕 */
