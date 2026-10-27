@@ -628,7 +628,7 @@
             <div class="stat tone-ok"><div class="stat-label">已報到</div><div class="stat-value" id="ckDone">0<small>戶</small></div></div>
             <div class="stat"><div class="stat-label">未到</div><div class="stat-value" id="ckMiss">0<small>戶</small></div></div>
             <div class="stat tone-rate">
-              <div class="stat-label">報到率（戶數／區分所有權）</div>
+              <div class="stat-label" id="ckRateLabel">報到率（戶數／區分所有權）</div>
               <div class="stat-value" id="ckRate">0%<small>／0%</small></div>
               <div class="stat-sub" id="ckTarget">門檻 戶數 50%／區分所有權 50%</div>
             </div>
@@ -640,7 +640,7 @@
           </div>
           <div class="ck-bars">
             <div class="ck-bar-row"><span class="ck-bar-label">戶數</span><div class="ck-progress"><i id="ckBar"></i></div></div>
-            <div class="ck-bar-row"><span class="ck-bar-label">區分所有權</span><div class="ck-progress"><i id="ckShareBar"></i></div></div>
+            <div class="ck-bar-row" id="ckShareRow"><span class="ck-bar-label">區分所有權</span><div class="ck-progress"><i id="ckShareBar"></i></div></div>
           </div>
           <div class="ck-list-wrap ck-qr-wrap">
             <div class="ck-list-title">掃碼瀏覽本頁 <span id="qrStatus"></span></div>
@@ -805,6 +805,8 @@
             checkinTargetSharePct: pct(v.checkinTargetSharePct, 50),
             topicPassCountPct: pct(v.topicPassCountPct, 50),
             topicPassSharePct: pct(v.topicPassSharePct, 50),
+            /* 區分所有權顯示：預設開啟；關閉時僅以票數（戶數）為準 */
+            showOwnership: v.showOwnership !== false,
           };
         }
 
@@ -838,7 +840,7 @@
           const targetSharePct = settings.checkinTargetSharePct;
           const missed = [];
           if (countRatePct < targetCountPct) missed.push("戶數");
-          if (shareKnown && shareRatePct < targetSharePct) missed.push("區分所有權");
+          if (settings.showOwnership && shareKnown && shareRatePct < targetSharePct) missed.push("區分所有權");
           return {
             totalCount: list.length,
             doneCount: doneList.length,
@@ -850,6 +852,7 @@
             shareRatePct,
             targetCountPct,
             targetSharePct,
+            showOwnership: settings.showOwnership,
             missed,
             passed: list.length > 0 && missed.length === 0,
           };
@@ -988,13 +991,14 @@
               shareRatePct,
               passed: totalCount > 0
                 && countRatePct >= passCountPct
-                && (!shareKnown || shareRatePct >= passSharePct),
+                && (!settings.showOwnership || !shareKnown || shareRatePct >= passSharePct),
             };
           });
           return {
             totalCount,
             totalShare,
             shareKnown,
+            showOwnership: settings.showOwnership,
             voterCount: voters.length,
             participantCountPct: pct(voters.length, totalCount),
             participantSharePct: pct(ownershipSum(voters), totalShare),
@@ -1045,22 +1049,31 @@
 
         function renderCheckin() {
           const s = checkinStats();
+          const showOwnership = s.showOwnership;
 
           el("ckTotal").innerHTML = `${s.totalCount}<small>戶</small>`;
           el("ckDone").innerHTML = `${s.doneCount}<small>戶</small>`;
           el("ckMiss").innerHTML = `${s.missCount}<small>戶</small>`;
-          el("ckRate").innerHTML = `${pctText(s.countRatePct)}<small>／${s.shareKnown ? pctText(s.shareRatePct) : "—"}</small>`;
-          el("ckTarget").textContent = `門檻 戶數 ${s.targetCountPct}%／區分所有權 ${s.targetSharePct}%`;
+          const rateLabel = el("ckRateLabel");
+          if (rateLabel) rateLabel.textContent = showOwnership ? "報到率（戶數／區分所有權）" : "報到率（戶數）";
+          el("ckRate").innerHTML = showOwnership
+            ? `${pctText(s.countRatePct)}<small>／${s.shareKnown ? pctText(s.shareRatePct) : "—"}</small>`
+            : `${pctText(s.countRatePct)}`;
+          el("ckTarget").textContent = showOwnership
+            ? `門檻 戶數 ${s.targetCountPct}%／區分所有權 ${s.targetSharePct}%`
+            : `門檻 戶數 ${s.targetCountPct}%`;
           el("ckVerdict").textContent = s.passed ? "通過" : "未通過";
           el("ckVerdictSub").textContent = s.passed
-            ? "戶數與區分所有權皆達門檻"
-            : `未達：${s.missed.join("、") || "—"}（兩者皆須達標）`;
+            ? (showOwnership ? "戶數與區分所有權皆達門檻" : "戶數已達門檻")
+            : `未達：${s.missed.join("、") || "—"}${showOwnership ? "（兩者皆須達標）" : ""}`;
           const verdictCard = el("ckVerdictCard");
           verdictCard.classList.toggle("tone-pass", s.passed);
           verdictCard.classList.toggle("tone-fail", !s.passed);
           const countBar = el("ckBar");
           countBar.style.width = `${Math.min(100, s.countRatePct)}%`;
           countBar.classList.toggle("is-pass", Number(s.countRatePct || 0) >= Number(s.targetCountPct || 0));
+          const shareRow = el("ckShareRow");
+          if (shareRow) shareRow.style.display = showOwnership ? "" : "none";
           const shareBar = el("ckShareBar");
           shareBar.style.width = `${Math.min(100, s.shareRatePct)}%`;
           shareBar.classList.toggle("is-pass", s.shareKnown && Number(s.shareRatePct || 0) >= Number(s.targetSharePct || 0));
@@ -1098,7 +1111,7 @@
               <div class="opt-row${o.passed ? " is-pass" : ""}">
                 <div class="opt-top">
                   <span class="opt-label">${escapeHtml(opt.label)}</span>
-                  <span class="opt-count">${o.count} 票<br />戶數 ${pctText(o.countRatePct)}${s.shareKnown ? `<br />區分所有權 ${pctText(o.shareRatePct)}` : ""}</span>
+                  <span class="opt-count">${o.count} 票<br />戶數 ${pctText(o.countRatePct)}${s.showOwnership && s.shareKnown ? `<br />區分所有權 ${pctText(o.shareRatePct)}` : ""}</span>
                 </div>
                 <div class="opt-bar"><i style="width:${Math.min(100, o.countRatePct)}%"></i></div>
                 ${o.passed ? `<div class="opt-flag">已達通過門檻</div>` : ""}
