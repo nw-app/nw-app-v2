@@ -184,6 +184,13 @@ a { color: inherit; text-decoration: none; }
   color: #fff;
 }
 .btn-primary:hover { box-shadow: 0 16px 34px rgba(211, 47, 47, 0.35); }
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
 .content { 
   display: grid; 
   gap: 14px; 

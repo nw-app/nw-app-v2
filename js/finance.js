@@ -1465,7 +1465,6 @@
       const role = String(context.role || "viewer").toLowerCase();
       const canWrite = Model.hasPermission(role, "write");
       const canDelete = Model.hasPermission(role, "delete");
-      const roleLabel = Model.roleLabel(role);
       const subnavEl = document.getElementById("subnav");
 
       const state = {
@@ -2358,10 +2357,9 @@
           "<p>" + esc(tabTitle) + "：" + esc(tabDesc) + "</p>" +
           "</div>" +
           "</div>" +
-          '<div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">' +
-          '<span class="fin-tag" style="background:rgba(29,78,216,.12);color:#1d4ed8;">' + esc(roleLabel) + "</span>" +
-          (canWrite ? "" : '<span class="fin-tag" style="background:rgba(107,114,128,.12);color:#4b5563;">唯讀</span>') +
-          "</div>" +
+          (canWrite ? "" : '<div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">' +
+            '<span class="fin-tag" style="background:rgba(107,114,128,.12);color:#4b5563;">唯讀</span>' +
+            "</div>") +
           "</div>" +
           '<div class="card-bd">' + body + "</div>" +
           "</section>";

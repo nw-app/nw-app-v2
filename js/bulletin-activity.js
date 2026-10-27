@@ -2,6 +2,7 @@
   'use strict';
 
   const FIRESTORE_TYPE = 'activity';
+  const NA = window.NWActivity || {};
 
   const firebaseConfig = window.FIREBASE_CONFIG;
   if (!firebaseConfig) console.error("Missing FIREBASE_CONFIG");
@@ -46,65 +47,6 @@
       .replace(/'/g, '&#039;');
   }
 
-  function formatDate(date) {
-    if (!date) return "";
-    let d;
-    if (date instanceof Date) d = date;
-    else if (date && typeof date.toDate === "function") { try { d = date.toDate(); } catch {} }
-    if (!d) d = new Date(date);
-    if (!d || isNaN(d.getTime())) return String(date || "");
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const da = String(d.getDate()).padStart(2, "0");
-    const h = String(d.getHours()).padStart(2, "0");
-    const mi = String(d.getMinutes()).padStart(2, "0");
-    return `${y}-${m}-${da} ${h}:${mi}`;
-  }
-
-  function youtubeVideoId(url) {
-    const u = String(url || "").trim();
-    if (!u) return "";
-    const patterns = [
-      /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/|live\/))([A-Za-z0-9_-]{6,})/,
-    ];
-    for (const re of patterns) {
-      const m = u.match(re);
-      if (m && m[1]) return m[1];
-    }
-    try {
-      const uo = new URL(u);
-      if (uo.hostname.includes("youtube.com") || uo.hostname.includes("youtu.be")) {
-        const v = uo.searchParams.get("v");
-        if (v) return v;
-      }
-    } catch {}
-    return "";
-  }
-
-  function youtubeEmbedUrl(url) {
-    const id = youtubeVideoId(url);
-    if (!id) return "";
-    return `https://www.youtube.com/embed/${id}?rel=0`;
-  }
-
-  function googlePhotosAlbumId(url) {
-    const u = String(url || "").trim();
-    const m = u.match(/photos\.google\.com\/[^/]+\/[^/]+\/([A-Za-z0-9_-]{10,})/);
-    if (m && m[1]) return m[1];
-    const m2 = u.match(/\/([A-Za-z0-9_-]{20,})/);
-    if (m2 && m2[1]) return m2[1];
-    return "";
-  }
-
-  function normalizePhotoPreviewUrl(url) {
-    const u = String(url || "").trim();
-    if (!u) return "";
-    if (/^https?:\/\/.+\.(png|jpe?g|gif|webp)(\?|$)/i.test(u)) return u;
-    const id = googlePhotosAlbumId(u);
-    if (id) return `https://lh3.googleusercontent.com/${encodeURIComponent(id)}=w1200`;
-    return "";
-  }
-
   function setupTabs() {
     if (!tabsEl) return;
     const buttons = tabsEl.querySelectorAll(".tab-btn");
@@ -128,25 +70,26 @@
     const isVideo = currentTab === "video";
     bulletinList.innerHTML = list.map((item) => {
       const url = String(item.url || "").trim();
-      const time = formatDate(item.activityTime || item.createdAt);
-      const previewUrl = isVideo ? youtubeEmbedUrl(url) : normalizePhotoPreviewUrl(url);
+      const time = NA.formatDateTime(item.activityTime || item.createdAt);
+      const thumb = isVideo ? NA.youtubeThumbUrl(url) : NA.normalizePhotoPreviewUrl(url);
+      const title = escapeHtml(String(item.title || ""));
+      const alt = escapeHtml(String(item.title || (isVideo ? "活動影片" : "活動相片")));
       return `
         <div class="parcel-item" style="padding:14px;">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; cursor:pointer;" data-open-external="${escapeHtml(item.id)}">
-            <div style="flex:1; min-width:0;">
-              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
-                <h3 style="font-size:16px; margin:0; font-weight:700;">${escapeHtml(String(item.title || ""))}</h3>
-                <span style="display:inline-block; padding:3px 10px; border-radius:9999px; font-size:12px; font-weight:700; background:${isVideo ? "#fef3c7" : "#dcfce7"}; color:${isVideo ? "#b45309" : "#166534"};">${isVideo ? "影片" : "相片"}</span>
-              </div>
-              <div style="font-size:13px; color:#6b7280; margin-bottom:10px;">時間：${escapeHtml(time || "—")}</div>
-              ${previewUrl ? `
-                <div style="display:flex; justify-content:center; margin:8px 0;">
-                  ${isVideo
-                    ? `<iframe src="${escapeHtml(previewUrl)}" title="${escapeHtml(String(item.title || "影片"))}" style="width:100%; max-width:720px; aspect-ratio:16/9; border:none; border-radius:12px;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy"></iframe>`
-                    : `<img src="${escapeHtml(previewUrl)}" alt="${escapeHtml(String(item.title || "相片"))}" style="max-width:100%; max-height:380px; border-radius:12px; display:block;">`}
-                </div>
-              ` : ""}
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <h3 style="font-size:16px; margin:0; font-weight:700;">${title}</h3>
+              <span style="display:inline-block; padding:3px 10px; border-radius:9999px; font-size:12px; font-weight:700; background:${isVideo ? "#fef3c7" : "#dcfce7"}; color:${isVideo ? "#b45309" : "#166534"};">${isVideo ? "影片" : "相片"}</span>
             </div>
+            <div style="font-size:13px; color:#6b7280;">時間：${escapeHtml(time || "—")}</div>
+            ${thumb ? `
+              <button type="button" data-open-external="${escapeHtml(item.id)}" style="padding:0; border:none; background:none; cursor:pointer; display:flex; justify-content:center; margin:4px 0;">
+                <span style="position:relative; display:block; width:100%; max-width:720px; border-radius:12px; overflow:hidden; background:#0b0b0b;">
+                  <img src="${escapeHtml(thumb)}" alt="${alt}" style="width:100%; display:block; max-height:420px; object-fit:contain; background:#0b0b0b;" loading="lazy" />
+                  ${isVideo ? `<span style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.28);"><span style="width:56px; height:56px; border-radius:9999px; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; color:#fff;"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:26px; height:26px;"><path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l11.3-6.8a1 1 0 0 0 0-1.7l-11.3-6.8A1 1 0 0 0 8 5.2Z" fill="currentColor"/></svg></span></span>` : ""}
+                </span>
+              </button>
+            ` : ""}
           </div>
           <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
             <button class="btn btn-sm" type="button" data-external-btn="${escapeHtml(item.id)}">另開視窗前往</button>
@@ -154,22 +97,21 @@
         </div>
       `;
     }).join("");
+  }
 
-    const openExternal = (id) => {
-      const item = allData.find((x) => String(x.id || "") === String(id || ""));
-      const u = String(item?.url || "").trim();
+  // 事件委派只綁一次（清單容器是靜態元素，重繪不需要重新綁定）
+  function bindListEvents() {
+    if (!bulletinList || bulletinList._actDelegBound) return;
+    bulletinList._actDelegBound = true;
+    bulletinList.addEventListener("click", (e) => {
+      const el = e.target.closest("[data-open-external], [data-external-btn]");
+      if (!el) return;
+      e.preventDefault();
+      const id = el.getAttribute("data-open-external") || el.getAttribute("data-external-btn") || "";
+      const item = (allData || []).find((x) => String(x.id || "") === String(id || ""));
+      const u = String((item && item.url) || "").trim();
       if (!u) return;
       window.open(u, "_blank", "noopener,noreferrer");
-    };
-
-    bulletinList.querySelectorAll("[data-open-external]").forEach((el) => {
-      el.addEventListener("click", () => openExternal(el.getAttribute("data-open-external")));
-    });
-    bulletinList.querySelectorAll("[data-external-btn]").forEach((el) => {
-      el.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openExternal(el.getAttribute("data-external-btn"));
-      });
     });
   }
 
@@ -227,19 +169,8 @@
       .onSnapshot(
         (snap) => {
           const list = [];
-          snap.forEach((doc) => { list.push({ id: doc.id, ...doc.data() }); });
-          list.sort((a, b) => {
-            const getT = (x) => {
-              const t = x.activityTime || x.createdAt;
-              if (!t) return 0;
-              if (t && typeof t.toMillis === "function") return t.toMillis();
-              if (t instanceof Date) return t.getTime();
-              const d = new Date(t);
-              return isNaN(d.getTime()) ? 0 : d.getTime();
-            };
-            return getT(b) - getT(a);
-          });
-          allData = list;
+          snap.forEach((doc) => { list.push(NA.normalizeItem(doc)); });
+          allData = NA.sortByTimeDesc(list);
           renderList();
         },
         (err) => {
@@ -252,6 +183,7 @@
 
   function init() {
     setupTabs();
+    bindListEvents();
     auth.onAuthStateChanged(async (user) => {
       if (user) {
         await loadProfile(user);

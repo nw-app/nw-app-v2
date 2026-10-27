@@ -18767,7 +18767,7 @@
     const c = String(community || "").trim();
     const fn = String(fromName || "住戶").trim() || "住戶";
     const fh = String(fromHouseNo || "").trim();
-    const title = "生活網｜住戶來電";
+    const title = "QAi生活網｜住戶來電";
     const body = [fn, fh].filter(Boolean).join("｜") || "住戶來電";
 
     const q = new URLSearchParams();
@@ -21982,9 +21982,63 @@
     activeProjectId: "",
     roster: [],
     topics: [],
+    elections: [],
     documents: [],
   };
   const CHECKIN_VOTE_FILE_LIMIT = 450 * 1024;
+  let cvRosterWatchUnsub = null;
+  let cvRosterWatchKey = "";
+
+  function cvStopRosterWatch() {
+    if (typeof cvRosterWatchUnsub === "function") {
+      try { cvRosterWatchUnsub(); } catch {}
+    }
+    cvRosterWatchUnsub = null;
+    cvRosterWatchKey = "";
+  }
+
+  function cvRefreshCheckinVoteLive() {
+    if (!String(location.hash || "").includes("#community/checkin-vote")) return;
+    const scrollTop = contentEl ? contentEl.scrollTop : 0;
+    Promise.resolve()
+      .then(() => renderCheckinVoteModule())
+      .then(() => { if (contentEl) contentEl.scrollTop = scrollTop; })
+      .catch(() => {});
+  }
+
+  /* 即時同步名單（報到狀態與投票結果）：掃碼視窗寫入後，本頁立即更新 */
+  function cvStartRosterWatch(communityId, projectId) {
+    const cid = String(communityId || "").trim();
+    const pid = String(projectId || "").trim();
+    if (!cid || !pid) {
+      cvStopRosterWatch();
+      return;
+    }
+    const key = `${cid}::${pid}`;
+    if (cvRosterWatchKey === key && typeof cvRosterWatchUnsub === "function") return;
+    cvStopRosterWatch();
+    cvRosterWatchKey = key;
+    let firstShot = true;
+    cvRosterWatchUnsub = cvRefRoster(cid, pid).onSnapshot(
+      (snap) => {
+        if (cvRosterWatchKey !== key) return;
+        const roster = (snap && Array.isArray(snap.docs) ? snap.docs : [])
+          .map((doc) => cvNormalizeRosterEntry(doc.data(), doc.id))
+          .sort((a, b) => {
+            const unitCompare = cvFormatUnit(a).localeCompare(cvFormatUnit(b), "zh-Hant");
+            if (unitCompare !== 0) return unitCompare;
+            return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
+          });
+        checkinVoteState.roster = roster;
+        if (firstShot) {
+          firstShot = false;
+          return;
+        }
+        cvRefreshCheckinVoteLive();
+      },
+      () => {}
+    );
+  }
 
   function cvRefProjects(communityId) {
     return db.collection("communities").doc(String(communityId || "default")).collection("checkinVoteProjects");
@@ -22000,6 +22054,10 @@
 
   function cvRefTopics(communityId, projectId) {
     return cvRefProject(communityId, projectId).collection("topics");
+  }
+
+  function cvRefElections(communityId, projectId) {
+    return cvRefProject(communityId, projectId).collection("elections");
   }
 
   function cvRefDocuments(communityId, projectId) {
@@ -22042,6 +22100,13 @@
     if (!n) return "—";
     const d = new Date(n);
     return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  }
+
+  function cvCheckinMethodLabel(method) {
+    const value = String(method || "").trim();
+    if (value === "qr") return "QR 掃碼";
+    if (value === "manual") return "人工報到";
+    return value || "—";
   }
 
   function cvFormatUnit(item) {
@@ -22132,7 +22197,8 @@
       allowQrCheckin: v.allowQrCheckin !== false,
       allowManualVote: v.allowManualVote !== false,
       allowQrVote: v.allowQrVote !== false,
-      requireCheckinBeforeVote: v.requireCheckinBeforeVote === true,
+      // 預設沿用「需先報到」，僅在明確設為「否」時才放行未報到者投票
+      requireCheckinBeforeVote: v.requireCheckinBeforeVote !== false,
       defaultSingleChoice: v.defaultSingleChoice !== false,
       showResultCount: v.showResultCount !== false,
       nameDisplay: String(v.nameDisplay || "").trim() === "mask" ? "mask" : "full",
@@ -22141,6 +22207,8 @@
       checkinTargetSharePct: cvClampPct(v.checkinTargetSharePct, 50),
       topicPassCountPct: cvClampPct(v.topicPassCountPct, 50),
       topicPassSharePct: cvClampPct(v.topicPassSharePct, 50),
+      // 社區 LOGO（Base64 存放於 Firestore，不佔用 Cloud Storage）
+      docLogoDataUrl: String(v.docLogoDataUrl || "").trim(),
     };
   }
 
@@ -22199,6 +22267,7 @@
       area: String(v.area || "").trim(),
       ownership: String(v.ownership || "").trim(),
       weight: Math.max(1, Number(v.weight || 1) || 1),
+      rosterNo: String(v.rosterNo || "").trim(),
       qrToken: String(v.qrToken || "").trim() || cvMakeToken("cvp"),
       checkedIn: v.checkedIn === true,
       checkedInAtMs: Number(v.checkedInAtMs || 0) || 0,
@@ -22211,6 +22280,73 @@
     };
   }
 
+  // 數值固定顯示到小數點第 2 位；非數值時原樣回傳
+  function cvFixed2(value) {
+    const raw = String(value == null ? "" : value).trim();
+    if (!raw) return "";
+    const num = Number(raw.replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(num) ? num.toFixed(2) : raw;
+  }
+
+  // 議題選項代號：依選項順序固定對應（第 1 個 T、第 2 個 F…）
+  const CV_OPTION_CODES = ["T", "F", "N", "A", "B", "C", "D", "E", "G", "H"];
+  const CV_OPTION_MIN = 2;
+  const CV_OPTION_MAX = CV_OPTION_CODES.length;
+
+  // 選舉候選人代號：依候選人順序固定對應（第 1 位 A、第 2 位 B…）
+  const CV_CANDIDATE_CODES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+  function cvCandidateCode(index) {
+    const i = Math.max(0, Number(index) || 0);
+    return CV_CANDIDATE_CODES[i] || `C${i + 1}`;
+  }
+
+  function cvNormalizeElection(data, id) {
+    const v = data && typeof data === "object" ? data : {};
+    const candidates = Array.isArray(v.candidates) ? v.candidates : [];
+    const tallyInput = v.tally && typeof v.tally === "object" ? v.tally : {};
+    const scope = String(v.scope || "").trim() === "building" ? "building" : "all";
+    return {
+      id: String(id || v.id || "").trim(),
+      title: String(v.title || "").trim() || "未命名選舉",
+      code: String(v.code || "").trim(),
+      description: String(v.description || "").trim(),
+      enabled: v.enabled !== false,
+      // 應選名額（管理委員席次）
+      seats: Math.max(1, Number(v.seats || 0) || 1),
+      // 候補名額；0 表示不限（所有未進入當選名單者皆可列候補）
+      alternates: Math.max(0, Number(v.alternates || 0) || 0),
+      // 每戶可投票數（1＝一人一張，大於 1＝一戶多票）
+      votesPerHousehold: Math.max(1, Number(v.votesPerHousehold || 0) || 1),
+      // 投票權範圍：all＝全部住戶；building＝僅指定棟別住戶有投票權
+      scope,
+      scopeBuildings: Array.isArray(v.scopeBuildings)
+        ? v.scopeBuildings.map((x) => String(x || "").trim()).filter(Boolean)
+        : [],
+      order: Number(v.order || 0) || 0,
+      candidates: candidates.map((cand, index) => ({
+        id: String((cand && cand.id) || cvMakeId(`cand${index + 1}`)).trim(),
+        name: String((cand && cand.name) || "").trim() || `候選人 ${index + 1}`,
+        code: String((cand && cand.code) || "").trim() || cvCandidateCode(index),
+        houseNo: String((cand && cand.houseNo) || "").trim(),
+        building: String((cand && cand.building) || "").trim(),
+        note: String((cand && cand.note) || "").trim(),
+        qrToken: String((cand && cand.qrToken) || "").trim() || cvMakeToken("cvc"),
+      })),
+      // 唱票累計：候選人 id → 票數
+      tally: (() => {
+        const out = {};
+        candidates.forEach((cand, index) => {
+          const candId = String((cand && cand.id) || "").trim() || `cand${index + 1}`;
+          out[candId] = Math.max(0, Math.floor(Number(tallyInput[candId] || 0) || 0));
+        });
+        return out;
+      })(),
+      createdAtMs: Number(v.createdAtMs || 0) || 0,
+      updatedAtMs: Number(v.updatedAtMs || 0) || 0,
+    };
+  }
+
   function cvNormalizeTopic(data, id, project) {
     const v = data && typeof data === "object" ? data : {};
     const defaults = cvNormalizeProjectSettings(project && project.settings ? project.settings : {});
@@ -22218,15 +22354,19 @@
     return {
       id: String(id || v.id || "").trim(),
       title: String(v.title || "").trim() || "未命名議題",
+      code: String(v.code || "").trim(),
       description: String(v.description || "").trim(),
       enabled: v.enabled !== false,
       singleChoice: Object.prototype.hasOwnProperty.call(v, "singleChoice")
         ? v.singleChoice !== false
         : defaults.defaultSingleChoice !== false,
+      // 多選時的最多可選項數；0 表示不限
+      maxChoices: Math.max(0, Number(v.maxChoices || 0) || 0),
       order: Number(v.order || 0) || 0,
       options: options.map((opt, index) => ({
         id: String((opt && opt.id) || cvMakeId(`opt${index + 1}`)).trim(),
         label: String((opt && opt.label) || "").trim() || `選項 ${index + 1}`,
+        code: String((opt && opt.code) || "").trim() || CV_OPTION_CODES[index] || "",
         description: String((opt && opt.description) || "").trim(),
         qrToken: String((opt && opt.qrToken) || "").trim() || cvMakeToken("cvo"),
       })),
@@ -22261,6 +22401,27 @@
     return checkinVoteState.projects.find((item) => String(item.id || "") === id) || null;
   }
 
+  function cvProjectById(projectId) {
+    const id = String(projectId || "").trim();
+    return checkinVoteState.projects.find((item) => String(item.id || "") === id) || null;
+  }
+
+  // 封存專案鎖定：封存後所有資料不得再更新（掃碼、人工新增、編輯、刪除皆停止）
+  function cvIsArchivedProject(projectId) {
+    const project = cvProjectById(projectId);
+    return !!(project && project.archived);
+  }
+
+  function cvBlockIfArchived(projectId) {
+    if (!cvIsArchivedProject(projectId)) return false;
+    toast("此專案已封存，請先解除封存後再操作");
+    return true;
+  }
+
+  function cvBlockIfArchivedProject(project) {
+    return cvBlockIfArchived(project && project.id);
+  }
+
   function cvFindRosterEntry(entryId) {
     const id = String(entryId || "").trim();
     return checkinVoteState.roster.find((item) => String(item.id || "") === id) || null;
@@ -22271,12 +22432,54 @@
     return checkinVoteState.topics.find((item) => String(item.id || "") === id) || null;
   }
 
+  function cvFindElection(electionId) {
+    const id = String(electionId || "").trim();
+    return checkinVoteState.elections.find((item) => String(item.id || "") === id) || null;
+  }
+
+  function cvTopicTypeLabel(topic) {
+    if (!topic || topic.singleChoice) return "單選題";
+    const max = Math.max(0, Number(topic.maxChoices || 0) || 0);
+    return max > 0 ? `多選題（最多 ${max} 項）` : "多選題";
+  }
+
   function cvTopicParticipationCount(topic, roster) {
     const tid = String(topic && topic.id || "").trim();
     return (Array.isArray(roster) ? roster : []).filter((entry) => {
       const vote = entry && entry.votes ? entry.votes[tid] : null;
       return vote && Array.isArray(vote.optionIds) && vote.optionIds.length > 0;
     }).length;
+  }
+
+  function cvVoteBaseRoster(project, roster) {
+    const list = Array.isArray(roster) ? roster.filter(Boolean) : [];
+    return list.filter((entry) => entry.checkedIn);
+  }
+
+  function cvElectionResolvedScope(election) {
+    if (String((election && election.scope) || "").trim() === "building") {
+      const explicitBuildings = Array.isArray(election && election.scopeBuildings)
+        ? election.scopeBuildings.map((x) => String(x || "").trim()).filter(Boolean)
+        : [];
+      if (explicitBuildings.length) return { scope: "building", buildings: explicitBuildings };
+    }
+    const candidateBuildings = Array.from(new Set(
+      (Array.isArray(election && election.candidates) ? election.candidates : [])
+        .map((cand) => String((cand && cand.building) || "").trim())
+        .filter(Boolean)
+    ));
+    if (candidateBuildings.length) return { scope: "building", buildings: candidateBuildings };
+    return { scope: "all", buildings: [] };
+  }
+
+  /* 選舉投票權範圍：全部住戶，或僅指定棟別的已報到住戶（分母／上限皆以此為準） */
+  function cvElectionScopeRoster(election, project, roster) {
+    const base = cvVoteBaseRoster(project, roster);
+    const resolved = cvElectionResolvedScope(election);
+    if (resolved.scope !== "building") return base;
+    const buildings = new Set(resolved.buildings);
+    if (!buildings.size) return base;
+    return base.filter((entry) => buildings.has(String((entry && entry.building) || "").trim()));
   }
 
   // 區分所有權比例（%）：名單未填時視為 0，不計入區分所有權總額
@@ -22338,16 +22541,15 @@
     const list = Array.isArray(roster) ? roster : [];
     const settings = cvNormalizeProjectSettings(project && project.settings ? project.settings : {});
     const tid = String(topic && topic.id || "").trim();
-    /* 有報到才能投票：議題一律以「實際報到人數」為分母 */
-    const checkedList = list.filter((entry) => entry && entry.checkedIn);
-    const totalCount = checkedList.length;
-    const totalShare = cvOwnershipSum(checkedList);
+    const voteBase = cvVoteBaseRoster(project, list);
+    const totalCount = voteBase.length;
+    const totalShare = cvOwnershipSum(voteBase);
     const shareKnown = totalShare > 0;
     const usingDefaultCount = !(topic && topic.passCountPct !== null && topic.passCountPct !== undefined);
     const usingDefaultShare = !(topic && topic.passSharePct !== null && topic.passSharePct !== undefined);
     const passCountPct = usingDefaultCount ? settings.topicPassCountPct : Number(topic.passCountPct);
     const passSharePct = usingDefaultShare ? settings.topicPassSharePct : Number(topic.passSharePct);
-    const voters = checkedList.filter((entry) => {
+    const voters = voteBase.filter((entry) => {
       const vote = entry && entry.votes ? entry.votes[tid] : null;
       return vote && Array.isArray(vote.optionIds) && vote.optionIds.length > 0;
     });
@@ -22413,12 +22615,8 @@
     return parts.join("");
   }
 
-  function cvPersonQrPayload(projectId, entry) {
-    return `nwcv:person:${String(projectId || "").trim()}:${String(entry && entry.id || "").trim()}:${String(entry && entry.qrToken || "").trim()}`;
-  }
-
-  function cvOptionQrPayload(projectId, topic, option) {
-    return `nwcv:option:${String(projectId || "").trim()}:${String(topic && topic.id || "").trim()}:${String(option && option.id || "").trim()}:${String(option && option.qrToken || "").trim()}`;
+  function cvPersonQrPayload(entry) {
+    return `${String(entry && entry.qrToken || "").trim()}ADDT`;
   }
 
   function cvQrImageUrl(payload) {
@@ -22472,11 +22670,13 @@
       const project = projects.find((item) => item.id === activeProjectId) || null;
       let roster = [];
       let topics = [];
+      let elections = [];
       let documents = [];
       if (project) {
-        const [rosterSnap, topicSnap, documentSnap] = await Promise.all([
+        const [rosterSnap, topicSnap, electionSnap, documentSnap] = await Promise.all([
           cvRefRoster(cid, project.id).get().catch(() => null),
           cvRefTopics(cid, project.id).get().catch(() => null),
+          cvRefElections(cid, project.id).get().catch(() => null),
           cvRefDocuments(cid, project.id).get().catch(() => null),
         ]);
         roster = (rosterSnap && Array.isArray(rosterSnap.docs) ? rosterSnap.docs : [])
@@ -22489,6 +22689,19 @@
         topics = (topicSnap && Array.isArray(topicSnap.docs) ? topicSnap.docs : [])
           .map((doc) => cvNormalizeTopic(doc.data(), doc.id, project))
           .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+        // 舊資料未存議題代號時，依排序序位補上預設代號（M01、M02…），
+        // 確保每個議題的 QR 按鈕都能產生投票碼（掃碼頁亦採相同規則）。
+        topics.forEach((topic, index) => {
+          if (!String(topic.code || "").trim()) topic.code = `M${String(index + 1).padStart(2, "0")}`;
+        });
+        elections = (electionSnap && Array.isArray(electionSnap.docs) ? electionSnap.docs : [])
+          .map((doc) => cvNormalizeElection(doc.data(), doc.id))
+          .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+        // 舊資料未存選舉代號時，依排序序位補上預設代號（E01、E02…），
+        // 確保每個候選人的 QR 按鈕都能產生投票碼（掃碼頁亦採相同規則）。
+        elections.forEach((election, index) => {
+          if (!String(election.code || "").trim()) election.code = `E${String(index + 1).padStart(2, "0")}`;
+        });
         documents = (documentSnap && Array.isArray(documentSnap.docs) ? documentSnap.docs : [])
           .map((doc) => cvNormalizeDocument(doc.data(), doc.id))
           .sort((a, b) => Number(b.updatedAtMs || 0) - Number(a.updatedAtMs || 0));
@@ -22499,6 +22712,7 @@
       checkinVoteState.activeProjectId = activeProjectId;
       checkinVoteState.roster = roster;
       checkinVoteState.topics = topics;
+      checkinVoteState.elections = elections;
       checkinVoteState.documents = documents;
       if (activeProjectId && String(cfg.checkinVoteActiveProjectId || "").trim() !== activeProjectId) {
         configDocRef(cid).set({
@@ -22551,16 +22765,18 @@
     const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
     const pid = String(projectId || "").trim();
     if (!pid) return;
-    const ok = window.confirm("刪除此專案後，名單、投票、文件都會一併移除，是否繼續？");
+    const ok = window.confirm("刪除此專案後，名單、投票、選舉、文件都會一併移除，是否繼續？");
     if (!ok) return;
-    const [rosterSnap, topicSnap, documentSnap] = await Promise.all([
+    const [rosterSnap, topicSnap, electionSnap, documentSnap] = await Promise.all([
       cvRefRoster(cid, pid).get().catch(() => null),
       cvRefTopics(cid, pid).get().catch(() => null),
+      cvRefElections(cid, pid).get().catch(() => null),
       cvRefDocuments(cid, pid).get().catch(() => null),
     ]);
     const batch = db.batch();
     (rosterSnap && Array.isArray(rosterSnap.docs) ? rosterSnap.docs : []).forEach((doc) => batch.delete(doc.ref));
     (topicSnap && Array.isArray(topicSnap.docs) ? topicSnap.docs : []).forEach((doc) => batch.delete(doc.ref));
+    (electionSnap && Array.isArray(electionSnap.docs) ? electionSnap.docs : []).forEach((doc) => batch.delete(doc.ref));
     (documentSnap && Array.isArray(documentSnap.docs) ? documentSnap.docs : []).forEach((doc) => batch.delete(doc.ref));
     batch.delete(cvRefProject(cid, pid));
     await batch.commit();
@@ -22575,12 +22791,9 @@
     await cvReloadAndMaybeRender({ communityId: cid, force: true });
   }
 
-  async function cvSaveRosterEntry(communityId, projectId, entryId, payload) {
-    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
-    const pid = String(projectId || "").trim();
-    if (!pid) return;
-    const ref = entryId ? cvRefRoster(cid, pid).doc(String(entryId || "").trim()) : cvRefRoster(cid, pid).doc();
+  function cvBuildRosterEntryData(payload, isCreate) {
     const now = cvNow();
+    const name = String(payload.name || "").trim() || "住戶";
     const data = {
       residentUid: String(payload.residentUid || "").trim(),
       residentKey: String(payload.residentKey || "").trim() || createCareResidentKey({
@@ -22590,7 +22803,7 @@
       }),
       houseNo: String(payload.houseNo || "").trim(),
       subHouseNo: String(payload.subHouseNo || "").trim(),
-      name: String(payload.name || "").trim() || "住戶",
+      name,
       phone: String(payload.phone || "").trim(),
       email: String(payload.email || "").trim(),
       note: String(payload.note || "").trim(),
@@ -22599,11 +22812,12 @@
       area: String(payload.area || "").trim(),
       ownership: String(payload.ownership || "").trim(),
       weight: Math.max(1, Number(payload.weight || 1) || 1),
+      rosterNo: String(payload.rosterNo || "").trim(),
       qrToken: String(payload.qrToken || "").trim() || cvMakeToken("cvp"),
       updatedAt: FieldValue.serverTimestamp(),
       updatedAtMs: now,
     };
-    if (!entryId) {
+    if (isCreate) {
       data.createdAt = FieldValue.serverTimestamp();
       data.createdAtMs = now;
       data.checkedIn = false;
@@ -22613,7 +22827,16 @@
       data.checkedInByName = "";
       data.votes = {};
     }
-    await ref.set(data, { merge: true });
+    return data;
+  }
+
+  async function cvSaveRosterEntry(communityId, projectId, entryId, payload) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    if (!pid) return;
+    if (cvBlockIfArchived(pid)) return;
+    const ref = entryId ? cvRefRoster(cid, pid).doc(String(entryId || "").trim()) : cvRefRoster(cid, pid).doc();
+    await ref.set(cvBuildRosterEntryData(payload, !entryId), { merge: true });
     await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: pid });
   }
 
@@ -22623,6 +22846,7 @@
     const eid = String(entryId || "").trim();
     const opts = options && typeof options === "object" ? options : {};
     if (!pid || !eid) return;
+    if (cvBlockIfArchived(pid)) return;
     const now = cvNow();
     await cvRefRoster(cid, pid).doc(eid).set({
       checkedIn: true,
@@ -22652,6 +22876,7 @@
     const pid = String(projectId || "").trim();
     const eid = String(entryId || "").trim();
     if (!pid || !eid) return;
+    if (cvBlockIfArchived(pid)) return;
     const ok = window.confirm("要取消這位住戶的報到狀態嗎？");
     if (!ok) return;
     const now = cvNow();
@@ -22670,6 +22895,7 @@
   async function cvSaveResidentVote(communityId, projectId, entryId, topicId, optionIds, method, options) {
     const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
     const pid = String(projectId || "").trim();
+    if (cvBlockIfArchived(pid)) return;
     const eid = String(entryId || "").trim();
     const tid = String(topicId || "").trim();
     const opts = options && typeof options === "object" ? options : {};
@@ -22678,7 +22904,7 @@
     const project = cvActiveProject();
     if (!entry || !topic || !project) return;
     if (project.settings.requireCheckinBeforeVote && !entry.checkedIn) {
-      toast("此專案設定需先報到才能投票");
+      toast("請先完成報到，再進行投票");
       return;
     }
     const normalizedOptionIds = Array.isArray(optionIds)
@@ -22688,21 +22914,29 @@
       toast("請至少選擇一個選項");
       return;
     }
-    const finalOptionIds = topic.singleChoice ? [normalizedOptionIds[0]] : Array.from(new Set(normalizedOptionIds));
+    const uniqueOptionIds = Array.from(new Set(normalizedOptionIds));
+    const maxChoices = topic.singleChoice ? 1 : Math.max(0, Number(topic.maxChoices || 0) || 0);
+    if (maxChoices > 0 && uniqueOptionIds.length > maxChoices) {
+      toast(`此議題最多只能選 ${maxChoices} 項`);
+      return;
+    }
+    const finalOptionIds = topic.singleChoice ? [uniqueOptionIds[0]] : uniqueOptionIds;
     const now = cvNow();
-    const votes = { ...(entry.votes || {}) };
-    votes[tid] = {
+    const vote = {
       optionIds: finalOptionIds,
       updatedAtMs: now,
       method: String(method || "manual").trim() || "manual",
       operatorUid: cvCurrentActorUid(),
       operatorName: cvCurrentActorName(),
     };
-    await cvRefRoster(cid, pid).doc(eid).set({
-      votes,
+    // 以點記法只更新本次議題，避免整包 votes 覆蓋掉其他裝置剛寫入的其他議題票
+    await cvRefRoster(cid, pid).doc(eid).update({
+      [`votes.${tid}`]: vote,
       updatedAt: FieldValue.serverTimestamp(),
       updatedAtMs: now,
-    }, { merge: true });
+    });
+    const votes = { ...(entry.votes || {}) };
+    votes[tid] = vote;
     entry.votes = votes;
     entry.updatedAtMs = now;
     if (opts.rerender !== false && String(location.hash || "").includes("#community/checkin-vote") && !String(location.hash || "").includes("/scan")) {
@@ -22710,23 +22944,31 @@
     }
   }
 
-  async function cvClearResidentVote(communityId, projectId, entryId, topicId) {
+  async function cvClearResidentVote(communityId, projectId, entryId, topicId, options) {
     const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
     const pid = String(projectId || "").trim();
+    if (cvBlockIfArchived(pid)) return;
     const eid = String(entryId || "").trim();
     const tid = String(topicId || "").trim();
+    const opts = options && typeof options === "object" ? options : {};
     const entry = cvFindRosterEntry(eid);
     if (!entry) return;
-    const ok = window.confirm("要清除此住戶在本議題的投票嗎？");
-    if (!ok) return;
+    if (opts.confirm !== false) {
+      const ok = window.confirm("要清除此住戶在本議題的投票嗎？");
+      if (!ok) return;
+    }
     const votes = { ...(entry.votes || {}) };
     delete votes[tid];
     const now = cvNow();
-    await cvRefRoster(cid, pid).doc(eid).set({
-      votes,
+    // 注意：set(..., { merge: true }) 對巢狀 map 是深層合併、且不解析點記法，
+    // 無法刪除 votes 底下的單一議題；須改用 update() 的點記法搭配 delete sentinel。
+    await cvRefRoster(cid, pid).doc(eid).update({
+      [`votes.${tid}`]: FieldValue.delete(),
       updatedAt: FieldValue.serverTimestamp(),
       updatedAtMs: now,
-    }, { merge: true });
+    });
+    entry.votes = votes;
+    entry.updatedAtMs = now;
     await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: pid });
   }
 
@@ -22734,6 +22976,7 @@
     const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
     const pid = String(projectId || "").trim();
     if (!pid) return;
+    if (cvBlockIfArchived(pid)) return;
     const ref = topicId ? cvRefTopics(cid, pid).doc(String(topicId || "").trim()) : cvRefTopics(cid, pid).doc();
     const project = cvActiveProject();
     const current = topicId ? (cvFindTopic(topicId) || null) : null;
@@ -22744,18 +22987,24 @@
       return {
         id: String((prev && prev.id) || opt.id || cvMakeId(`opt${index + 1}`)).trim(),
         label: String(opt.label || "").trim() || `選項 ${index + 1}`,
+        // 代號依選項順序固定對應
+        code: CV_OPTION_CODES[index] || String((prev && prev.code) || "").trim(),
         description: String(opt.description || "").trim(),
         qrToken: String((prev && prev.qrToken) || opt.qrToken || cvMakeToken("cvo")).trim(),
       };
     });
     const now = cvNow();
+    const singleChoice = Object.prototype.hasOwnProperty.call(payload, "singleChoice")
+      ? payload.singleChoice !== false
+      : cvNormalizeProjectSettings(project && project.settings ? project.settings : {}).defaultSingleChoice !== false;
     const topicPayload = {
       title: String(payload.title || "").trim() || "未命名議題",
+      code: String(payload.code || "").trim(),
       description: String(payload.description || "").trim(),
       enabled: payload.enabled !== false,
-      singleChoice: Object.prototype.hasOwnProperty.call(payload, "singleChoice")
-        ? payload.singleChoice !== false
-        : cvNormalizeProjectSettings(project && project.settings ? project.settings : {}).defaultSingleChoice !== false,
+      singleChoice,
+      // 只有多選才需要上限；單選固定為 0（不限）
+      maxChoices: singleChoice ? 0 : Math.max(0, Number(payload.maxChoices || 0) || 0),
       order: Math.max(0, Number(payload.order || 0) || 0),
       options,
       passCountPct: cvOptionalPct(payload.passCountPct),
@@ -22776,21 +23025,27 @@
         if (!vote || !Array.isArray(vote.optionIds)) return;
         const nextOptionIds = vote.optionIds.filter((item) => validOptionIds.has(String(item || "").trim()));
         if (nextOptionIds.length === vote.optionIds.length) return;
-        const votes = { ...(entry.votes || {}) };
+        const topicKey = String(current.id || "").trim();
+        const entryRef = cvRefRoster(cid, pid).doc(String(entry.id || "").trim());
         if (nextOptionIds.length) {
-          votes[String(current.id || "").trim()] = {
-            ...vote,
-            optionIds: nextOptionIds,
+          // 以點記法只更新本議題，避免整包 votes 覆蓋掉其他議題的票
+          updates.push(entryRef.update({
+            [`votes.${topicKey}`]: {
+              ...vote,
+              optionIds: nextOptionIds,
+              updatedAtMs: now,
+            },
+            updatedAt: FieldValue.serverTimestamp(),
             updatedAtMs: now,
-          };
+          }));
         } else {
-          delete votes[String(current.id || "").trim()];
+          // 巢狀 map 無法用 set({ merge: true }) 刪除，須用 update() 的點記法
+          updates.push(entryRef.update({
+            [`votes.${topicKey}`]: FieldValue.delete(),
+            updatedAt: FieldValue.serverTimestamp(),
+            updatedAtMs: now,
+          }));
         }
-        updates.push(cvRefRoster(cid, pid).doc(String(entry.id || "").trim()).set({
-          votes,
-          updatedAt: FieldValue.serverTimestamp(),
-          updatedAtMs: now,
-        }, { merge: true }));
       });
       if (updates.length) await Promise.all(updates);
     }
@@ -22802,6 +23057,7 @@
     const pid = String(projectId || "").trim();
     const tid = String(topicId || "").trim();
     if (!pid || !tid) return;
+    if (cvBlockIfArchived(pid)) return;
     const ok = window.confirm("刪除此議題後，該議題的投票結果也會一併清除，是否繼續？");
     if (!ok) return;
     await cvRefTopics(cid, pid).doc(tid).delete();
@@ -22810,14 +23066,575 @@
       const votes = { ...(entry.votes || {}) };
       if (!Object.prototype.hasOwnProperty.call(votes, tid)) return;
       delete votes[tid];
-      updates.push(cvRefRoster(cid, pid).doc(String(entry.id || "").trim()).set({
-        votes,
+      updates.push(cvRefRoster(cid, pid).doc(String(entry.id || "").trim()).update({
+        [`votes.${tid}`]: FieldValue.delete(),
         updatedAt: FieldValue.serverTimestamp(),
         updatedAtMs: cvNow(),
-      }, { merge: true }));
+      }));
     });
     if (updates.length) await Promise.all(updates);
     await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: pid });
+  }
+
+  /* ── 選舉（區分所有權人大會選舉管理委員） ── */
+
+  /* 選舉統計：純唱票計數，各候選人得票數以「該投票權範圍的實際報到人數」為分母計算得票率，
+     依票數排序，取前「應選名額」當選，其後列為候補。
+     選舉只計票數，不計區分所有權比例。 */
+  function cvElectionStats(election, project, roster) {
+    const eid = String((election && election.id) || "").trim();
+    const scopeRoster = cvElectionScopeRoster(election, project, roster);
+    const totalCount = scopeRoster.length;
+    const seats = Math.max(1, Number((election && election.seats) || 1) || 1);
+    const alternates = Math.max(0, Number((election && election.alternates) || 0) || 0);
+    const votesPerHousehold = Math.max(1, Number((election && election.votesPerHousehold) || 1) || 1);
+    const tally = election && election.tally && typeof election.tally === "object" ? election.tally : {};
+    const readCount = (candId) => Math.max(0, Math.floor(Number(tally[candId] || 0) || 0));
+    const maxVotes = totalCount * votesPerHousehold;
+    const castVotes = (Array.isArray(election && election.candidates) ? election.candidates : [])
+      .reduce((sum, cand) => sum + readCount(String((cand && cand.id) || "").trim()), 0);
+    const candidates = (Array.isArray(election && election.candidates) ? election.candidates : []).map((cand, index) => {
+      const candId = String((cand && cand.id) || "").trim();
+      const count = readCount(candId);
+      const countRatePct = cvPct(count, totalCount);
+      return {
+        id: candId,
+        code: String((cand && cand.code) || "").trim(),
+        name: String((cand && cand.name) || "").trim() || `候選人 ${index + 1}`,
+        building: String((cand && cand.building) || "").trim(),
+        note: String((cand && cand.note) || "").trim(),
+        orderIndex: index,
+        count,
+        countRatePct,
+        countPassed: count > 0,
+        passed: totalCount > 0 && count > 0,
+        rank: 0,
+        result: "none",
+        isTie: false,
+      };
+    });
+    // 依得票數排序，同票時依候選人原順序
+    const ranked = candidates.slice().sort((a, b) => (b.count - a.count) || (a.orderIndex - b.orderIndex));
+    let electedCount = 0;
+    let alternateCount = 0;
+    ranked.forEach((cand, index) => {
+      cand.rank = index + 1;
+      if (!cand.passed) { cand.result = "failed"; return; }
+      if (electedCount < seats) { cand.result = "elected"; electedCount += 1; return; }
+      if (alternates === 0 || alternateCount < alternates) { cand.result = "alternate"; alternateCount += 1; return; }
+      cand.result = "none";
+    });
+    // 同票提示：當選名額邊界若有同票，標記需抽籤
+    const boundary = ranked[seats - 1];
+    const nextCand = ranked[seats];
+    if (boundary && nextCand && nextCand.count === boundary.count) {
+      ranked.forEach((cand) => {
+        if (cand.count === boundary.count) cand.isTie = true;
+      });
+    }
+    return {
+      id: eid,
+      scope: cvElectionResolvedScope(election).scope,
+      scopeBuildings: cvElectionResolvedScope(election).buildings,
+      totalCount,
+      maxVotes,
+      castVotes,
+      votesPerHousehold,
+      seats,
+      alternates,
+      candidates,
+      ranked,
+      electedCount,
+      alternateCount,
+    };
+  }
+
+  function cvElectionResultChip(cand) {
+    if (cand.isTie) return `<span class="status-chip warning">同票待抽籤</span>`;
+    if (cand.result === "elected") return `<span class="status-chip success">當選</span>`;
+    if (cand.result === "alternate") return `<span class="status-chip primary">候補</span>`;
+    return `<span class="status-chip gray">未當選</span>`;
+  }
+
+  function cvRenderElectionContent(project, roster, elections) {
+    if (!project) return `<div class="status">請先新增專案。</div>`;
+    const list = Array.isArray(elections) ? elections : [];
+    return `
+      <div class="row" style="justify-content:space-between; gap:12px; margin-bottom:14px;">
+        <div class="muted">候選人依票數排序，取前「應選名額」當選，其後列為候補；得票率以「該投票權範圍的實際報到人數」為分母，只計票數。</div>
+        <div class="row" style="gap:8px;">
+          <button class="btn danger" type="button" id="btnCvAddElection">新增選舉</button>
+          <button class="btn btn-primary" type="button" id="btnCvElectionCount">人工計票</button>
+        </div>
+      </div>
+      ${list.length ? list.map((election) => {
+        const stats = cvElectionStats(election, project, roster);
+        const subtitle = election.description
+          || `應選 ${stats.seats} 名／候補 ${stats.alternates || "不限"}｜每戶可投 ${stats.votesPerHousehold} 票`;
+        return `
+          <div class="card" style="margin-bottom:12px;">
+            <div class="card-hd">
+              <div class="left">
+                <div style="min-width:0;">
+                  <h2 style="font-size:calc(22px * var(--fs, 1));">${escapeHtml(election.title)}${String(election.code || "").trim() ? `<span class="cv-topic-code">${escapeHtml(String(election.code).trim())}</span>` : ""}</h2>
+                  <p>${escapeHtml(subtitle)}</p>
+                </div>
+              </div>
+              <div class="row" style="gap:8px;">
+                <span class="status-chip ${stats.electedCount ? "success" : "gray"}">${stats.electedCount ? `當選 ${stats.electedCount} 名` : "尚無當選"}</span>
+                <span class="status-chip ${election.enabled ? "success" : "gray"}">${election.enabled ? "啟用" : "停用"}</span>
+                <button class="btn btn-sm" type="button" data-cv-edit-election="${escapeHtml(election.id)}">編輯</button>
+                <button class="btn btn-sm danger" type="button" data-cv-delete-election="${escapeHtml(election.id)}">刪除</button>
+              </div>
+            </div>
+            <div class="card-bd">
+              <div class="row" style="justify-content:space-between; margin-bottom:6px;">
+                <div class="muted">已計票 ${stats.castVotes}/${stats.maxVotes} 票（${stats.scope === "building" && stats.scopeBuildings.length ? `投票權範圍：${escapeHtml(stats.scopeBuildings.join("、"))}` : "投票權範圍：全部住戶"}，報到 ${stats.totalCount} 人 × 每戶 ${stats.votesPerHousehold} 票）</div>
+              </div>
+              ${stats.ranked.length ? `
+                <div class="cv-roster-table-wrap">
+                  <table class="cv-roster-table">
+                    <thead>
+                      <tr>
+                        <th>名次</th>
+                        <th>候選人</th>
+                        <th>棟別</th>
+                        <th>得票數</th>
+                        <th>得票率</th>
+                        <th>結果</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${stats.ranked.map((cand) => `
+                        <tr>
+                          <td data-label="名次" class="cv-roster-no">${cand.rank}</td>
+                          <td data-label="候選人"><b>${escapeHtml(cand.name)}</b>${String(cand.code || "").trim() ? `<span class="cv-topic-code">${escapeHtml(String(cand.code).trim())}</span>` : ""}${cand.note ? `<div class="muted" style="margin-top:2px;">${escapeHtml(cand.note)}</div>` : ""}</td>
+                          <td data-label="棟別">${escapeHtml(cand.building || "—")}</td>
+                          <td data-label="得票數">${cand.count}</td>
+                          <td data-label="得票率">${cvFormatPct(cand.countRatePct)}</td>
+                          <td data-label="結果">${cvElectionResultChip(cand)}</td>
+                        </tr>
+                      `).join("")}
+                    </tbody>
+                  </table>
+                </div>
+              ` : `<div class="status" style="margin:0;">尚未建立候選人</div>`}
+            </div>
+          </div>
+        `;
+      }).join("") : `<div class="status">尚未建立任何選舉</div>`}
+    `;
+  }
+
+  async function cvSaveElection(communityId, projectId, electionId, payload) {
+    if (cvBlockIfArchived(projectId)) return;
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    if (!pid) return;
+    const ref = electionId ? cvRefElections(cid, pid).doc(String(electionId || "").trim()) : cvRefElections(cid, pid).doc();
+    const current = electionId ? (cvFindElection(electionId) || null) : null;
+    const currentCandidates = current && Array.isArray(current.candidates) ? current.candidates : [];
+    const inputCandidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+    const candidates = inputCandidates.map((cand, index) => {
+      const prev = currentCandidates[index] || null;
+      return {
+        id: String((prev && prev.id) || cand.id || cvMakeId(`cand${index + 1}`)).trim(),
+        name: String(cand.name || "").trim() || `候選人 ${index + 1}`,
+        // 代號依候選人順序固定對應
+        code: cvCandidateCode(index),
+        houseNo: String(cand.houseNo || "").trim(),
+        building: String(cand.building || "").trim(),
+        note: String(cand.note || "").trim(),
+        qrToken: String((prev && prev.qrToken) || cand.qrToken || cvMakeToken("cvc")).trim(),
+      };
+    });
+    const seats = Math.max(1, Number(payload.seats || 0) || 1);
+    const votesPerHousehold = Math.min(seats, Math.max(1, Number(payload.votesPerHousehold || 0) || seats));
+    const scope = String(payload.scope || "").trim() === "building" ? "building" : "all";
+    const scopeBuildings = scope === "building"
+      ? Array.from(new Set((Array.isArray(payload.scopeBuildings) ? payload.scopeBuildings : []).map((x) => String(x || "").trim()).filter(Boolean)))
+      : [];
+    const now = cvNow();
+    const electionPayload = {
+      title: String(payload.title || "").trim() || "未命名選舉",
+      code: String(payload.code || "").trim(),
+      description: String(payload.description || "").trim(),
+      enabled: payload.enabled !== false,
+      seats,
+      alternates: Math.max(0, Number(payload.alternates || 0) || 0),
+      votesPerHousehold,
+      scope,
+      scopeBuildings,
+      order: Math.max(0, Number(payload.order || 0) || 0),
+      candidates,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedAtMs: now,
+    };
+    if (!current) {
+      electionPayload.createdAt = FieldValue.serverTimestamp();
+      electionPayload.createdAtMs = now;
+      electionPayload.tally = {};
+    }
+    await ref.set(electionPayload, { merge: true });
+    // 編輯後若有候選人被移除，一併清除其唱票累計，避免幽靈票
+    {
+      const validCandidateIds = new Set(candidates.map((item) => String(item.id || "").trim()).filter(Boolean));
+      const staleIds = Object.keys((current && current.tally) || {}).filter((id) => !validCandidateIds.has(String(id || "").trim()));
+      const patch = { updatedAtMs: now, passCountPct: FieldValue.delete() };
+      staleIds.forEach((id) => { patch[`tally.${id}`] = FieldValue.delete(); });
+      await ref.update(patch);
+    }
+    await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: pid });
+  }
+
+  async function cvDeleteElection(communityId, projectId, electionId) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    const eid = String(electionId || "").trim();
+    if (!pid || !eid) return;
+    if (cvBlockIfArchived(pid)) return;
+    const ok = window.confirm("刪除此選舉後，該場選舉的唱票結果也會一併清除，是否繼續？");
+    if (!ok) return;
+    await cvRefElections(cid, pid).doc(eid).delete();
+    await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: pid });
+  }
+
+  /* 從名單挑選候選人：勾選後回傳所選名單項目 */
+  function cvOpenRosterPickModal(roster, selectedIds, onConfirm) {
+    const list = Array.isArray(roster) ? roster : [];
+    const picked = new Set((Array.isArray(selectedIds) ? selectedIds : []).map((x) => String(x || "").trim()));
+    const modal = ensureModal("checkinVoteRosterPickModal", "modal-checkin-vote-topic", "min(620px, 92vw)");
+    bindModalClose(modal);
+    const filterRows = (keyword) => {
+      const kw = String(keyword || "").trim().toLowerCase();
+      return list.filter((entry) => {
+        if (!kw) return true;
+        const haystack = `${cvFormatUnit(entry)} ${entry.name || ""} ${entry.building || ""}`.toLowerCase();
+        return haystack.indexOf(kw) !== -1;
+      });
+    };
+    const renderRows = (keyword) => {
+      const rows = filterRows(keyword);
+      if (!rows.length) return `<div class="status" style="margin:0;">沒有符合的名單</div>`;
+      return rows.map((entry) => `
+        <label class="list-item" style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+          <input type="checkbox" data-pick-entry="${escapeHtml(entry.id)}"${picked.has(String(entry.id)) ? " checked" : ""} />
+          <span style="font-weight:700;">${escapeHtml(entry.name || "")}</span>
+          <span class="muted">${escapeHtml(cvFormatUnit(entry))}${entry.building ? `｜${escapeHtml(entry.building)}` : ""}</span>
+        </label>
+      `).join("");
+    };
+    const buildings = Array.from(new Set(list.map((entry) => String(entry.building || "").trim()).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b, "zh-Hant"));
+    const buildingIds = (building) => list
+      .filter((entry) => String(entry.building || "").trim() === building)
+      .map((entry) => String(entry.id || "").trim());
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinVoteRosterPickTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="checkinVoteRosterPickTitle">從名單帶入候選人</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="field" style="display:block;">
+            <input id="cvRosterPickSearch" type="search" placeholder="搜尋姓名／戶號／棟別" />
+          </div>
+          <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0;">
+            <button class="btn btn-sm" type="button" id="cvPickAll">全選</button>
+            <button class="btn btn-sm" type="button" id="cvPickNone">清除</button>
+            <span class="muted" style="font-size:12px;">分棟：</span>
+            <span id="cvPickBuildings" class="row" style="gap:6px; flex-wrap:wrap; align-items:center;"></span>
+            <span class="muted" style="font-size:12px; margin-left:auto;">已選 <b id="cvPickCount">0</b> 位</span>
+          </div>
+          <div id="cvRosterPickList" style="display:flex; flex-direction:column; gap:6px; max-height:46vh; overflow:auto;"></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">取消</button>
+          <button class="btn btn-primary" type="button" id="cvRosterPickConfirm">帶入所選</button>
+        </div>
+      </div>
+    `.trim();
+    const listEl = modal.querySelector("#cvRosterPickList");
+    const searchEl = modal.querySelector("#cvRosterPickSearch");
+    const buildingEl = modal.querySelector("#cvPickBuildings");
+    const countEl = modal.querySelector("#cvPickCount");
+    const renderBuildings = () => {
+      const allPicked = (ids) => ids.length > 0 && ids.every((id) => picked.has(id));
+      buildingEl.innerHTML = buildings.length
+        ? buildings.map((building) => {
+          const ids = buildingIds(building);
+          return `<button class="btn btn-sm${allPicked(ids) ? " btn-primary" : ""}" type="button" data-pick-building="${escapeHtml(building)}">${escapeHtml(building)}棟（${ids.length}）</button>`;
+        }).join("")
+        : `<span class="muted" style="font-size:12px;">尚無棟別資料</span>`;
+    };
+    const refresh = () => {
+      listEl.innerHTML = renderRows(searchEl ? searchEl.value : "");
+      renderBuildings();
+      if (countEl) countEl.textContent = String(picked.size);
+    };
+    refresh();
+    if (searchEl) searchEl.addEventListener("input", () => { listEl.innerHTML = renderRows(searchEl.value); });
+    const setVisible = (checked) => {
+      filterRows(searchEl ? searchEl.value : "").forEach((entry) => {
+        const id = String(entry.id || "").trim();
+        if (checked) picked.add(id); else picked.delete(id);
+      });
+      refresh();
+    };
+    const pickAllEl = modal.querySelector("#cvPickAll");
+    const pickNoneEl = modal.querySelector("#cvPickNone");
+    if (pickAllEl) pickAllEl.addEventListener("click", () => setVisible(true));
+    if (pickNoneEl) pickNoneEl.addEventListener("click", () => setVisible(false));
+    buildingEl.addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-pick-building]");
+      if (!btn) return;
+      const ids = buildingIds(String(btn.getAttribute("data-pick-building") || "").trim());
+      const allPicked = ids.length > 0 && ids.every((id) => picked.has(id));
+      ids.forEach((id) => { if (allPicked) picked.delete(id); else picked.add(id); });
+      refresh();
+    });
+    listEl.addEventListener("change", (event) => {
+      const input = event.target.closest("[data-pick-entry]");
+      if (!input) return;
+      const id = String(input.getAttribute("data-pick-entry") || "").trim();
+      if (input.checked) picked.add(id); else picked.delete(id);
+      if (countEl) countEl.textContent = String(picked.size);
+      renderBuildings();
+    });
+    modal.querySelector("#cvRosterPickConfirm").addEventListener("click", () => {
+      const chosen = list.filter((entry) => picked.has(String(entry.id)));
+      modal.hidden = true;
+      if (typeof onConfirm === "function") onConfirm(chosen);
+    });
+    modal.hidden = false;
+  }
+
+  function cvOpenElectionModal(communityId, projectId, election) {
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    if (cvBlockIfArchived(pid)) return;
+    const current = election || null;
+    const roster = checkinVoteState.roster;
+    const rosterBuildings = new Set((Array.isArray(roster) ? roster : []).map((entry) => String((entry && entry.building) || "").trim()).filter(Boolean));
+    const findRosterCandidate = (name, building) => {
+      const targetName = String(name || "").trim();
+      const targetBuilding = String(building || "").trim();
+      if (!targetName) return null;
+      const list = Array.isArray(roster) ? roster : [];
+      return list.find((entry) => String(entry.name || "").trim() === targetName && String(entry.building || "").trim() === targetBuilding)
+        || list.find((entry) => String(entry.name || "").trim() === targetName)
+        || null;
+    };
+    const parseCandidateLine = (line) => {
+      const parts = String(line || "").split(/[｜|]/).map((item) => String(item || "").trim());
+      if (parts.length >= 4) {
+        return { name: parts[0] || "", houseNo: parts[1] || "", building: parts[2] || "", note: parts.slice(3).join("｜") || "" };
+      }
+      if (parts.length === 3) {
+        if (rosterBuildings.has(parts[2])) {
+          return { name: parts[0] || "", houseNo: parts[1] || "", building: parts[2] || "", note: "" };
+        }
+        return { name: parts[0] || "", houseNo: "", building: parts[1] || "", note: parts[2] || "" };
+      }
+      return { name: parts[0] || "", houseNo: "", building: parts[1] || "", note: parts[2] || "" };
+    };
+    const buildCandidateLine = (item) => [item.name, item.houseNo, item.building, item.note].filter(Boolean).join("｜");
+    const currentCandidates = current && Array.isArray(current.candidates) ? current.candidates : [];
+    const candidateText = currentCandidates.length
+      ? currentCandidates.map((item) => {
+        const matched = findRosterCandidate(item.name, item.building);
+        const parts = [String(item.name || "").trim()];
+        const houseNo = String(item.houseNo || (matched && matched.houseNo) || "").trim();
+        const building = String(item.building || (matched && matched.building) || "").trim();
+        if (houseNo) parts.push(houseNo);
+        if (building) parts.push(building);
+        if (String(item.note || "").trim()) parts.push(String(item.note).trim());
+        return parts.join("｜");
+      }).join("\n")
+      : "";
+    const electionSequence = current
+      ? Math.max(1, checkinVoteState.elections.findIndex((item) => String(item.id || "") === String(current.id || "")) + 1)
+      : checkinVoteState.elections.length + 1;
+    const electionCodeValue = current && String(current.code || "").trim()
+      ? String(current.code).trim()
+      : `E${String(electionSequence).padStart(2, "0")}`;
+    const seatsValue = current ? current.seats : 5;
+    const currentScope = current && String(current.scope || "").trim() === "building" ? "building" : "all";
+    const selectedScopeBuildings = new Set((current && Array.isArray(current.scopeBuildings) ? current.scopeBuildings : []).map((x) => String(x || "").trim()).filter(Boolean));
+    const buildingOptions = Array.from(new Set((Array.isArray(roster) ? roster : []).map((entry) => String((entry && entry.building) || "").trim()).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b, "zh-Hant"));
+    const buildingChoicesHtml = buildingOptions.length
+      ? buildingOptions.map((building) => `<label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;"><input type="checkbox" data-scope-building="${escapeHtml(building)}"${selectedScopeBuildings.has(building) ? " checked" : ""} />${escapeHtml(building)}</label>`).join("")
+      : `<span class="muted" style="font-size:12px;">名單尚無棟別資料</span>`;
+    const modal = ensureModal("checkinVoteElectionModal", "modal-checkin-vote-topic", "min(680px, 92vw)");
+    bindModalClose(modal);
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinVoteElectionTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="checkinVoteElectionTitle">${escapeHtml(current ? "編輯選舉" : "新增選舉")}</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <form id="checkinVoteElectionForm">
+          <div class="modal-body">
+            <label class="field" style="display:flex; align-items:center; gap:8px;">
+              <span>啟用選舉</span>
+              <input id="cvElectionEnabled" class="cv-toggle" type="checkbox"${current ? (current.enabled ? " checked" : "") : " checked"} />
+            </label>
+            <div class="field" style="display:block;">
+              <label for="cvElectionCode">代號</label>
+              <input id="cvElectionCode" type="text" value="${escapeHtml(electionCodeValue)}" />
+            </div>
+            <div class="field" style="display:block;">
+              <span>排序</span>
+              <input id="cvElectionOrder" type="number" min="0" step="1" value="${escapeHtml(String(current ? current.order : checkinVoteState.elections.length + 1))}" />
+            </div>
+            <div class="field" style="display:block;">
+              <label for="cvElectionName">選舉名稱</label>
+              <input id="cvElectionName" type="text" value="${escapeHtml(current ? current.title : "第 1 屆管理委員選舉")}" required />
+            </div>
+            <div class="field" style="display:block;">
+              <label for="cvElectionDesc">選舉說明</label>
+              <textarea id="cvElectionDesc" rows="2">${escapeHtml(current ? current.description : "")}</textarea>
+            </div>
+            <div class="field" style="display:block;">
+              <span>應選名額（席次）</span>
+              <input id="cvElectionSeats" type="number" min="1" step="1" value="${escapeHtml(String(seatsValue))}" />
+            </div>
+            <div class="field" style="display:block;">
+              <span>候補名額（0＝不限）</span>
+              <input id="cvElectionAlternates" type="number" min="0" step="1" value="${escapeHtml(String(current ? current.alternates : 0))}" />
+            </div>
+            <div class="field" style="display:block;">
+              <span>每戶可投票數（1＝一人一張）</span>
+              <input id="cvElectionPerHouse" type="number" min="1" step="1" value="${escapeHtml(String(current ? current.votesPerHousehold : 1))}" />
+            </div>
+            <div class="field" style="display:block;">
+              <label for="cvElectionScope">投票權範圍</label>
+              <select id="cvElectionScope">
+                <option value="all"${currentScope === "all" ? " selected" : ""}>全部住戶（不分棟別）</option>
+                <option value="building"${currentScope === "building" ? " selected" : ""}>指定棟別（僅該棟住戶具投票權）</option>
+              </select>
+            </div>
+            <div class="field" style="display:block;" id="cvElectionScopeWrap"${currentScope === "building" ? "" : " hidden"}>
+              <span>具投票權棟別（可複選）</span>
+              <div class="row" style="gap:10px; flex-wrap:wrap; align-items:center; margin-top:6px;">${buildingChoicesHtml}</div>
+            </div>
+            <div class="field" style="display:block;">
+              <label for="cvElectionCandidates">候選人（每行一位，可寫「姓名｜戶號｜棟別｜備註」）</label>
+              <textarea id="cvElectionCandidates" rows="6" placeholder="例如：王大明｜101｜A棟｜現任主委&#10;李美華&#10;陳建國｜305｜B棟">${escapeHtml(candidateText)}</textarea>
+              <div class="row" style="margin-top:8px;">
+                <button class="btn btn-sm" type="button" id="btnCvElectionImportRoster">從名單帶入</button>
+              </div>
+            </div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" data-modal-close="1">取消</button>
+            <button class="btn btn-primary" type="submit">儲存</button>
+          </div>
+        </form>
+      </div>
+    `.trim();
+    const candidatesTextarea = modal.querySelector("#cvElectionCandidates");
+    const seatsInput = modal.querySelector("#cvElectionSeats");
+    const perHouseInput = modal.querySelector("#cvElectionPerHouse");
+    // 每戶可投票數不得超過應選名額；調整席次時自動帶動
+    const syncPerHouse = () => {
+      const seats = Math.max(1, Number(seatsInput && seatsInput.value || 1) || 1);
+      if (perHouseInput) {
+        perHouseInput.max = String(seats);
+        const perHouse = Math.max(1, Number(perHouseInput.value || 1) || 1);
+        if (perHouse > seats) perHouseInput.value = String(seats);
+      }
+    };
+    if (seatsInput) seatsInput.addEventListener("input", syncPerHouse);
+    syncPerHouse();
+    // 投票權範圍：選擇「指定棟別」時才顯示棟別複選
+    const scopeSelect = modal.querySelector("#cvElectionScope");
+    const scopeWrap = modal.querySelector("#cvElectionScopeWrap");
+    if (scopeSelect && scopeWrap) {
+      const syncScope = () => { scopeWrap.hidden = String(scopeSelect.value || "all").trim() !== "building"; };
+      scopeSelect.addEventListener("change", syncScope);
+      syncScope();
+    }
+    const importBtn = modal.querySelector("#btnCvElectionImportRoster");
+    if (importBtn) {
+      importBtn.addEventListener("click", () => {
+        if (!roster.length) {
+          toast("此專案尚無名單，請先到「名單」建立");
+          return;
+        }
+        // 已輸入的候選人姓名作為預設勾選依據，避免重複帶入
+        const existingNames = new Set(String(candidatesTextarea && candidatesTextarea.value || "")
+          .split(/\r?\n/)
+          .map((line) => String(line || "").split(/[｜|]/)[0].trim())
+          .filter(Boolean));
+        const selectedIds = roster.filter((entry) => existingNames.has(String(entry.name || "").trim())).map((entry) => entry.id);
+        cvOpenRosterPickModal(roster, selectedIds, (chosen) => {
+          const items = String(candidatesTextarea.value || "")
+            .split(/\r?\n/)
+            .map((line) => parseCandidateLine(String(line || "").trim()))
+            .filter((item) => item.name);
+          const indexByName = new Map(items.map((item, index) => [item.name, index]));
+          chosen.forEach((entry) => {
+            const name = String(entry.name || "").trim();
+            if (!name) return;
+            const next = {
+              name,
+              houseNo: String(entry.houseNo || "").trim(),
+              building: String(entry.building || "").trim(),
+              note: indexByName.has(name) ? String(items[indexByName.get(name)].note || "").trim() : "",
+            };
+            if (indexByName.has(name)) items[indexByName.get(name)] = next;
+            else {
+              indexByName.set(name, items.length);
+              items.push(next);
+            }
+          });
+          candidatesTextarea.value = items.map(buildCandidateLine).join("\n");
+          syncPerHouse();
+        });
+      });
+    }
+    modal.querySelector("#checkinVoteElectionForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const title = String(modal.querySelector("#cvElectionName")?.value || "").trim();
+      if (!title) {
+        toast("請輸入選舉名稱");
+        return;
+      }
+      const candidateLines = String(modal.querySelector("#cvElectionCandidates")?.value || "")
+        .split(/\r?\n/)
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+      const candidates = candidateLines.map(parseCandidateLine).filter((item) => item.name);
+      try {
+        await cvSaveElection(cid, pid, current ? current.id : "", {
+          title,
+          code: modal.querySelector("#cvElectionCode")?.value || "",
+          description: modal.querySelector("#cvElectionDesc")?.value || "",
+          seats: modal.querySelector("#cvElectionSeats")?.value,
+          alternates: modal.querySelector("#cvElectionAlternates")?.value,
+          votesPerHousehold: modal.querySelector("#cvElectionPerHouse")?.value,
+          scope: modal.querySelector("#cvElectionScope")?.value || "all",
+          scopeBuildings: Array.from(modal.querySelectorAll("[data-scope-building]"))
+            .filter((input) => input.checked)
+            .map((input) => String(input.getAttribute("data-scope-building") || "").trim())
+            .filter(Boolean),
+          order: Number(modal.querySelector("#cvElectionOrder")?.value || 0) || 0,
+          enabled: modal.querySelector("#cvElectionEnabled")?.checked !== false,
+          candidates,
+        });
+      } catch (error) {
+        console.warn("[checkin-vote] 選舉儲存失敗", error);
+        toast(`選舉儲存失敗：${(error && error.message) || "請確認網路與權限"}`);
+        return;
+      }
+      modal.hidden = true;
+      toast(current ? "選舉已更新" : "選舉已新增");
+    };
+    modal.hidden = false;
   }
 
   async function cvReadFileAsDataUrl(file) {
@@ -22837,6 +23654,7 @@
     const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
     const pid = String(projectId || "").trim();
     if (!pid) return;
+    if (cvBlockIfArchived(pid)) return;
     const ref = documentId ? cvRefDocuments(cid, pid).doc(String(documentId || "").trim()) : cvRefDocuments(cid, pid).doc();
     const now = cvNow();
     const data = {
@@ -22863,6 +23681,7 @@
     const pid = String(projectId || "").trim();
     const did = String(documentId || "").trim();
     if (!pid || !did) return;
+    if (cvBlockIfArchived(pid)) return;
     const ok = window.confirm("要刪除此文件嗎？");
     if (!ok) return;
     await cvRefDocuments(cid, pid).doc(did).delete();
@@ -22892,7 +23711,9 @@
       `;
     }
     const checkedInCount = roster.filter((item) => item.checkedIn).length;
-    const votedResidents = roster.filter((item) => cvResidentVoteCount(item) > 0).length;
+    const voteBase = cvVoteBaseRoster(project, roster);
+    const voteBaseCount = voteBase.length;
+    const votedResidents = voteBase.filter((item) => cvResidentVoteCount(item) > 0).length;
     const enabledTopics = topics.filter((item) => item.enabled !== false);
     const ck = cvCheckinStats(project, roster);
     return `
@@ -22903,15 +23724,15 @@
           <div class="muted" style="margin-top:6px;">會議時間：${escapeHtml(cvFormatDateTime(project.meetingAtMs))}</div>
         </div>
         <div class="row" style="gap:8px;">
-          <button class="btn" type="button" data-cv-go="scan">前往掃碼</button>
-          <button class="btn" type="button" data-cv-go="archive">專案備存</button>
+          <button class="btn danger" type="button" data-cv-go="scan">前往掃碼</button>
+          <button class="btn btn-warning" type="button" data-cv-go="archive">專案備存</button>
         </div>
       </div>
       <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:16px;">
         <div class="co-card tone-success"><div class="co-label">名單總數</div><div class="co-value">${roster.length}<span class="co-unit">人</span></div><div class="co-sub">本專案獨立名單</div></div>
         <div class="co-card ${checkedInCount ? "tone-success" : "tone-muted"}"><div class="co-label">已報到</div><div class="co-value">${checkedInCount}<span class="co-unit">人</span></div><div class="co-sub">戶數 ${cvFormatPct(ck.countRatePct)}｜區分所有權 ${ck.shareKnown ? cvFormatPct(ck.shareRatePct) : "—"}</div></div>
         <div class="co-card ${ck.passed ? "tone-success" : "tone-muted"}"><div class="co-label">報到結果</div><div class="co-value">${ck.passed ? "通過" : "未通過"}</div><div class="co-sub">門檻 戶數 ${ck.targetCountPct}%／區分所有權 ${ck.targetSharePct}%</div></div>
-        <div class="co-card ${votedResidents ? "tone-success" : "tone-muted"}"><div class="co-label">已投票</div><div class="co-value">${votedResidents}<span class="co-unit">人</span></div><div class="co-sub">投票率 ${checkedInCount ? Math.round((votedResidents / checkedInCount) * 100) : 0}%（以實際報到 ${checkedInCount} 人為分母）</div></div>
+        <div class="co-card ${votedResidents ? "tone-success" : "tone-muted"}"><div class="co-label">已投票</div><div class="co-value">${votedResidents}<span class="co-unit">人</span></div><div class="co-sub">投票率 ${voteBaseCount ? Math.round((votedResidents / voteBaseCount) * 100) : 0}%（以實際報到 ${voteBaseCount} 人為分母）</div></div>
         <div class="co-card tone-primary"><div class="co-label">議題數</div><div class="co-value">${enabledTopics.length}<span class="co-unit">題</span></div><div class="co-sub">文件 ${documents.length} 筆</div></div>
       </div>
       <div class="row" style="margin-top:10px;">
@@ -22930,14 +23751,14 @@
         <div style="flex:1 1 320px;">
           <div class="care-overview-head"><strong>投票概況</strong><span>${enabledTopics.length} 題</span></div>
           ${enabledTopics.length ? enabledTopics.map((topic) => {
-            const participation = cvTopicParticipationCount(topic, roster);
+            const participation = cvTopicParticipationCount(topic, voteBase);
             return `
               <div class="list-item" style="display:block;">
                 <div style="display:flex; justify-content:space-between; gap:12px; align-items:center;">
                   <div style="font-weight:700;">${escapeHtml(topic.title)}</div>
-                  <span class="status-chip ${participation ? "success" : "gray"}">${participation}/${checkedInCount}</span>
+                  <span class="status-chip ${participation ? "success" : "gray"}">${participation}/${voteBaseCount}</span>
                 </div>
-                <div class="muted" style="margin-top:6px;">${escapeHtml(topic.description || (topic.singleChoice ? "單選題" : "多選題"))}</div>
+                <div class="muted" style="margin-top:6px;">${escapeHtml(topic.description || cvTopicTypeLabel(topic))}</div>
               </div>
             `;
           }).join("") : `<div class="status">目前尚未建立投票議題</div>`}
@@ -22952,7 +23773,7 @@
       return `
         <div class="status">此專案目前沒有名單，請先到「名單」建立或帶入住戶資料。</div>
         <div class="row" style="margin-top:12px;">
-          <button class="btn" type="button" data-cv-go="roster">前往名單</button>
+          <button class="btn btn-success" type="button" data-cv-go="roster">前往名單</button>
         </div>
       `;
     }
@@ -22969,7 +23790,7 @@
         <div class="muted">可用方式：${project.settings.allowManualCheckin ? "人工" : ""}${project.settings.allowManualCheckin && project.settings.allowQrCheckin ? "、" : ""}${project.settings.allowQrCheckin ? "QR" : ""}</div>
         <div class="row" style="gap:8px;">
           ${project.settings.allowQrCheckin ? `<button class="btn btn-primary" type="button" data-cv-go="scan">掃碼報到</button>` : ""}
-          <button class="btn" type="button" data-cv-go="roster">管理名單</button>
+          <button class="btn btn-success" type="button" data-cv-go="roster">管理名單</button>
         </div>
       </div>
       <div style="display:flex; flex-direction:column; gap:12px;">
@@ -22979,7 +23800,6 @@
               <div>
                 <div style="font-size:calc(16px * var(--fs, 1)); font-weight:800; color:#111827;">${escapeHtml(cvDisplayName(entry))}</div>
                 <div class="muted" style="margin-top:4px;">${escapeHtml(cvFormatUnit(entry))}${entry.phone ? `｜${escapeHtml(entry.phone)}` : ""}</div>
-                <div class="muted" style="margin-top:4px;">${entry.checkedIn ? `已於 ${escapeHtml(cvFormatDateTime(entry.checkedInAtMs))} 透過 ${escapeHtml(entry.checkedInMethod || "manual")} 報到` : "尚未報到"}</div>
               </div>
               <div class="row" style="gap:8px; align-items:center;">
                 <span class="status-chip ${entry.checkedIn ? "success" : "warning"}">${entry.checkedIn ? "已報到" : "待報到"}</span>
@@ -22988,6 +23808,11 @@
                   ? `<button class="btn btn-sm" type="button" data-cv-undo-checkin="${escapeHtml(entry.id)}">取消報到</button>`
                   : `<button class="btn btn-sm btn-primary" type="button" data-cv-checkin="${escapeHtml(entry.id)}">人工報到</button>`) : ""}
               </div>
+            </div>
+            <div class="cv-ck-meta">
+              <div><span>報到時間</span><b>${entry.checkedIn ? escapeHtml(cvFormatDateTime(entry.checkedInAtMs)) : "—"}</b></div>
+              <div><span>報到方式</span><b>${entry.checkedIn ? escapeHtml(cvCheckinMethodLabel(entry.checkedInMethod)) : "—"}</b></div>
+              <div><span>操作人員</span><b>${entry.checkedIn ? escapeHtml(entry.checkedInByName || "—") : "—"}</b></div>
             </div>
           </div>
         `).join("")}
@@ -22999,7 +23824,7 @@
     if (!project) return `<div class="status">請先新增專案。</div>`;
     return `
       <div class="row" style="justify-content:space-between; gap:12px; margin-bottom:14px;">
-        <div class="muted">可用方式：${project.settings.allowManualVote ? "人工投票" : ""}${project.settings.allowManualVote && project.settings.allowQrVote ? "、" : ""}${project.settings.allowQrVote ? "QR 掃碼投票" : ""}${project.settings.requireCheckinBeforeVote ? "｜需先報到" : ""}</div>
+        <div class="muted">可用方式：${project.settings.allowManualVote ? "人工投票" : ""}${project.settings.allowManualVote && project.settings.allowQrVote ? "、" : ""}${project.settings.allowQrVote ? "QR 掃碼投票" : ""}${project.settings.requireCheckinBeforeVote ? "｜需先報到" : "｜免報到可投票"}</div>
         <div class="row" style="gap:8px;">
           <button class="btn danger" type="button" id="btnCvAddTopic">新增議題</button>
           ${project.settings.allowQrVote ? `<button class="btn btn-primary" type="button" data-cv-go="scan">掃碼投票</button>` : ""}
@@ -23013,7 +23838,7 @@
               <div class="left">
                 <div style="min-width:0;">
                   <h2 style="font-size:calc(22px * var(--fs, 1));">${escapeHtml(topic.title)}</h2>
-                  <p>${escapeHtml(topic.description || (topic.singleChoice ? "單選題" : "多選題"))}</p>
+                  <p>${escapeHtml(topic.description || cvTopicTypeLabel(topic))}</p>
                 </div>
               </div>
               <div class="row" style="gap:8px;">
@@ -23031,19 +23856,18 @@
                 </div>
               </div>
               <div class="muted" style="margin-bottom:10px;">通過門檻：得票戶數 ${stats.passCountPct}%／得票區分所有權 ${stats.passSharePct}%（兩者皆須達標）${stats.usingDefaultCount || stats.usingDefaultShare ? "｜沿用專案預設" : "｜本議題自訂"}</div>
-              <div style="display:flex; flex-direction:column; gap:10px;">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap:10px;">
                 ${(topic.options || []).map((option) => {
                   const opt = stats.options.find((item) => item.id === String(option.id || "").trim())
                     || { count: 0, countRatePct: 0, shareRatePct: 0, passed: false };
                   return `
-                  <div class="list-item">
-                    <div>
+                  <div class="list-item" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:var(--panel-2);">
+                    <div style="min-width:0;">
                       <div style="font-weight:700;">${escapeHtml(option.label)}</div>
                       <div class="muted" style="margin-top:4px;">${opt.count} 票｜戶數 ${cvFormatPct(opt.countRatePct)}／區分所有權 ${stats.shareKnown ? cvFormatPct(opt.shareRatePct) : "—"}</div>
                     </div>
-                    <div class="row" style="gap:8px;">
+                    <div style="flex:0 0 auto;">
                       <span class="status-chip ${opt.passed ? "success" : "gray"}">${opt.passed ? "通過" : "未達門檻"}</span>
-                      <button class="btn btn-sm" type="button" data-cv-option-qr="${escapeHtml(`${topic.id}::${option.id}`)}">QR</button>
                     </div>
                   </div>
                 `;
@@ -23062,19 +23886,24 @@
       <div class="row" style="justify-content:space-between; gap:12px; margin-bottom:14px;">
         <div class="muted">此名單為本專案獨立資料，不會直接覆蓋住戶造冊。</div>
         <div class="row" style="gap:8px;">
+          <button class="btn" type="button" id="btnCvExportRosterExcel">匯出Excel</button>
+          <button class="btn" type="button" id="btnCvImportRosterExcel">匯入Excel</button>
           <button class="btn" type="button" id="btnCvImportResidents">帶入住戶造冊</button>
           <button class="btn danger" type="button" id="btnCvAddRosterEntry">新增名單</button>
         </div>
       </div>
+      <input type="file" id="cvRosterExcelInput" accept=".xlsx,.xls,.csv" hidden />
       ${roster.length ? `
         <div class="cv-roster-table-wrap">
           <table class="cv-roster-table">
             <thead>
               <tr>
-                <th>QR code碼</th>
+                <th>編號</th>
+                <th class="cv-roster-qr-col">QR code碼</th>
                 <th>戶號</th>
                 <th>姓名</th>
                 <th>地址</th>
+                <th>棟別</th>
                 <th>坪數</th>
                 <th>區分所有權比例</th>
                 <th>報到</th>
@@ -23085,12 +23914,14 @@
             <tbody>
               ${roster.map((entry) => `
                 <tr>
+                  <td data-label="編號" class="cv-roster-no"><span>${escapeHtml(entry.rosterNo || "—")}</span></td>
                   <td data-label="QR code碼"><span class="cv-roster-qr" title="${escapeHtml(entry.qrToken)}">${escapeHtml(entry.qrToken)}</span></td>
                   <td data-label="戶號">${escapeHtml(cvFormatUnit(entry))}</td>
                   <td data-label="姓名">${escapeHtml(cvDisplayName(entry))}</td>
                   <td data-label="地址">${escapeHtml(entry.address || "—")}</td>
-                  <td data-label="坪數">${escapeHtml(entry.area || "—")}</td>
-                  <td data-label="區分所有權比例">${entry.ownership ? `${escapeHtml(entry.ownership)}%` : "—"}</td>
+                  <td data-label="棟別">${escapeHtml(entry.building || "—")}</td>
+                  <td data-label="坪數">${escapeHtml(cvFixed2(entry.area) || "—")}</td>
+                  <td data-label="區分所有權比例">${entry.ownership ? `${escapeHtml(cvFixed2(entry.ownership))}%` : "—"}</td>
                   <td data-label="報到">${entry.checkedIn ? `<span class="status-chip success">已報到</span>` : `<span class="status-chip gray">未報到</span>`}</td>
                   <td data-label="投票">${cvResidentVoteCount(entry)}/${topics.length}</td>
                   <td data-label="操作">
@@ -23109,16 +23940,161 @@
     `;
   }
 
+  /* ── 名單 Excel 匯出／匯入（使用 admin.html 既有 SheetJS） ── */
+  const CV_ROSTER_EXCEL_COLUMNS = ["編號", "QR code碼", "戶號", "子戶號", "姓名", "地址", "棟別", "坪數", "區分所有權比例"];
+  const CV_ROSTER_EXCEL_FIELDS = {
+    rosterNo: ["編號", "序號", "編號no", "no", "id"],
+    qrToken: ["qrcode碼", "qrcode", "qr碼", "qr", "qrtoken"],
+    houseNo: ["戶號", "戶別", "門牌", "houseno"],
+    subHouseNo: ["子戶號", "子號", "subhouseno"],
+    name: ["姓名", "名字", "住戶", "name"],
+    address: ["地址", "住址", "address"],
+    building: ["棟別", "棟", "區", "building", "block"],
+    area: ["坪數", "面積", "坪", "area"],
+    ownership: ["區分所有權比例", "區分所有權", "持分", "比例", "ownership"],
+  };
+
+  function cvRosterExcelText(value) {
+    return String(value == null ? "" : value).trim();
+  }
+
+  function cvRosterExcelPick(row, field) {
+    const source = row && typeof row === "object" ? row : {};
+    const aliases = CV_ROSTER_EXCEL_FIELDS[field] || [];
+    const hit = Object.keys(source).find((key) => {
+      const normalized = String(key || "").trim().toLowerCase().replace(/[\s_()（）]/g, "");
+      return aliases.some((alias) => alias.toLowerCase().replace(/[\s_()（）]/g, "") === normalized);
+    });
+    return hit ? cvRosterExcelText(source[hit]) : "";
+  }
+
+  function cvExportRosterExcel(project) {
+    const XLSX = window.XLSX;
+    if (!XLSX) {
+      toast("Excel 元件尚未載入，請重新整理後再試");
+      return;
+    }
+    const rows = (Array.isArray(checkinVoteState.roster) ? checkinVoteState.roster : []).map((entry) => ({
+      "編號": entry.rosterNo || "",
+      "QR code碼": entry.qrToken || "",
+      "戶號": entry.houseNo || "",
+      "子戶號": entry.subHouseNo || "",
+      "姓名": entry.name || "",
+      "地址": entry.address || "",
+      "棟別": entry.building || "",
+      "坪數": entry.area || "",
+      "區分所有權比例": entry.ownership || "",
+    }));
+    if (!rows.length) {
+      toast("目前沒有可匯出的名單");
+      return;
+    }
+    const sheet = XLSX.utils.json_to_sheet(rows, { header: CV_ROSTER_EXCEL_COLUMNS });
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, "名單");
+    XLSX.writeFile(book, `名單_${sanitizeFileName80(project && project.name)}_${stamp80()}.xlsx`);
+    toast(`已匯出 ${rows.length} 筆名單`);
+  }
+
+  async function cvImportRosterExcel(communityId, projectId, file) {
+    const XLSX = window.XLSX;
+    if (!XLSX) {
+      toast("Excel 元件尚未載入，請重新整理後再試");
+      return;
+    }
+    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
+    const pid = String(projectId || "").trim();
+    if (!pid) return;
+    if (cvBlockIfArchived(pid)) return;
+    let rows = [];
+    try {
+      const book = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const sheetName = book.SheetNames[0];
+      rows = sheetName
+        ? XLSX.utils.sheet_to_json(book.Sheets[sheetName], { defval: "", raw: false })
+        : [];
+    } catch (err) {
+      toast("無法讀取此 Excel 檔案");
+      return;
+    }
+    if (!rows.length) {
+      toast("檔案中沒有可匯入的資料");
+      return;
+    }
+    const existing = Array.isArray(checkinVoteState.roster) ? checkinVoteState.roster : [];
+    const byToken = new Map();
+    const byUnit = new Map();
+    existing.forEach((entry) => {
+      if (entry.qrToken) byToken.set(entry.qrToken, entry);
+      byUnit.set(`${entry.houseNo}|${entry.subHouseNo}|${entry.name}`, entry);
+    });
+    const creates = [];
+    const updates = [];
+    let skipped = 0;
+    rows.forEach((row) => {
+      const houseNo = cvRosterExcelPick(row, "houseNo");
+      const subHouseNo = cvRosterExcelPick(row, "subHouseNo");
+      const name = cvRosterExcelPick(row, "name");
+      if (!name && !houseNo) {
+        skipped += 1;
+        return;
+      }
+      const ownership = cvRosterExcelPick(row, "ownership").replace(/[%％\s]/g, "");
+      const payload = {
+        houseNo,
+        subHouseNo,
+        name: name || "住戶",
+        address: cvRosterExcelPick(row, "address"),
+        building: cvRosterExcelPick(row, "building"),
+        area: cvRosterExcelPick(row, "area"),
+        ownership: Number.isFinite(Number(ownership)) ? String(Number(ownership)) : "",
+        rosterNo: cvRosterExcelPick(row, "rosterNo"),
+        qrToken: cvRosterExcelPick(row, "qrToken"),
+      };
+      const matched = (payload.qrToken && byToken.get(payload.qrToken))
+        || byUnit.get(`${payload.houseNo}|${payload.subHouseNo}|${payload.name}`)
+        || null;
+      if (matched) updates.push({ id: matched.id, payload });
+      else creates.push(payload);
+    });
+    if (!creates.length && !updates.length) {
+      toast(`沒有可匯入的資料${skipped ? `（略過 ${skipped} 筆）` : ""}`);
+      return;
+    }
+    const summary = `匯入預覽：新增 ${creates.length} 筆、更新 ${updates.length} 筆${skipped ? `、略過 ${skipped} 筆（無戶號與姓名）` : ""}。是否繼續？`;
+    if (!window.confirm(summary)) return;
+    const rosterRef = cvRefRoster(cid, pid);
+    const writes = [
+      ...creates.map((payload) => ({ ref: rosterRef.doc(), data: cvBuildRosterEntryData(payload, true) })),
+      ...updates.map((item) => ({ ref: rosterRef.doc(item.id), data: cvBuildRosterEntryData(item.payload, false) })),
+    ];
+    for (let i = 0; i < writes.length; i += 400) {
+      const batch = db.batch();
+      writes.slice(i, i + 400).forEach((item) => batch.set(item.ref, item.data, { merge: true }));
+      await batch.commit();
+    }
+    toast(`已匯入：新增 ${creates.length} 筆、更新 ${updates.length} 筆`);
+    await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: pid });
+  }
+
   // ==== 文件產生器（報到單 / 投票單）====
   const cvDocPrefs = {
-    checkin: { layout: "personal", targetId: "__all__", perPage: 10, mergeOwner: false },
-    vote: { layout: "single", targetId: "__all__", topicId: "__all__", mergeOwner: false },
+    checkin: { layout: "personal", targetId: "__all__", targetIds: ["__all__"], perPage: 10, mergeOwner: false },
+    vote: { layout: "single", targetId: "__all__", topicId: "__all__", mergeOwner: false, perPage: 5 },
+    pass: { layout: "biz", targetIds: ["__all__"], heading: "出席證" },
   };
   const cvDocPageCss = `
     .cv-doc-page { width: 210mm; height: 297mm; box-sizing: border-box; padding: 18mm 16mm; background: #fff; color: #111827; display: flex; flex-direction: column; font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif; overflow: hidden; }
     .cv-doc-hd { border-bottom: 3px solid #d32f2f; padding-bottom: 10px; margin-bottom: 16px; }
     .cv-doc-hd h1 { margin: 0; font-size: 26px; letter-spacing: 2px; font-weight: 800; }
-    .cv-doc-sub { margin: 6px 0 0; font-size: 15px; color: #374151; }
+    .cv-doc-title-row { position: relative; display: flex; align-items: center; justify-content: center; gap: 12px; }
+    .cv-doc-house { position: absolute; right: 0; top: 0; font-size: 28px; font-weight: 800; color: #374151; }
+    .cv-doc-logo { height: 44px; width: auto; max-width: 120px; object-fit: contain; flex: 0 0 auto; }
+    .cv-doc-subrow { position: relative; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 6px; }
+    .cv-doc-subrow .cv-doc-sub, .cv-doc-subrow .cv-doc-meta { margin: 0; }
+    .cv-doc-subrow .cv-doc-sub { flex: 1 1 auto; text-align: center; }
+    .cv-doc-subrow .cv-doc-meta { position: absolute; right: 0; top: 0; text-align: right; white-space: nowrap; }
+    .cv-doc-sub { margin: 6px 0 0; font-size: 19px; font-weight: 600; text-align: center; color: #374151; }
     .cv-doc-meta { margin: 4px 0 0; font-size: 13px; color: #6b7280; }
     .cv-doc-bd { flex: 1; }
     .cv-doc-ft { border-top: 1px solid #e5e7eb; padding-top: 8px; margin-top: 12px; display: flex; justify-content: space-between; font-size: 12px; color: #9ca3af; }
@@ -23129,6 +24105,23 @@
     .cv-doc-table th, .cv-doc-table td { border: 1px solid #d1d5db; padding: 9px 10px; font-size: 14px; }
     .cv-doc-table th { background: #f9fafb; }
     .cv-doc-table td { height: 34px; }
+    .cv-doc-roster-table { table-layout: fixed; }
+    .cv-doc-roster-table th, .cv-doc-roster-table td { padding: 4px 5px; font-size: 11px; text-align: center; word-break: break-word; vertical-align: middle; }
+    .cv-doc-roster-table th { line-height: 1.25; }
+    .cv-doc-roster-table td { height: 48px; }
+    .cv-doc-roster-table td:nth-child(3), .cv-doc-roster-table td:nth-child(4) { text-align: left; }
+    .cv-doc-roster-table tfoot td { padding: 10px 8px; font-size: 12px; text-align: left; }
+    .cv-doc-roster-table tfoot td.cv-doc-proxy-cell { padding: 12px 10px; border-top: 1px solid #e5e7eb; }
+    .cv-doc-proxy { text-align: left; }
+    .cv-doc-proxy-title { font-size: 18px; font-weight: 900; text-align: center; letter-spacing: 3px; margin-bottom: 10px; }
+    .cv-doc-proxy-body { font-size: 13px; line-height: 2.8; white-space: pre-wrap; word-break: break-word; }
+    .cv-doc-blank { border-bottom: 1px solid #111827; letter-spacing: 4px; }
+    .cv-doc-proxy-date { margin-top: 16px; text-align: center; font-size: 13px; letter-spacing: 1px; }
+    .cv-doc-roster-table .cv-doc-roster-opts { padding: 3px 4px; text-align: left; font-size: 9px; line-height: 1.55; }
+    .cv-doc-roster-table .cv-doc-roster-opts span { display: block; white-space: nowrap; }
+    .cv-doc-roster-qr img { width: 42px; height: 42px; display: block; margin: 0 auto; }
+    .cv-doc-roster-qr-unit { display: block; margin-bottom: 2px; font-size: 9px; font-weight: 800; line-height: 1.2; }
+    .cv-doc-roster-qr-txt { display: block; margin-top: 2px; font-size: 8px; line-height: 1.2; letter-spacing: 0; word-break: break-all; }
     .cv-doc-qr { text-align: center; margin: 20px 0; }
     .cv-doc-qr img { width: 150px; height: 150px; }
     .cv-doc-qr-cap { font-size: 12px; color: #6b7280; margin-top: 6px; }
@@ -23138,15 +24131,42 @@
     .cv-doc-qr-item .cv-doc-qr-cap { font-size: 11px; }
     .cv-doc-note { border: 1px dashed #d1d5db; border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #4b5563; line-height: 1.7; }
     .cv-doc-topic { border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
-    .cv-doc-topic-title { font-size: 16px; font-weight: 800; }
-    .cv-doc-topic-desc { font-size: 13px; color: #6b7280; margin-top: 6px; }
-    .cv-doc-options { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-direction: column; gap: 10px; }
-    .cv-doc-options li { display: flex; align-items: center; gap: 12px; }
-    .cv-doc-box { width: 18px; height: 18px; border: 2px solid #374151; border-radius: 3px; flex: 0 0 auto; }
-    .cv-doc-opt-label { font-size: 15px; flex: 1; }
-    .cv-doc-opt-qr { width: 64px; height: 64px; border: 1px solid #e5e7eb; padding: 2px; }
-    .cv-doc-sign { margin-top: 22px; display: flex; gap: 28px; font-size: 14px; }
-    .cv-doc-sign span { flex: 1; border-bottom: 1px solid #374151; padding-bottom: 28px; }
+    .cv-doc-topic-title { font-size: 26px; font-weight: 800; }
+    .cv-doc-topic-desc { font-size: 15px; color: #6b7280; margin-top: 6px; }
+    .cv-doc-options { list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+    .cv-doc-options li { display: flex; align-items: center; gap: 10px; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; background: #f9fafb; }
+    .cv-doc-box { width: 24px; height: 24px; border: 2px solid #374151; border-radius: 3px; flex: 0 0 auto; }
+    .cv-doc-opt-label { font-size: 19px; flex: 1; }
+    .cv-doc-opt-qrwrap { flex: 0 0 auto; width: 120px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .cv-doc-opt-qr { width: 96px; height: 96px; border: 1px solid #e5e7eb; padding: 2px; }
+    .cv-doc-opt-qr-txt { font-size: 8px; line-height: 1.3; color: #4b5563; text-align: center; word-break: break-all; }
+    /* 報到證：名片式 9cm × 5cm（每頁 10 張＝2 欄×5 列）與直立式 4cm × 6cm（每頁 20 張＝5 欄×4 列），卡片相鄰無間距 */
+    .cv-doc-page--pass { padding: 0; }
+    .cv-doc-pass-grid { display: grid; gap: 0; height: 100%; justify-content: center; align-content: center; }
+    .cv-doc-pass-grid--biz { grid-template-columns: repeat(2, 90mm); grid-auto-rows: 50mm; }
+    .cv-doc-pass-grid--tall { grid-template-columns: repeat(5, 40mm); grid-auto-rows: 60mm; }
+    .cv-pass { box-sizing: border-box; border: 1px dashed #9ca3af; overflow: hidden; display: flex; flex-direction: column; }
+    .cv-pass--biz { padding: 2.5mm 3mm; gap: 1.5mm; }
+    .cv-pass--tall { padding: 2.5mm; align-items: center; justify-content: center; text-align: center; gap: 1mm; }
+    .cv-pass-heading { font-size: 23px; font-weight: 800; letter-spacing: 3px; color: #111827; text-align: center; line-height: 1.2; padding-bottom: 1.5mm; border-bottom: 1px solid #9ca3af; }
+    .cv-pass--biz .cv-pass-body { flex: 1; min-height: 0; display: flex; flex-direction: row; align-items: center; gap: 3mm; }
+    .cv-pass-qr { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.8mm; }
+    .cv-pass--biz .cv-pass-qr img { display: block; width: 28mm; height: 28mm; }
+    .cv-pass--tall .cv-pass-qr img { display: block; width: 28mm; height: 28mm; }
+    .cv-pass-qr-txt { font-size: 8px; font-weight: 700; color: #4b5563; letter-spacing: 0.5px; }
+    .cv-pass-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 0.8mm; }
+    .cv-pass-brand { font-size: 16px; font-weight: 800; color: #111827; line-height: 1.3; }
+    .cv-pass-project { font-size: 12.5px; font-weight: 700; color: #374151; line-height: 1.35; }
+    .cv-pass-line { font-size: 11.5px; color: #374151; line-height: 1.5; }
+    .cv-pass-house { font-size: 15px; font-weight: 800; color: #111827; letter-spacing: 1px; line-height: 1.2; }
+    .cv-pass--tall .cv-pass-brand { font-size: 10px; }
+    .cv-pass--tall .cv-pass-project { font-size: 8px; }
+    .cv-pass--tall .cv-pass-line { font-size: 7.5px; }
+    .cv-pass--tall .cv-pass-house { font-size: 28px; }
+    .cv-pass--tall .cv-pass-qr-txt { font-size: 7px; }
+    .cv-log-table th, .cv-log-table td { font-size: 13px; padding: 8px 10px; vertical-align: middle; }
+    .cv-log-table td:first-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .cv-log-table td:nth-child(2) { white-space: nowrap; }
   `;
   const cvDocPrintCss = `
     @page { size: A4 portrait; margin: 0; }
@@ -23169,39 +24189,121 @@
     return text || "社區";
   }
 
+  // 讀取 LOGO 圖片並縮圖，回傳可直接存入 Firestore 的 Base64 Data URL
+  function cvDocReadLogoFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("read-failed"));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error("image-decode-failed"));
+        img.onload = () => {
+          const srcW = img.naturalWidth || 0;
+          const srcH = img.naturalHeight || 0;
+          if (!srcW || !srcH) {
+            reject(new Error("bad-image"));
+            return;
+          }
+          const scale = Math.min(1, 360 / srcW, 200 / srcH);
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(srcW * scale));
+          canvas.height = Math.max(1, Math.round(srcH * scale));
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("no-canvas"));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const keepAlpha = /png|svg/i.test(String(file.type || "")) || /\.png$/i.test(String(file.name || ""));
+          resolve(canvas.toDataURL(keepAlpha ? "image/png" : "image/jpeg", 0.85));
+        };
+        img.src = String(reader.result || "");
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   function cvDocDefaultHeader(project, kind) {
     const isVote = kind === "vote";
+    const meetingMs = Number((project && project.meetingAtMs) || 0) || 0;
+    let deadlineLine = "";
+    if (meetingMs) {
+      // 補發時間預設為會議日前 3 天（民國年格式）
+      const pad2 = (n) => String(n).padStart(2, "0");
+      const dd = new Date(meetingMs - 3 * 24 * 60 * 60 * 1000);
+      deadlineLine = `${dd.getFullYear() - 1911}年${pad2(dd.getMonth() + 1)}月${pad2(dd.getDate())}日`;
+    }
+    const communityName = cvDocCommunityName();
+    const projectName = String((project && project.name) || "").trim();
     return {
-      title: `${cvDocCommunityName()} ${isVote ? "投票單" : "報到單"}`,
-      subtitle: String(project && project.name || "").trim(),
+      title: `${communityName}${projectName ? ` ${projectName}` : ""}`,
+      subtitle: isVote ? "投票單" : (kind === "pass" ? "報到證" : "個人報到單"),
       meetingLine: project && project.meetingAtMs ? `會議時間：${cvFormatDateTime(project.meetingAtMs)}` : "",
+      deadlineLine,
       note: isVote
         ? "請於選項方格內打勾（或掃描選項 QR code），並於下方簽名確認。"
         : "請於報到時出示個人 QR code 或於名冊簽名，以完成報到手續。",
-      showQr: true,
+      logo: String((project && project.settings && project.settings.docLogoDataUrl) || "").trim(),
+      // 報到證卡片上方置中抬頭（可由編輯區「抬頭名稱」調整）
+      passHeading: String(cvDocPrefs.pass.heading || "").trim() || "出席證",
     };
   }
 
-  function cvDocPickTargets(roster, targetId) {
+  // 依「棟別」彙總名單（僅列出有填棟別的住戶）
+  function cvDocBuildingList(roster) {
+    const map = new Map();
+    (Array.isArray(roster) ? roster : []).forEach((entry) => {
+      const key = String((entry && entry.building) || "").trim();
+      if (!key) return;
+      map.set(key, (map.get(key) || 0) + 1);
+    });
+    return Array.from(map.entries()).sort((a, b) => String(a[0]).localeCompare(String(b[0]), "zh-Hant"));
+  }
+
+  // 報到單對象：可複選，支援 __all__（全部）、b:棟別、住戶 id
+  function cvDocTargetPickerHtml(roster, selected, pickerId) {
     const list = Array.isArray(roster) ? roster : [];
-    const id = String(targetId || "__all__").trim();
-    if (!id || id === "__all__") return list.slice();
-    return list.filter((entry) => String(entry.id || "") === id);
+    const selectedList = (Array.isArray(selected) ? selected : [selected]).map((item) => String(item == null ? "" : item).trim()).filter(Boolean);
+    const current = selectedList.length ? new Set(selectedList) : new Set(["__all__"]);
+    if (!current.size) current.add("__all__");
+    const chip = (value, label, on) => `<button class="btn btn-sm cv-target-chip${on ? " is-on" : ""}" type="button" data-cv-target="${escapeHtml(value)}">${escapeHtml(label)}</button>`;
+    const buildings = cvDocBuildingList(list);
+    return `
+      <div class="cv-target-picker" id="${escapeHtml(pickerId || "cvCheckinTargetPicker")}">
+        <div class="cv-target-row">
+          ${chip("__all__", `全部名單（${list.length} 人）`, current.has("__all__"))}
+        </div>
+        ${buildings.length ? `<div class="cv-target-row">
+          <span class="cv-target-key">棟別</span>
+          ${buildings.map((item) => chip(`b:${item[0]}`, `${item[0]}（${item[1]}）`, current.has(`b:${item[0]}`))).join("")}
+        </div>` : ""}
+        <div class="cv-target-row">
+          <span class="cv-target-key">住戶</span>
+          ${list.map((entry) => chip(String(entry.id), `${entry.name}（${cvFormatUnit(entry)}）`, current.has(String(entry.id)))).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function cvDocPickTargets(roster, targetIds) {
+    const list = Array.isArray(roster) ? roster : [];
+    const tokens = (Array.isArray(targetIds) ? targetIds : [targetIds])
+      .map((item) => String(item == null ? "" : item).trim())
+      .filter(Boolean);
+    if (!tokens.length || tokens.includes("__all__")) return list.slice();
+    const idSet = new Set();
+    const buildingSet = new Set();
+    tokens.forEach((token) => {
+      if (token.slice(0, 2) === "b:") buildingSet.add(token.slice(2));
+      else idSet.add(token);
+    });
+    return list.filter((entry) => idSet.has(String(entry.id || "")) || buildingSet.has(String((entry && entry.building) || "").trim()));
   }
 
   function cvDocEnabledTopics() {
     return (Array.isArray(checkinVoteState.topics) ? checkinVoteState.topics : [])
       .filter((topic) => topic && topic.enabled !== false)
       .sort((a, b) => (Number(a.order || 0) - Number(b.order || 0)) || String(a.title || "").localeCompare(String(b.title || ""), "zh-Hant"));
-  }
-
-  function cvDocVoteEntryTable(entry) {
-    return `
-      <table class="cv-doc-info">
-        <tr><th>戶號</th><td>${escapeHtml(cvFormatUnit(entry))}</td><th>姓名</th><td>${escapeHtml(cvDisplayName(entry))}</td></tr>
-        <tr><th>投票時間</th><td></td><th>簽名</th><td></td></tr>
-      </table>
-    `;
   }
 
   // 合併同一區分所有權人的多戶資料表（用於合併報到單／投票單）
@@ -23247,6 +24349,12 @@
     `;
   }
 
+  // 合併戶別的投票碼前綴：取該區分所有權人第一筆住戶的 QR code 碼
+  function cvDocOwnerQrToken(group) {
+    const entries = Array.isArray(group && group.entries) ? group.entries : [];
+    return entries.length ? String(entries[0].qrToken || "").trim() : "";
+  }
+
   function cvDocOwnerQrBlock(group, project) {
     const entries = Array.isArray(group && group.entries) ? group.entries : [];
     if (!entries.length) return "";
@@ -23254,7 +24362,7 @@
       <div class="cv-doc-qr-list">
         ${entries.map((entry) => `
           <div class="cv-doc-qr-item">
-            <img src="${escapeHtml(cvQrImageUrl(cvPersonQrPayload(project.id, entry)))}" alt="QR" />
+            <img src="${escapeHtml(cvQrImageUrl(cvPersonQrPayload(entry)))}" alt="QR" />
             <div class="cv-doc-qr-cap">${escapeHtml(cvFormatUnit(entry))} 報到 QR</div>
           </div>
         `).join("")}
@@ -23262,111 +24370,237 @@
     `;
   }
 
-  function cvDocTopicBlock(topic, index, project) {
+  function cvDocTopicBlock(topic, index, project, ownerQrToken) {
     const options = Array.isArray(topic.options) ? topic.options : [];
+    const token = String(ownerQrToken || "").trim();
+    const topicCode = String(topic.code || "").trim();
     return `
       <div class="cv-doc-topic">
         <div class="cv-doc-topic-title">議題 ${index}：${escapeHtml(topic.title)}（${topic.singleChoice ? "單選" : "可多選"}）</div>
         ${topic.description ? `<div class="cv-doc-topic-desc">${escapeHtml(topic.description)}</div>` : ""}
         ${options.length ? `
           <ul class="cv-doc-options">
-            ${options.map((opt) => `
+            ${options.map((opt) => {
+              // 與人工投票的選項 QR 相同來源：住戶 QR code碼 ＋ 議題代號 ＋ 選項代號（例：A001M01T）
+              const payload = `${token}${topicCode}${String(opt.code || "").trim()}`;
+              return `
               <li>
                 <span class="cv-doc-box"></span>
                 <span class="cv-doc-opt-label">${escapeHtml(opt.label)}</span>
-                <img class="cv-doc-opt-qr" src="${escapeHtml(cvQrImageUrl(cvOptionQrPayload(project.id, topic, opt)))}" alt="QR" />
+                <span class="cv-doc-opt-qrwrap">
+                  <img class="cv-doc-opt-qr" src="${escapeHtml(cvQrImageUrl(payload))}" alt="QR" />
+                  <span class="cv-doc-opt-qr-txt">${escapeHtml(payload)}</span>
+                </span>
               </li>
-            `).join("")}
+            `;
+            }).join("")}
           </ul>
         ` : `<div class="cv-doc-topic-desc">此議題尚未設定選項。</div>`}
       </div>
     `;
   }
 
-  function cvDocSignHtml() {
+  // 委託書內文：將連續 4 個以上空白轉為底線填寫區（含行首空白）
+  function cvDocBlankLineHtml(line) {
+    const toBlank = (spaces) => `<span class="cv-doc-blank">${"&nbsp;".repeat(spaces.length)}</span>`;
+    return escapeHtml(String(line || ""))
+      .replace(/(\S)( {4,})/g, (m, prev, spaces) => `${prev}${toBlank(spaces)}`)
+      .replace(/^( {4,})/, (m, spaces) => toBlank(spaces));
+  }
+
+  // 由「會議時間」欄位文字或專案會議時間取出民國年月日與時間（例：115年05月17日 10:00）
+  function cvDocMeetingText(header, project) {
+    const pad2 = (n) => String(n).padStart(2, "0");
+    const raw = String((header && header.meetingLine) || "").trim();
+    const m = raw.match(/(\d{3,4})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{1,2})(?:[^\d]{0,3}(\d{1,2}):(\d{2}))?/);
+    if (m) {
+      const year = Number(m[1]);
+      const roc = year >= 1912 ? year - 1911 : year;
+      const date = `${roc}年${pad2(m[2])}月${pad2(m[3])}日`;
+      return m[4] ? `${date} ${pad2(m[4])}:${m[5]}` : date;
+    }
+    const ms = Number((project && project.meetingAtMs) || 0) || 0;
+    if (!ms) return "";
+    const d = new Date(ms);
+    return `${d.getFullYear() - 1911}年${pad2(d.getMonth() + 1)}月${pad2(d.getDate())}日 ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  }
+
+  // 名冊式表格（個人式沿用同一格式，只帶入單一住戶）
+  function cvDocRosterTableHtml(rows, header, project, opts) {
+    const withProxy = !opts || opts.withProxy !== false;
+    const list = Array.isArray(rows) ? rows : [];
+    const meetingText = cvDocMeetingText(header, project);
+    const proxyLines = [
+      `致  ${cvDocCommunityName()}  社區：預定於${meetingText || "       "}舉行之第一次區分所有權人會議， 本人謹委託`,
+      `${" ".repeat(24)}先生（女士）代表出席區分所有權人會議，並於區分所有權人會議中行使各項`,
+      "本人應有之權利與義務，區分所有標的物標示地址如上。",
+      "區權人   姓名：                （簽章） 委託人   連絡電話：",
+      "受委託人 姓名：                （簽章） 受委託人 連絡電話：",
+      "受委託人 地址：               路      段      巷      號       樓之",
+      "依公寓大廈理條例規定，受委託人需具備以下四種任一身份，請自行勾選，如有不實責任自負",
+      "□ 配偶 □ 有行為能力之直系血親 □ 其他區分所有權人 □ 承租人",
+      "注意事項:",
+      "1.為便於日後向主管機關核備作業，請區權人及受委託人務必簽名或蓋章。",
+      `2.區權人資料如有錯誤或遺失時，請於${String(header.deadlineLine || "").trim() || "       "}前至管理服務中心更正及申請補發，管理服務中心將於會議前一天投進區權人信箱。`,
+    ];
     return `
-      <div class="cv-doc-sign">
-        <span>投票人簽名</span>
-        <span>日期</span>
+      <table class="cv-doc-table cv-doc-roster-table">
+        <thead>
+          <tr>
+            <th style="width:48px;">編號</th>
+            <th style="width:66px;">個人報到 QR code</th>
+            <th style="width:76px;">姓名</th>
+            <th>地址</th>
+            <th style="width:70px;">簽到</th>
+            <th style="width:60px;">是否委託出席</th>
+            <th style="width:124px;">委託關係</th>
+            <th style="width:62px;">區分所有權比例</th>
+            <th style="width:78px;">備註／簽退</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${list.map((entry) => `
+            <tr>
+              <td>${escapeHtml(entry.rosterNo || "")}</td>
+              <td class="cv-doc-roster-qr">${entry.qrToken ? `<span class="cv-doc-roster-qr-unit">${escapeHtml(String(entry.houseNo || "").trim())}</span><img src="${escapeHtml(cvQrImageUrl(cvPersonQrPayload(entry)))}" alt="QR" /><span class="cv-doc-roster-qr-txt">${escapeHtml(cvPersonQrPayload(entry))}</span>` : escapeHtml(String(entry.houseNo || "").trim())}</td>
+              <td>${escapeHtml(cvDisplayName(entry))}</td>
+              <td>${escapeHtml(entry.address || "")}</td>
+              <td></td>
+              <td class="cv-doc-roster-opts"><span>□本人</span><span>□委託</span></td>
+              <td class="cv-doc-roster-opts"><span>□ 配偶</span><span>□ 有行為能力之直系血親</span><span>□ 其他區分所有權人</span><span>□ 承租人</span></td>
+              <td>${entry.ownership ? `${escapeHtml(cvFixed2(entry.ownership))}%` : ""}</td>
+              <td></td>
+            </tr>
+          `).join("")}
+        </tbody>
+        ${withProxy ? `<tfoot>
+          <tr><td colspan="9">□已確認身分</td></tr>
+          <tr><td colspan="9" class="cv-doc-proxy-cell">
+            <div class="cv-doc-proxy">
+              <div class="cv-doc-proxy-title">會議出席委託書：</div>
+              <div class="cv-doc-proxy-body">${proxyLines.map((line) => cvDocBlankLineHtml(line)).join("<br />")}</div>
+              <div class="cv-doc-proxy-date"><br /><br />中&nbsp;&nbsp;華&nbsp;&nbsp;民&nbsp;&nbsp;國${"&nbsp;".repeat(20)}年${"&nbsp;".repeat(20)}月${"&nbsp;".repeat(20)}日</div>
+            </div>
+          </td></tr>
+        </tfoot>` : ""}
+      </table>
+      <div class="cv-doc-note" style="margin-top:16px;">${escapeHtml(header.note)}</div>
+    `;
+  }
+
+  // 報到證：名片式（9:5，每頁 10 張）與直立式（4:6，每頁 20 張）
+  function cvDocPassCardHtml(entry, header, project, layout) {
+    const isBiz = layout !== "tall";
+    const community = cvDocCommunityName();
+    const projectName = String((project && project.name) || "").trim();
+    const meeting = cvDocMeetingText(header, project);
+    const houseNo = String((entry && entry.houseNo) || "").trim();
+    const payload = entry ? String(cvPersonQrPayload(entry) || "").trim() : "";
+    const heading = String((header && header.passHeading) || "").trim() || "出席證";
+    const headHtml = `<div class="cv-pass-heading">${escapeHtml(heading)}</div>`;
+    const qrHtml = payload
+      ? `<div class="cv-pass-qr"><img src="${escapeHtml(cvQrImageUrl(payload))}" alt="QR" /><span class="cv-pass-qr-txt">${escapeHtml(payload)}</span></div>`
+      : "";
+    const brandHtml = `<div class="cv-pass-brand">${escapeHtml(community)}</div>`;
+    const projectHtml = projectName ? `<div class="cv-pass-project">${escapeHtml(projectName)}</div>` : "";
+    const meetingHtml = meeting ? `<div class="cv-pass-line">會議時間：${escapeHtml(meeting)}</div>` : "";
+    const houseHtml = houseNo ? `<div class="cv-pass-line cv-pass-house">${escapeHtml(houseNo)}</div>` : "";
+    if (!isBiz) {
+      // 直立式：不加抬頭，內容為社區名稱、專案名稱、會議時間、QR code（下方帶文字碼）、戶號
+      return `
+        <div class="cv-pass cv-pass--tall">
+          ${brandHtml}
+          ${projectHtml}
+          ${meetingHtml}
+          ${qrHtml}
+          ${houseHtml}
+        </div>
+      `;
+    }
+    // 名片式：抬頭置中於上方，下方左側 QR code（帶文字碼）、右側戶號、姓名、區分所有權比例
+    return `
+      <div class="cv-pass cv-pass--biz">
+        ${headHtml}
+        <div class="cv-pass-body">
+          ${qrHtml}
+          <div class="cv-pass-info">
+            ${brandHtml}
+            ${projectHtml}
+            ${meetingHtml}
+            ${houseHtml}
+            <div class="cv-pass-line">姓名：${escapeHtml(cvDisplayName(entry))}</div>
+            ${entry && entry.ownership ? `<div class="cv-pass-line">區分所有權比例：${escapeHtml(cvFixed2(entry.ownership))}%</div>` : ""}
+          </div>
+        </div>
       </div>
     `;
   }
 
+  function cvDocPassGridHtml(entries, header, project, layout) {
+    const isBiz = layout !== "tall";
+    const cards = (Array.isArray(entries) ? entries : [])
+      .map((entry) => cvDocPassCardHtml(entry, header, project, layout))
+      .join("");
+    return `<div class="cv-doc-pass-grid cv-doc-pass-grid--${isBiz ? "biz" : "tall"}">${cards}</div>`;
+  }
+
   function cvDocPageHtml(page, project, header, pageNo, totalPages) {
     let body = "";
-    if (page.kind === "checkin-personal") {
-      const entry = page.entry;
-      body = `
-        <table class="cv-doc-info">
-          <tr><th>戶號</th><td>${escapeHtml(cvFormatUnit(entry))}</td><th>姓名</th><td>${escapeHtml(cvDisplayName(entry))}</td></tr>
-          <tr><th>報到時間</th><td></td><th>簽名</th><td></td></tr>
-        </table>
-        ${header.showQr ? `
-          <div class="cv-doc-qr">
-            <img src="${escapeHtml(cvQrImageUrl(cvPersonQrPayload(project.id, entry)))}" alt="QR" />
-            <div class="cv-doc-qr-cap">個人報到 QR code</div>
-          </div>
-        ` : ""}
-        <div class="cv-doc-note">${escapeHtml(header.note)}</div>
-      `;
+    if (page.kind === "pass-biz") {
+      body = cvDocPassGridHtml(page.rows, header, project, "biz");
+    } else if (page.kind === "pass-tall") {
+      body = cvDocPassGridHtml(page.rows, header, project, "tall");
+    } else if (page.kind === "checkin-personal") {
+      body = cvDocRosterTableHtml([page.entry], header, project);
     } else if (page.kind === "checkin-owner") {
       body = `
         ${cvDocOwnerUnitsTable(page.group, "報到時間")}
-        ${header.showQr ? cvDocOwnerQrBlock(page.group, project) : ""}
+        ${cvDocOwnerQrBlock(page.group, project)}
         <div class="cv-doc-note">${escapeHtml(header.note)}</div>
       `;
     } else if (page.kind === "checkin-roster") {
-      body = `
-        <table class="cv-doc-table">
-          <thead>
-            <tr>
-              <th style="width:64px;">序號</th>
-              <th style="width:130px;">戶號</th>
-              <th>姓名</th>
-              <th style="width:140px;">報到時間</th>
-              <th style="width:140px;">簽名</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${page.rows.map((entry, index) => `
-              <tr>
-                <td>${page.startIndex + index}</td>
-                <td>${escapeHtml(cvFormatUnit(entry))}</td>
-                <td>${escapeHtml(cvDisplayName(entry))}</td>
-                <td></td>
-                <td></td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-        <div class="cv-doc-note" style="margin-top:16px;">${escapeHtml(header.note)}</div>
-      `;
+      body = cvDocRosterTableHtml(page.rows, header, project, { withProxy: false });
     } else if (page.kind === "vote-single") {
-      body = cvDocVoteEntryTable(page.entry) + cvDocTopicBlock(page.topic, 1, project) + cvDocSignHtml();
+      body = cvDocTopicBlock(page.topic, 1, project, page.entry && page.entry.qrToken);
     } else if (page.kind === "vote-multi") {
-      body = cvDocVoteEntryTable(page.entry)
-        + page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project)).join("")
-        + cvDocSignHtml();
+      body = page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project, page.entry && page.entry.qrToken)).join("");
     } else if (page.kind === "vote-owner-single") {
       body = cvDocOwnerUnitsTable(page.group, "投票時間")
-        + cvDocTopicBlock(page.topic, 1, project)
-        + cvDocSignHtml();
+        + cvDocTopicBlock(page.topic, 1, project, cvDocOwnerQrToken(page.group));
     } else if (page.kind === "vote-owner-multi") {
       body = cvDocOwnerUnitsTable(page.group, "投票時間")
-        + page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project)).join("")
-        + cvDocSignHtml();
+        + page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project, cvDocOwnerQrToken(page.group))).join("");
     }
+    const isVotePage = String(page.kind || "").indexOf("vote-") === 0;
+    // 報到證：不使用頁首／頁尾區塊，卡片直接鋪滿整頁
+    if (String(page.kind || "").indexOf("pass-") === 0) {
+      return `
+        <section class="cv-doc-page cv-doc-page--pass">
+          <div class="cv-doc-bd">${body}</div>
+        </section>
+      `;
+    }
+    // 右上角僅顯示戶號（不含子戶號）
+    const houseNo = isVotePage && page.entry ? String(page.entry.houseNo || "").trim() : "";
     return `
       <section class="cv-doc-page">
         <header class="cv-doc-hd">
-          <h1>${escapeHtml(header.title)}</h1>
-          ${header.subtitle ? `<p class="cv-doc-sub">${escapeHtml(header.subtitle)}</p>` : ""}
-          ${header.meetingLine ? `<p class="cv-doc-meta">${escapeHtml(header.meetingLine)}</p>` : ""}
+          <div class="cv-doc-title-row">
+            ${header.logo ? `<img class="cv-doc-logo" src="${escapeHtml(header.logo)}" alt="社區LOGO" />` : ""}
+            <h1>${escapeHtml(header.title)}</h1>
+            ${houseNo ? `<span class="cv-doc-house">${escapeHtml(houseNo)}</span>` : ""}
+          </div>
+          ${(header.subtitle || header.meetingLine) ? `
+            <div class="cv-doc-subrow">
+              ${header.subtitle ? `<p class="cv-doc-sub">${escapeHtml(header.subtitle)}</p>` : "<span></span>"}
+              ${header.meetingLine ? `<p class="cv-doc-meta">${escapeHtml(header.meetingLine)}</p>` : ""}
+            </div>
+          ` : ""}
         </header>
         <div class="cv-doc-bd">${body}</div>
         <footer class="cv-doc-ft">
           <span>${escapeHtml(cvDocCommunityName())}</span>
-          <span>第 ${pageNo} / ${totalPages} 頁</span>
+          ${(page.kind === "checkin-personal" || String(page.kind || "").startsWith("vote")) ? "" : `<span>第 ${pageNo} / ${totalPages} 頁</span>`}
         </footer>
       </section>
     `;
@@ -23375,10 +24609,18 @@
   function cvDocBuildPageList(kind, project, header, prefs) {
     if (!project) return [];
     const roster = Array.isArray(checkinVoteState.roster) ? checkinVoteState.roster : [];
-    const targets = cvDocPickTargets(roster, prefs.targetId);
+    const targets = cvDocPickTargets(roster, prefs.targetIds && prefs.targetIds.length ? prefs.targetIds : prefs.targetId);
     const mergeOwner = prefs.mergeOwner === true;
     const groups = mergeOwner ? cvGroupRosterByOwner(targets) : [];
     const pageItems = [];
+    if (kind === "pass") {
+      const isTall = prefs.layout === "tall";
+      const per = isTall ? 20 : 10;
+      for (let i = 0; i < targets.length; i += per) {
+        pageItems.push({ kind: isTall ? "pass-tall" : "pass-biz", rows: targets.slice(i, i + per) });
+      }
+      return pageItems.map((page, index) => cvDocPageHtml(page, project, header, index + 1, pageItems.length));
+    }
     if (kind === "checkin") {
       if (mergeOwner) {
         groups.forEach((group) => pageItems.push({ kind: "checkin-owner", group }));
@@ -23392,17 +24634,26 @@
       }
     } else {
       const enabledTopics = cvDocEnabledTopics();
-      const pickedTopics = prefs.topicId && prefs.topicId !== "__all__"
-        ? enabledTopics.filter((topic) => String(topic.id || "") === String(prefs.topicId).trim())
-        : enabledTopics;
+      const pickedTopics = (prefs.layout === "multi" || !prefs.topicId || prefs.topicId === "__all__")
+        ? enabledTopics
+        : enabledTopics.filter((topic) => String(topic.id || "") === String(prefs.topicId).trim());
+      const perPage = Math.max(2, Math.min(5, Number(prefs.perPage) || 5));
       if (mergeOwner) {
         if (prefs.layout === "multi") {
-          groups.forEach((group) => pageItems.push({ kind: "vote-owner-multi", group, topics: pickedTopics }));
+          groups.forEach((group) => {
+            for (let i = 0; i < pickedTopics.length; i += perPage) {
+              pageItems.push({ kind: "vote-owner-multi", group, topics: pickedTopics.slice(i, i + perPage) });
+            }
+          });
         } else {
           groups.forEach((group) => pickedTopics.forEach((topic) => pageItems.push({ kind: "vote-owner-single", group, topic })));
         }
       } else if (prefs.layout === "multi") {
-        targets.forEach((entry) => pageItems.push({ kind: "vote-multi", entry, topics: pickedTopics }));
+        targets.forEach((entry) => {
+          for (let i = 0; i < pickedTopics.length; i += perPage) {
+            pageItems.push({ kind: "vote-multi", entry, topics: pickedTopics.slice(i, i + perPage) });
+          }
+        });
       } else {
         targets.forEach((entry) => pickedTopics.forEach((topic) => pageItems.push({ kind: "vote-single", entry, topic })));
       }
@@ -23436,30 +24687,55 @@
     win.document.close();
   }
 
-  function cvDocDownloadHtml(header, pageList) {
+  // 將頁面清單輸出成 A4 直式 PDF（逐頁截圖），回傳 Data URL
+  async function cvDocBuildPdfDataUri(pageList) {
+    const pages = (Array.isArray(pageList) ? pageList : []).filter(Boolean);
+    if (!pages.length) throw new Error("empty-pages");
+    const h2c = window.html2canvas;
+    if (!h2c) throw new Error("html2canvas-missing");
+    cvEnsureDocCss();
+    const mod = await import("https://esm.sh/jspdf@2.5.1");
+    const JsPDF = mod && (mod.jsPDF || mod.default);
+    if (!JsPDF) throw new Error("jspdf-missing");
+    const host = document.createElement("div");
+    host.style.cssText = "position:fixed;left:-10000px;top:0;width:210mm;background:#fff;";
+    host.innerHTML = pages.join("");
+    document.body.appendChild(host);
+    try {
+      const nodes = Array.from(host.querySelectorAll(".cv-doc-page"));
+      if (!nodes.length) throw new Error("no-page-node");
+      const pdf = new JsPDF({ orientation: "p", unit: "mm", format: "a4" });
+      for (let i = 0; i < nodes.length; i += 1) {
+        const canvas = await h2c(nodes[i], { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+        if (i > 0) pdf.addPage();
+        pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, 297);
+      }
+      return pdf.output("datauristring");
+    } finally {
+      host.remove();
+    }
+  }
+
+  async function cvDocDownloadPdf(header, pageList) {
     if (!pageList.length) {
       toast("目前沒有可下載的內容");
       return;
     }
-    const html = `<!doctype html>
-<html lang="zh-Hant">
-<head>
-<meta charset="utf-8" />
-<title>${escapeHtml(header.title)}</title>
-<style>${cvDocPageCss}</style>
-</head>
-<body><div class="cv-doc-print-root">${pageList.join("")}</div></body>
-</html>`;
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${cvDocSafeFileName(header.title)}.html`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 3000);
-    toast("文件已下載（可用瀏覽器開啟後列印為 PDF）");
+    toast("PDF 產生中，請稍候…");
+    try {
+      const dataUri = await cvDocBuildPdfDataUri(pageList);
+      const a = document.createElement("a");
+      a.href = dataUri;
+      a.download = `${cvDocSafeFileName(header.title)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast("PDF 已下載");
+    } catch (error) {
+      console.warn("[checkin-vote] 文件 PDF 產生失敗", error);
+      toast("PDF 產生失敗，已改為開啟列印視窗");
+      cvDocOpenPrintWindow(header, pageList);
+    }
   }
 
   function cvOpenDocPreviewModal(kind, project) {
@@ -23468,8 +24744,12 @@
       return;
     }
     cvEnsureDocCss();
-    const prefs = kind === "vote" ? cvDocPrefs.vote : cvDocPrefs.checkin;
+    const prefs = kind === "vote" ? cvDocPrefs.vote : (kind === "pass" ? cvDocPrefs.pass : cvDocPrefs.checkin);
     const header = cvDocDefaultHeader(project, kind);
+    // 名冊式報到單表尾無委託書，故不顯示「補發時間」欄位；報到證無頁首／備註，僅保留會議時間（卡片會帶入）
+    const showDeadline = !(kind === "checkin" && prefs.layout === "roster") && kind !== "pass";
+    const showNote = kind !== "pass";
+    const showHeaderFields = kind !== "pass";
     const pageList = cvDocBuildPageList(kind, project, header, prefs);
     const modal = ensureModal("checkinVoteDocPreviewModal", "modal-checkin-vote-doc-preview", "min(1180px, 96vw)");
     bindModalClose(modal);
@@ -23482,19 +24762,31 @@
       <div class="modal-backdrop" data-modal-close="1"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinVoteDocPreviewTitle">
         <div class="modal-hd">
-          <h3 class="modal-title" id="checkinVoteDocPreviewTitle">${escapeHtml(kind === "vote" ? "投票單" : "報到單")}｜生成、編輯、列印與下載</h3>
+          <h3 class="modal-title" id="checkinVoteDocPreviewTitle">${escapeHtml(kind === "vote" ? "投票單" : (kind === "pass" ? "報到證" : "報到單"))}｜生成、編輯、列印與下載</h3>
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <div class="modal-body">
-          <div class="cv-doc-editor">
-            <label>文件標題<input id="cvDocInputTitle" type="text" value="${escapeHtml(header.title)}" /></label>
-            <label>副標題<input id="cvDocInputSubtitle" type="text" value="${escapeHtml(header.subtitle)}" /></label>
-            <label>會議時間<input id="cvDocInputMeeting" type="text" value="${escapeHtml(header.meetingLine)}" /></label>
-            <label>備註說明<textarea id="cvDocInputNote" rows="2">${escapeHtml(header.note)}</textarea></label>
-            ${kind === "checkin" ? `<label class="cv-doc-inline"><input id="cvDocInputShowQr" type="checkbox"${header.showQr ? " checked" : ""} />個人式報到單顯示 QR code</label>` : ""}
+          <div class="cv-doc-layout">
+            <div class="cv-doc-editor">
+              ${showHeaderFields ? `
+              <label class="cv-doc-logo-field">
+                <span>社區 LOGO（顯示於標題左側）</span>
+                <input id="cvDocInputLogo" type="file" accept="image/*" />
+                <span class="row" style="grid-template-columns:auto 1fr; align-items:center; gap:10px;">
+                  <img id="cvDocLogoThumb" class="cv-doc-logo-thumb" src="${escapeHtml(header.logo)}" alt="LOGO 預覽"${header.logo ? "" : " hidden"} />
+                  <button class="btn btn-sm" type="button" id="btnCvDocLogoClear"${header.logo ? "" : " hidden"}>移除 LOGO</button>
+                </span>
+              </label>
+              <label>文件標題<input id="cvDocInputTitle" type="text" value="${escapeHtml(header.title)}" /></label>
+              <label>副標題<input id="cvDocInputSubtitle" type="text" value="${escapeHtml(header.subtitle)}" /></label>
+              ` : ""}
+              <label>會議時間<input id="cvDocInputMeeting" type="text" value="${escapeHtml(header.meetingLine)}" /></label>
+              ${showDeadline ? `<label>補發時間<input id="cvDocInputDeadline" type="text" value="${escapeHtml(header.deadlineLine || "")}" placeholder="例：115年05月14日" /></label>` : ""}
+              ${showNote ? `<label>備註說明<textarea id="cvDocInputNote" rows="2">${escapeHtml(header.note)}</textarea></label>` : ""}
+            </div>
+            <div class="cv-doc-preview" id="cvDocPreviewArea">${renderPreview()}</div>
           </div>
-          <div class="muted" style="margin:10px 0;">共 ${pageList.length} 頁（A4 直式）。可直接編輯上方文字，預覽與列印內容會同步更新。</div>
-          <div class="cv-doc-preview" id="cvDocPreviewArea">${renderPreview()}</div>
+          <div class="muted">共 ${pageList.length} 頁（A4 直式）。可直接編輯上方文字，預覽與列印內容會同步更新。</div>
         </div>
         <div class="modal-ft">
           <button class="btn" type="button" id="btnCvDocPrint">列印</button>
@@ -23506,12 +24798,13 @@
     modal.hidden = false;
 
     const syncHeader = () => {
-      header.title = String(modal.querySelector("#cvDocInputTitle").value || "").trim() || "未命名文件";
-      header.subtitle = String(modal.querySelector("#cvDocInputSubtitle").value || "").trim();
+      if (showHeaderFields) {
+        header.title = String(modal.querySelector("#cvDocInputTitle").value || "").trim() || "未命名文件";
+        header.subtitle = String(modal.querySelector("#cvDocInputSubtitle").value || "").trim();
+      }
       header.meetingLine = String(modal.querySelector("#cvDocInputMeeting").value || "").trim();
-      header.note = String(modal.querySelector("#cvDocInputNote").value || "").trim();
-      const qrInput = modal.querySelector("#cvDocInputShowQr");
-      if (qrInput) header.showQr = qrInput.checked === true;
+      header.deadlineLine = String((modal.querySelector("#cvDocInputDeadline") || {}).value || "").trim();
+      header.note = String((modal.querySelector("#cvDocInputNote") || {}).value || "").trim();
       const next = cvDocBuildPageList(kind, project, header, prefs);
       pageList.length = 0;
       next.forEach((html) => pageList.push(html));
@@ -23519,15 +24812,252 @@
       if (area) area.innerHTML = renderPreview();
     };
 
-    ["#cvDocInputTitle", "#cvDocInputSubtitle", "#cvDocInputMeeting", "#cvDocInputNote"].forEach((sel) => {
+    ["#cvDocInputTitle", "#cvDocInputSubtitle", "#cvDocInputMeeting", "#cvDocInputDeadline", "#cvDocInputNote"].forEach((sel) => {
       const input = modal.querySelector(sel);
       if (input) input.addEventListener("input", syncHeader);
     });
-    const qrToggle = modal.querySelector("#cvDocInputShowQr");
-    if (qrToggle) qrToggle.addEventListener("change", syncHeader);
+
+    // 社區 LOGO：上傳後縮圖存成 Base64 並寫入專案設定，之後開啟可直接沿用
+    const cid = String(checkinVoteState.cid || resolveActiveCommunityId() || "default").trim() || "default";
+    const logoThumb = modal.querySelector("#cvDocLogoThumb");
+    const logoClearBtn = modal.querySelector("#btnCvDocLogoClear");
+    const setLogo = async (dataUrl) => {
+      header.logo = String(dataUrl || "").trim();
+      if (logoThumb) {
+        logoThumb.src = header.logo;
+        logoThumb.hidden = !header.logo;
+      }
+      if (logoClearBtn) logoClearBtn.hidden = !header.logo;
+      if (project.settings) project.settings.docLogoDataUrl = header.logo;
+      syncHeader();
+      try {
+        await cvRefProject(cid, project.id).update({
+          "settings.docLogoDataUrl": header.logo,
+          updatedAt: FieldValue.serverTimestamp(),
+          updatedAtMs: cvNow(),
+        });
+      } catch (error) {
+        console.warn("[checkin-vote] LOGO 儲存失敗", error);
+        toast("LOGO 儲存失敗，仍可用於本次列印");
+      }
+    };
+    const logoInput = modal.querySelector("#cvDocInputLogo");
+    if (logoInput) {
+      logoInput.addEventListener("change", async () => {
+        const file = logoInput.files && logoInput.files[0];
+        logoInput.value = "";
+        if (!file) return;
+        try {
+          const dataUrl = await cvDocReadLogoFile(file);
+          await setLogo(dataUrl);
+          toast("已套用社區 LOGO");
+        } catch (error) {
+          console.warn("[checkin-vote] LOGO 讀取失敗", error);
+          toast("LOGO 讀取失敗，請改用其他圖片");
+        }
+      });
+    }
+    if (logoClearBtn) logoClearBtn.addEventListener("click", () => setLogo(""));
 
     modal.querySelector("#btnCvDocPrint").addEventListener("click", () => cvDocOpenPrintWindow(header, pageList));
-    modal.querySelector("#btnCvDocDownload").addEventListener("click", () => cvDocDownloadHtml(header, pageList));
+    modal.querySelector("#btnCvDocDownload").addEventListener("click", () => cvDocDownloadPdf(header, pageList));
+  }
+
+  /* ── 報到紀錄／投票紀錄：A4 直式列印與 PDF 下載 ── */
+
+  const CV_LOG_ROWS_PER_PAGE = 18;
+
+  function cvLogStamp(ms) {
+    const d = new Date(Number(ms || Date.now()));
+    return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}`;
+  }
+
+  // 日期時間、戶號、項目（報到方式／議題與所選選項）
+  function cvBuildLogRows(kind, rosterInput, topicsInput) {
+    const roster = Array.isArray(rosterInput) ? rosterInput : (Array.isArray(checkinVoteState.roster) ? checkinVoteState.roster : []);
+    const topics = Array.isArray(topicsInput) ? topicsInput : (Array.isArray(checkinVoteState.topics) ? checkinVoteState.topics : []);
+    const rows = [];
+    if (kind === "vote") {
+      roster.forEach((entry) => {
+        const votes = entry && entry.votes ? entry.votes : null;
+        if (!votes) return;
+        Object.keys(votes).forEach((tid) => {
+          const vote = votes[tid];
+          const optionIds = vote && Array.isArray(vote.optionIds) ? vote.optionIds : [];
+          if (!optionIds.length) return;
+          const topic = topics.find((item) => String(item.id || "") === String(tid)) || null;
+          const labels = optionIds.map((oid) => {
+            const options = topic && Array.isArray(topic.options) ? topic.options : [];
+            const option = options.find((item) => String(item.id || "") === String(oid)) || null;
+            return option ? String(option.label || "").trim() : String(oid || "").trim();
+          }).filter(Boolean);
+          rows.push({
+            atMs: Number(vote.updatedAtMs || 0),
+            unit: cvFormatUnit(entry),
+            item: `${topic ? topic.title : "（議題已刪除）"}｜${labels.join("、") || "—"}`,
+          });
+        });
+      });
+    } else {
+      roster.forEach((entry) => {
+        if (!entry || !entry.checkedIn) return;
+        rows.push({
+          atMs: Number(entry.checkedInAtMs || 0),
+          unit: cvFormatUnit(entry),
+          item: `報到（${cvCheckinMethodLabel(entry.checkedInMethod)}）`,
+        });
+      });
+    }
+    return rows.sort((a, b) => a.atMs - b.atMs);
+  }
+
+  function cvBuildLogPages(header, rows) {
+    const list = Array.isArray(rows) ? rows : [];
+    const chunks = [];
+    for (let i = 0; i < list.length; i += CV_LOG_ROWS_PER_PAGE) chunks.push(list.slice(i, i + CV_LOG_ROWS_PER_PAGE));
+    if (!chunks.length) chunks.push([]);
+    const tableRows = (chunk) => (chunk.length
+      ? chunk.map((row) => `
+          <tr>
+            <td>${escapeHtml(cvFormatDateTime(row.atMs))}</td>
+            <td>${escapeHtml(row.unit)}</td>
+            <td>${escapeHtml(row.item)}</td>
+          </tr>
+        `).join("")
+      : `<tr><td colspan="3" style="text-align:center;color:#9ca3af;">目前尚無紀錄</td></tr>`);
+    return chunks.map((chunk, index) => `
+      <section class="cv-doc-page">
+        <header class="cv-doc-hd">
+          <h1>${escapeHtml(header.title)}</h1>
+          <p class="cv-doc-sub">${escapeHtml(header.subtitle)}</p>
+          <p class="cv-doc-meta">${escapeHtml(header.metaLine || "")}</p>
+        </header>
+        <div class="cv-doc-bd">
+          <table class="cv-doc-table cv-log-table">
+            <thead>
+              <tr>
+                <th style="width:170px;">日期時間</th>
+                <th style="width:150px;">戶號</th>
+                <th>項目</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows(chunk)}</tbody>
+          </table>
+        </div>
+        <footer class="cv-doc-ft">
+          <span>${escapeHtml(cvDocCommunityName())}</span>
+          <span>第 ${index + 1} / ${chunks.length} 頁</span>
+        </footer>
+      </section>
+    `);
+  }
+
+  async function cvExportLogPdf(header, pageList, fileName) {
+    if (!pageList.length) {
+      cvDocOpenPrintWindow(header, pageList);
+      return;
+    }
+    toast("PDF 產生中，請稍候…");
+    try {
+      const dataUri = await cvDocBuildPdfDataUri(pageList);
+      if (typeof window.openPdfViewer === "function") {
+        window.openPdfViewer(dataUri, `${fileName}.pdf`);
+      } else {
+        const a = document.createElement("a");
+        a.href = dataUri;
+        a.download = `${fileName}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      toast("PDF 已產生，可下載或列印");
+    } catch (error) {
+      console.warn("[checkin-vote] 紀錄 PDF 產生失敗", error);
+      cvDocOpenPrintWindow(header, pageList);
+    }
+  }
+
+  async function cvOpenLogModal(kind, projectId) {
+    const pid = String(projectId || checkinVoteState.activeProjectId || "").trim();
+    const project = cvProjectById(pid) || cvActiveProject();
+    if (!project) {
+      toast("請先新增專案");
+      return;
+    }
+    cvEnsureDocCss();
+    // 各專案紀錄各自獨立：非目前專案時即時讀取該專案名單與議題
+    let roster = Array.isArray(checkinVoteState.roster) ? checkinVoteState.roster : [];
+    let topics = Array.isArray(checkinVoteState.topics) ? checkinVoteState.topics : [];
+    if (String(project.id || "") !== String(checkinVoteState.activeProjectId || "")) {
+      const cid = String(checkinVoteState.cid || resolveActiveCommunityId() || "default").trim() || "default";
+      const [rosterSnap, topicSnap] = await Promise.all([
+        cvRefRoster(cid, project.id).get().catch(() => null),
+        cvRefTopics(cid, project.id).get().catch(() => null),
+      ]);
+      roster = (rosterSnap && Array.isArray(rosterSnap.docs) ? rosterSnap.docs : [])
+        .map((doc) => cvNormalizeRosterEntry(doc.data(), doc.id));
+      topics = (topicSnap && Array.isArray(topicSnap.docs) ? topicSnap.docs : [])
+        .map((doc) => cvNormalizeTopic(doc.data(), doc.id, project));
+    }
+    const isVote = kind === "vote";
+    const rows = cvBuildLogRows(kind, roster, topics);
+    const header = {
+      title: `${cvDocCommunityName()} ${isVote ? "投票紀錄" : "報到紀錄"}`,
+      subtitle: String(project.name || "").trim(),
+      metaLine: `共 ${rows.length} 筆｜產製時間：${cvFormatDateTime(cvNow())}`,
+    };
+    const pageList = cvBuildLogPages(header, rows);
+    const previewHtml = (list) => (list.length
+      ? list.map((html) => `<div class="cv-doc-slot">${html}</div>`).join("")
+      : `<div class="status">尚無紀錄</div>`);
+    const modal = ensureModal("checkinVoteLogModal", "modal-checkin-vote-log", "min(1180px, 96vw)");
+    bindModalClose(modal);
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinVoteLogTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="checkinVoteLogTitle">${escapeHtml(isVote ? "投票紀錄" : "報到紀錄")}｜列印與下載</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="cv-doc-editor">
+            <label>文件標題<input id="cvLogInputTitle" type="text" value="${escapeHtml(header.title)}" /></label>
+            <label>副標題<input id="cvLogInputSubtitle" type="text" value="${escapeHtml(header.subtitle)}" /></label>
+          </div>
+          <div class="muted" style="margin:10px 0;">共 ${rows.length} 筆、${pageList.length} 頁（A4 直式）。欄位：日期時間、戶號、項目。</div>
+          <div class="cv-doc-preview" id="cvLogPreviewArea">${previewHtml(pageList)}</div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" id="btnCvLogPrint">列印</button>
+          <button class="btn danger" type="button" id="btnCvLogPdf">下載 PDF</button>
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    modal.hidden = false;
+
+    const rebuild = () => {
+      const next = cvBuildLogPages(header, rows);
+      pageList.length = 0;
+      next.forEach((html) => pageList.push(html));
+      const area = modal.querySelector("#cvLogPreviewArea");
+      if (area) area.innerHTML = previewHtml(pageList);
+    };
+    ["#cvLogInputTitle", "#cvLogInputSubtitle"].forEach((sel) => {
+      const input = modal.querySelector(sel);
+      if (!input) return;
+      input.addEventListener("input", () => {
+        const value = String(input.value || "").trim();
+        if (sel === "#cvLogInputTitle") header.title = value || header.title;
+        else header.subtitle = value;
+        rebuild();
+      });
+    });
+    modal.querySelector("#btnCvLogPrint").addEventListener("click", () => cvDocOpenPrintWindow(header, pageList));
+    modal.querySelector("#btnCvLogPdf").addEventListener("click", () => {
+      const fileName = cvDocSafeFileName(`${header.title}${header.subtitle ? `_${header.subtitle}` : ""}_${cvLogStamp()}`);
+      cvExportLogPdf(header, pageList, fileName);
+    });
   }
 
   function cvDocTargetOptionsHtml(roster, selectedId) {
@@ -23545,6 +25075,7 @@
     const enabledTopics = cvDocEnabledTopics();
     const checkinPrefs = cvDocPrefs.checkin;
     const votePrefs = cvDocPrefs.vote;
+    const passPrefs = cvDocPrefs.pass;
     return `
       <div class="cv-doc-gen">
         <div class="cv-doc-gen-card">
@@ -23556,8 +25087,8 @@
                 <option value="roster"${checkinPrefs.layout === "roster" ? " selected" : ""}>名冊式（多人一頁 A4 直式）</option>
               </select>
             </label>
-            <label>對象
-              <select id="cvCheckinTarget">${cvDocTargetOptionsHtml(residentList, checkinPrefs.targetId)}</select>
+            <label>對象（可複選）
+              ${cvDocTargetPickerHtml(residentList, checkinPrefs.targetIds)}
             </label>
             <label id="cvCheckinPerPageWrap"${checkinPrefs.layout === "roster" ? "" : " hidden"}>每頁人數
               <input id="cvCheckinPerPage" type="number" min="4" max="20" step="1" value="${Number(checkinPrefs.perPage) || 10}" />
@@ -23580,6 +25111,11 @@
                 <option value="multi"${votePrefs.layout === "multi" ? " selected" : ""}>個人式・多個議題一頁 A4 直式</option>
               </select>
             </label>
+            <label id="cvVotePerPageWrap"${votePrefs.layout === "multi" ? "" : " hidden"}>每頁議題數
+              <select id="cvVotePerPage">
+                ${[2, 3, 4, 5].map((n) => `<option value="${n}"${(Math.max(2, Math.min(5, Number(votePrefs.perPage) || 5))) === n ? " selected" : ""}>${n} 個議題</option>`).join("")}
+              </select>
+            </label>
             <label>對象
               <select id="cvVoteTarget">${cvDocTargetOptionsHtml(residentList, votePrefs.targetId)}</select>
             </label>
@@ -23595,6 +25131,23 @@
             </label>
             <div class="row" style="gap:8px;">
               <button class="btn danger" type="button" id="btnCvGenVoteDoc">生成投票單</button>
+            </div>
+          </div>
+        </div>
+        <div class="cv-doc-gen-card">
+          <div class="cv-doc-gen-hd">報到證</div>
+          <div class="cv-doc-gen-bd">
+            <label>版式
+              <select id="cvPassLayout">
+                <option value="biz"${passPrefs.layout === "biz" ? " selected" : ""}>名片式（9:5，每頁 10 張）</option>
+                <option value="tall"${passPrefs.layout === "tall" ? " selected" : ""}>直立式（4:6，每頁 20 張）</option>
+              </select>
+            </label>
+            <label>對象（可複選）
+              ${cvDocTargetPickerHtml(residentList, passPrefs.targetIds, "cvPassTargetPicker")}
+            </label>
+            <div class="row" style="gap:8px;">
+              <button class="btn danger" type="button" id="btnCvGenPassDoc">生成報到證</button>
             </div>
           </div>
         </div>
@@ -23629,23 +25182,41 @@
           <button class="btn danger" type="button" id="btnCvCreateProject">新增專案</button>
         </div>
       </div>
-      ${projects.length ? projects.map((project) => `
-        <div class="list-item" style="margin-bottom:10px;">
-          <div>
-            <div style="font-size:calc(16px * var(--fs, 1)); font-weight:800; color:#111827;">${escapeHtml(project.name)}</div>
-            <div class="muted" style="margin-top:4px;">${escapeHtml(project.description || "無專案說明")}｜${escapeHtml(cvFormatDateTime(project.meetingAtMs))}</div>
-            <div class="muted" style="margin-top:4px;">建立 ${escapeHtml(cvFormatDateTime(project.createdAtMs))}</div>
+      ${projects.length ? projects.map((project) => {
+        const isActive = project.id === activeProjectId;
+        return `
+          <div class="cv-proj-card${project.archived ? " is-archived" : ""}">
+            <div class="cv-proj-card-hd">
+              <div style="min-width:0;">
+                <div class="cv-proj-card-title">${escapeHtml(project.name)}</div>
+                <div class="muted" style="margin-top:4px;">${escapeHtml(project.description || "無專案說明")}｜${escapeHtml(cvFormatDateTime(project.meetingAtMs))}</div>
+                <div class="muted" style="margin-top:4px;">建立 ${escapeHtml(cvFormatDateTime(project.createdAtMs))}</div>
+              </div>
+              <div class="cv-proj-card-flags">
+                <span class="status-chip ${project.archived ? "gray" : "success"}">${project.archived ? "封存" : "進行中"}</span>
+                ${isActive ? `<span class="status-chip success">目前專案</span>` : ""}
+              </div>
+            </div>
+            <div class="cv-proj-card-log">
+              <div style="min-width:0;">
+                <div class="cv-log-bar-title">紀錄報表</div>
+                <div class="muted">輸出「${escapeHtml(project.name)}」的實際報到與投票紀錄（A4 直式，可列印或下載 PDF）。</div>
+              </div>
+              <div class="row" style="gap:8px; flex-wrap:wrap;">
+                <button class="btn btn-sm" type="button" data-cv-log="checkin" data-cv-log-project="${escapeHtml(project.id)}">報到紀錄</button>
+                <button class="btn btn-sm" type="button" data-cv-log="vote" data-cv-log-project="${escapeHtml(project.id)}">投票紀錄</button>
+              </div>
+            </div>
+            <div class="cv-proj-card-actions">
+              ${isActive ? "" : `<button class="btn btn-sm" type="button" data-cv-set-active="${escapeHtml(project.id)}">設為目前專案</button>`}
+              <button class="btn btn-sm" type="button" data-cv-open-project="${escapeHtml(project.id)}">檢視</button>
+              <button class="btn btn-sm" type="button" data-cv-edit-project="${escapeHtml(project.id)}"${project.archived ? " disabled" : ""}>編輯</button>
+              <button class="btn btn-sm" type="button" data-cv-toggle-archive="${escapeHtml(project.id)}">${project.archived ? "解除封存" : "封存"}</button>
+              <button class="btn btn-sm danger" type="button" data-cv-delete-project="${escapeHtml(project.id)}">刪除</button>
+            </div>
           </div>
-          <div class="row" style="gap:8px; flex-wrap:wrap; justify-content:flex-end;">
-            <span class="status-chip ${project.archived ? "gray" : "success"}">${project.archived ? "封存" : "進行中"}</span>
-            ${project.id === activeProjectId ? `<span class="status-chip success">目前專案</span>` : `<button class="btn btn-sm" type="button" data-cv-set-active="${escapeHtml(project.id)}">設為目前專案</button>`}
-            <button class="btn btn-sm" type="button" data-cv-open-project="${escapeHtml(project.id)}">檢視</button>
-            <button class="btn btn-sm" type="button" data-cv-edit-project="${escapeHtml(project.id)}">編輯</button>
-            <button class="btn btn-sm" type="button" data-cv-toggle-archive="${escapeHtml(project.id)}">${project.archived ? "解除封存" : "封存"}</button>
-            <button class="btn btn-sm danger" type="button" data-cv-delete-project="${escapeHtml(project.id)}">刪除</button>
-          </div>
-        </div>
-      `).join("") : `<div class="status">目前尚未建立任何專案</div>`}
+        `;
+      }).join("") : `<div class="status">目前尚未建立任何專案</div>`}
     `;
   }
 
@@ -23654,8 +25225,9 @@
       toast("請先新增專案後再使用掃碼");
       return false;
     }
+    if (cvBlockIfArchivedProject(project)) return false;
     const cid = String(checkinVoteState.cid || resolveActiveCommunityId() || "default").trim() || "default";
-    const url = `qrcode-scan.html?c=${encodeURIComponent(cid)}&p=${encodeURIComponent(project.id)}`;
+    const url = `qrcode-scan.html?v=10&c=${encodeURIComponent(cid)}&p=${encodeURIComponent(project.id)}`;
     const width = 430;
     const height = 860;
     const left = Math.max(0, Math.round((Number(window.screen && window.screen.width) || width) - width) / 2);
@@ -23675,10 +25247,31 @@
       return false;
     }
     const cid = String(checkinVoteState.cid || resolveActiveCommunityId() || "default").trim() || "default";
-    const url = `checkin-vote-share.html?c=${encodeURIComponent(cid)}&p=${encodeURIComponent(project.id)}`;
+    const url = `checkin-vote-share.html?v=36&c=${encodeURIComponent(cid)}&p=${encodeURIComponent(project.id)}`;
     const opened = window.open(url, "_blank");
     if (!opened) {
       toast("請允許彈出視窗以開啟分享頁面");
+      return false;
+    }
+    try { opened.focus(); } catch {}
+    return true;
+  }
+
+  function cvOpenElectionCountWindow(project) {
+    if (!project) {
+      toast("請先新增專案後再使用人工計票");
+      return false;
+    }
+    if (cvBlockIfArchivedProject(project)) return false;
+    const cid = String(checkinVoteState.cid || resolveActiveCommunityId() || "default").trim() || "default";
+    const url = `election-count.html?v=17&c=${encodeURIComponent(cid)}&p=${encodeURIComponent(project.id)}`;
+    const width = 430;
+    const height = 860;
+    const left = Math.max(0, Math.round((Number(window.screen && window.screen.width) || width) - width) / 2);
+    const top = Math.max(0, Math.round((Number(window.screen && window.screen.height) || height) - height) / 2);
+    const opened = window.open(url, "nwCheckinVoteElectionCount", `popup=yes,width=${width},height=${height},left=${Math.round(left)},top=${Math.round(top)}`);
+    if (!opened) {
+      toast("請允許彈出視窗以開啟人工計票頁面");
       return false;
     }
     try { opened.focus(); } catch {}
@@ -23699,7 +25292,7 @@
         </div>
         <div class="row" style="gap:8px; margin-top:16px;">
           <button class="btn danger" type="button" id="btnCvOpenScanWindow">開啟掃碼視窗</button>
-          <button class="btn" type="button" data-cv-go="roster">管理名單</button>
+          <button class="btn btn-success" type="button" data-cv-go="roster">管理名單</button>
         </div>
       </div>
     `;
@@ -23811,12 +25404,18 @@
         </div>
       </div>
     `.trim();
+    // 於其他彈窗上層開啟時，需確保此彈窗排在最後（同層級元素後者在上）
+    if (modal.parentNode) modal.parentNode.appendChild(modal);
     modal.hidden = false;
   }
 
   function cvOpenProjectModal(communityId, project) {
     const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
     const current = project || null;
+    if (current && current.archived) {
+      toast("此專案已封存，請先解除封存後再編輯");
+      return;
+    }
     const modal = ensureModal("checkinVoteProjectModal", "modal-checkin-vote-project", "min(720px, 92vw)");
     bindModalClose(modal);
     modal.innerHTML = `
@@ -23891,6 +25490,7 @@
   function cvOpenRosterModal(communityId, projectId, entry) {
     const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
     const pid = String(projectId || "").trim();
+    if (cvBlockIfArchived(pid)) return;
     const current = entry || null;
     const modal = ensureModal("checkinVoteRosterModal", "modal-checkin-vote-roster", "min(760px, 92vw)");
     bindModalClose(modal);
@@ -23902,17 +25502,16 @@
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
         <form id="checkinVoteRosterForm">
-          <div class="modal-body" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px;">
-            <label class="field" style="display:block;"><span>姓名</span><input id="cvRosterName" type="text" value="${escapeHtml(current ? current.name : "")}" required /></label>
+          <div class="modal-body" style="display:flex; flex-direction:column; gap:12px;">
+            <label class="field" style="display:block;"><span>編號</span><input id="cvRosterNo" type="text" inputmode="numeric" value="${escapeHtml(current ? current.rosterNo : "")}" placeholder="例如：1" /></label>
+            <label class="field" style="display:block;"><span>QR code碼</span><input id="cvRosterQrToken" type="text" value="${escapeHtml(current ? current.qrToken : "")}" placeholder="留空將自動產生" style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;" /></label>
             <label class="field" style="display:block;"><span>戶號</span><input id="cvRosterHouseNo" type="text" value="${escapeHtml(current ? current.houseNo : "")}" /></label>
             <label class="field" style="display:block;"><span>子戶號</span><input id="cvRosterSubHouseNo" type="text" value="${escapeHtml(current ? current.subHouseNo : "")}" /></label>
-            <label class="field" style="display:block; grid-column:1/-1;"><span>地址</span><input id="cvRosterAddress" type="text" value="${escapeHtml(current ? current.address : "")}" /></label>
+            <label class="field" style="display:block;"><span>姓名</span><input id="cvRosterName" type="text" value="${escapeHtml(current ? current.name : "")}" required /></label>
+            <label class="field" style="display:block;"><span>地址</span><input id="cvRosterAddress" type="text" value="${escapeHtml(current ? current.address : "")}" /></label>
+            <label class="field" style="display:block;"><span>棟別</span><input id="cvRosterBuilding" type="text" value="${escapeHtml(current ? current.building : "")}" placeholder="例如：A棟" /></label>
             <label class="field" style="display:block;"><span>坪數</span><input id="cvRosterArea" type="text" value="${escapeHtml(current ? current.area : "")}" /></label>
             <label class="field" style="display:block;"><span>區分所有權比例（%）</span><input id="cvRosterOwnership" type="text" value="${escapeHtml(current ? current.ownership : "")}" /></label>
-            <label class="field" style="display:block;"><span>電話</span><input id="cvRosterPhone" type="text" value="${escapeHtml(current ? current.phone : "")}" /></label>
-            <label class="field" style="display:block;"><span>Email</span><input id="cvRosterEmail" type="email" value="${escapeHtml(current ? current.email : "")}" /></label>
-            <label class="field" style="display:block;"><span>權重</span><input id="cvRosterWeight" type="number" min="1" step="1" value="${escapeHtml(String(current ? current.weight : 1))}" /></label>
-            <label class="field" style="display:block; grid-column:1/-1;"><span>備註</span><textarea id="cvRosterNote" rows="3">${escapeHtml(current ? current.note : "")}</textarea></label>
           </div>
           <div class="modal-ft">
             <button class="btn" type="button" data-modal-close="1">取消</button>
@@ -23930,13 +25529,15 @@
         subHouseNo: modal.querySelector("#cvRosterSubHouseNo")?.value || "",
         name: modal.querySelector("#cvRosterName")?.value || "",
         address: modal.querySelector("#cvRosterAddress")?.value || "",
+        building: modal.querySelector("#cvRosterBuilding")?.value || "",
         area: modal.querySelector("#cvRosterArea")?.value || "",
         ownership: modal.querySelector("#cvRosterOwnership")?.value || "",
-        phone: modal.querySelector("#cvRosterPhone")?.value || "",
-        email: modal.querySelector("#cvRosterEmail")?.value || "",
-        note: modal.querySelector("#cvRosterNote")?.value || "",
-        weight: modal.querySelector("#cvRosterWeight")?.value || 1,
-        qrToken: current ? current.qrToken : "",
+        phone: current ? current.phone : "",
+        email: current ? current.email : "",
+        note: current ? current.note : "",
+        weight: current ? current.weight : 1,
+        rosterNo: modal.querySelector("#cvRosterNo")?.value || "",
+        qrToken: modal.querySelector("#cvRosterQrToken")?.value || "",
       });
       modal.hidden = true;
       toast(current ? "名單已更新" : "名單已新增");
@@ -23947,6 +25548,7 @@
   function cvOpenImportResidentsModal(communityId, projectId) {
     const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
     const pid = String(projectId || "").trim();
+    if (cvBlockIfArchived(pid)) return;
     const modal = ensureModal("checkinVoteImportResidentsModal", "modal-checkin-vote-import", "min(880px, 94vw)");
     bindModalClose(modal);
     modal.innerHTML = `
@@ -24092,12 +25694,20 @@
   function cvOpenTopicModal(communityId, projectId, topic) {
     const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
     const pid = String(projectId || "").trim();
+    if (cvBlockIfArchived(pid)) return;
     const project = cvActiveProject();
     const current = topic || null;
     const optionText = current && Array.isArray(current.options) && current.options.length
       ? current.options.map((item) => String(item.label || "").trim()).filter(Boolean).join("\n")
       : "同意\n不同意";
-    const modal = ensureModal("checkinVoteTopicModal", "modal-checkin-vote-topic", "min(760px, 92vw)");
+    // 代號預設：新增議題依現有議題數遞增（M01、M02…），既有議題沿用已存代號，未填則依其所在序位補上
+    const topicSequence = current
+      ? Math.max(1, checkinVoteState.topics.findIndex((item) => String(item.id || "") === String(current.id || "")) + 1)
+      : checkinVoteState.topics.length + 1;
+    const topicCodeValue = current && String(current.code || "").trim()
+      ? String(current.code).trim()
+      : `M${String(topicSequence).padStart(2, "0")}`;
+    const modal = ensureModal("checkinVoteTopicModal", "modal-checkin-vote-topic", "min(620px, 92vw)");
     bindModalClose(modal);
     modal.innerHTML = `
       <div class="modal-backdrop" data-modal-close="1"></div>
@@ -24108,46 +25718,51 @@
         </div>
         <form id="checkinVoteTopicForm">
           <div class="modal-body">
-            <div class="field">
+            <label class="field" style="display:flex; align-items:center; gap:8px;">
+              <span>啟用議題</span>
+              <input id="cvTopicEnabled" class="cv-toggle" type="checkbox"${current ? (current.enabled ? " checked" : "") : " checked"} />
+            </label>
+            <div class="field" style="display:block;">
+              <label for="cvTopicCode">代號</label>
+              <input id="cvTopicCode" type="text" value="${escapeHtml(topicCodeValue)}" />
+            </div>
+            <div class="field" style="display:block;">
+              <span>排序</span>
+              <input id="cvTopicOrder" type="number" min="0" step="1" value="${escapeHtml(String(current ? current.order : checkinVoteState.topics.length + 1))}" />
+            </div>
+            <div class="field" style="display:block;">
               <label for="cvTopicName">議題名稱</label>
               <input id="cvTopicName" type="text" value="${escapeHtml(current ? current.title : "")}" required />
             </div>
-            <div class="field">
+            <div class="field" style="display:block;">
               <label for="cvTopicDesc">議題說明</label>
               <textarea id="cvTopicDesc" rows="3">${escapeHtml(current ? current.description : "")}</textarea>
             </div>
-            <div class="field">
-              <label for="cvTopicOptions">選項（每行一個）</label>
+            <div class="field" style="display:block;">
+              <label for="cvTopicOptions">選項（每行一個，${CV_OPTION_MIN}～${CV_OPTION_MAX} 個）</label>
               <textarea id="cvTopicOptions" rows="6" placeholder="例如：同意&#10;不同意">${escapeHtml(optionText)}</textarea>
+              <div class="muted" style="margin-top:6px;">選項代號依序為：${CV_OPTION_CODES.join("、")}</div>
             </div>
-            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px;">
-              <label class="field" style="display:block;">
-                <span>題型</span>
-                <select id="cvTopicSingleChoice">
-                  <option value="single"${current ? (current.singleChoice ? " selected" : "") : (cvNormalizeProjectSettings(project && project.settings ? project.settings : {}).defaultSingleChoice ? " selected" : "")}>單選</option>
-                  <option value="multi"${current ? (current.singleChoice ? "" : " selected") : (cvNormalizeProjectSettings(project && project.settings ? project.settings : {}).defaultSingleChoice ? "" : " selected")}>多選</option>
-                </select>
-              </label>
-              <label class="field" style="display:block;">
-                <span>排序</span>
-                <input id="cvTopicOrder" type="number" min="0" step="1" value="${escapeHtml(String(current ? current.order : checkinVoteState.topics.length + 1))}" />
-              </label>
-              <label class="field" style="display:flex; align-items:center; gap:10px; margin-top:24px;">
-                <input id="cvTopicEnabled" type="checkbox"${current ? (current.enabled ? " checked" : "") : " checked"} />
-                <span>啟用議題</span>
-              </label>
+            <div class="field" style="display:block;">
+              <span>題型</span>
+              <select id="cvTopicSingleChoice">
+                <option value="single"${current ? (current.singleChoice ? " selected" : "") : (cvNormalizeProjectSettings(project && project.settings ? project.settings : {}).defaultSingleChoice ? " selected" : "")}>單選</option>
+                <option value="multi"${current ? (current.singleChoice ? "" : " selected") : (cvNormalizeProjectSettings(project && project.settings ? project.settings : {}).defaultSingleChoice ? "" : " selected")}>多選</option>
+              </select>
             </div>
-            <div class="muted" style="margin:14px 0 8px; font-weight:800;">通過門檻（留空則沿用專案預設）</div>
-            <div class="muted" style="margin-bottom:10px;">得票率以「本專案名單總數」為分母，戶數與區分所有權比例需同時達標。</div>
-            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px;">
-              <label class="field" style="display:block;">
-                <span>得票戶數（人數）%</span>
-                <input id="cvTopicPassCountPct" type="number" min="0" max="100" step="1" placeholder="沿用專案預設" value="${current && current.passCountPct !== null && current.passCountPct !== undefined ? escapeHtml(String(current.passCountPct)) : ""}" />
-              </label>
-              <label class="field" style="display:block;">
-                <span>得票區分所有權比例%</span>
-                <input id="cvTopicPassSharePct" type="number" min="0" max="100" step="1" placeholder="沿用專案預設" value="${current && current.passSharePct !== null && current.passSharePct !== undefined ? escapeHtml(String(current.passSharePct)) : ""}" />
-              </label>
+            <div class="field" id="cvTopicMaxChoicesField" style="display:block;">
+              <span>多選上限（0＝不限）</span>
+              <input id="cvTopicMaxChoices" type="number" min="0" step="1" value="${escapeHtml(String(current ? current.maxChoices || 0 : 0))}" />
+            </div>
+            <div class="muted" style="margin:18px 0 8px; font-weight:800;">通過門檻（留空則沿用專案預設）</div>
+            <div class="muted" style="margin-bottom:10px;">得票率以「實際報到戶數」為分母，戶數與區分所有權比例需同時達標。</div>
+            <div class="field" style="display:block;">
+              <span>得票戶數（人數）%</span>
+              <input id="cvTopicPassCountPct" type="number" min="0" max="100" step="1" placeholder="沿用專案預設" value="${current && current.passCountPct !== null && current.passCountPct !== undefined ? escapeHtml(String(current.passCountPct)) : ""}" />
+            </div>
+            <div class="field" style="display:block;">
+              <span>得票區分所有權比例%</span>
+              <input id="cvTopicPassSharePct" type="number" min="0" max="100" step="1" placeholder="沿用專案預設" value="${current && current.passSharePct !== null && current.passSharePct !== undefined ? escapeHtml(String(current.passSharePct)) : ""}" />
             </div>
           </div>
           <div class="modal-ft">
@@ -24157,6 +25772,32 @@
         </form>
       </div>
     `.trim();
+    // 多選上限只在題型為「多選」時顯示
+    const singleChoiceSelect = modal.querySelector("#cvTopicSingleChoice");
+    const maxChoicesField = modal.querySelector("#cvTopicMaxChoicesField");
+    const maxChoicesInput = modal.querySelector("#cvTopicMaxChoices");
+    const optionsTextarea = modal.querySelector("#cvTopicOptions");
+    const syncMaxChoicesField = () => {
+      const isMulti = String(singleChoiceSelect && singleChoiceSelect.value || "single") === "multi";
+      if (maxChoicesField) maxChoicesField.style.display = isMulti ? "block" : "none";
+    };
+    const countOptionLines = () => String(optionsTextarea && optionsTextarea.value || "")
+      .split(/\r?\n/)
+      .map((item) => String(item || "").trim())
+      .filter(Boolean).length;
+    // 選項 2 個以下只能單選；3 個以上才開放多選，且多選上限自動帶入「選項總數 - 1」
+    const syncTopicTypeByOptions = (autoFillMax) => {
+      const count = countOptionLines();
+      const allowMulti = count >= 3;
+      const multiOption = singleChoiceSelect ? singleChoiceSelect.querySelector('option[value="multi"]') : null;
+      if (multiOption) multiOption.disabled = !allowMulti;
+      if (!allowMulti && singleChoiceSelect) singleChoiceSelect.value = "single";
+      if (autoFillMax && allowMulti && maxChoicesInput) maxChoicesInput.value = String(count - 1);
+      syncMaxChoicesField();
+    };
+    if (singleChoiceSelect) singleChoiceSelect.addEventListener("change", syncMaxChoicesField);
+    if (optionsTextarea) optionsTextarea.addEventListener("input", () => syncTopicTypeByOptions(true));
+    syncTopicTypeByOptions(false);
     modal.querySelector("#checkinVoteTopicForm").onsubmit = async (e) => {
       e.preventDefault();
       const title = String(modal.querySelector("#cvTopicName")?.value || "").trim();
@@ -24168,15 +25809,21 @@
         toast("請輸入議題名稱");
         return;
       }
-      if (optionLines.length < 2) {
-        toast("請至少輸入兩個選項");
+      if (optionLines.length < CV_OPTION_MIN) {
+        toast(`請至少輸入 ${CV_OPTION_MIN} 個選項`);
+        return;
+      }
+      if (optionLines.length > CV_OPTION_MAX) {
+        toast(`選項最多 ${CV_OPTION_MAX} 個`);
         return;
       }
       await cvSaveTopic(cid, pid, current ? current.id : "", {
         title,
+        code: modal.querySelector("#cvTopicCode")?.value || "",
         description: modal.querySelector("#cvTopicDesc")?.value || "",
         options: optionLines.map((label) => ({ label })),
         singleChoice: String(modal.querySelector("#cvTopicSingleChoice")?.value || "single") !== "multi",
+        maxChoices: modal.querySelector("#cvTopicMaxChoices")?.value,
         order: Number(modal.querySelector("#cvTopicOrder")?.value || 0) || 0,
         enabled: modal.querySelector("#cvTopicEnabled")?.checked !== false,
         passCountPct: modal.querySelector("#cvTopicPassCountPct")?.value,
@@ -24191,87 +25838,139 @@
   function cvOpenVoteModal(communityId, projectId, topic, residentId) {
     const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
     const pid = String(projectId || "").trim();
+    if (cvBlockIfArchived(pid)) return;
     const targetTopic = typeof topic === "string" ? cvFindTopic(topic) : topic;
     if (!targetTopic) {
       toast("找不到議題");
       return;
     }
-    const roster = Array.isArray(checkinVoteState.roster) ? checkinVoteState.roster : [];
+    const roster = cvVoteBaseRoster(cvActiveProject(), checkinVoteState.roster);
     if (!roster.length) {
-      toast("請先建立名單");
+      toast("目前沒有可投票的已報到名單");
       return;
     }
-    const modal = ensureModal("checkinVoteCastModal", "modal-checkin-vote-cast", "min(760px, 92vw)");
+    const tid = String(targetTopic.id || "").trim();
+    const topicOptions = (targetTopic.options || []).filter((option) => option && option.id);
+    const focusEntryId = String(residentId || "").trim();
+    const maxChoices = targetTopic.singleChoice ? 0 : Math.max(0, Number(targetTopic.maxChoices || 0) || 0);
+    const voteHint = targetTopic.singleChoice
+      ? "單選：每戶只能選一項。點一下即選擇，再點同一項即取消；改點其他選項會直接替換原選項。"
+      : (maxChoices > 0
+        ? `多選：每戶最多可選 ${maxChoices} 項。點一下即加入，再點同一項即取消。`
+        : "多選：每戶可選多項。點一下即加入，再點同一項即取消。");
+    const modal = ensureModal("checkinVoteCastModal", "modal-checkin-vote-cast", "min(1080px, 96vw)");
     bindModalClose(modal);
     modal.innerHTML = `
       <div class="modal-backdrop" data-modal-close="1"></div>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="checkinVoteCastTitle">
         <div class="modal-hd">
-          <h3 class="modal-title" id="checkinVoteCastTitle">${escapeHtml(targetTopic.title)}｜人工投票</h3>
+          <h3 class="modal-title" id="checkinVoteCastTitle">${escapeHtml(targetTopic.title)}｜人工投票${String(targetTopic.code || "").trim() ? `<span class="cv-topic-code">${escapeHtml(String(targetTopic.code).trim())}</span>` : ""}</h3>
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
-        <form id="checkinVoteCastForm">
-          <div class="modal-body">
-            <div class="field">
-              <label for="cvVoteResident">投票人</label>
-              <select id="cvVoteResident">
-                ${roster.map((entry) => `<option value="${escapeHtml(entry.id)}"${String(entry.id || "") === String(residentId || "").trim() ? " selected" : ""}>${escapeHtml(entry.name)}（${escapeHtml(cvFormatUnit(entry))}）</option>`).join("")}
-              </select>
-            </div>
-            <div class="field">
-              <label>${escapeHtml(targetTopic.singleChoice ? "請選擇一個選項" : "可選擇多個選項")}</label>
-              <div style="display:flex; flex-direction:column; gap:10px;">
-                ${(targetTopic.options || []).map((option) => `
-                  <label class="list-item" style="cursor:pointer;">
-                    <div>${escapeHtml(option.label)}</div>
-                    <div><input type="${targetTopic.singleChoice ? "radio" : "checkbox"}" name="cvVoteOption" value="${escapeHtml(option.id)}" /></div>
-                  </label>
-                `).join("")}
-              </div>
-            </div>
-          </div>
-          <div class="modal-ft">
-            <button class="btn" type="button" data-modal-close="1">取消</button>
-            <button class="btn" type="button" id="btnCvClearVoteInModal">清除此議題投票</button>
-            <button class="btn btn-primary" type="submit">儲存投票</button>
-          </div>
-        </form>
+        <div class="modal-body">
+          <div class="muted" style="margin-bottom:8px;">${escapeHtml(voteHint)}</div>
+          <div class="cv-vote-list" id="cvVoteList"></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
       </div>
     `.trim();
-    const form = modal.querySelector("#checkinVoteCastForm");
-    const residentSelect = modal.querySelector("#cvVoteResident");
-    const syncCurrentVote = () => {
-      const entry = cvFindRosterEntry(residentSelect ? residentSelect.value : "");
-      const vote = entry && entry.votes ? entry.votes[String(targetTopic.id || "").trim()] : null;
-      const selectedIds = vote && Array.isArray(vote.optionIds) ? vote.optionIds : [];
-      modal.querySelectorAll('[name="cvVoteOption"]').forEach((input) => {
-        input.checked = selectedIds.includes(String(input.value || "").trim());
-      });
+    const listEl = modal.querySelector("#cvVoteList");
+    const readVoteOptionIds = (entry) => {
+      const vote = entry && entry.votes ? entry.votes[tid] : null;
+      return vote && Array.isArray(vote.optionIds) ? vote.optionIds.map((x) => String(x || "").trim()) : [];
     };
-    if (residentSelect) residentSelect.addEventListener("change", syncCurrentVote);
-    syncCurrentVote();
-    modal.querySelector("#btnCvClearVoteInModal").onclick = async () => {
-      const entryId = String(residentSelect ? residentSelect.value : "").trim();
-      if (!entryId) return;
-      await cvClearResidentVote(cid, pid, entryId, targetTopic.id);
-      modal.hidden = true;
+    const renderList = () => {
+      const rows = cvVoteBaseRoster(cvActiveProject(), checkinVoteState.roster);
+      listEl.innerHTML = `
+        <div class="cv-vote-row cv-vote-head">
+          <div class="cv-vote-no">編號</div>
+          <div class="cv-vote-qr">QR code碼</div>
+          <div class="cv-vote-name">姓名</div>
+          <div class="cv-vote-opts">選項</div>
+        </div>
+      ` + (rows.map((entry) => {
+        const selectedIds = readVoteOptionIds(entry);
+        const qrToken = String(entry.qrToken || "").trim();
+        const rosterNo = String(entry.rosterNo || "").trim();
+        const buttons = topicOptions.map((option) => {
+          const active = selectedIds.includes(String(option.id || "").trim());
+          const optionId = escapeHtml(option.id);
+          return `<span class="cv-vote-opt-cell">`
+            + `<button class="btn cv-vote-opt${active ? " is-on" : ""}" type="button" data-entry="${escapeHtml(entry.id)}" data-option="${optionId}">${escapeHtml(option.label)}</button>`
+            + `<button class="btn cv-vote-opt-qr" type="button" data-entry="${escapeHtml(entry.id)}" data-option="${optionId}" title="${escapeHtml(option.label)} QR code">QR</button>`
+            + `</span>`;
+        }).join("");
+        return `
+          <div class="cv-vote-row${selectedIds.length ? " is-voted" : ""}${String(entry.id || "") === focusEntryId ? " is-focus" : ""}" data-entry="${escapeHtml(entry.id)}">
+            <div class="cv-vote-no">${escapeHtml(rosterNo || "—")}</div>
+            <div class="cv-vote-qr" title="${escapeHtml(qrToken)}">${escapeHtml(qrToken || "—")}</div>
+            <div class="cv-vote-name"><b>${escapeHtml(entry.name || "")}</b><span>${escapeHtml(cvFormatUnit(entry))}</span></div>
+            <div class="cv-vote-opts">${buttons || `<span class="muted">此議題尚無選項</span>`}</div>
+          </div>
+        `;
+      }).join("") || `<div class="muted">尚無名單</div>`);
     };
-    form.onsubmit = async (e) => {
-      e.preventDefault();
-      const entryId = String(residentSelect ? residentSelect.value : "").trim();
-      const optionIds = Array.from(modal.querySelectorAll('[name="cvVoteOption"]:checked'))
-        .map((input) => String(input.value || "").trim())
-        .filter(Boolean);
-      await cvSaveResidentVote(cid, pid, entryId, targetTopic.id, optionIds, "manual");
-      modal.hidden = true;
-      toast("投票已儲存");
-    };
+    renderList();
+    listEl.addEventListener("click", async (event) => {
+      const qrBtn = event.target.closest(".cv-vote-opt-qr");
+      if (qrBtn) {
+        const qrOptionId = String(qrBtn.getAttribute("data-option") || "").trim();
+        const qrOption = topicOptions.find((item) => String(item.id || "").trim() === qrOptionId) || null;
+        const qrEntry = cvFindRosterEntry(String(qrBtn.getAttribute("data-entry") || "").trim());
+        if (!qrOption || !qrEntry) return;
+        const topicCode = String(targetTopic.code || "").trim();
+        const optionCode = String(qrOption.code || "").trim();
+        if (!topicCode || !optionCode) {
+          toast("此議題或選項缺少代號，請先編輯議題設定代號");
+          return;
+        }
+        // 選項 QR 內容＝住戶 QR code碼 ＋ 議題代號 ＋ 選項代號（例：A001M01T）
+        const payload = `${String(qrEntry.qrToken || "").trim()}${topicCode}${optionCode}`;
+        cvOpenQrModal(`${targetTopic.title}｜${qrOption.label}`, payload, "此 QR code 為「住戶＋議題＋選項」投票碼，掃描後直接完成投票。");
+        return;
+      }
+      const btn = event.target.closest(".cv-vote-opt");
+      if (!btn || btn.disabled) return;
+      const entryId = String(btn.getAttribute("data-entry") || "").trim();
+      const optionId = String(btn.getAttribute("data-option") || "").trim();
+      const entry = cvFindRosterEntry(entryId);
+      if (!entry || !optionId) return;
+      const selectedIds = readVoteOptionIds(entry);
+      const isOn = selectedIds.includes(optionId);
+      if (!isOn && maxChoices > 0 && selectedIds.length >= maxChoices) {
+        toast(`此議題最多只能選 ${maxChoices} 項`);
+        return;
+      }
+      // 再點同一顆＝取消該選項；單選時點其他顆＝直接換成該選項；多選時累加
+      const nextIds = isOn
+        ? selectedIds.filter((id) => id !== optionId)
+        : (targetTopic.singleChoice ? [optionId] : selectedIds.concat(optionId));
+      btn.disabled = true;
+      try {
+        if (nextIds.length) {
+          await cvSaveResidentVote(cid, pid, entryId, tid, nextIds, "manual", { rerender: false });
+          cvRefreshCheckinVoteLive();
+        } else {
+          await cvClearResidentVote(cid, pid, entryId, tid, { confirm: false });
+        }
+      } catch (error) {
+        console.warn("[checkin-vote] 投票更新失敗", error);
+        toast("投票更新失敗，請稍後再試");
+      } finally {
+        renderList();
+      }
+    });
     modal.hidden = false;
+    const focusRow = listEl.querySelector(`.cv-vote-row[data-entry="${focusEntryId}"]`);
+    if (focusRow && typeof focusRow.scrollIntoView === "function") focusRow.scrollIntoView({ block: "center" });
   }
 
   function cvOpenDocumentModal(communityId, projectId, documentItem) {
     const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
     const pid = String(projectId || "").trim();
+    if (cvBlockIfArchived(pid)) return;
     const current = documentItem || null;
     const modal = ensureModal("checkinVoteDocumentModal", "modal-checkin-vote-document", "min(760px, 92vw)");
     bindModalClose(modal);
@@ -24404,7 +26103,7 @@
     let currentPage = "overview";
     if (parts.length >= 3 && parts[0] === "community" && parts[1] === "checkin-vote") {
       const pageParam = parts[2];
-      if (["overview", "checkin", "vote", "roster", "files", "archive", "scan", "settings"].includes(pageParam)) currentPage = pageParam;
+      if (["overview", "checkin", "vote", "election", "roster", "files", "archive", "scan", "settings"].includes(pageParam)) currentPage = pageParam;
     }
     await ensureCheckinVoteDataLoaded(cid, {});
     const project = cvActiveProject();
@@ -24412,6 +26111,7 @@
       overview: { label: "總覽", title: "總覽", desc: "報到與投票統計、目前專案總覽。" },
       checkin: { label: "報到", title: "報到", desc: "人工報到、QR 報到與報到進度管理。" },
       vote: { label: "投票", title: "投票", desc: "議題建立、人工投票、結果統計與選項 QR。" },
+      election: { label: "選舉", title: "選舉", desc: "區分所有權人大會選舉管理委員：候選人建檔、人工投票、得票排序與當選／候補。" },
       roster: { label: "名單", title: "名單", desc: "本專案獨立名單，可從住戶造冊帶入後再個別維護。" },
       files: { label: "文件", title: "文件", desc: "報到單與投票單生成、編輯、列印、下載，並保存專案文件。" },
       archive: { label: "備存", title: "備存", desc: "多個專案分開保存、切換與檢視。" },
@@ -24441,6 +26141,7 @@
     if (currentPage === "overview") bodyContent = cvRenderOverviewContent(project, checkinVoteState.roster, checkinVoteState.topics, checkinVoteState.documents);
     else if (currentPage === "checkin") bodyContent = cvRenderCheckinContent(project, checkinVoteState.roster);
     else if (currentPage === "vote") bodyContent = cvRenderVoteContent(project, checkinVoteState.roster, checkinVoteState.topics);
+    else if (currentPage === "election") bodyContent = cvRenderElectionContent(project, checkinVoteState.roster, checkinVoteState.elections);
     else if (currentPage === "roster") bodyContent = cvRenderRosterContent(project, checkinVoteState.roster, checkinVoteState.topics);
     else if (currentPage === "files") bodyContent = cvRenderFilesContent(project, checkinVoteState.documents, checkinVoteState.roster);
     else if (currentPage === "archive") bodyContent = cvRenderArchiveContent(checkinVoteState.projects, checkinVoteState.activeProjectId);
@@ -24463,6 +26164,7 @@
           <div class="row" style="margin-bottom:14px;">
             <div style="font-size:calc(18px * var(--fs, 1)); font-weight:800; color:#111827;">${escapeHtml(pageMap[currentPage].title)}</div>
           </div>
+          ${project && project.archived && currentPage !== "archive" ? `<div class="cv-archived-banner">此專案已封存：所有資料已鎖定，無法掃碼、人工新增、投票或修改。請至「備存」解除封存後再操作。</div>` : ""}
           ${bodyContent}
         </div>
       </section>
@@ -24495,6 +26197,13 @@
     if (currentPage === "archive") {
       const createBtn = document.getElementById("btnCvCreateProject");
       if (createBtn) createBtn.addEventListener("click", () => cvOpenProjectModal(cid, null));
+      contentEl.querySelectorAll("[data-cv-log]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const kind = String(btn.getAttribute("data-cv-log") || "checkin").trim() || "checkin";
+          const projectId = String(btn.getAttribute("data-cv-log-project") || "").trim();
+          cvOpenLogModal(kind, projectId);
+        });
+      });
       contentEl.querySelectorAll("[data-cv-open-project]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const projectId = String(btn.getAttribute("data-cv-open-project") || "").trim();
@@ -24514,6 +26223,7 @@
       contentEl.querySelectorAll("[data-cv-edit-project]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const projectId = String(btn.getAttribute("data-cv-edit-project") || "").trim();
+          if (cvBlockIfArchived(projectId)) return;
           const target = checkinVoteState.projects.find((item) => String(item.id || "") === projectId) || null;
           if (target) cvOpenProjectModal(cid, target);
         });
@@ -24522,6 +26232,11 @@
         btn.addEventListener("click", async () => {
           const projectId = String(btn.getAttribute("data-cv-toggle-archive") || "").trim();
           const target = checkinVoteState.projects.find((item) => String(item.id || "") === projectId) || null;
+          const willArchive = !!(target && !target.archived);
+          if (willArchive) {
+            const ok = window.confirm("封存後將無法再掃碼、人工新增或修改任何資料，需解除封存才能繼續。是否封存？");
+            if (!ok) return;
+          }
           if (!target) return;
           await cvRefProject(cid, projectId).set({
             archived: !target.archived,
@@ -24543,8 +26258,20 @@
     if (currentPage === "roster" && project) {
       const addBtn = document.getElementById("btnCvAddRosterEntry");
       const importBtn = document.getElementById("btnCvImportResidents");
+      const exportXlsxBtn = document.getElementById("btnCvExportRosterExcel");
+      const importXlsxBtn = document.getElementById("btnCvImportRosterExcel");
+      const xlsxInput = document.getElementById("cvRosterExcelInput");
       if (addBtn) addBtn.addEventListener("click", () => cvOpenRosterModal(cid, project.id, null));
       if (importBtn) importBtn.addEventListener("click", () => cvOpenImportResidentsModal(cid, project.id));
+      if (exportXlsxBtn) exportXlsxBtn.addEventListener("click", () => cvExportRosterExcel(project));
+      if (importXlsxBtn && xlsxInput) {
+        importXlsxBtn.addEventListener("click", () => xlsxInput.click());
+        xlsxInput.addEventListener("change", async () => {
+          const file = xlsxInput.files && xlsxInput.files[0];
+          xlsxInput.value = "";
+          if (file) await cvImportRosterExcel(cid, project.id, file);
+        });
+      }
       contentEl.querySelectorAll("[data-cv-edit-roster]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const entry = cvFindRosterEntry(btn.getAttribute("data-cv-edit-roster") || "");
@@ -24553,6 +26280,7 @@
       });
       contentEl.querySelectorAll("[data-cv-delete-roster]").forEach((btn) => {
         btn.addEventListener("click", async () => {
+          if (cvBlockIfArchivedProject(project)) return;
           const entryId = String(btn.getAttribute("data-cv-delete-roster") || "").trim();
           const ok = window.confirm("要刪除此名單資料嗎？");
           if (!ok) return;
@@ -24568,7 +26296,7 @@
         btn.addEventListener("click", () => {
           const entry = cvFindRosterEntry(btn.getAttribute("data-cv-person-qr") || "");
           if (!entry) return;
-          cvOpenQrModal(`${entry.name}｜個人 QR`, cvPersonQrPayload(project.id, entry), "此 QR code 可用於報到與投票人識別。");
+          cvOpenQrModal(`${entry.name}｜個人 QR`, cvPersonQrPayload(entry), "此 QR code 可用於報到與投票人識別。");
         });
       });
     }
@@ -24613,16 +26341,26 @@
           cvOpenVoteModal(cid, project.id, topicId, "");
         });
       });
-      contentEl.querySelectorAll("[data-cv-option-qr]").forEach((btn) => {
+    }
+
+    if (currentPage === "election" && project) {
+      const addElectionBtn = document.getElementById("btnCvAddElection");
+      if (addElectionBtn) addElectionBtn.addEventListener("click", () => cvOpenElectionModal(cid, project.id, null));
+      contentEl.querySelectorAll("[data-cv-edit-election]").forEach((btn) => {
         btn.addEventListener("click", () => {
-          const rawKey = String(btn.getAttribute("data-cv-option-qr") || "").trim();
-          const [topicId, optionId] = rawKey.split("::");
-          const topic = cvFindTopic(topicId);
-          const option = topic && Array.isArray(topic.options) ? topic.options.find((item) => String(item.id || "") === String(optionId || "").trim()) : null;
-          if (!topic || !option) return;
-          cvOpenQrModal(`${topic.title}｜${option.label}`, cvOptionQrPayload(project.id, topic, option), "此 QR code 為議題選項碼，投票掃碼時請先掃描投票人，再掃描選項。");
+          const election = cvFindElection(btn.getAttribute("data-cv-edit-election") || "");
+          if (election) cvOpenElectionModal(cid, project.id, election);
         });
       });
+      contentEl.querySelectorAll("[data-cv-delete-election]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const electionId = String(btn.getAttribute("data-cv-delete-election") || "").trim();
+          if (!electionId) return;
+          await cvDeleteElection(cid, project.id, electionId);
+        });
+      });
+      const electionCountBtn = document.getElementById("btnCvElectionCount");
+      if (electionCountBtn) electionCountBtn.addEventListener("click", () => cvOpenElectionCountWindow(project));
     }
 
     if (currentPage === "files" && project) {
@@ -24634,9 +26372,21 @@
         cvDocPrefs.checkin.layout = String(checkinLayoutSel.value || "personal").trim() === "roster" ? "roster" : "personal";
         renderCheckinVoteModule();
       });
-      const checkinTargetSel = document.getElementById("cvCheckinTarget");
-      if (checkinTargetSel) checkinTargetSel.addEventListener("change", () => {
-        cvDocPrefs.checkin.targetId = String(checkinTargetSel.value || "__all__").trim() || "__all__";
+      const checkinTargetPicker = document.getElementById("cvCheckinTargetPicker");
+      if (checkinTargetPicker) checkinTargetPicker.addEventListener("click", (event) => {
+        const chip = event.target.closest("[data-cv-target]");
+        if (!chip || !checkinTargetPicker.contains(chip)) return;
+        const allChip = checkinTargetPicker.querySelector('[data-cv-target="__all__"]');
+        const chips = Array.from(checkinTargetPicker.querySelectorAll("[data-cv-target]"));
+        if (chip === allChip || String(chip.getAttribute("data-cv-target")) === "__all__") {
+          chips.forEach((item) => item.classList.toggle("is-on", item === allChip));
+        } else {
+          chip.classList.toggle("is-on");
+          const othersOn = chips.some((item) => item !== allChip && item.classList.contains("is-on"));
+          if (allChip) allChip.classList.toggle("is-on", !othersOn);
+        }
+        const picked = chips.filter((item) => item.classList.contains("is-on")).map((item) => String(item.getAttribute("data-cv-target") || "").trim()).filter(Boolean);
+        cvDocPrefs.checkin.targetIds = picked.length ? picked : ["__all__"];
       });
       const checkinPerPageInput = document.getElementById("cvCheckinPerPage");
       if (checkinPerPageInput) checkinPerPageInput.addEventListener("change", () => {
@@ -24660,6 +26410,10 @@
       if (voteLayoutSel) voteLayoutSel.addEventListener("change", () => {
         cvDocPrefs.vote.layout = String(voteLayoutSel.value || "single").trim() === "multi" ? "multi" : "single";
         renderCheckinVoteModule();
+      });
+      const votePerPageSel = document.getElementById("cvVotePerPage");
+      if (votePerPageSel) votePerPageSel.addEventListener("change", () => {
+        cvDocPrefs.vote.perPage = Math.max(2, Math.min(5, Number(votePerPageSel.value) || 5));
       });
       const voteTargetSel = document.getElementById("cvVoteTarget");
       if (voteTargetSel) voteTargetSel.addEventListener("change", () => {
@@ -24685,6 +26439,35 @@
         }
         if (voteMergeInput) cvDocPrefs.vote.mergeOwner = voteMergeInput.checked === true;
         cvOpenDocPreviewModal("vote", project);
+      });
+
+      const passLayoutSel = document.getElementById("cvPassLayout");
+      if (passLayoutSel) passLayoutSel.addEventListener("change", () => {
+        cvDocPrefs.pass.layout = String(passLayoutSel.value || "biz").trim() === "tall" ? "tall" : "biz";
+      });
+      const passTargetPicker = document.getElementById("cvPassTargetPicker");
+      if (passTargetPicker) passTargetPicker.addEventListener("click", (event) => {
+        const chip = event.target.closest("[data-cv-target]");
+        if (!chip || !passTargetPicker.contains(chip)) return;
+        const allChip = passTargetPicker.querySelector('[data-cv-target="__all__"]');
+        const chips = Array.from(passTargetPicker.querySelectorAll("[data-cv-target]"));
+        if (chip === allChip || String(chip.getAttribute("data-cv-target")) === "__all__") {
+          chips.forEach((item) => item.classList.toggle("is-on", item === allChip));
+        } else {
+          chip.classList.toggle("is-on");
+          const othersOn = chips.some((item) => item !== allChip && item.classList.contains("is-on"));
+          if (allChip) allChip.classList.toggle("is-on", !othersOn);
+        }
+        const picked = chips.filter((item) => item.classList.contains("is-on")).map((item) => String(item.getAttribute("data-cv-target") || "").trim()).filter(Boolean);
+        cvDocPrefs.pass.targetIds = picked.length ? picked : ["__all__"];
+      });
+      const genPassBtn = document.getElementById("btnCvGenPassDoc");
+      if (genPassBtn) genPassBtn.addEventListener("click", () => {
+        if (!checkinVoteState.roster.length) {
+          toast("請先到「名單」建立或帶入住戶資料");
+          return;
+        }
+        cvOpenDocPreviewModal("pass", project);
       });
 
       contentEl.querySelectorAll("[data-cv-open-document]").forEach((btn) => {
@@ -24714,6 +26497,7 @@
       if (settingsForm) {
         settingsForm.addEventListener("submit", async (e) => {
           e.preventDefault();
+          if (cvBlockIfArchivedProject(project)) return;
           await cvRefProject(cid, project.id).set({
             settings: cvNormalizeProjectSettings({
               allowManualCheckin: String(document.getElementById("cvAllowManualCheckin")?.value || "yes") !== "no",
@@ -24742,7 +26526,28 @@
       if (openScanBtn) openScanBtn.addEventListener("click", () => cvOpenScanWindow(project));
     }
 
+    cvStartRosterWatch(cid, project ? project.id : "");
     updateFooterActiveNav();
+  }
+
+  let __liveHistoryUnsub = null;
+
+  /** 停止歷史影片訂閱（離開模組時呼叫，避免殘留監聽） */
+  function stopLiveHistorySubscription() {
+    if (__liveHistoryUnsub) {
+      try { __liveHistoryUnsub(); } catch {}
+      __liveHistoryUnsub = null;
+    }
+  }
+
+  let __activityItemsUnsub = null;
+
+  /** 停止社區活動清單訂閱（離開模組時呼叫，避免殘留監聽） */
+  function stopActivitySubscription() {
+    if (__activityItemsUnsub) {
+      try { __activityItemsUnsub(); } catch {}
+      __activityItemsUnsub = null;
+    }
   }
 
   function ensureLiveMeetingSettingsModal80() {
@@ -24760,12 +26565,14 @@
         <div class="modal-body" style="display:flex;flex-direction:column;gap:16px;">
           <div style="padding:16px 18px;border:1px solid rgba(17,24,39,0.1);border-radius:16px;background:#f9fafb;">
             <div style="font-size:calc(16px * var(--fs, 1));font-weight:800;color:#111827;">YouTube 直播串流連結</div>
-            <div style="margin-top:6px;color:#6b7280;line-height:1.65;">請輸入 YouTube 直播或影片的連結</div>
+            <div style="margin-top:6px;color:#6b7280;line-height:1.65;">請輸入 YouTube 直播或影片的連結，儲存前會自動驗證格式並顯示封面預覽</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:12px;">
-            <label style="font-size:calc(14px * var(--fs, 1));font-weight:700;color:#111827;">串流連結</label>
+            <label for="liveMeetingYoutubeUrlInput" style="font-size:calc(14px * var(--fs, 1));font-weight:700;color:#111827;">串流連結</label>
             <input type="url" id="liveMeetingYoutubeUrlInput" placeholder="例如：https://www.youtube.com/watch?v=..." style="padding:12px 16px;border:1px solid rgba(17,24,39,0.2);border-radius:12px;font-size:calc(16px * var(--fs, 1));">
+            <div id="liveMeetingUrlHint" style="font-size:calc(12.5px * var(--fs, 1));color:#6b7280;line-height:1.6;">貼上連結後會自動解析影片 ID 並顯示封面預覽。</div>
           </div>
+          <div id="liveMeetingPreview" style="display:none;border-radius:16px;overflow:hidden;border:1px solid rgba(17,24,39,0.08);background:#000;"></div>
         </div>
         <div class="modal-ft">
           <button class="btn" type="button" data-modal-close="1">取消</button>
@@ -24773,26 +26580,74 @@
         </div>
       </div>
     `.trim();
-    
+
+    // 即時解析連結並更新封面預覽
+    const updatePreview = () => {
+      const input = modal.querySelector("#liveMeetingYoutubeUrlInput");
+      const box = modal.querySelector("#liveMeetingPreview");
+      const hint = modal.querySelector("#liveMeetingUrlHint");
+      if (!input || !box || !hint) return;
+      const raw = String(input.value || "").trim();
+      if (!raw) {
+        box.style.display = "none";
+        box.innerHTML = "";
+        hint.textContent = "貼上連結後會自動解析影片 ID 並顯示封面預覽。";
+        hint.style.color = "#6b7280";
+        return;
+      }
+      const vid = window.NWLive.youtubeVideoId(raw);
+      if (!vid) {
+        box.style.display = "none";
+        box.innerHTML = "";
+        hint.textContent = "無法解析 YouTube 影片 ID，請確認網址格式。";
+        hint.style.color = "#dc2626";
+        return;
+      }
+      hint.textContent = `已解析影片 ID：${vid}`;
+      hint.style.color = "#16a34a";
+      box.style.display = "block";
+      box.innerHTML = `
+        <div style="position:relative;aspect-ratio:16/9;background:#000;background-image:url('https://img.youtube.com/vi/${escapeHtml(vid)}/hqdefault.jpg');background-size:cover;background-position:center;">
+          <div style="position:absolute;inset:0;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:56px;height:56px;color:#fff;filter:drop-shadow(0 4px 16px rgba(0,0,0,0.35));">
+              <path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l11.3-6.8a1 1 0 0 0 0-1.7l-11.3-6.8A1 1 0 0 0 8 5.2Z" fill="currentColor"/>
+            </svg>
+          </div>
+        </div>
+      `;
+    };
+
+    const inputEl = modal.querySelector("#liveMeetingYoutubeUrlInput");
+    if (inputEl) {
+      inputEl.addEventListener("input", updatePreview);
+      inputEl.addEventListener("paste", () => { setTimeout(updatePreview, 0); });
+    }
+    modal.__nwUpdateLivePreview = updatePreview;
+
     // 绑定事件
     const handleSave = async () => {
       try {
-        const input = document.getElementById("liveMeetingYoutubeUrlInput");
+        const input = modal.querySelector("#liveMeetingYoutubeUrlInput");
         const youtubeUrl = input ? String(input.value || "").trim() : "";
-        
+
+        if (youtubeUrl && !window.NWLive.youtubeVideoId(youtubeUrl)) {
+          toast("YouTube 連結格式錯誤，請確認網址");
+          return;
+        }
+
         const cid = resolveActiveCommunityId();
         const cfg = loadConfig(cid) || {};
         cfg.liveMeetingYoutubeUrl = youtubeUrl;
-        
+
         if (state.config && typeof state.config === "object") {
           state.config.liveMeetingYoutubeUrl = youtubeUrl;
         }
-        
+
         await configDocRef(cid).set(
           { liveMeetingYoutubeUrl: youtubeUrl, updatedAt: FieldValue.serverTimestamp() },
           { merge: true }
         );
-        
+
         toast("已儲存");
         if (modal && modal.hidden !== undefined) modal.hidden = true;
       } catch (e) {
@@ -24820,6 +26675,9 @@
     if (input) {
       input.value = currentUrl;
     }
+    if (typeof modal.__nwUpdateLivePreview === "function") {
+      try { modal.__nwUpdateLivePreview(); } catch {}
+    }
     
     // 显示模态框
     modal.hidden = false;
@@ -24829,25 +26687,7 @@
     const cid = resolveActiveCommunityId();
     const communityName = (state.communities.find((c) => c.id === cid) || {}).name || "";
     
-    const youtubeVideoId98 = (url) => {
-      const u = String(url || "").trim();
-      if (!u) return "";
-      const patterns = [
-        /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/|live\/))([A-Za-z0-9_-]{6,})/,
-      ];
-      for (const re of patterns) {
-        const m = u.match(re);
-        if (m && m[1]) return m[1];
-      }
-      try {
-        const uo = new URL(u);
-        if (uo.hostname.includes("youtube.com") || uo.hostname.includes("youtu.be")) {
-          const v = uo.searchParams.get("v");
-          if (v) return v;
-        }
-      } catch {}
-      return "";
-    };
+    const youtubeVideoId98 = (url) => window.NWLive.youtubeVideoId(url);
 
     const youtubeEmbedUrl98 = (url) => {
       const id = youtubeVideoId98(url);
@@ -24866,37 +26706,16 @@
       }
     }
 
-    let __unsubLiveHistory = null;
     const ensureLiveHistorySubscription = (cid, onChange) => {
-      if (__unsubLiveHistory) {
-        try { __unsubLiveHistory(); } catch {}
-        __unsubLiveHistory = null;
-      }
+      stopLiveHistorySubscription();
       try {
-        __unsubLiveHistory = db.collection("communities").doc(cid).collection("liveMeetingHistory")
+        __liveHistoryUnsub = db.collection("communities").doc(cid).collection("liveMeetingHistory")
           .orderBy("datetime", "desc")
           .onSnapshot(
             (snap) => {
-              const items = (snap && snap.docs ? snap.docs : []).map((d) => {
-                const data = d.data() || {};
-                const dt = data.datetime && typeof data.datetime.toDate === "function" ? data.datetime.toDate() : (data.datetime ? new Date(data.datetime) : null);
-                return {
-                  id: d.id,
-                  title: String(data.title || "").trim(),
-                  datetime: dt && dt.getTime() ? dt : null,
-                  youtubeUrl: String(data.youtubeUrl || "").trim(),
-                  createdAt: data.createdAt && typeof data.createdAt.toDate === "function" ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date(0)),
-                };
-              });
-              items.sort((a, b) => {
-                const ta = a.datetime ? a.datetime.getTime() : 0;
-                const tb = b.datetime ? b.datetime.getTime() : 0;
-                if (ta !== tb) return tb - ta;
-                const ca = a.createdAt ? a.createdAt.getTime() : 0;
-                const cb = b.createdAt ? b.createdAt.getTime() : 0;
-                return cb - ca;
-              });
-              if (typeof onChange === "function") onChange(items);
+              const items = (snap && snap.docs ? snap.docs : [])
+                .map((d) => window.NWLive.normalizeHistoryDoc(d.id, d.data() || {}));
+              if (typeof onChange === "function") onChange(window.NWLive.sortHistoryDesc(items));
             },
             (err) => {
               console.warn("[LiveHistory] onSnapshot 失敗", err);
@@ -24909,32 +26728,11 @@
       }
     };
 
-    const formatHistoryDate = (date) => {
-      if (!date) return "";
-      const y = date.getFullYear();
-      const m = String(date.getMonth() + 1).padStart(2, "0");
-      const d = String(date.getDate()).padStart(2, "0");
-      const hh = String(date.getHours()).padStart(2, "0");
-      const mm = String(date.getMinutes()).padStart(2, "0");
-      return `${y}-${m}-${d} ${hh}:${mm}`;
-    };
+    const formatHistoryDate = (date) => window.NWLive.formatDateTime(date);
 
-    const formatHistoryInputValue = (date) => {
-      if (!date) return "";
-      const y = date.getFullYear();
-      const m = String(date.getMonth() + 1).padStart(2, "0");
-      const d = String(date.getDate()).padStart(2, "0");
-      const hh = String(date.getHours()).padStart(2, "0");
-      const mm = String(date.getMinutes()).padStart(2, "0");
-      return `${y}-${m}-${d}T${hh}:${mm}`;
-    };
+    const formatHistoryInputValue = (date) => window.NWLive.formatDateTimeInput(date);
 
-    const parseHistoryDatetime = (val) => {
-      if (!val) return null;
-      const d = new Date(val);
-      if (!d || Number.isNaN(d.getTime())) return null;
-      return d;
-    };
+    const parseHistoryDatetime = (val) => window.NWLive.parseDateTime(val);
 
     const openLiveHistoryModal = (item) => {
       const mid = "liveMeetingHistoryModal";
@@ -25027,6 +26825,7 @@
       subnavEl.innerHTML = `
         <button class="btn btn-sm ${currentPage === "live" ? "btn-primary" : ""}" type="button" data-live-page="live">直播</button>
         <button class="btn btn-sm ${currentPage === "history" ? "btn-primary" : ""}" type="button" data-live-page="history">歷史影片</button>
+        <button class="btn btn-sm" type="button" data-open-live-settings aria-label="設定" title="設定">設定</button>
       `.trim();
       
       subnavEl.querySelectorAll("[data-live-page]").forEach(btn => {
@@ -25036,19 +26835,92 @@
           renderPage();
         });
       });
+
+      const settingsBtn = subnavEl.querySelector("[data-open-live-settings]");
+      if (settingsBtn) {
+        settingsBtn.addEventListener("click", () => {
+          openLiveMeetingSettingsModal80();
+        });
+      }
     };
 
     const renderLivePage = () => {
       const cfg = loadConfig(cid) || {};
       const youtubeUrl = String(cfg.liveMeetingYoutubeUrl || "").trim();
-      const enabled = cfg.liveMeetingEnabled !== false;
+      const status = window.NWLive.normalizeStatus(cfg);
       const videoId = youtubeVideoId98(youtubeUrl);
       const embedUrl = youtubeEmbedUrl98(youtubeUrl);
       const thumbnailUrl = videoId
         ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
         : "";
 
-      const toggleId = "liveMeetingEnabledToggle_" + Math.random().toString(36).slice(2, 8);
+      const statusBtn = (s) => `<button class="btn btn-sm ${status === s ? "btn-primary" : ""}" type="button" data-live-status="${s}" style="min-width:70px;">${window.NWLive.statusLabel(s)}</button>`;
+
+      let cardHtml = "";
+      if (status === "live") {
+        cardHtml = `
+          <div class="card" data-live-card="${youtubeUrl ? "1" : "0"}" style="cursor:${youtubeUrl ? "pointer" : "default"};position:relative;overflow:hidden;border-radius:20px;border:1px solid rgba(17,24,39,0.08);background:#fff;">
+            ${youtubeUrl && thumbnailUrl
+              ? `<div style="position:relative;aspect-ratio:16/9;background:#000;background-image:url('${escapeHtml(thumbnailUrl)}');background-size:cover;background-position:center;">
+                   <div style="position:absolute;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">
+                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:68px;height:68px;color:#fff;filter:drop-shadow(0 4px 16px rgba(0,0,0,0.35));">
+                       <path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l11.3-6.8a1 1 0 0 0 0-1.7l-11.3-6.8A1 1 0 0 0 8 5.2Z" fill="currentColor"/>
+                     </svg>
+                   </div>
+                   <div style="position:absolute;top:12px;left:12px;display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(220,38,38,0.95);color:#fff;font-size:calc(12px * var(--fs, 1));font-weight:800;">
+                     <span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:sosCardPulse 1.5s ease-in-out infinite;"></span>
+                     LIVE
+                   </div>
+                   <div style="position:absolute;top:12px;right:12px;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:999px;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:calc(12px * var(--fs, 1));font-weight:800;box-shadow:0 6px 18px rgba(239,68,68,0.35);">
+                     ↗ 另開
+                   </div>
+                 </div>`
+              : `<div style="aspect-ratio:16/9;background:linear-gradient(135deg,#f3f4f6,#e5e7eb);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#6b7280;">
+                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:56px;height:56px;">
+                     <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                     <path d="m10 9 5 3-5 3V9Z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+                   </svg>
+                   <div style="font-size:calc(14px * var(--fs, 1));font-weight:700;">尚未設定直播連結</div>
+                   <div style="font-size:calc(13px * var(--fs, 1));">請點擊上方「設定」按鈕輸入連結</div>
+                 </div>`
+            }
+            <div style="padding:16px 18px;display:flex;align-items:center;gap:14px;">
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:calc(16px * var(--fs, 1));font-weight:800;color:#111827;line-height:1.5;">
+                  ${youtubeUrl ? (videoId ? `YouTube 直播串流 (${videoId})` : "直播連結已設定") : "尚未設定直播"}
+                </div>
+                <div style="margin-top:4px;font-size:calc(13px * var(--fs, 1));color:#6b7280;word-break:break-all;">
+                  ${youtubeUrl ? escapeHtml(youtubeUrl) : "請先於設定中輸入 YouTube 直播或影片連結"}
+                </div>
+              </div>
+            </div>
+          </div>`;
+      } else if (status === "ended") {
+        cardHtml = `
+          <div data-live-ended-card style="aspect-ratio:16/9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;border-radius:20px;border:1px solid rgba(17,24,39,0.06);background:linear-gradient(135deg,#f9fafB 0%,#f3f4f6 100%);">
+            <div style="width:72px;height:72px;border-radius:999px;background:rgba(156,163,175,0.14);display:flex;align-items:center;justify-content:center;">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:34px;height:34px;color:#6b7280;">
+                <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                <path d="M8 12h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div style="font-size:calc(20px * var(--fs, 1));font-weight:900;color:#111827;letter-spacing:0.2px;">直播已結束</div>
+            <div style="font-size:calc(13px * var(--fs, 1));color:#6b7280;">住戶端將提示前往「歷史影片」觀看錄影</div>
+          </div>`;
+      } else {
+        cardHtml = `
+          <div data-live-disabled-card style="aspect-ratio:16/9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;border-radius:20px;border:1px solid rgba(17,24,39,0.06);background:linear-gradient(135deg,#f9fafB 0%,#f3f4f6 100%);">
+            <div style="width:72px;height:72px;border-radius:999px;background:rgba(156,163,175,0.14);display:flex;align-items:center;justify-content:center;">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:34px;height:34px;color:#9ca3af;">
+                <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                <path d="M7 9.5 17 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M17 9.5 7 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div style="font-size:calc(20px * var(--fs, 1));font-weight:900;color:#111827;letter-spacing:0.2px;">目前無社區區大直播</div>
+            <div style="font-size:calc(13px * var(--fs, 1));color:#6b7280;">請將上方狀態切換為「直播中」以開啟住戶端播放</div>
+          </div>`;
+      }
 
       contentEl.innerHTML = `
         <section class="card">
@@ -25060,84 +26932,29 @@
                 <p>YouTube 直播串流管理</p>
               </div>
             </div>
-            <button class="btn btn-sm btn-ghost" type="button" data-open-live-settings aria-label="設定">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:20px;height:20px;">
-                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M19.4 15a7.3 7.3 0 0 0 .1-1l2-1.3a.8.8 0 0 0 .1-1l-1.9-3.3a.8.8 0 0 0-.6-.4l-2.4-.4a7.8 7.8 0 0 0-.2-1.8l-.4-2.4a.8.8 0 0 0-.7-.6h-3.8a.8.8 0 0 0-.7.6l-.4 2.4c-.1.6-.2 1.2-.2 1.8l-2.4.4a.8.8 0 0 0-.6.4L2.4 11.7a.8.8 0 0 0 .1 1l2 1.3c0 .3 0 .7.1 1l-.4 2.4a.8.8 0 0 0 .7.9h3.8c.6 0 1.2.1 1.8.2l1.9 3.3a.8.8 0 0 0 .6.4.8.8 0 0 0 .7-.1l2-1.3c.3 0 .7 0 1-.1l.4 2.4a.8.8 0 0 0 .7.6h3.8a.8.8 0 0 0 .7-.6l.4-2.4Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
           </div>
           <div class="card-bd" style="display:flex;flex-direction:column;gap:18px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-radius:16px;background:linear-gradient(135deg,#fef2f2 0%,#fff1f2 100%);border:1px solid rgba(239,68,68,0.12);">
-              <div style="display:flex;align-items:center;gap:12px;">
-                <div style="width:36px;height:36px;border-radius:10px;background:rgba(220,38,38,0.1);display:flex;align-items:center;justify-content:center;color:#dc2626;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:14px 18px;border-radius:16px;background:linear-gradient(135deg,#fef2f2 0%,#fff1f2 100%);border:1px solid rgba(239,68,68,0.12);">
+              <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+                <div style="width:36px;height:36px;border-radius:10px;background:rgba(220,38,38,0.1);display:flex;align-items:center;justify-content:center;color:#dc2626;flex:0 0 auto;">
                   ${iconSvg("live-meeting")}
                 </div>
-                <div>
-                  <div style="font-size:calc(15px * var(--fs, 1));font-weight:800;color:#111827;">啟用社區直播</div>
-                  <div style="font-size:calc(12.5px * var(--fs, 1));color:#6b7280;margin-top:2px;">關閉時住戶端與後台皆顯示「目前無社區區大直播」</div>
+                <div style="min-width:0;">
+                  <div style="font-size:calc(15px * var(--fs, 1));font-weight:800;color:#111827;">社區直播狀態</div>
+                  <div style="font-size:calc(12.5px * var(--fs, 1));color:#6b7280;margin-top:2px;">僅「直播中」會讓住戶端播放串流；「已結束」保留提示但不播放</div>
                 </div>
               </div>
-              <label for="${toggleId}" style="display:inline-flex;align-items:center;cursor:pointer;user-select:none;position:relative;flex:0 0 auto;min-width:54px;min-height:30px;touch-action:manipulation;">
-                <input type="checkbox" id="${toggleId}" data-live-enabled-toggle style="position:absolute;inset:0;opacity:0;margin:0;padding:0;appearance:none;-webkit-appearance:none;border:0;outline:0;" ${enabled ? "checked" : ""}>
-                <span aria-hidden="true" style="pointer-events:none;position:relative;display:inline-block;width:54px;height:30px;border-radius:999px;background:${enabled ? "linear-gradient(135deg,#ef4444,#dc2626)" : "rgba(156,163,175,0.55)"};box-shadow:${enabled ? "0 6px 16px rgba(239,68,68,0.28)" : "inset 0 1px 2px rgba(0,0,0,0.06)"};transition:background 200ms ease, box-shadow 200ms ease;">
-                  <span aria-hidden="true" style="pointer-events:none;position:absolute;top:2px;left:${enabled ? "calc(100% - 26px)" : "2px"};width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(17,24,39,0.18);transition:left 200ms cubic-bezier(.4,0,.2,1);"></span>
-                </span>
-              </label>
+              <div style="display:inline-flex;gap:6px;padding:4px;border-radius:999px;background:rgba(255,255,255,0.9);border:1px solid rgba(17,24,39,0.08);flex:0 0 auto;">
+                ${statusBtn("idle")}
+                ${statusBtn("live")}
+                ${statusBtn("ended")}
+              </div>
             </div>
 
-            ${enabled
-              ? `<div class="card" data-live-card="${youtubeUrl ? "1" : "0"}" style="cursor:${youtubeUrl ? "pointer" : "default"};position:relative;overflow:hidden;border-radius:20px;border:1px solid rgba(17,24,39,0.08);background:#fff;">
-                  ${youtubeUrl && thumbnailUrl
-                    ? `<div style="position:relative;aspect-ratio:16/9;background:#000;background-image:url('${thumbnailUrl}');background-size:cover;background-position:center;">
-                         <div style="position:absolute;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">
-                           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:68px;height:68px;color:#fff;filter:drop-shadow(0 4px 16px rgba(0,0,0,0.35));">
-                             <path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l11.3-6.8a1 1 0 0 0 0-1.7l-11.3-6.8A1 1 0 0 0 8 5.2Z" fill="currentColor"/>
-                           </svg>
-                         </div>
-                         <div style="position:absolute;top:12px;left:12px;display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(220,38,38,0.95);color:#fff;font-size:calc(12px * var(--fs, 1));font-weight:800;">
-                           <span style="width:8px;height:8px;border-radius:50%;background:#fff;animation:sosCardPulse 1.5s ease-in-out infinite;"></span>
-                           LIVE
-                         </div>
-                         <div style="position:absolute;top:12px;right:12px;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:999px;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:calc(12px * var(--fs, 1));font-weight:800;box-shadow:0 6px 18px rgba(239,68,68,0.35);">
-                           ↗ 另開
-                         </div>
-                       </div>`
-                    : `<div style="aspect-ratio:16/9;background:linear-gradient(135deg,#f3f4f6,#e5e7eb);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#6b7280;">
-                         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:56px;height:56px;">
-                           <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-                           <path d="m10 9 5 3-5 3V9Z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
-                         </svg>
-                         <div style="font-size:calc(14px * var(--fs, 1));font-weight:700;">尚未設定直播連結</div>
-                         <div style="font-size:calc(13px * var(--fs, 1));">點擊右上角齒輪按鈕進行設定</div>
-                       </div>`
-                  }
-                  <div style="padding:16px 18px;display:flex;align-items:center;gap:14px;">
-                    <div style="flex:1;min-width:0;">
-                      <div style="font-size:calc(16px * var(--fs, 1));font-weight:800;color:#111827;line-height:1.5;">
-                        ${youtubeUrl ? (videoId ? `YouTube 直播串流 (${videoId})` : "直播連結已設定") : "尚未設定直播"}
-                      </div>
-                      <div style="margin-top:4px;font-size:calc(13px * var(--fs, 1));color:#6b7280;word-break:break-all;">
-                        ${youtubeUrl ? escapeHtml(youtubeUrl) : "請先於設定中輸入 YouTube 直播或影片連結"}
-                      </div>
-                    </div>
-                  </div>
-                </div>`
-              : `<div data-live-disabled-card style="aspect-ratio:16/9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;border-radius:20px;border:1px solid rgba(17,24,39,0.06);background:linear-gradient(135deg,#f9fafB 0%,#f3f4f6 100%);">
-                   <div style="width:72px;height:72px;border-radius:999px;background:rgba(156,163,175,0.14);display:flex;align-items:center;justify-content:center;">
-                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:34px;height:34px;color:#9ca3af;">
-                       <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                       <path d="M7 9.5 17 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                       <path d="M17 9.5 7 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                     </svg>
-                   </div>
-                   <div style="font-size:calc(20px * var(--fs, 1));font-weight:900;color:#111827;letter-spacing:0.2px;">目前無社區區大直播</div>
-                   <div style="font-size:calc(13px * var(--fs, 1));color:#6b7280;">管理員已關閉直播顯示，若需開啟請使用上方開關</div>
-                 </div>`
-            }
+            ${cardHtml}
 
             <div id="liveEmbedContainer" style="display:none;border-radius:20px;overflow:hidden;border:1px solid rgba(17,24,39,0.08);background:#000;aspect-ratio:16/9;">
-              ${embedUrl
+              ${(status === "live" && embedUrl)
                 ? `<iframe src="${escapeHtml(embedUrl)}" title="YouTube Live" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen style="width:100%;height:100%;display:block;"></iframe>`
                 : ""
               }
@@ -25146,39 +26963,34 @@
         </section>
       `;
 
-      const settingsBtn = contentEl.querySelector("[data-open-live-settings]");
-      if (settingsBtn) {
-        settingsBtn.addEventListener("click", () => {
-          openLiveMeetingSettingsModal80();
-        });
-      }
-
-      const toggleInput = contentEl.querySelector("[data-live-enabled-toggle]");
-      if (toggleInput) {
-        toggleInput.addEventListener("change", async () => {
+      contentEl.querySelectorAll("[data-live-status]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const next = String(btn.getAttribute("data-live-status") || "idle");
+          if (next === status) return;
           try {
-            const nextEnabled = Boolean(toggleInput.checked);
             const refCfg = loadConfig(cid) || {};
-            refCfg.liveMeetingEnabled = nextEnabled;
+            refCfg.liveMeetingStatus = next;
+            refCfg.liveMeetingEnabled = next === "live";
             if (state.config && typeof state.config === "object") {
-              state.config.liveMeetingEnabled = nextEnabled;
+              state.config.liveMeetingStatus = next;
+              state.config.liveMeetingEnabled = next === "live";
             }
             await configDocRef(cid).set(
-              { liveMeetingEnabled: nextEnabled, updatedAt: FieldValue.serverTimestamp() },
+              { liveMeetingStatus: next, liveMeetingEnabled: next === "live", updatedAt: FieldValue.serverTimestamp() },
               { merge: true }
             );
-            toast(nextEnabled ? "已啟用直播" : "已關閉直播");
+            toast(`已切換為「${window.NWLive.statusLabel(next)}」`);
             renderLivePage();
           } catch (e) {
-            console.error("[LiveMeeting] 啟用狀態儲存失敗", e);
+            console.error("[LiveMeeting] 狀態儲存失敗", e);
             toast("儲存失敗");
             renderLivePage();
           }
         });
-      }
+      });
 
       const liveCard = contentEl.querySelector("[data-live-card]");
-      if (liveCard && youtubeUrl && enabled) {
+      if (liveCard && youtubeUrl && status === "live") {
         liveCard.style.transition = "transform .18s ease, box-shadow .18s ease";
         liveCard.addEventListener("mouseenter", () => {
           liveCard.style.transform = "translateY(-2px)";
@@ -25196,6 +27008,9 @@
     };
 
     let historyItems = [];
+    let histSearch = "";
+    let histPage = 1;
+    const HIST_PAGE_SIZE = 6;
 
     const renderHistoryPage = () => {
       const rightBtnHtml = `<button class="btn btn-sm btn-ghost" type="button" id="hist-new-btn" aria-label="新增影片" title="新增影片">${iconSvg("plus")}</button>`;
@@ -25212,12 +27027,28 @@
             </div>
             ${rightBtnHtml}
           </div>
-          <div class="card-bd" id="hist-list-bd" style="display:flex;flex-direction:column;gap:16px;"></div>
+          <div class="card-bd" style="display:flex;flex-direction:column;gap:16px;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <input id="hist-search" type="search" placeholder="搜尋影片標題或日期（例：管委會、113-08）" value="${escapeHtml(histSearch)}" style="flex:1 1 240px;min-width:0;padding:10px 14px;border:1px solid rgba(17,24,39,0.18);border-radius:12px;font-size:calc(14px * var(--fs, 1));">
+              <div id="hist-count" style="font-size:calc(13px * var(--fs, 1));color:#6b7280;flex:0 0 auto;"></div>
+            </div>
+            <div id="hist-list-bd" style="display:flex;flex-direction:column;gap:16px;"></div>
+            <div id="hist-pager" style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;"></div>
+          </div>
         </section>
       `;
 
       const newBtn = document.getElementById("hist-new-btn");
       if (newBtn) newBtn.addEventListener("click", () => openLiveHistoryModal(null));
+
+      const searchEl = document.getElementById("hist-search");
+      if (searchEl) {
+        searchEl.addEventListener("input", () => {
+          histSearch = String(searchEl.value || "");
+          histPage = 1;
+          renderHistoryItems();
+        });
+      }
 
       renderHistoryItems();
     };
@@ -25225,8 +27056,28 @@
     const renderHistoryItems = () => {
       const bd = document.getElementById("hist-list-bd");
       if (!bd) return;
-      const items = Array.isArray(historyItems) ? historyItems : [];
-      if (!items.length) {
+      const all = Array.isArray(historyItems) ? historyItems : [];
+      const kw = histSearch.trim().toLowerCase();
+      const filtered = kw
+        ? all.filter((it) => {
+            const t = String(it.title || "").toLowerCase();
+            const d = formatHistoryDate(it.datetime);
+            return t.includes(kw) || String(d).includes(kw);
+          })
+        : all;
+
+      const countEl = document.getElementById("hist-count");
+      if (countEl) countEl.textContent = all.length ? `共 ${filtered.length} / ${all.length} 部` : "";
+
+      const totalPages = Math.max(1, Math.ceil(filtered.length / HIST_PAGE_SIZE));
+      if (histPage > totalPages) histPage = totalPages;
+      if (histPage < 1) histPage = 1;
+      const start = (histPage - 1) * HIST_PAGE_SIZE;
+      const pageItems = filtered.slice(start, start + HIST_PAGE_SIZE);
+
+      if (!pageItems.length) {
+        const emptyTitle = all.length ? "找不到符合的影片" : "尚未新增歷史影片";
+        const emptyHint = all.length ? "請調整搜尋關鍵字後再試" : "點擊右上角「＋」新增卡片式影片";
         bd.innerHTML = `
           <div style="aspect-ratio:16/5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border-radius:20px;border:1px solid rgba(17,24,39,0.06);background:linear-gradient(135deg,#f9fafB 0%,#f3f4f6 100%);">
             <div style="width:72px;height:72px;border-radius:999px;background:rgba(156,163,175,0.14);display:flex;align-items:center;justify-content:center;">
@@ -25235,14 +27086,16 @@
                 <path d="M10 9v6l6-3-6-3Z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
               </svg>
             </div>
-            <div style="font-size:calc(20px * var(--fs, 1));font-weight:900;color:#111827;letter-spacing:0.2px;">尚未新增歷史影片</div>
-            <div style="font-size:calc(13px * var(--fs, 1));color:#6b7280;">點擊右上角「＋」新增卡片式影片</div>
+            <div style="font-size:calc(20px * var(--fs, 1));font-weight:900;color:#111827;letter-spacing:0.2px;">${emptyTitle}</div>
+            <div style="font-size:calc(13px * var(--fs, 1));color:#6b7280;">${emptyHint}</div>
           </div>
         `;
+        const pagerEmpty = document.getElementById("hist-pager");
+        if (pagerEmpty) pagerEmpty.innerHTML = "";
         return;
       }
 
-      const html = items.map((it) => {
+      const html = pageItems.map((it) => {
         const vid = youtubeVideoId98(it.youtubeUrl);
         const thumb = vid ? `https://img.youtube.com/vi/${vid}/hqdefault.jpg` : "";
         const dtStr = formatHistoryDate(it.datetime);
@@ -25300,8 +27153,8 @@
       }).join("");
       bd.innerHTML = html;
 
-      bd.querySelectorAll("[data-hist-id]").forEach((card) => {
-        if (!card.classList || !card.classList.contains("card")) return;
+      // 僅做 hover 效果，不再讓整張卡片點擊就另開（避免誤觸）
+      bd.querySelectorAll(".card[data-hist-id]").forEach((card) => {
         card.style.transition = "transform .18s ease, box-shadow .18s ease";
         card.addEventListener("mouseenter", () => {
           card.style.transform = "translateY(-2px)";
@@ -25311,45 +27164,66 @@
           card.style.transform = "";
           card.style.boxShadow = "";
         });
-        card.addEventListener("click", (e) => {
-          if (e.target.closest("button")) return;
-          const id = String(card.getAttribute("data-hist-id") || "").trim();
-          const it = items.find((x) => x.id === id) || null;
-          if (it && it.youtubeUrl) window.open(it.youtubeUrl, "_blank", "noopener,noreferrer");
-        });
       });
 
-      bd.addEventListener("click", (e) => {
-        const btn = e.target.closest("button[data-action]");
-        if (!btn) return;
-        e.stopPropagation();
-        const action = String(btn.getAttribute("data-action") || "").trim();
-        const id = String(btn.getAttribute("data-hist-id") || "").trim();
-        if (!action || !id) return;
-        const it = items.find((x) => x.id === id) || null;
-        if (action === "hist-edit") {
-          if (it) openLiveHistoryModal(it);
-        } else if (action === "hist-open") {
-          if (it && it.youtubeUrl) window.open(it.youtubeUrl, "_blank", "noopener,noreferrer");
-        } else if (action === "hist-del") {
-          if (!it) return;
-          const ok1 = window.confirm("確認要刪除此歷史影片？\n刪除後無法復原。");
-          if (!ok1) return;
-          const ok2 = window.confirm("再次確認：確定永久刪除「" + (it.title || "未命名影片") + "」？");
-          if (!ok2) return;
-          (async () => {
+      // 事件委派只綁一次（原本使用 { once: true } 會讓按鈕點一次後全部失效）
+      if (!bd._histDelegBound) {
+        bd._histDelegBound = true;
+        bd.addEventListener("click", async (e) => {
+          const btn = e.target.closest("button[data-action]");
+          if (!btn) return;
+          e.stopPropagation();
+          const action = String(btn.getAttribute("data-action") || "").trim();
+          const id = String(btn.getAttribute("data-hist-id") || "").trim();
+          if (!action || !id) return;
+          const list = Array.isArray(historyItems) ? historyItems : [];
+          const it = list.find((x) => x.id === id) || null;
+          if (action === "hist-edit") {
+            if (it) openLiveHistoryModal(it);
+          } else if (action === "hist-open") {
+            if (it && it.youtubeUrl) window.open(it.youtubeUrl, "_blank", "noopener,noreferrer");
+          } else if (action === "hist-del") {
+            if (!it) return;
+            const ok = await (window.nwConfirm ? window.nwConfirm({
+              title: "刪除歷史影片",
+              message: `確定要永久刪除「${it.title || "未命名影片"}」？\n刪除後無法復原。`,
+              okText: "刪除",
+              cancelText: "取消",
+              danger: true,
+            }) : Promise.resolve(window.confirm("確定要刪除此歷史影片？刪除後無法復原。")));
+            if (!ok) return;
             try {
               await db.collection("communities").doc(resolveActiveCommunityId()).collection("liveMeetingHistory").doc(it.id).delete();
               toast("已刪除");
-            } catch (e) {
-              console.error("[LiveHistory] 刪除失敗", e);
-              const code = String(e && e.code || "");
-              const msg = e && e.message ? e.message : "未知錯誤";
+            } catch (err) {
+              console.error("[LiveHistory] 刪除失敗", err);
+              const code = String(err && err.code || "");
+              const msg = err && err.message ? err.message : "未知錯誤";
               toast(code.includes("permission-denied") ? "沒有權限刪除（請更新 Firestore Rules）" : `刪除失敗：${msg}`);
             }
-          })();
+          }
+        });
+      }
+
+      const pager = document.getElementById("hist-pager");
+      if (pager) {
+        if (totalPages <= 1) {
+          pager.innerHTML = "";
+        } else {
+          pager.innerHTML = `
+            <button class="btn btn-sm" type="button" data-hist-page="prev" ${histPage <= 1 ? "disabled" : ""}>上一頁</button>
+            <span style="font-size:calc(13px * var(--fs, 1));color:#6b7280;font-weight:700;">第 ${histPage} / ${totalPages} 頁</span>
+            <button class="btn btn-sm" type="button" data-hist-page="next" ${histPage >= totalPages ? "disabled" : ""}>下一頁</button>
+          `;
+          pager.querySelectorAll("[data-hist-page]").forEach((b) => {
+            b.addEventListener("click", () => {
+              const dir = String(b.getAttribute("data-hist-page") || "");
+              histPage = dir === "prev" ? histPage - 1 : histPage + 1;
+              renderHistoryItems();
+            });
+          });
         }
-      }, { once: true });
+      }
     };
 
     // 渲染页面内容
@@ -25357,10 +27231,7 @@
       renderSubnav();
       
       if (currentPage === "live") {
-        if (__unsubLiveHistory) {
-          try { __unsubLiveHistory(); } catch {}
-          __unsubLiveHistory = null;
-        }
+        stopLiveHistorySubscription();
         renderLivePage();
       } else if (currentPage === "history") {
         renderHistoryPage();
@@ -26335,6 +28206,9 @@
     if (moduleId !== "parcel") { stopParcelsSubscription(); stopParcelStatsSubscription80(); }
     if (moduleId !== "care") { stopCheckinListener(); stopCareReminderWatcher(); }
     if (moduleId !== "bulletin") stopBulletinsSubscription();
+    if (moduleId !== "checkin-vote") cvStopRosterWatch();
+    if (moduleId !== "live-meeting") stopLiveHistorySubscription();
+    if (moduleId !== "activity") stopActivitySubscription();
     if (moduleId !== "finance" && typeof window.__nwFinanceCleanup === "function") {
       try { window.__nwFinanceCleanup(); } catch {}
     }
@@ -26615,46 +28489,14 @@
       if (p === "video" || p === "photo") currentTab = p;
     }
 
-    let unsubscribeItems = null;
     let itemsData = [];
+    let actSearch = "";
+    let actPage = 1;
+    const ACT_PAGE_SIZE = 6;
+    const NA = window.NWActivity || {};
 
-    const formatDate = (date) => {
-      if (!date) return "";
-      const d = date instanceof Date ? date : date.toDate ? date.toDate() : new Date(date);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const da = String(d.getDate()).padStart(2, "0");
-      const h = String(d.getHours()).padStart(2, "0");
-      const mi = String(d.getMinutes()).padStart(2, "0");
-      return `${y}-${m}-${da} ${h}:${mi}`;
-    };
-
-    const formatActivityTime = (val) => {
-      if (!val) return "";
-      const s = String(val).trim();
-      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) {
-        const d = new Date(s);
-        if (!isNaN(d.getTime())) {
-          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-        }
-      }
-      if (val && typeof val.toDate === "function") {
-        try { return formatDate(val.toDate()); } catch {}
-      }
-      if (val instanceof Date) return formatDate(val);
-      return s;
-    };
-
-    const toDatetimeLocalValue = (val) => {
-      if (!val) return "";
-      let d;
-      if (val instanceof Date) d = val;
-      else if (val && typeof val.toDate === "function") { try { d = val.toDate(); } catch {} }
-      else d = new Date(val);
-      if (!d || isNaN(d.getTime())) return "";
-      const pad = (n) => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    };
+    const formatActivityTime = (val) => (NA.formatDateTime ? NA.formatDateTime(val) : String(val || ""));
+    const toDatetimeLocalValue = (val) => (NA.formatDateTimeInput ? NA.formatDateTimeInput(val) : "");
 
     const renderSubnav = () => {
       if (!subnavEl) return;
@@ -26671,68 +28513,12 @@
       });
     };
 
-    const youtubeVideoId = (url) => {
-      const u = String(url || "").trim();
-      if (!u) return "";
-      const patterns = [
-        /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/|live\/))([A-Za-z0-9_-]{6,})/,
-      ];
-      for (const re of patterns) {
-        const m = u.match(re);
-        if (m && m[1]) return m[1];
-      }
-      try {
-        const uo = new URL(u);
-        if (uo.hostname.includes("youtube.com") || uo.hostname.includes("youtu.be")) {
-          const v = uo.searchParams.get("v");
-          if (v) return v;
-        }
-      } catch {}
-      return "";
-    };
-
-    const youtubeEmbedUrl = (url) => {
-      const id = youtubeVideoId(url);
-      if (!id) return "";
-      return `https://www.youtube.com/embed/${id}?rel=0`;
-    };
-
-    const googlePhotosDirectUrl = (url) => {
-      const u = String(url || "").trim();
-      if (!u) return "";
-      try {
-        const uo = new URL(u);
-        const host = uo.hostname.toLowerCase();
-        if (host.includes("photos.google.com") || host.includes("goo.gl") || host.includes("photos.app.goo.gl")) {
-          return u;
-        }
-      } catch {}
-      return u;
-    };
-
-    const googlePhotosAlbumId = (url) => {
-      const u = String(url || "").trim();
-      const m = u.match(/photos\.google\.com\/[^/]+\/[^/]+\/([A-Za-z0-9_-]{10,})/);
-      if (m && m[1]) return m[1];
-      const m2 = u.match(/\/([A-Za-z0-9_-]{20,})/);
-      if (m2 && m2[1]) return m2[1];
-      return "";
-    };
-
-    const normalizePhotoPreviewUrl = (url) => {
-      const u = String(url || "").trim();
-      if (!u) return "";
-      if (/^https?:\/\/.+\.(png|jpe?g|gif|webp)(\?|$)/i.test(u)) {
-        return u;
-      }
-      const id = googlePhotosAlbumId(u);
-      if (id) return `https://lh3.googleusercontent.com/${encodeURIComponent(id)}=w1200`;
-      try {
-        const uo = new URL(u);
-        if (uo.hostname.toLowerCase().includes("photos.google.com")) return "";
-      } catch {}
-      return "";
-    };
+    // 影片／相簿連結解析統一由 js/activity-shared.js（window.NWActivity）提供
+    const youtubeVideoId = (url) => (NA.youtubeVideoId ? NA.youtubeVideoId(url) : "");
+    const youtubeEmbedUrl = (url) => (NA.youtubeEmbedUrl ? NA.youtubeEmbedUrl(url) : "");
+    const youtubeThumbUrl = (url) => (NA.youtubeThumbUrl ? NA.youtubeThumbUrl(url) : "");
+    const googlePhotosDirectUrl = (url) => (NA.googlePhotosDirectUrl ? NA.googlePhotosDirectUrl(url) : String(url || "").trim());
+    const normalizePhotoPreviewUrl = (url) => (NA.normalizePhotoPreviewUrl ? NA.normalizePhotoPreviewUrl(url) : "");
 
     const openActivityPreview = (item) => {
       try {
@@ -26798,7 +28584,13 @@
       const modalTitle = isEditMode
         ? (isVideoType ? "編輯社區活動（影片）" : "編輯社區活動（相片）")
         : (isVideoType ? "新增社區活動（影片）" : "新增社區活動（相片）");
-      const detach = bindModalClose(modal, () => { try { detach(); } catch {} });
+      // 統一由 closeModal 關閉，確保 bindModalClose 的監聽器會被 detach（避免重複綁定累積）
+      let detach = () => {};
+      const closeModal = () => {
+        try { detach(); } catch {}
+        modal.hidden = true;
+      };
+      detach = bindModalClose(modal, () => { try { detach(); } catch {} });
 
       modal.innerHTML = `
         <div class="modal-backdrop" data-modal-close="1"></div>
@@ -26935,6 +28727,11 @@
             setStatus("請輸入標題與連結位置", true);
             return;
           }
+          // 影片類別必須能解析出 YouTube 影片 ID，避免前台無法預覽
+          if (category === "video" && !youtubeVideoId(url)) {
+            setStatus("尚未偵測到有效的 YouTube 影片連結，請貼上 https://www.youtube.com/watch?v=... 或 youtu.be/... 連結", true);
+            return;
+          }
           try {
             const payload = {
               type: "activity",
@@ -26954,7 +28751,13 @@
               });
               toast("已儲存");
             }
-            try { modal.setAttribute("hidden", ""); } catch {}
+            closeModal();
+            // 若儲存的分類與目前分頁不同，切換到該分類，避免使用者看不到剛儲存的資料
+            if (category !== currentTab) {
+              currentTab = category;
+              location.hash = `#community/activity/${currentTab}`;
+              renderPage();
+            }
           } catch (err) {
             console.error(err);
             setStatus(`儲存失敗：${err.message}`, true);
@@ -26968,20 +28771,61 @@
       }
     };
 
+    const renderPager = (totalPages) => {
+      const pager = document.getElementById("activityPager");
+      if (!pager) return;
+      if (!totalPages || totalPages <= 1) { pager.innerHTML = ""; return; }
+      pager.innerHTML = `
+        <button class="btn btn-sm" type="button" data-act-page="prev" ${actPage <= 1 ? "disabled" : ""}>上一頁</button>
+        <span style="font-size:calc(13px * var(--fs, 1)); color:#6b7280; font-weight:700;">第 ${actPage} / ${totalPages} 頁</span>
+        <button class="btn btn-sm" type="button" data-act-page="next" ${actPage >= totalPages ? "disabled" : ""}>下一頁</button>
+      `;
+      pager.querySelectorAll("[data-act-page]").forEach((b) => {
+        b.addEventListener("click", () => {
+          actPage = String(b.getAttribute("data-act-page") || "") === "prev" ? actPage - 1 : actPage + 1;
+          renderList(document.getElementById("activityList"), currentTab);
+        });
+      });
+    };
+
     const renderList = (listEl, category) => {
       if (!listEl) return;
-      const list = (itemsData || []).filter((x) => String(x.category || "") === String(category || ""));
-      if (!list.length) {
-        listEl.innerHTML = `<div class="status">目前沒有${category === "video" ? "影片" : "相片"}</div>`;
+      const isVideo = String(category) === "video";
+      const all = (itemsData || []).filter((x) => String(x.category || "") === String(category || ""));
+      const kw = actSearch.trim().toLowerCase();
+      const filtered = kw
+        ? all.filter((x) => {
+            const t = String(x.title || "").toLowerCase();
+            const d = formatActivityTime(x.activityTime || x.createdAt);
+            return t.includes(kw) || String(d).toLowerCase().includes(kw);
+          })
+        : all;
+
+      const countEl = document.getElementById("activityCount");
+      if (countEl) countEl.textContent = all.length ? `共 ${filtered.length} / ${all.length} 筆` : "";
+
+      const totalPages = Math.max(1, Math.ceil(filtered.length / ACT_PAGE_SIZE));
+      if (actPage > totalPages) actPage = totalPages;
+      if (actPage < 1) actPage = 1;
+      const start = (actPage - 1) * ACT_PAGE_SIZE;
+      const pageItems = filtered.slice(start, start + ACT_PAGE_SIZE);
+
+      if (!pageItems.length) {
+        listEl.innerHTML = `<div class="status">${all.length ? "找不到符合的活動，請調整搜尋關鍵字" : `目前沒有${isVideo ? "影片" : "相片"}`}</div>`;
+        renderPager(0);
         return;
       }
-      listEl.innerHTML = list.map((item) => {
+
+      const playOverlay = `<span style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.28);"><span style="width:56px; height:56px; border-radius:9999px; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; color:#fff;"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:26px; height:26px;"><path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l11.3-6.8a1 1 0 0 0 0-1.7l-11.3-6.8A1 1 0 0 0 8 5.2Z" fill="currentColor"/></svg></span></span>`;
+
+      listEl.innerHTML = pageItems.map((item) => {
         const url = String(item.url || "").trim();
         const time = formatActivityTime(item.activityTime || item.createdAt);
-        const isVideo = String(category) === "video";
-        const previewUrl = isVideo ? youtubeEmbedUrl(url) : normalizePhotoPreviewUrl(url);
+        // 影片改用縮圖，避免清單中同時載入多個 YouTube iframe
+        const thumb = isVideo ? youtubeThumbUrl(url) : normalizePhotoPreviewUrl(url);
+        const id = escapeHtml(String(item.id || ""));
         return `
-          <div class="card" style="margin:0;" data-activity-id="${escapeHtml(String(item.id || ""))}">
+          <div class="card" style="margin:0;" data-activity-id="${id}">
             <div class="card-hd">
               <div class="left" style="min-width:0;">
                 <h3 style="font-size:calc(16px * var(--fs, 1)); margin:0 0 6px 0;">${escapeHtml(String(item.title || ""))}</h3>
@@ -26990,19 +28834,19 @@
               </div>
               <div class="bulletin-head-actions">
                 <span class="tag ${isVideo ? "yellow" : "green"}">${isVideo ? "影片" : "相片"}</span>
-                <button class="icon-btn sm" type="button" data-activity-preview="${escapeHtml(String(item.id || ""))}" aria-label="預覽" title="預覽">
+                <button class="icon-btn sm" type="button" data-activity-preview="${id}" aria-label="預覽" title="預覽">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
                     <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
                   </svg>
                 </button>
-                <button class="icon-btn sm" type="button" data-activity-edit="${escapeHtml(String(item.id || ""))}" aria-label="編輯" title="編輯">
+                <button class="icon-btn sm" type="button" data-activity-edit="${id}" aria-label="編輯" title="編輯">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-1.4L4 18.6V20Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
                     <path d="M13.5 6.5l4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
                   </svg>
                 </button>
-                <button class="icon-btn sm danger" type="button" data-activity-delete="${escapeHtml(String(item.id || ""))}" aria-label="刪除" title="刪除">
+                <button class="icon-btn sm danger" type="button" data-activity-delete="${id}" aria-label="刪除" title="刪除">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M5 7h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
                     <path d="M9 7V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8V7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
@@ -27013,100 +28857,91 @@
               </div>
             </div>
             <div class="card-bd">
-              ${previewUrl ? `
+              ${thumb ? `
                 <div style="display:flex; justify-content:center; margin-top:6px;">
-                  ${isVideo ? `<iframe src="${escapeHtml(previewUrl)}" title="${escapeHtml(String(item.title || "影片"))}" style="width:100%; max-width:720px; height:380px; border:none; border-radius:12px;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy"></iframe>` : `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(previewUrl)}" alt="${escapeHtml(String(item.title || "相片"))}" style="max-width:100%; max-height:380px; border-radius:12px; display:block;"></a>`}
+                  <button type="button" data-activity-preview="${id}" style="padding:0; border:none; background:none; cursor:pointer; display:block; width:100%; max-width:720px; position:relative; border-radius:12px; overflow:hidden; background:#0b0b0b;">
+                    <img src="${escapeHtml(thumb)}" alt="${escapeHtml(String(item.title || (isVideo ? "影片" : "相片")))}" style="width:100%; display:block; max-height:380px; object-fit:contain; background:#0b0b0b;" loading="lazy" />
+                    ${isVideo ? playOverlay : ""}
+                  </button>
                 </div>
               ` : ""}
-              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
-                <button class="btn btn-sm" type="button" data-activity-open-external="${escapeHtml(String(item.id || ""))}">另開視窗前往</button>
-                <button class="btn btn-sm btn-primary" type="button" data-activity-preview-inline="${escapeHtml(String(item.id || ""))}">預覽</button>
+              <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; margin-top:12px;">
+                <button class="btn btn-sm" type="button" data-activity-open-external="${id}">另開視窗前往</button>
+                <button class="btn btn-sm btn-primary" type="button" data-activity-preview="${id}">預覽</button>
               </div>
             </div>
           </div>
         `;
       }).join("");
 
-      listEl.querySelectorAll("[data-activity-edit]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const id = String(btn.getAttribute("data-activity-edit") || "").trim();
-          const item = itemsData.find((x) => String(x.id || "") === id);
-          if (!item) return;
-          openActivityModal(item.category || category || "video", item);
-        });
-      });
+      renderPager(totalPages);
 
-      listEl.querySelectorAll("[data-activity-delete]").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const id = String(btn.getAttribute("data-activity-delete") || "").trim();
-          const item = itemsData.find((x) => String(x.id || "") === id);
-          if (!id || !item) return;
-          const ok = await (window.nwConfirm ? window.nwConfirm({
-            title: "刪除社區活動",
-            message: `是否刪除「${String(item.title || "").trim() || "此筆活動"}」？`,
-            okText: "確認刪除",
-            cancelText: "取消",
-            danger: true
-          }) : Promise.resolve(confirm("是否刪除此筆活動？")));
-          if (!ok) return;
-          try {
-            await db.collection("communities").doc(cid).collection("bulletins").doc(id).delete();
-            toast("已刪除");
-          } catch (err) {
-            toast(`刪除失敗：${err.message}`);
+      // 事件委派只綁一次（容器是靜態的，重繪不需要重新綁定）
+      if (!listEl._actDelegBound) {
+        listEl._actDelegBound = true;
+        listEl.addEventListener("click", async (e) => {
+          const btn = e.target.closest("[data-activity-edit], [data-activity-delete], [data-activity-preview], [data-activity-open-external]");
+          if (!btn) return;
+          const id = String(
+            btn.getAttribute("data-activity-edit") ||
+            btn.getAttribute("data-activity-delete") ||
+            btn.getAttribute("data-activity-preview") ||
+            btn.getAttribute("data-activity-open-external") || ""
+          ).trim();
+          const item = (itemsData || []).find((x) => String(x.id || "") === id);
+          if (!item) return;
+
+          if (btn.hasAttribute("data-activity-preview")) {
+            openActivityPreview(item);
+            return;
+          }
+          if (btn.hasAttribute("data-activity-edit")) {
+            openActivityModal(item.category || category || "video", item);
+            return;
+          }
+          if (btn.hasAttribute("data-activity-open-external")) {
+            const u = String(item.url || "").trim();
+            if (u) window.open(u, "_blank", "noopener,noreferrer");
+            return;
+          }
+          if (btn.hasAttribute("data-activity-delete")) {
+            const ok = await (window.nwConfirm ? window.nwConfirm({
+              title: "刪除社區活動",
+              message: `是否刪除「${String(item.title || "").trim() || "此筆活動"}」？`,
+              okText: "確認刪除",
+              cancelText: "取消",
+              danger: true
+            }) : Promise.resolve(confirm("是否刪除此筆活動？")));
+            if (!ok) return;
+            try {
+              await db.collection("communities").doc(cid).collection("bulletins").doc(id).delete();
+              toast("已刪除");
+            } catch (err) {
+              toast(`刪除失敗：${err.message}`);
+            }
           }
         });
-      });
-
-      listEl.querySelectorAll("[data-activity-preview], [data-activity-preview-inline]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const id = String(btn.getAttribute("data-activity-preview") || btn.getAttribute("data-activity-preview-inline") || "").trim();
-          const item = itemsData.find((x) => String(x.id || "") === id);
-          if (!item) return;
-          openActivityPreview(item);
-        });
-      });
-
-      listEl.querySelectorAll("[data-activity-open-external]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const id = String(btn.getAttribute("data-activity-open-external") || "").trim();
-          const item = itemsData.find((x) => String(x.id || "") === id);
-          if (!item || !String(item.url || "").trim()) return;
-          window.open(String(item.url || "").trim(), "_blank", "noopener,noreferrer");
-        });
-      });
+      }
     };
 
     const setupListener = (category, listEl) => {
-      if (unsubscribeItems) {
-        try { unsubscribeItems(); } catch {}
-      }
+      stopActivitySubscription();
       if (!cid) {
         if (listEl) listEl.innerHTML = `<div class="status">尚未選擇社區</div>`;
         return;
       }
-      unsubscribeItems = db
+      __activityItemsUnsub = db
         .collection("communities")
         .doc(cid)
         .collection("bulletins")
         .where("type", "==", "activity")
         .onSnapshot(
           (snap) => {
-            itemsData = [];
+            const list = [];
             snap.forEach((doc) => {
-              itemsData.push({ id: doc.id, ...doc.data() });
+              list.push(NA.normalizeItem ? NA.normalizeItem(doc) : { id: doc.id, ...doc.data() });
             });
-            itemsData.sort((a, b) => {
-              const getT = (x) => {
-                const t = x.activityTime || x.createdAt;
-                if (!t) return 0;
-                if (t.toMillis) return t.toMillis();
-                if (t instanceof Date) return t.getTime();
-                const d = new Date(t);
-                return isNaN(d.getTime()) ? 0 : d.getTime();
-              };
-              return getT(b) - getT(a);
-            });
+            itemsData = NA.sortByTimeDesc ? NA.sortByTimeDesc(list) : list;
             renderList(listEl, category);
           },
           (err) => {
@@ -27117,7 +28952,7 @@
 
     const renderPage = () => {
       renderSubnav();
-      const browseKey = (currentTab === "video" ? "btnActivityNewVideo" : "btnActivityNewPhoto");
+      const newLabel = currentTab === "video" ? "新增影片" : "新增相片";
       contentEl.innerHTML = `
         <section class="card parcel-page">
           <div class="card-hd">
@@ -27128,29 +28963,35 @@
                 <p>活動影片（YouTube）與活動相片（Google 相簿）管理與預覽</p>
               </div>
             </div>
-            <div style="display:flex; align-items:center; gap:10px;">
-              <button class="icon-btn primary" type="button" id="${browseKey}" title="新增活動" aria-label="新增活動">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M12 5v14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
-                  <path d="M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
-                </svg>
-              </button>
-              <a class="btn btn-sm" target="_blank" rel="noopener noreferrer" href="bulletin-activity.html?c=${encodeURIComponent(communityKey)}&v=2">另開視窗（前台）</a>
-              <a class="tag red manual-btn" data-manual="activity" href="${manualViewerHref("activity", "社區活動")}" target="_blank" rel="noopener" title="開啟 社區活動 操作手冊" aria-label="開啟 社區活動 操作手冊">手冊</a>
-            </div>
           </div>
           <div class="card-bd">
+            <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
+              <button class="btn btn-sm btn-primary" type="button" id="activityNewBtn" title="${newLabel}" aria-label="${newLabel}">${newLabel}</button>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+              <input id="activitySearch" type="search" placeholder="搜尋活動標題或日期（例：中秋、113-08）" value="${escapeHtml(actSearch)}" style="flex:1 1 240px; min-width:0; padding:10px 14px; border:1px solid rgba(17,24,39,0.18); border-radius:12px; font-size:calc(14px * var(--fs, 1));" />
+              <div id="activityCount" style="font-size:calc(13px * var(--fs, 1)); color:#6b7280; flex:0 0 auto;"></div>
+            </div>
             <div id="activityList" style="display:flex; flex-direction:column; gap:12px; width:100%;">
               <div class="status">讀取中...</div>
             </div>
+            <div id="activityPager" style="display:flex; align-items:center; justify-content:center; gap:12px; flex-wrap:wrap; margin-top:16px;"></div>
           </div>
         </section>
       `.trim();
       const listEl = document.getElementById("activityList");
-      const btnNew = document.getElementById(browseKey);
+      const btnNew = document.getElementById("activityNewBtn");
       if (btnNew) {
         btnNew.addEventListener("click", () => {
           openActivityModal(currentTab);
+        });
+      }
+      const searchEl = document.getElementById("activitySearch");
+      if (searchEl) {
+        searchEl.addEventListener("input", () => {
+          actSearch = String(searchEl.value || "");
+          actPage = 1;
+          renderList(listEl, currentTab);
         });
       }
       setupListener(currentTab, listEl);
@@ -27193,7 +29034,7 @@
         <div class="modal-backdrop" data-modal-close="1"></div>
         <div class="modal-dialog a4-preview-dialog" role="dialog" aria-modal="true">
           <div class="modal-hd">
-            <h3 class="modal-title">生活網 APP 下載說明</h3>
+            <h3 class="modal-title">QAi生活網 APP 下載說明</h3>
             <div class="modal-actions">
               <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
             </div>
@@ -27211,8 +29052,8 @@
                 </div>
                 <div class="a4-content">
                   <div class="a4-header">
-                    <img src="logo.svg?v=4" class="a4-logo" alt="生活網" />
-                    <h1 class="a4-title">生活網</h1>
+                    <img src="logo.svg?v=4" class="a4-logo" alt="QAi生活網" />
+                    <h1 class="a4-title">QAi生活網</h1>
                     <p class="a4-subtitle">智慧社區服務系統｜住戶端 APP</p>
                   </div>
                   
@@ -27237,7 +29078,7 @@
                       </div>
                       <div class="step">
                         <div class="step-num">2</div>
-                        <div class="step-text">點擊連結進入「生活網」官方下載頁面。</div>
+                        <div class="step-text">點擊連結進入「QAi生活網」官方下載頁面。</div>
                       </div>
                       <div class="step">
                         <div class="step-num">3</div>
@@ -27252,7 +29093,7 @@
 
                   <div class="a4-footer">
                     <p>如有任何安裝問題，請洽社區管理室。</p>
-                    <p class="copyright">© 2026 生活網｜西北保全 & 西北物業</p>
+                    <p class="copyright">© 2026 QAi生活網｜西北保全 & 西北物業</p>
                   </div>
                 </div>
               </div>
@@ -27274,7 +29115,7 @@
           win.document.write(`
             <html>
               <head>
-                <title>生活網 APP 下載說明</title>
+                <title>QAi生活網 APP 下載說明</title>
                 <link rel="stylesheet" href="css/admin.css">
                 <style>
                   body { margin: 0; padding: 0; }

@@ -1422,6 +1422,7 @@
     const tab = initialTab === "system" ? "system" : "profile";
     const sosModeCustom = String(memberSettings.sosMode || "default").trim() === "custom";
     const sosCustomPhone = String(memberSettings.sosCustomPhone || "").trim();
+    const hasPasswordProvider = !!(currentUser && (currentUser.providerData || []).some(p => String((p && p.providerId) || "") === "password"));
 
     return `
       <div class="member-settings">
@@ -1491,6 +1492,18 @@
               <span class="mst-save-status" id="ms_sos_status" aria-live="polite"></span>
             </div>
           </section>
+          ${hasPasswordProvider ? `
+          <section class="mst-setting-section" style="text-align:left;margin-top:18px;padding-top:18px;border-top:1px dashed var(--border);">
+            <div class="mst-section-title">帳號安全</div>
+            <div class="mst-section-desc">變更您的登入密碼。</div>
+            <input type="password" class="mst-text" id="ms_pwd_old" placeholder="目前密碼" autocomplete="current-password" />
+            <input type="password" class="mst-text" id="ms_pwd_new" placeholder="新密碼（至少 6 碼）" autocomplete="new-password" />
+            <input type="password" class="mst-text" id="ms_pwd_confirm" placeholder="確認新密碼" autocomplete="new-password" />
+            <div class="mst-action-row">
+              <button type="button" class="btn btn-primary" id="ms_pwd_save">變更密碼</button>
+              <span class="mst-save-status" id="ms_pwd_status" aria-live="polite"></span>
+            </div>
+          </section>` : ``}
         </div>
       </div>
     `;
@@ -1595,6 +1608,59 @@
           statusEl.textContent = "已儲存";
           clearTimeout(statusEl._t);
           statusEl._t = setTimeout(() => { statusEl.textContent = ""; }, 2000);
+        }
+      });
+    }
+
+    const pwdBtn = document.getElementById("ms_pwd_save");
+    if (pwdBtn && !pwdBtn._boundMs) {
+      pwdBtn._boundMs = true;
+      pwdBtn.addEventListener("click", async () => {
+        const oldEl = document.getElementById("ms_pwd_old");
+        const newEl = document.getElementById("ms_pwd_new");
+        const confirmEl = document.getElementById("ms_pwd_confirm");
+        const pwdStatus = document.getElementById("ms_pwd_status");
+        const setPwdStatus = (msg, ok) => {
+          if (!pwdStatus) return;
+          pwdStatus.style.color = ok ? "#18794e" : "#d33";
+          pwdStatus.textContent = msg;
+        };
+        const currentUser = (typeof auth !== "undefined" && auth && auth.currentUser) ? auth.currentUser : null;
+        if (!currentUser) { setPwdStatus("尚未登入", false); return; }
+        const email = String(currentUser.email || "").trim();
+        if (!email) { setPwdStatus("此帳號不支援密碼變更", false); return; }
+        const oldPwd = oldEl ? String(oldEl.value || "") : "";
+        const newPwd = newEl ? String(newEl.value || "") : "";
+        const confirmPwd = confirmEl ? String(confirmEl.value || "") : "";
+        if (!oldPwd) { setPwdStatus("請輸入目前密碼", false); try { oldEl.focus(); } catch {} return; }
+        if (newPwd.length < 6) { setPwdStatus("新密碼至少 6 碼", false); try { newEl.focus(); } catch {} return; }
+        if (newPwd === oldPwd) { setPwdStatus("新密碼不可與目前密碼相同", false); try { newEl.focus(); } catch {} return; }
+        if (newPwd !== confirmPwd) { setPwdStatus("兩次新密碼不一致", false); try { confirmEl.focus(); } catch {} return; }
+        pwdBtn.disabled = true;
+        setPwdStatus("處理中…", true);
+        try {
+          const cred = firebase.auth.EmailAuthProvider.credential(email, oldPwd);
+          await currentUser.reauthenticateWithCredential(cred);
+          await currentUser.updatePassword(newPwd);
+          if (oldEl) oldEl.value = "";
+          if (newEl) newEl.value = "";
+          if (confirmEl) confirmEl.value = "";
+          setPwdStatus("密碼已更新", true);
+          if (pwdStatus) {
+            clearTimeout(pwdStatus._t);
+            pwdStatus._t = setTimeout(() => { pwdStatus.textContent = ""; }, 3000);
+          }
+        } catch (err) {
+          const code = String((err && err.code) || "");
+          let msg = "密碼更新失敗，請稍後再試";
+          if (code === "auth/wrong-password" || code === "auth/invalid-credential" || code === "auth/invalid-login-credentials") msg = "目前密碼錯誤";
+          else if (code === "auth/weak-password") msg = "新密碼強度不足";
+          else if (code === "auth/too-many-requests") msg = "嘗試次數過多，請稍後再試";
+          else if (code === "auth/requires-recent-login") msg = "請重新登入後再試";
+          else if (code === "auth/network-request-failed") msg = "網路連線失敗，請稍後再試";
+          setPwdStatus(msg, false);
+        } finally {
+          pwdBtn.disabled = false;
         }
       });
     }
@@ -1804,7 +1870,7 @@
     const c = String(community || "").trim();
     const fn = String(fromName || "社區後台").trim() || "社區後台";
     const fh = String(fromHouseNo || "").trim();
-    const title = "生活網｜社區後台來電";
+    const title = "QAi生活網｜社區後台來電";
     const body = fh ? `${fn}｜${fh}` : fn;
 
     const q = new URLSearchParams();

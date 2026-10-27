@@ -41,20 +41,12 @@
   let pendingBookingsByRoom = {}; // 按直播室统计待审核预约
   let totalPendingBookings = 0;
   let liveMeetingYoutubeUrl = "";
-  let liveMeetingEnabled = true;
+  let liveMeetingStatus = "idle";
   let __unsubLiveConfig = null;
   let liveHistoryItems = [];
   let __unsubLiveHistory = null;
 
-  function formatHistoryDate(date) {
-    if (!date) return "";
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    const hh = String(date.getHours()).padStart(2, "0");
-    const mm = String(date.getMinutes()).padStart(2, "0");
-    return `${y}-${m}-${d} ${hh}:${mm}`;
-  }
+  const formatHistoryDate = (date) => window.NWLive.formatDateTime(date);
 
   function ensureLiveHistorySubscription(cid) {
     const communityId = String(cid || "").trim() || "default";
@@ -67,26 +59,9 @@
         .orderBy("datetime", "desc")
         .onSnapshot(
           (snap) => {
-            const items = (snap && snap.docs ? snap.docs : []).map((d) => {
-              const data = d.data() || {};
-              const dt = data.datetime && typeof data.datetime.toDate === "function" ? data.datetime.toDate() : (data.datetime ? new Date(data.datetime) : null);
-              const ca = data.createdAt && typeof data.createdAt.toDate === "function" ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date(0));
-              return {
-                id: d.id,
-                title: String(data.title || "").trim(),
-                datetime: dt && dt.getTime() ? dt : null,
-                youtubeUrl: String(data.youtubeUrl || "").trim(),
-                createdAt: ca,
-              };
-            });
-            items.sort((a, b) => {
-              const ta = a.datetime ? a.datetime.getTime() : 0;
-              const tb = b.datetime ? b.datetime.getTime() : 0;
-              if (ta !== tb) return tb - ta;
-              const ca = a.createdAt ? a.createdAt.getTime() : 0;
-              const cb = b.createdAt ? b.createdAt.getTime() : 0;
-              return cb - ca;
-            });
+            const items = window.NWLive.sortHistoryDesc(
+              (snap && snap.docs ? snap.docs : []).map((d) => window.NWLive.normalizeHistoryDoc(d.id, d.data() || {}))
+            );
             liveHistoryItems = items;
             const activeTab = (() => {
               const ab = document.querySelector('.tab-btn.active');
@@ -206,11 +181,20 @@
     }).join("");
     bd.innerHTML = html;
 
+    // 事件委派只在首次綁定，避免每次重繪後監聽器遺失
+    if (!bd._histDelegBound) {
+      bd._histDelegBound = true;
+      bd.addEventListener("click", (e) => {
+        const card = e.target.closest("[data-hist-card]");
+        if (!card) return;
+        const id = String(card.getAttribute("data-hist-card") || "").trim();
+        if (!id) return;
+        const it = (Array.isArray(liveHistoryItems) ? liveHistoryItems : []).find((x) => x.id === id) || null;
+        if (it && it.youtubeUrl) openHistPlay(it.youtubeUrl);
+      });
+    }
+
     bd.querySelectorAll("[data-hist-card]").forEach((card) => {
-      const id = String(card.getAttribute("data-hist-card") || "").trim();
-      if (!id) return;
-      const it = items.find((x) => x.id === id) || null;
-      if (!it) return;
       card.style.transition = "transform .18s ease, box-shadow .18s ease";
       card.addEventListener("mouseenter", () => {
         card.style.transform = "translateY(-2px)";
@@ -220,27 +204,7 @@
         card.style.transform = "";
         card.style.boxShadow = "";
       });
-      card.addEventListener("click", (e) => {
-        if (e.target.closest("button[data-action='hist-play'],button,a")) return;
-        if (it.youtubeUrl) window.open(it.youtubeUrl, "_blank", "noopener,noreferrer");
-      });
     });
-
-    if (!bd._histDelegBound) {
-      bd._histDelegBound = true;
-      bd.addEventListener("click", (e) => {
-        const playBtn = e.target.closest("button[data-action='hist-play']");
-        if (playBtn) {
-          e.stopPropagation();
-          e.preventDefault();
-          const id = String(playBtn.getAttribute("data-hist-id") || "").trim();
-          if (!id) return;
-          const it = items.find((x) => x.id === id) || null;
-          if (it && it.youtubeUrl) openHistPlay(it.youtubeUrl);
-          return;
-        }
-      });
-    }
   }
 
   function getCurrentTab() {
@@ -251,16 +215,13 @@
 
   function applyTabVisibility(tab) {
     const actual = (tab === "live" || tab === "history") ? tab : "live";
+    const isLive = actual === "live";
     const residentWrap = document.getElementById('residentLiveStreamWrap');
     const historyList = document.getElementById('historyList');
-    if (actual === 'live') {
-      if (residentWrap) { residentWrap.classList.remove('hidden'); residentWrap.style.removeProperty('display'); residentWrap.style.setProperty('display', 'block', 'important'); }
-      if (liveList) { liveList.classList.remove('hidden'); liveList.style.display = ''; }
-      if (historyList) { historyList.classList.add('hidden'); historyList.style.display = 'none'; }
-    } else {
-      if (residentWrap) { residentWrap.classList.add('hidden'); residentWrap.style.removeProperty('display'); residentWrap.style.setProperty('display', 'none', 'important'); }
-      if (liveList) { liveList.classList.add('hidden'); liveList.style.display = 'none'; }
-      if (historyList) { historyList.classList.remove('hidden'); historyList.style.display = 'flex'; }
+    if (residentWrap) residentWrap.classList.toggle('hidden', !isLive);
+    if (liveList) liveList.classList.toggle('hidden', !isLive);
+    if (historyList) historyList.classList.toggle('hidden', isLive);
+    if (!isLive) {
       try { renderHistoryList(); } catch (e) { console.warn('[LiveHistory] 首次渲染失敗', e); }
     }
   }
@@ -275,13 +236,6 @@
 
   function switchMyRecordsTab(subtab) {
     // 我的記錄功能已停用，保留空實作避免外部呼叫直接噴錯
-  }
-
-  function ensureHiddenForHistoryTab() {
-    if (getCurrentTab() !== 'history') return;
-    const rw = document.getElementById('residentLiveStreamWrap');
-    if (rw) { rw.classList.add('hidden'); rw.style.removeProperty('display'); rw.style.setProperty('display', 'none', 'important'); }
-    if (liveList) { liveList.classList.add('hidden'); liveList.style.display = 'none'; }
   }
 
   async function loadAndRenderMyRecords() {
@@ -564,10 +518,10 @@
           try {
             const res = await loadAppLiveUrl(resolvedCommunityId);
             const v = (res && res.url) || "";
-            const e = res ? (res.enabled !== false) : true;
-            if (v !== liveMeetingYoutubeUrl || e !== liveMeetingEnabled) {
+            const s = (res && res.status) || "idle";
+            if (v !== liveMeetingYoutubeUrl || s !== liveMeetingStatus) {
               liveMeetingYoutubeUrl = v;
-              liveMeetingEnabled = e;
+              liveMeetingStatus = s;
               renderLiveStreamCard();
             }
           } catch {}
@@ -602,8 +556,6 @@
         liveList.innerHTML = '<div class="status error">載入直播室失敗，請稍後再試</div>';
       }
       try { renderLiveStreamCard(); } catch {}
-    } finally {
-      try { ensureHiddenForHistoryTab(); } catch {}
     }
   }
 
@@ -618,25 +570,7 @@
     return div.innerHTML;
   }
 
-  function youtubeVideoId98(url) {
-    const u = String(url || "").trim();
-    if (!u) return "";
-    const patterns = [
-      /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/|live\/))([A-Za-z0-9_-]{6,})/,
-    ];
-    for (const re of patterns) {
-      const m = u.match(re);
-      if (m && m[1]) return m[1];
-    }
-    try {
-      const uo = new URL(u);
-      if (uo.hostname.includes("youtube.com") || uo.hostname.includes("youtu.be")) {
-        const v = uo.searchParams.get("v");
-        if (v) return v;
-      }
-    } catch {}
-    return "";
-  }
+  const youtubeVideoId98 = (url) => window.NWLive.youtubeVideoId(url);
 
   async function loadAppLiveUrl(cid) {
     const communityId = String(cid || "").trim() || "default";
@@ -646,13 +580,13 @@
         const data = doc.data() || {};
         return {
           url: String(data.liveMeetingYoutubeUrl || "").trim(),
-          enabled: data.liveMeetingEnabled !== false,
+          status: window.NWLive.normalizeStatus(data),
         };
       }
     } catch (e) {
       console.warn("[LiveMeeting] 讀取 app_config.liveMeetingYoutubeUrl 失敗 (直接 get)", e);
     }
-    return { url: "", enabled: true };
+    return { url: "", status: "idle" };
   }
 
   function ensureLiveConfigSubscription(cid) {
@@ -668,10 +602,10 @@
             try {
               const data = doc && doc.exists ? (doc.data() || {}) : {};
               const nextUrl = String(data.liveMeetingYoutubeUrl || "").trim();
-              const nextEnabled = data.liveMeetingEnabled !== false;
-              if (nextUrl !== liveMeetingYoutubeUrl || nextEnabled !== liveMeetingEnabled) {
+              const nextStatus = window.NWLive.normalizeStatus(data);
+              if (nextUrl !== liveMeetingYoutubeUrl || nextStatus !== liveMeetingStatus) {
                 liveMeetingYoutubeUrl = nextUrl;
-                liveMeetingEnabled = nextEnabled;
+                liveMeetingStatus = nextStatus;
                 renderLiveStreamCard();
               }
             } catch (e) {
@@ -682,10 +616,10 @@
             console.warn("[LiveMeeting] onSnapshot 權限/連線錯誤，嘗試一次性讀取", err);
             loadAppLiveUrl(communityId).then((res) => {
               const v = (res && res.url) || "";
-              const e = res ? (res.enabled !== false) : true;
-              if (v !== liveMeetingYoutubeUrl || e !== liveMeetingEnabled) {
+              const s = (res && res.status) || "idle";
+              if (v !== liveMeetingYoutubeUrl || s !== liveMeetingStatus) {
                 liveMeetingYoutubeUrl = v;
-                liveMeetingEnabled = e;
+                liveMeetingStatus = s;
                 renderLiveStreamCard();
               }
             }).catch(() => {});
@@ -695,10 +629,10 @@
       console.warn("[LiveMeeting] 註冊 onSnapshot 失敗", e);
       loadAppLiveUrl(communityId).then((res) => {
         const v = (res && res.url) || "";
-        const e = res ? (res.enabled !== false) : true;
-        if (v !== liveMeetingYoutubeUrl || e !== liveMeetingEnabled) {
+        const s = (res && res.status) || "idle";
+        if (v !== liveMeetingYoutubeUrl || s !== liveMeetingStatus) {
           liveMeetingYoutubeUrl = v;
-          liveMeetingEnabled = e;
+          liveMeetingStatus = s;
           renderLiveStreamCard();
         }
       }).catch(() => {});
@@ -712,16 +646,13 @@
       const url = String(liveMeetingYoutubeUrl || "").trim();
       const videoId = youtubeVideoId98(url);
       const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : "";
-      const enabled = liveMeetingEnabled !== false;
+      const status = liveMeetingStatus || "idle";
 
       const wrapper = document.getElementById('residentLiveStreamWrap');
       if (!wrapper) {
         console.warn('[LiveMeeting] #residentLiveStreamWrap DOM 不存在');
         return;
       }
-      wrapper.classList.remove('hidden');
-      wrapper.style.display = 'block !important';
-      wrapper.style.setProperty('display', 'block', 'important');
 
       const cardEl = wrapper.querySelector('[data-resident-live-card="1"]');
       const coverEl = wrapper.querySelector('[data-resident-cover]');
@@ -731,30 +662,9 @@
         return;
       }
 
-      if (!enabled) {
-        cardEl.setAttribute('data-live-card', '0');
-        cardEl.style.cursor = 'default';
-        coverEl.setAttribute('data-resident-cover', 'disabled');
-        coverEl.style.cssText = 'aspect-ratio:16/9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;border-radius:20px;border:1px solid rgba(17,24,39,0.06);background:linear-gradient(135deg,#f9fafB 0%,#f3f4f6 100%);';
-        coverEl.innerHTML = `
-          <div style="width:72px;height:72px;border-radius:999px;background:rgba(156,163,175,0.14);display:flex;align-items:center;justify-content:center;">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:34px;height:34px;color:#9ca3af;">
-              <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-              <path d="M7 9.5 17 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              <path d="M17 9.5 7 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div style="font-size:20px;font-weight:900;color:#111827;letter-spacing:0.2px;">目前無社區區大直播</div>
-          <div style="font-size:13px;color:#6b7280;">管理員暫未開放直播顯示</div>
-        `;
-        if (cardEl.dataset.boundLiveHover !== "1") {
-          cardEl.style.transition = 'transform .18s ease, box-shadow .18s ease';
-          cardEl.dataset.boundLiveHover = "1";
-        }
-        return;
-      }
+      const coverStyleFilled = 'aspect-ratio:16/9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;border-radius:20px;border:1px solid rgba(17,24,39,0.06);background:linear-gradient(135deg,#f9fafB 0%,#f3f4f6 100%);';
 
-      if (url && thumbnailUrl) {
+      if (status === "live" && url && thumbnailUrl) {
         cardEl.setAttribute('data-live-card', '1');
         cardEl.style.cursor = 'pointer';
         coverEl.setAttribute('data-resident-cover', 'loaded');
@@ -773,16 +683,36 @@
             ↗ 另開
           </div>
         `;
+      } else if (status === "ended") {
+        cardEl.setAttribute('data-live-card', '0');
+        cardEl.style.cursor = 'default';
+        coverEl.setAttribute('data-resident-cover', 'ended');
+        coverEl.style.cssText = coverStyleFilled;
+        coverEl.innerHTML = `
+          <div style="width:72px;height:72px;border-radius:999px;background:rgba(55,65,81,0.12);display:flex;align-items:center;justify-content:center;">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:34px;height:34px;color:#6b7280;">
+              <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              <path d="M10 9v6l6-3-6-3Z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div style="font-size:20px;font-weight:900;color:#111827;letter-spacing:0.2px;">直播已結束</div>
+          <div style="font-size:13px;color:#6b7280;">可切換至「歷史影片」觀看回放</div>
+        `;
       } else {
         cardEl.setAttribute('data-live-card', '0');
         cardEl.style.cursor = 'default';
         coverEl.setAttribute('data-resident-cover', 'empty');
-        coverEl.style.cssText = 'aspect-ratio:16/9;background:linear-gradient(135deg,#f3f4f6,#e5e7eb);display:flex;align-items:center;justify-content:center;color:#6b7280;';
+        coverEl.style.cssText = coverStyleFilled;
         coverEl.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:56px;height:56px;">
-            <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-            <path d="m10 9 5 3-5 3V9Z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
-          </svg>
+          <div style="width:72px;height:72px;border-radius:999px;background:rgba(156,163,175,0.14);display:flex;align-items:center;justify-content:center;">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" style="width:34px;height:34px;color:#9ca3af;">
+              <path d="M22 8.5v7a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              <path d="M7 9.5 17 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M17 9.5 7 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div style="font-size:20px;font-weight:900;color:#111827;letter-spacing:0.2px;">目前無社區區大直播</div>
+          <div style="font-size:13px;color:#6b7280;">管理員暫未開放直播顯示</div>
         `;
       }
 
@@ -790,7 +720,7 @@
         __residentLiveBound = true;
         cardEl.style.transition = 'transform .18s ease, box-shadow .18s ease';
         cardEl.addEventListener('mouseenter', () => {
-          if (!String(cardEl.getAttribute('data-live-card') || '').trim()) return;
+          if (String(cardEl.getAttribute('data-live-card') || '') !== '1') return;
           cardEl.style.transform = 'translateY(-2px)';
           cardEl.style.boxShadow = '0 16px 36px rgba(17,24,39,0.12)';
         });
@@ -799,7 +729,7 @@
           cardEl.style.boxShadow = '';
         });
         cardEl.addEventListener('click', (e) => {
-          if (!String(cardEl.getAttribute('data-live-card') || '').trim()) return;
+          if (String(cardEl.getAttribute('data-live-card') || '') !== '1') return;
           if (e.target.closest('button, a')) return;
           window.open(String(liveMeetingYoutubeUrl || url || '').trim(), '_blank', 'noopener,noreferrer');
         });
@@ -807,7 +737,7 @@
     } catch (e) {
       console.error('[LiveMeeting] renderLiveStreamCard 失敗', e);
     } finally {
-      try { ensureHiddenForHistoryTab(); } catch {}
+      try { applyTabVisibility(getCurrentTab()); } catch {}
     }
   }
 
