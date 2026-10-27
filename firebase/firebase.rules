@@ -341,6 +341,31 @@ service cloud.firestore {
         && resource.data.get('unit', '') in userUnitKeys();
     }
 
+    // 報到投票專案管理權（管理員或本社區工作人員）
+    function isCheckinVoteManager(slug) {
+      return request.auth != null
+        && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+    }
+
+    // 專案是否已封存（封存後全面鎖定，任何身分皆不得再寫入）
+    function isCheckinVoteProjectArchived(slug, projectId) {
+      return exists(/databases/$(database)/documents/communities/$(slug)/checkinVoteProjects/$(projectId))
+        && get(/databases/$(database)/documents/communities/$(slug)/checkinVoteProjects/$(projectId)).data.get('archived', false) == true;
+    }
+
+    // 免登入掃碼可寫入的名單欄位（僅限報到與投票結果，不得竄改姓名／戶號／代碼）
+    function checkinVotePublicRosterKeys() {
+      return [
+        "checkedIn", "checkedInAtMs", "checkedInMethod", "checkedInByUid", "checkedInByName",
+        "votes", "updatedAt", "updatedAtMs"
+      ];
+    }
+
+    // 免登入計票可寫入的選舉欄位（僅限票數快照）
+    function checkinVotePublicElectionKeys() {
+      return ["tally", "tallyUpdatedAtMs", "updatedAt", "updatedAtMs"];
+    }
+
     match /users/{uid} {
       // 讀取：本人 / 管理方；待審申請文件僅限已登入者（不得匿名列舉、避免外洩聯絡資料）
       allow read: if request.auth != null && (
@@ -484,8 +509,23 @@ service cloud.firestore {
         allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
 
         match /roster/{entryId} {
+          // 掃碼頁（qrcode-scan.html）可透過「分享」連結免登入操作報到與議題投票，
+          // 故開放免登入「更新」既有名單；但仍限制如下：
+          //   1. 僅能改寫報到與投票欄位（不得竄改姓名／戶號／QR 代碼）
+          //   2. 不得新增或刪除名單（避免偽造住戶）
+          //   3. 專案已封存時全面禁止寫入
           allow read: if true;
-          allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+          allow create, delete: if isCheckinVoteManager(slug);
+          allow update: if isCheckinVoteManager(slug)
+            || (
+              !isCheckinVoteProjectArchived(slug, projectId)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(checkinVotePublicRosterKeys())
+              && request.resource.data.get('checkedIn', false) is bool
+              && request.resource.data.get('checkedInAtMs', 0) is int
+              && request.resource.data.get('votes', {}) is map
+              && request.resource.data.updatedAt is timestamp
+              && request.resource.data.get('updatedAtMs', 0) is int
+            );
         }
 
         match /topics/{topicId} {
@@ -495,6 +535,25 @@ service cloud.firestore {
 
         match /documents/{documentId} {
           allow read, write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+        }
+
+        match /elections/{electionId} {
+          // 人工計票頁（election-count.html）可透過「分享」連結免登入唱票，
+          // 故開放免登入「更新」既有選舉票數；但仍限：
+          //   1. 僅能改寫票數快照（tally 等欄位）
+          //   2. 不得新增或刪除選舉
+          //   3. 專案已封存時全面禁止寫入
+          allow read: if true;
+          allow create, delete: if isCheckinVoteManager(slug);
+          allow update: if isCheckinVoteManager(slug)
+            || (
+              !isCheckinVoteProjectArchived(slug, projectId)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(checkinVotePublicElectionKeys())
+              && request.resource.data.get('tally', {}) is map
+              && request.resource.data.get('tallyUpdatedAtMs', 0) is int
+              && request.resource.data.updatedAt is timestamp
+              && request.resource.data.get('updatedAtMs', 0) is int
+            );
         }
       }
 
