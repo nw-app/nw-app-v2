@@ -176,6 +176,8 @@
         cursor: pointer;
       }
       .ft-btn[hidden] { display: none; }
+      .ft-btn.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+      .ft-btn:disabled { opacity: 0.45; cursor: not-allowed; }
       .sh-mask {
         position: fixed;
         inset: 0;
@@ -272,6 +274,7 @@
       <div class="scan-status" id="status">正在載入專案資料…</div>
 
       <footer class="scan-ft">
+        <button class="ft-btn" type="button" id="btnMacro">微焦距</button>
         <button class="ft-btn" type="button" id="btnCamera">關閉相機</button>
         <button class="ft-btn" type="button" id="btnClearVoter" hidden>清除投票人</button>
       </footer>
@@ -298,6 +301,7 @@
           scanner: null,
           processing: false,
           ignoreUntil: 0,
+          macro: false,
         };
 
         let db = null;
@@ -648,8 +652,16 @@
 
         function renderCameraBtn() {
           const btn = el("btnCamera");
+          if (btn) btn.textContent = state.scanner ? "關閉相機" : "開啟相機";
+          renderMacroBtn();
+        }
+
+        function renderMacroBtn() {
+          const btn = el("btnMacro");
           if (!btn) return;
-          btn.textContent = state.scanner ? "關閉相機" : "開啟相機";
+          btn.textContent = state.macro ? "微焦距：開" : "微焦距";
+          btn.classList.toggle("on", state.macro);
+          btn.disabled = !state.scanner;
         }
 
         async function stopScanner() {
@@ -664,19 +676,100 @@
           renderCameraBtn();
         }
 
-        /* 相機啟動後再套用連續對焦（best-effort）。
+        /* 取得目前相機的 video track（用於調整對焦、變焦等鏡頭參數） */
+        function getVideoTrack() {
+          const video = document.querySelector("#reader video");
+          const stream = video && video.srcObject;
+          return stream && typeof stream.getVideoTracks === "function" ? (stream.getVideoTracks()[0] || null) : null;
+        }
+
+        function getCameraCapabilities() {
+          const track = getVideoTrack();
+          if (!track || typeof track.getCapabilities !== "function") return {};
+          try { return track.getCapabilities() || {}; } catch { return {}; }
+        }
+
+        /* 相機啟動後套用最佳對焦（best-effort）。
            注意：不可把 advanced 放進 cameraIdOrConfig，因為 html5-qrcode 規定該物件
            只能有 1 個鍵（facingMode 或 deviceId），多帶鍵會直接拋錯導致相機無法開啟。 */
-        function applyContinuousFocus() {
-          try {
-            const video = document.querySelector("#reader video");
-            const stream = video && video.srcObject;
-            const track = stream && typeof stream.getVideoTracks === "function" ? stream.getVideoTracks()[0] : null;
-            if (!track || typeof track.applyConstraints !== "function") return;
-            const caps = typeof track.getCapabilities === "function" ? (track.getCapabilities() || {}) : {};
-            if (Array.isArray(caps.focusMode) && !caps.focusMode.includes("continuous")) return;
+        function applyBestFocus() {
+          const track = getVideoTrack();
+          if (!track || typeof track.applyConstraints !== "function") return;
+          const caps = getCameraCapabilities();
+          if (Array.isArray(caps.focusMode) && caps.focusMode.includes("continuous")) {
             track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
-          } catch {}
+          }
+        }
+
+        /* 微焦距（微距）模式：讓鏡頭對焦到最近距離，使 10mm 等級的小 QR code 也能掃描。
+           focusDistance 單位為公尺（W3C Image Capture 規格），取 capabilities 的 min 即最近對焦距離。
+           若裝置不支援對焦控制（例如 iOS Safari），改用變焦輔助。 */
+        async function applyMacroFocus(on) {
+          const track = getVideoTrack();
+          if (!track || typeof track.applyConstraints !== "function") return "no-camera";
+          const caps = getCameraCapabilities();
+          const modes = Array.isArray(caps.focusMode) ? caps.focusMode : [];
+          const zoom = caps.zoom;
+          const zoomCapable = !!(zoom && Number.isFinite(Number(zoom.max)) && Number(zoom.max) > Number(zoom.min || 1));
+          const advanced = [];
+          let focusApplied = false;
+
+          if (on) {
+            if (modes.includes("manual") && caps.focusDistance) {
+              const near = Number(caps.focusDistance.min);
+              advanced.push({ focusMode: "manual", focusDistance: Number.isFinite(near) ? near : 0 });
+              focusApplied = true;
+            } else if (modes.includes("continuous")) {
+              advanced.push({ focusMode: "continuous" });
+              focusApplied = true;
+            }
+          } else if (modes.includes("continuous")) {
+            advanced.push({ focusMode: "continuous" });
+            focusApplied = true;
+          } else if (modes.includes("manual") && caps.focusDistance) {
+            const far = Number(caps.focusDistance.max);
+            advanced.push({ focusMode: "manual", focusDistance: Number.isFinite(far) ? far : 1 });
+            focusApplied = true;
+          }
+
+          if (zoomCapable) {
+            const zMin = Number(zoom.min) || 1;
+            const zMax = Number(zoom.max);
+            advanced.push({ zoom: on ? Math.min(zMax, Math.max(zMin, 3)) : zMin });
+          }
+
+          if (!advanced.length) return "unsupported";
+          try {
+            await track.applyConstraints({ advanced });
+          } catch {
+            return "unsupported";
+          }
+          return focusApplied || zoomCapable ? "ok" : "unsupported";
+        }
+
+        /* 切換微焦距按鈕：僅在有相機時可用 */
+        async function toggleMacro() {
+          if (!state.scanner) {
+            setStatus("請先開啟相機再使用微焦距", "warn");
+            return;
+          }
+          const next = !state.macro;
+          const result = await applyMacroFocus(next);
+          if (result === "no-camera") {
+            setStatus("相機尚未就緒，請稍候再試", "warn");
+            return;
+          }
+          if (result === "unsupported") {
+            state.macro = false;
+            renderMacroBtn();
+            setStatus("此裝置相機不支援微焦距調整；請將 QR code 放大，或改用掃碼槍", "warn");
+            return;
+          }
+          state.macro = next;
+          renderMacroBtn();
+          setStatus(next
+            ? "已開啟微焦距：鏡頭可近距離對焦，請將鏡頭緩慢靠近 QR code（約 2～6 公分）直到畫面清晰"
+            : "已關閉微焦距，回復標準焦距");
         }
 
         async function startScanner() {
@@ -728,8 +821,16 @@
               },
               function () {}
             );
-            // 相機成功開啟後才套用連續對焦，避免對焦設定影響相機啟動
-            applyContinuousFocus();
+            // 相機成功開啟後才套用對焦設定，避免影響相機啟動
+            applyBestFocus();
+            if (state.macro) {
+              // 重新開啟相機後是新的 video track，需重新套用微焦距
+              const macroResult = await applyMacroFocus(true);
+              if (macroResult !== "ok") {
+                state.macro = false;
+                setStatus("此裝置相機不支援微焦距調整，已回復標準焦距", "warn");
+              }
+            }
           } catch {
             state.scanner = null;
             setStatus("無法開啟相機，請確認已授權鏡頭權限", "error");
@@ -838,6 +939,10 @@
           toggleCamera();
         });
 
+        el("btnMacro").addEventListener("click", () => {
+          toggleMacro();
+        });
+
         /* 掃碼槍：聚焦輸入框，掃描完成自動送出 Enter 即觸發處理 */
         (function bindGunInput() {
           const input = el("gunInput");
@@ -930,7 +1035,7 @@
               if (!state.project.settings.allowQrCheckin && state.project.settings.requireCheckinBeforeVote) {
                 setStatus("本專案未開放 QR 報到、且要求先報到，掃碼站無法完成報到；請改用人工報到或請管理員開啟 QR 報到。", "warn");
               } else {
-                setStatus("請掃描住戶個人 QR code 完成報到，接著掃描議題選項 QR code 投票。");
+                setStatus("請掃描住戶個人 QR code 完成報到，接著掃描議題選項 QR code 投票；QR code 很小（如 10mm）時可點下方「微焦距」近距離掃描。");
               }
               const gun = el("gunInput");
               if (gun) gun.focus();
