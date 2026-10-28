@@ -682,14 +682,17 @@
           state.scanner = scanner;
           try {
             await scanner.start(
-              { facingMode: "environment" },
+              // 加上 continuous 對焦：近距離（貼近紙本 QR code）時鏡頭會持續對焦，避免模糊導致辨識失敗
+              { facingMode: "environment", advanced: [{ focusMode: "continuous" }] },
               {
-                fps: 10,
+                fps: 15,
                 aspectRatio: 1.0,
                 disableFlip: false,
                 experimentalFeatures: { useBarCodeDetectorIfSupported: true },
                 qrbox: function (w, h) {
-                  const size = Math.floor(Math.min(w, h, 260));
+                  // 取樣框放大至畫面 85%：近距離時 QR code 在畫面上較大，
+                  // 若取樣框太小（舊版固定 260px）會框不住整個碼而無法辨識
+                  const size = Math.floor(Math.min(w, h) * 0.85);
                   // 讓白色掃描框與函式庫實際取樣的區域一致
                   try { document.documentElement.style.setProperty("--scan-box", size + "px"); } catch {}
                   return { width: size, height: size };
