@@ -24541,6 +24541,11 @@
     return text || "社區";
   }
 
+  // 文件是否顯示區分所有權比例：依專案「區分所有權顯示」設定，關閉時文件不帶任何比例資訊
+  function cvDocShowOwnership(project) {
+    return cvNormalizeProjectSettings(project && project.settings ? project.settings : {}).showOwnership;
+  }
+
   // 讀取 LOGO 圖片並縮圖，回傳可直接存入 Firestore 的 Base64 Data URL
   function cvDocReadLogoFile(file) {
     return new Promise((resolve, reject) => {
@@ -24659,9 +24664,10 @@
   }
 
   // 合併同一區分所有權人的多戶資料表（用於合併報到單／投票單）
-  function cvDocOwnerUnitsTable(group, withTimeLabel) {
+  function cvDocOwnerUnitsTable(group, withTimeLabel, project) {
     const entries = Array.isArray(group && group.entries) ? group.entries : [];
     const total = cvGroupOwnershipTotal(group);
+    const showOwnership = cvDocShowOwnership(project);
     return `
       <table class="cv-doc-info">
         <tr><th>姓名</th><td colspan="3">${escapeHtml(cvDisplayName({ name: group && group.name }))}</td></tr>
@@ -24673,7 +24679,7 @@
             <th style="width:120px;">戶號</th>
             <th>地址</th>
             <th style="width:80px;">坪數</th>
-            <th style="width:110px;">區分所有權比例</th>
+            ${showOwnership ? `<th style="width:110px;">區分所有權比例</th>` : ""}
             <th style="width:110px;">${escapeHtml(withTimeLabel || "報到時間")}</th>
             <th style="width:110px;">簽名</th>
           </tr>
@@ -24685,16 +24691,16 @@
               <td>${escapeHtml(cvFormatUnit(entry))}</td>
               <td>${escapeHtml(entry.address || "")}</td>
               <td>${escapeHtml(entry.area || "")}</td>
-              <td>${entry.ownership ? `${escapeHtml(entry.ownership)}%` : ""}</td>
+              ${showOwnership ? `<td>${entry.ownership ? `${escapeHtml(entry.ownership)}%` : ""}</td>` : ""}
               <td></td>
               <td></td>
             </tr>
           `).join("")}
           <tr>
             <td colspan="4" style="text-align:right;font-weight:700;">合計</td>
-            <td style="font-weight:700;">${entries.length} 戶${total > 0 ? `｜${total.toFixed(2).replace(/\.00$/, "")}%` : ""}</td>
-            <td></td>
-            <td></td>
+            ${showOwnership
+              ? `<td style="font-weight:700;">${entries.length} 戶${total > 0 ? `｜${total.toFixed(2).replace(/\.00$/, "")}%` : ""}</td><td></td><td></td>`
+              : `<td style="font-weight:700;">${entries.length} 戶</td><td></td>`}
           </tr>
         </tbody>
       </table>
@@ -24782,6 +24788,8 @@
     const withProxy = !opts || opts.withProxy !== false;
     const list = Array.isArray(rows) ? rows : [];
     const meetingText = cvDocMeetingText(header, project);
+    const showOwnership = cvDocShowOwnership(project);
+    const colCount = showOwnership ? 9 : 8;
     const proxyLines = [
       `致  ${cvDocCommunityName()}  社區：預定於${meetingText || "       "}舉行之第一次區分所有權人會議， 本人謹委託`,
       `${" ".repeat(24)}先生（女士）代表出席區分所有權人會議，並於區分所有權人會議中行使各項`,
@@ -24806,7 +24814,7 @@
             <th style="width:70px;">簽到</th>
             <th style="width:60px;">是否委託出席</th>
             <th style="width:124px;">委託關係</th>
-            <th style="width:62px;">區分所有權比例</th>
+            ${showOwnership ? `<th style="width:62px;">區分所有權比例</th>` : ""}
             <th style="width:78px;">備註／簽退</th>
           </tr>
         </thead>
@@ -24820,14 +24828,14 @@
               <td></td>
               <td class="cv-doc-roster-opts"><span>□本人</span><span>□委託</span></td>
               <td class="cv-doc-roster-opts"><span>□ 配偶</span><span>□ 有行為能力之直系血親</span><span>□ 其他區分所有權人</span><span>□ 承租人</span></td>
-              <td>${entry.ownership ? `${escapeHtml(cvFixed2(entry.ownership))}%` : ""}</td>
+              ${showOwnership ? `<td>${entry.ownership ? `${escapeHtml(cvFixed2(entry.ownership))}%` : ""}</td>` : ""}
               <td></td>
             </tr>
           `).join("")}
         </tbody>
         ${withProxy ? `<tfoot>
-          <tr><td colspan="9">□已確認身分</td></tr>
-          <tr><td colspan="9" class="cv-doc-proxy-cell">
+          <tr><td colspan="${colCount}">□已確認身分</td></tr>
+          <tr><td colspan="${colCount}" class="cv-doc-proxy-cell">
             <div class="cv-doc-proxy">
               <div class="cv-doc-proxy-title">會議出席委託書：</div>
               <div class="cv-doc-proxy-body">${proxyLines.map((line) => cvDocBlankLineHtml(line)).join("<br />")}</div>
@@ -24881,7 +24889,7 @@
             ${meetingHtml}
             ${houseHtml}
             <div class="cv-pass-line">姓名：${escapeHtml(cvDisplayName(entry))}</div>
-            ${entry && entry.ownership ? `<div class="cv-pass-line">區分所有權比例：${escapeHtml(cvFixed2(entry.ownership))}%</div>` : ""}
+            ${cvDocShowOwnership(project) && entry && entry.ownership ? `<div class="cv-pass-line">區分所有權比例：${escapeHtml(cvFixed2(entry.ownership))}%</div>` : ""}
           </div>
         </div>
       </div>
@@ -24906,7 +24914,7 @@
       body = cvDocRosterTableHtml([page.entry], header, project);
     } else if (page.kind === "checkin-owner") {
       body = `
-        ${cvDocOwnerUnitsTable(page.group, "報到時間")}
+        ${cvDocOwnerUnitsTable(page.group, "報到時間", project)}
         ${cvDocOwnerQrBlock(page.group, project)}
         <div class="cv-doc-note">${escapeHtml(header.note)}</div>
       `;
@@ -24917,10 +24925,10 @@
     } else if (page.kind === "vote-multi") {
       body = page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project, page.entry && page.entry.qrToken)).join("");
     } else if (page.kind === "vote-owner-single") {
-      body = cvDocOwnerUnitsTable(page.group, "投票時間")
+      body = cvDocOwnerUnitsTable(page.group, "投票時間", project)
         + cvDocTopicBlock(page.topic, 1, project, cvDocOwnerQrToken(page.group));
     } else if (page.kind === "vote-owner-multi") {
-      body = cvDocOwnerUnitsTable(page.group, "投票時間")
+      body = cvDocOwnerUnitsTable(page.group, "投票時間", project)
         + page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project, cvDocOwnerQrToken(page.group))).join("");
     }
     const isVotePage = String(page.kind || "").indexOf("vote-") === 0;
