@@ -25060,7 +25060,7 @@
   }
 
   // 將頁面清單輸出成 A4 直式 PDF（逐頁截圖），回傳 Data URL
-  async function cvDocBuildPdfDataUri(pageList) {
+  async function cvDocBuildPdfDataUri(pageList, onProgress) {
     const pages = (Array.isArray(pageList) ? pageList : []).filter(Boolean);
     if (!pages.length) throw new Error("empty-pages");
     const h2c = window.html2canvas;
@@ -25078,6 +25078,7 @@
       if (!nodes.length) throw new Error("no-page-node");
       const pdf = new JsPDF({ orientation: "p", unit: "mm", format: "a4" });
       for (let i = 0; i < nodes.length; i += 1) {
+        if (typeof onProgress === "function") onProgress(i + 1, nodes.length);
         const canvas = await h2c(nodes[i], { scale: 2, backgroundColor: "#ffffff", useCORS: true });
         if (i > 0) pdf.addPage();
         pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, 297);
@@ -25088,14 +25089,24 @@
     }
   }
 
-  async function cvDocDownloadPdf(header, pageList) {
+  async function cvDocDownloadPdf(header, pageList, triggerBtn) {
     if (!pageList.length) {
       toast("目前沒有可下載的內容");
       return;
     }
+    const btn = triggerBtn || null;
+    const originalText = btn ? String(btn.textContent || "").trim() || "下載" : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "準備中...";
+      btn.setAttribute("aria-busy", "true");
+    }
     toast("PDF 產生中，請稍候…");
     try {
-      const dataUri = await cvDocBuildPdfDataUri(pageList);
+      const dataUri = await cvDocBuildPdfDataUri(pageList, (current, total) => {
+        if (!btn) return;
+        btn.textContent = total > 1 ? `下載中 ${current}/${total}` : "下載中...";
+      });
       const a = document.createElement("a");
       a.href = dataUri;
       a.download = `${cvDocSafeFileName(header.title)}.pdf`;
@@ -25107,6 +25118,12 @@
       console.warn("[checkin-vote] 文件 PDF 產生失敗", error);
       toast("PDF 產生失敗，已改為開啟列印視窗");
       cvDocOpenPrintWindow(header, pageList);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        btn.removeAttribute("aria-busy");
+      }
     }
   }
 
@@ -25235,7 +25252,9 @@
     if (logoClearBtn) logoClearBtn.addEventListener("click", () => setLogo(""));
 
     modal.querySelector("#btnCvDocPrint").addEventListener("click", () => cvDocOpenPrintWindow(header, pageList));
-    modal.querySelector("#btnCvDocDownload").addEventListener("click", () => cvDocDownloadPdf(header, pageList));
+    modal.querySelector("#btnCvDocDownload").addEventListener("click", (event) => {
+      cvDocDownloadPdf(header, pageList, event.currentTarget);
+    });
   }
 
   /* ── 報到紀錄／投票紀錄：A4 直式列印與 PDF 下載 ── */
