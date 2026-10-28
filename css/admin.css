@@ -2984,6 +2984,91 @@ a { color: inherit; text-decoration: none; }
 #visitorQrModal .visitor-qr-img a { display: inline-grid; place-items: center; }
 #visitorQrModal .visitor-qr-img img { width: min(260px, 100%); height: auto; image-rendering: pixelated; cursor: pointer; }
 
+#visitorQuickGuideModal .modal-dialog { width: min(1180px, 96vw); max-height: 88vh; overflow: auto; box-sizing: border-box; }
+#visitorQuickGuideModal .modal-body { display: grid; gap: 14px; }
+#visitorQuickGuideModal .visitor-guide-tip {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(211, 47, 47, 0.08);
+  border: 1px solid rgba(211, 47, 47, 0.18);
+  color: #9f1c1c;
+  font-size: calc(14px * var(--fs));
+  font-weight: 800;
+}
+#visitorQuickGuideModal .visitor-guide-slider {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+#visitorQuickGuideModal .visitor-guide-slider > .btn {
+  min-width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  padding: 0;
+  font-size: calc(24px * var(--fs));
+  font-weight: 900;
+}
+#visitorQuickGuideModal .visitor-guide-stage {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+#visitorQuickGuideModal .visitor-guide-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 22px;
+  background: #fff;
+  border: 1px solid rgba(17, 24, 39, 0.1);
+  box-shadow: 0 10px 22px rgba(17, 24, 39, 0.06);
+}
+#visitorQuickGuideModal .visitor-guide-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: calc(13px * var(--fs));
+  font-weight: 800;
+}
+#visitorQuickGuideModal .visitor-guide-dots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#visitorQuickGuideModal .visitor-guide-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(17, 24, 39, 0.18);
+  padding: 0;
+}
+#visitorQuickGuideModal .visitor-guide-dot.is-active {
+  width: 28px;
+  background: #d32f2f;
+}
+#visitorQuickGuideModal .visitor-guide-meta { display: grid; gap: 4px; }
+#visitorQuickGuideModal .visitor-guide-meta strong {
+  font-size: calc(18px * var(--fs));
+  color: #111827;
+  font-weight: 900;
+}
+#visitorQuickGuideModal .visitor-guide-meta span {
+  font-size: calc(13px * var(--fs));
+  color: var(--muted);
+  font-weight: 700;
+}
+#visitorQuickGuideModal .visitor-guide-card img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 20px;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background: #fff;
+}
+
 #visitorTokenModal .modal-dialog { width: min(920px, 90vw); max-height: 80vh; overflow: auto; box-sizing: border-box; }
 #visitorTokenModal .field { display: grid; gap: 6px; width: 100%; box-sizing: border-box; }
 #visitorTokenModal label { font-size: calc(12px * var(--fs)); color: var(--muted); font-weight: 900; }
@@ -3224,7 +3309,8 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 768px) {
   #visitorQrModal .modal-dialog,
   #visitorTokenModal .modal-dialog,
-  #residentTokenModal .modal-dialog {
+  #residentTokenModal .modal-dialog,
+  #visitorQuickGuideModal .modal-dialog {
     width: calc(100vw - 16px) !important;
     max-width: calc(100vw - 16px) !important;
   }
@@ -3233,6 +3319,20 @@ a { color: inherit; text-decoration: none; }
   #visitorTokenModal .field,
   #residentTokenModal .field {
     width: 100% !important;
+  }
+
+  #visitorQuickGuideModal .visitor-guide-slider {
+    grid-template-columns: 1fr;
+  }
+
+  #visitorQuickGuideModal .visitor-guide-slider > .btn {
+    width: 100%;
+    height: 46px;
+  }
+
+  #visitorQuickGuideModal .visitor-guide-pager {
+    flex-direction: column;
+    align-items: flex-start;
   }
   
   #visitorQrModal input[type="text"],
@@ -3251,7 +3351,8 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 480px) {
   #visitorQrModal .modal-dialog,
   #visitorTokenModal .modal-dialog,
-  #residentTokenModal .modal-dialog {
+  #residentTokenModal .modal-dialog,
+  #visitorQuickGuideModal .modal-dialog {
     width: calc(100vw - 12px) !important;
     max-width: calc(100vw - 12px) !important;
   }
@@ -5027,4 +5128,3 @@ input.cv-toggle:focus-visible {
   font-weight: 800;
   color: var(--text);
 }
-

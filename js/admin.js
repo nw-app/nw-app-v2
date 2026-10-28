@@ -2243,6 +2243,7 @@
           <div class="status" id="visitorQrStatus" hidden></div>
         </div>
         <div class="modal-ft">
+          <button class="btn danger" type="button" id="btnVisitorQuickGuide">訪客操作懶人包</button>
           <button class="btn" type="button" id="btnOpenVisitorQrUrl">開啟</button>
           <button class="btn" type="button" data-modal-close="1">關閉</button>
         </div>
@@ -2250,6 +2251,245 @@
     `.trim();
     document.body.appendChild(modal);
     return modal;
+  }
+
+  function visitorGuideSvgDataUrl(svg) {
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(String(svg || "").trim())}`;
+  }
+
+  function visitorGuidePosterList(communityName) {
+    const community = escapeHtml(String(communityName || "").trim() || "本社區");
+    return [
+      {
+        title: "訪客登記懶人包｜Step 1-3",
+        caption: "先開啟頁面，再把基本資料一次填好。",
+        fileName: "訪客操作懶人包_step1-3.svg",
+        src: visitorGuideSvgDataUrl(`
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="bg1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fff8f8"/>
+      <stop offset="100%" stop-color="#fff2f2"/>
+    </linearGradient>
+    <linearGradient id="card1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#fff6f6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" rx="40" fill="url(#bg1)"/>
+  <rect x="42" y="42" width="1516" height="816" rx="34" fill="#ffffff" stroke="#f3d4d4" stroke-width="4"/>
+  <text x="90" y="118" fill="#d32f2f" font-size="54" font-weight="900">訪客登記 Step by Step</text>
+  <text x="90" y="170" fill="#374151" font-size="28" font-weight="700">${community}｜手機跟著做，先完成送出與等待審核</text>
+  <rect x="84" y="218" width="452" height="570" rx="32" fill="url(#card1)" stroke="#f0caca" stroke-width="4"/>
+  <circle cx="152" cy="286" r="40" fill="#d32f2f"/><text x="152" y="300" text-anchor="middle" fill="#ffffff" font-size="34" font-weight="900">1</text>
+  <text x="208" y="294" fill="#111827" font-size="36" font-weight="900">掃描 QR 或點連結</text>
+  <rect x="132" y="346" width="184" height="286" rx="30" fill="#111827"/>
+  <rect x="148" y="376" width="152" height="226" rx="18" fill="#ffffff"/>
+  <rect x="354" y="382" width="128" height="128" rx="30" fill="#fff5f5" stroke="#f0caca" stroke-width="4"/>
+  <rect x="380" y="408" width="76" height="76" rx="24" fill="#ffffff" stroke="#d32f2f" stroke-width="4"/>
+  <path d="M396 446h44M418 424v44" stroke="#d32f2f" stroke-width="8" stroke-linecap="round"/>
+  <path d="M366 442l-20 20M490 442l20 20M418 356v-22" stroke="#f87171" stroke-width="8" stroke-linecap="round"/>
+  <text x="132" y="684" fill="#374151" font-size="28" font-weight="800">用手機打開登記頁，不用下載 App</text>
+  <text x="132" y="724" fill="#6b7280" font-size="23">掃描管理室提供的 QR，或直接點住戶傳來的連結</text>
+
+  <rect x="574" y="218" width="452" height="570" rx="32" fill="url(#card1)" stroke="#f0caca" stroke-width="4"/>
+  <circle cx="642" cy="286" r="40" fill="#d32f2f"/><text x="642" y="300" text-anchor="middle" fill="#ffffff" font-size="34" font-weight="900">2</text>
+  <text x="698" y="294" fill="#111827" font-size="36" font-weight="900">填寫訪客資料</text>
+  <rect x="620" y="356" width="356" height="252" rx="28" fill="#ffffff" stroke="#d1d5db" stroke-width="4"/>
+  <text x="652" y="404" fill="#9f1c1c" font-size="24" font-weight="900">先填必填欄位</text>
+  <rect x="652" y="424" width="292" height="30" rx="15" fill="#fee2e2"/>
+  <rect x="652" y="482" width="292" height="30" rx="15" fill="#f3f4f6"/>
+  <rect x="652" y="540" width="292" height="30" rx="15" fill="#f3f4f6"/>
+  <text x="652" y="472" fill="#374151" font-size="24">姓名、手機、拜訪戶號</text>
+  <text x="652" y="530" fill="#374151" font-size="24">車牌、來訪事由、人數</text>
+  <text x="652" y="588" fill="#374151" font-size="24">確認日期時間是否正確</text>
+  <text x="620" y="684" fill="#374151" font-size="28" font-weight="800">照欄位填就好，不懂的先問住戶</text>
+  <text x="620" y="724" fill="#6b7280" font-size="23">文字不用很多，重點是拜訪資料要正確</text>
+
+  <rect x="1064" y="218" width="452" height="570" rx="32" fill="url(#card1)" stroke="#f0caca" stroke-width="4"/>
+  <circle cx="1132" cy="286" r="40" fill="#d32f2f"/><text x="1132" y="300" text-anchor="middle" fill="#ffffff" font-size="34" font-weight="900">3</text>
+  <text x="1188" y="294" fill="#111827" font-size="36" font-weight="900">按送出並等待</text>
+  <rect x="1144" y="394" width="292" height="94" rx="47" fill="#d32f2f"/>
+  <text x="1290" y="451" text-anchor="middle" fill="#ffffff" font-size="34" font-weight="900">送出申請</text>
+  <circle cx="1188" cy="560" r="22" fill="#fca5a5"/><circle cx="1288" cy="560" r="22" fill="#f87171"/><circle cx="1388" cy="560" r="22" fill="#ef4444"/>
+  <text x="1112" y="646" fill="#374151" font-size="28" font-weight="800">送出後先不要關閉頁面</text>
+  <text x="1112" y="686" fill="#6b7280" font-size="23">系統審核通過後，畫面會自動顯示通行憑證</text>
+  <text x="1112" y="722" fill="#6b7280" font-size="23">等待時請保持網路連線，不要重複送出</text>
+  <rect x="90" y="812" width="1420" height="54" rx="27" fill="#fff5f5" stroke="#f0caca" stroke-width="3"/>
+  <text x="122" y="846" fill="#9f1c1c" font-size="24" font-weight="900">小提醒：若填錯戶號或手機，管理室可能無法快速核對，會影響放行速度。</text>
+</svg>`)
+      },
+      {
+        title: "訪客登記懶人包｜Step 4-5",
+        caption: "審核通過後，出示憑證並完成進出流程。",
+        fileName: "訪客操作懶人包_step4-5.svg",
+        src: visitorGuideSvgDataUrl(`
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fffaf5"/>
+      <stop offset="100%" stop-color="#fff4ed"/>
+    </linearGradient>
+    <linearGradient id="card2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#fffaf6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" rx="40" fill="url(#bg2)"/>
+  <rect x="42" y="42" width="1516" height="816" rx="34" fill="#ffffff" stroke="#f4d7bf" stroke-width="4"/>
+  <text x="90" y="118" fill="#d32f2f" font-size="54" font-weight="900">訪客登記 Step by Step</text>
+  <text x="90" y="170" fill="#374151" font-size="28" font-weight="700">${community}｜審核通過後，照著畫面完成進場與離場</text>
+  <rect x="112" y="218" width="628" height="570" rx="34" fill="url(#card2)" stroke="#f1d2b8" stroke-width="4"/>
+  <circle cx="188" cy="286" r="42" fill="#d32f2f"/><text x="188" y="301" text-anchor="middle" fill="#ffffff" font-size="34" font-weight="900">4</text>
+  <text x="246" y="294" fill="#111827" font-size="36" font-weight="900">出示通行憑證給管理室</text>
+  <rect x="186" y="360" width="208" height="316" rx="32" fill="#111827"/>
+  <rect x="202" y="392" width="176" height="250" rx="18" fill="#ffffff"/>
+  <rect x="470" y="396" width="178" height="178" rx="30" fill="#fffaf6" stroke="#f1d2b8" stroke-width="4"/>
+  <rect x="510" y="434" width="98" height="98" rx="28" fill="#ffffff" stroke="#d32f2f" stroke-width="4"/>
+  <path d="M534 483h50M559 458v50" stroke="#d32f2f" stroke-width="8" stroke-linecap="round"/>
+  <path d="M500 484l-20 20M628 484l20 20M558 404v-20" stroke="#fb923c" stroke-width="8" stroke-linecap="round"/>
+  <text x="470" y="636" fill="#374151" font-size="28" font-weight="800">畫面出現憑證，就能給管理室掃描</text>
+  <text x="186" y="720" fill="#6b7280" font-size="23">請把手機畫面調亮，掃描會更快更穩定</text>
+
+  <rect x="860" y="218" width="628" height="570" rx="34" fill="url(#card2)" stroke="#f1d2b8" stroke-width="4"/>
+  <circle cx="936" cy="286" r="42" fill="#d32f2f"/><text x="936" y="301" text-anchor="middle" fill="#ffffff" font-size="34" font-weight="900">5</text>
+  <text x="994" y="294" fill="#111827" font-size="36" font-weight="900">離開時完成簽退</text>
+  <rect x="962" y="384" width="422" height="186" rx="28" fill="#fff7ed" stroke="#fdba74" stroke-width="4"/>
+  <text x="994" y="444" fill="#9a3412" font-size="30" font-weight="900">離場前請配合管理室完成簽退</text>
+  <text x="994" y="494" fill="#7c2d12" font-size="24">這樣住戶與管理室都能確認您已安全離開</text>
+  <text x="994" y="534" fill="#7c2d12" font-size="24">也能避免系統仍顯示您還在社區內</text>
+  <rect x="962" y="612" width="422" height="88" rx="20" fill="#d32f2f"/>
+  <text x="1173" y="666" text-anchor="middle" fill="#ffffff" font-size="32" font-weight="900">有問題就直接詢問警衛或櫃台</text>
+  <rect x="90" y="812" width="1420" height="54" rx="27" fill="#fff7ed" stroke="#fdba74" stroke-width="3"/>
+  <text x="122" y="846" fill="#9a3412" font-size="24" font-weight="900">小提醒：若畫面沒更新，先保持網路連線，不要急著重複送出。</text>
+</svg>`)
+      }
+    ];
+  }
+
+  function ensureVisitorQuickGuideModal80() {
+    let modal = document.getElementById("visitorQuickGuideModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "visitorQuickGuideModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="visitorQuickGuideTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="visitorQuickGuideTitle">訪客操作懶人包</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="visitor-guide-tip">給訪客看的簡明版流程圖，建議直接開給訪客看，或截圖傳給對方。</div>
+          <div class="visitor-guide-slider">
+            <button class="btn" type="button" id="btnVisitorGuidePrev" aria-label="上一張">←</button>
+            <div class="visitor-guide-stage">
+              <section class="visitor-guide-card">
+                <div class="visitor-guide-meta">
+                  <strong id="visitorGuideCardTitle"></strong>
+                  <span id="visitorGuideCardCaption"></span>
+                </div>
+                <img id="visitorGuideCardImg" alt="" loading="lazy" decoding="async" />
+              </section>
+              <div class="visitor-guide-pager">
+                <span id="visitorGuidePageText"></span>
+                <div class="visitor-guide-dots" id="visitorGuideDots"></div>
+              </div>
+            </div>
+            <button class="btn" type="button" id="btnVisitorGuideNext" aria-label="下一張">→</button>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn danger" type="button" id="btnVisitorGuideDownload">下載此圖片</button>
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openVisitorQuickGuideModal80({ communityName }) {
+    const modal = ensureVisitorQuickGuideModal80();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+    const titleEl = modal.querySelector("#visitorQuickGuideTitle");
+    const cardTitleEl = modal.querySelector("#visitorGuideCardTitle");
+    const cardCaptionEl = modal.querySelector("#visitorGuideCardCaption");
+    const cardImgEl = modal.querySelector("#visitorGuideCardImg");
+    const pageTextEl = modal.querySelector("#visitorGuidePageText");
+    const dotsEl = modal.querySelector("#visitorGuideDots");
+    const btnPrev = modal.querySelector("#btnVisitorGuidePrev");
+    const btnNext = modal.querySelector("#btnVisitorGuideNext");
+    const btnDownload = modal.querySelector("#btnVisitorGuideDownload");
+    const posters = visitorGuidePosterList(communityName);
+    let currentIndex = 0;
+
+    const syncGuide = () => {
+      const item = posters[currentIndex] || posters[0];
+      if (!item) return;
+      if (cardTitleEl) cardTitleEl.textContent = String(item.title || "").trim();
+      if (cardCaptionEl) cardCaptionEl.textContent = String(item.caption || "").trim();
+      if (cardImgEl) {
+        cardImgEl.src = item.src;
+        cardImgEl.alt = String(item.title || "").trim();
+      }
+      if (pageTextEl) pageTextEl.textContent = `${currentIndex + 1} / ${posters.length}`;
+      if (dotsEl) {
+        dotsEl.innerHTML = posters.map((_, index) => `
+          <button class="visitor-guide-dot${index === currentIndex ? " is-active" : ""}" type="button" data-guide-index="${index}" aria-label="切換到第 ${index + 1} 張"></button>
+        `).join("");
+      }
+      if (btnPrev) btnPrev.disabled = posters.length <= 1;
+      if (btnNext) btnNext.disabled = posters.length <= 1;
+    };
+
+    const goPrev = () => {
+      if (!posters.length) return;
+      currentIndex = (currentIndex - 1 + posters.length) % posters.length;
+      syncGuide();
+    };
+    const goNext = () => {
+      if (!posters.length) return;
+      currentIndex = (currentIndex + 1) % posters.length;
+      syncGuide();
+    };
+    const onDotsClick = (event) => {
+      const btn = event.target.closest("[data-guide-index]");
+      if (!btn) return;
+      const index = Number(btn.getAttribute("data-guide-index"));
+      if (!Number.isInteger(index) || index < 0 || index >= posters.length) return;
+      currentIndex = index;
+      syncGuide();
+    };
+    const onDownload = () => {
+      const item = posters[currentIndex];
+      if (!item || !item.src) return;
+      const a = document.createElement("a");
+      a.href = item.src;
+      a.download = String(item.fileName || `visitor-guide-${currentIndex + 1}.svg`);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    };
+
+    if (titleEl) titleEl.textContent = `訪客操作懶人包｜${String(communityName || "").trim() || "訪客登記"}`;
+    if (btnPrev) btnPrev.addEventListener("click", goPrev);
+    if (btnNext) btnNext.addEventListener("click", goNext);
+    if (dotsEl) dotsEl.addEventListener("click", onDotsClick);
+    if (btnDownload) btnDownload.addEventListener("click", onDownload);
+    syncGuide();
+    const oldDetach = detach;
+    detach = () => {
+      try { if (btnPrev) btnPrev.removeEventListener("click", goPrev); } catch {}
+      try { if (btnNext) btnNext.removeEventListener("click", goNext); } catch {}
+      try { if (dotsEl) dotsEl.removeEventListener("click", onDotsClick); } catch {}
+      try { if (btnDownload) btnDownload.removeEventListener("click", onDownload); } catch {}
+      oldDetach();
+    };
+    modal.hidden = false;
   }
 
   function openVisitorQrModal80({ communityId, communityName }) {
@@ -2262,6 +2502,7 @@
     const imgWrap = modal.querySelector("#visitorQrImgWrap");
     const statusEl = modal.querySelector("#visitorQrStatus");
     const btnOpen = modal.querySelector("#btnOpenVisitorQrUrl");
+    const btnGuide = modal.querySelector("#btnVisitorQuickGuide");
 
     const setStatus = (msg, isError) => {
       if (!statusEl) return;
@@ -2360,11 +2601,14 @@
       if (!url) return;
       try { window.open(url, "_blank", "noopener,noreferrer"); } catch { location.href = url; }
     };
+    const onGuide = () => openVisitorQuickGuideModal80({ communityName });
 
     if (btnOpen) btnOpen.addEventListener("click", onOpen);
+    if (btnGuide) btnGuide.addEventListener("click", onGuide);
     const oldDetach = detach;
     detach = () => {
       try { if (btnOpen) btnOpen.removeEventListener("click", onOpen); } catch {}
+      try { if (btnGuide) btnGuide.removeEventListener("click", onGuide); } catch {}
       oldDetach();
     };
 
