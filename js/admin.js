@@ -22359,13 +22359,8 @@
     cvRosterWatchUnsub = cvRefRoster(cid, pid).onSnapshot(
       (snap) => {
         if (cvRosterWatchKey !== key) return;
-        const roster = (snap && Array.isArray(snap.docs) ? snap.docs : [])
-          .map((doc) => cvNormalizeRosterEntry(doc.data(), doc.id))
-          .sort((a, b) => {
-            const unitCompare = cvFormatUnit(a).localeCompare(cvFormatUnit(b), "zh-Hant");
-            if (unitCompare !== 0) return unitCompare;
-            return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
-          });
+        const roster = cvSortRosterByNo((snap && Array.isArray(snap.docs) ? snap.docs : [])
+          .map((doc) => cvNormalizeRosterEntry(doc.data(), doc.id)));
         checkinVoteState.roster = roster;
         if (firstShot) {
           firstShot = false;
@@ -22795,6 +22790,25 @@
     return list.filter((entry) => entry.checkedIn);
   }
 
+  // 依「編號」排序（數字優先，未填編號者排最後，同編號再依戶號）
+  function cvRosterNoCompare(a, b) {
+    const rawA = String((a && a.rosterNo) || "").trim();
+    const rawB = String((b && b.rosterNo) || "").trim();
+    const numA = /^\d+$/.test(rawA) ? Number(rawA) : null;
+    const numB = /^\d+$/.test(rawB) ? Number(rawB) : null;
+    if (numA !== null && numB !== null && numA !== numB) return numA - numB;
+    if ((numA !== null) !== (numB !== null)) return numA !== null ? -1 : 1;
+    if (numA === null && numB === null) {
+      const cmp = rawA.localeCompare(rawB, "zh-Hant");
+      if (cmp !== 0) return cmp;
+    }
+    return cvFormatUnit(a).localeCompare(cvFormatUnit(b), "zh-Hant");
+  }
+
+  function cvSortRosterByNo(roster) {
+    return (Array.isArray(roster) ? roster.slice() : []).sort(cvRosterNoCompare);
+  }
+
   function cvElectionResolvedScope(election) {
     if (String((election && election.scope) || "").trim() === "building") {
       const explicitBuildings = Array.isArray(election && election.scopeBuildings)
@@ -23027,11 +23041,7 @@
         ]);
         roster = (rosterSnap && Array.isArray(rosterSnap.docs) ? rosterSnap.docs : [])
           .map((doc) => cvNormalizeRosterEntry(doc.data(), doc.id))
-          .sort((a, b) => {
-            const unitCompare = cvFormatUnit(a).localeCompare(cvFormatUnit(b), "zh-Hant");
-            if (unitCompare !== 0) return unitCompare;
-            return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
-          });
+          .sort(cvRosterNoCompare);
         topics = (topicSnap && Array.isArray(topicSnap.docs) ? topicSnap.docs : [])
           .map((doc) => cvNormalizeTopic(doc.data(), doc.id, project))
           .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
@@ -24234,6 +24244,7 @@
 
   function cvRenderRosterContent(project, roster, topics) {
     if (!project) return `<div class="status">請先新增專案。</div>`;
+    const orderedRoster = cvSortRosterByNo(roster);
     return `
       <div class="row" style="justify-content:space-between; gap:12px; margin-bottom:14px;">
         <div class="muted">此名單為本專案獨立資料，不會直接覆蓋住戶造冊。</div>
@@ -24242,10 +24253,11 @@
           <button class="btn" type="button" id="btnCvImportRosterExcel">匯入Excel</button>
           <button class="btn" type="button" id="btnCvImportResidents">帶入住戶造冊</button>
           <button class="btn danger" type="button" id="btnCvAddRosterEntry">新增名單</button>
+          <button class="btn danger" type="button" id="btnCvClearRoster">清除所有名單</button>
         </div>
       </div>
       <input type="file" id="cvRosterExcelInput" accept=".xlsx,.xls,.csv" hidden />
-      ${roster.length ? `
+      ${orderedRoster.length ? `
         <div class="cv-roster-table-wrap">
           <table class="cv-roster-table">
             <thead>
@@ -24264,7 +24276,7 @@
               </tr>
             </thead>
             <tbody>
-              ${roster.map((entry) => `
+              ${orderedRoster.map((entry) => `
                 <tr>
                   <td data-label="編號" class="cv-roster-no"><span>${escapeHtml(entry.rosterNo || "—")}</span></td>
                   <td data-label="QR code碼"><span class="cv-roster-qr" title="${escapeHtml(entry.qrToken)}">${escapeHtml(entry.qrToken)}</span></td>
@@ -25106,6 +25118,9 @@
     cvEnsureDocCss();
     const prefs = kind === "vote" ? cvDocPrefs.vote : (kind === "pass" ? cvDocPrefs.pass : cvDocPrefs.checkin);
     const header = cvDocDefaultHeader(project, kind);
+    if (kind === "checkin" && prefs.layout === "roster") {
+      header.subtitle = "出席人員名冊";
+    }
     // 名冊式報到單表尾無委託書，故不顯示「補發時間」欄位；報到證無頁首／備註，僅保留會議時間（卡片會帶入）
     const showDeadline = !(kind === "checkin" && prefs.layout === "roster") && kind !== "pass";
     const showNote = kind !== "pass";
@@ -25354,8 +25369,8 @@
         cvRefRoster(cid, project.id).get().catch(() => null),
         cvRefTopics(cid, project.id).get().catch(() => null),
       ]);
-      roster = (rosterSnap && Array.isArray(rosterSnap.docs) ? rosterSnap.docs : [])
-        .map((doc) => cvNormalizeRosterEntry(doc.data(), doc.id));
+      roster = cvSortRosterByNo((rosterSnap && Array.isArray(rosterSnap.docs) ? rosterSnap.docs : [])
+        .map((doc) => cvNormalizeRosterEntry(doc.data(), doc.id)));
       topics = (topicSnap && Array.isArray(topicSnap.docs) ? topicSnap.docs : [])
         .map((doc) => cvNormalizeTopic(doc.data(), doc.id, project));
     }
@@ -26254,7 +26269,7 @@
       return vote && Array.isArray(vote.optionIds) ? vote.optionIds.map((x) => String(x || "").trim()) : [];
     };
     const renderList = () => {
-      const rows = cvVoteBaseRoster(cvActiveProject(), checkinVoteState.roster);
+      const rows = cvVoteBaseRoster(cvActiveProject(), checkinVoteState.roster).sort(cvRosterNoCompare);
       listEl.innerHTML = `
         <div class="cv-vote-row cv-vote-head">
           <div class="cv-vote-no">編號</div>
@@ -26630,11 +26645,45 @@
     if (currentPage === "roster" && project) {
       const addBtn = document.getElementById("btnCvAddRosterEntry");
       const importBtn = document.getElementById("btnCvImportResidents");
+      const clearBtn = document.getElementById("btnCvClearRoster");
       const exportXlsxBtn = document.getElementById("btnCvExportRosterExcel");
       const importXlsxBtn = document.getElementById("btnCvImportRosterExcel");
       const xlsxInput = document.getElementById("cvRosterExcelInput");
       if (addBtn) addBtn.addEventListener("click", () => cvOpenRosterModal(cid, project.id, null));
       if (importBtn) importBtn.addEventListener("click", () => cvOpenImportResidentsModal(cid, project.id));
+      if (clearBtn) clearBtn.addEventListener("click", async () => {
+        if (cvBlockIfArchivedProject(project)) return;
+        const total = Array.isArray(checkinVoteState.roster) ? checkinVoteState.roster.length : 0;
+        if (!total) {
+          toast("目前沒有名單可清除");
+          return;
+        }
+        const ok = await (window.nwConfirm ? window.nwConfirm({
+          title: "清除所有名單",
+          message: `將刪除本專案全部 ${total} 筆名單（含報到與投票紀錄），此動作無法復原。`,
+          okText: "全部清除",
+          cancelText: "取消",
+          danger: true,
+        }) : Promise.resolve(confirm(`確定要清除全部 ${total} 筆名單嗎？此動作無法復原。`)));
+        if (!ok) return;
+        clearBtn.disabled = true;
+        try {
+          const snap = await cvRefRoster(cid, project.id).get();
+          const refs = (snap && Array.isArray(snap.docs) ? snap.docs : []).map((doc) => doc.ref);
+          for (let i = 0; i < refs.length; i += 400) {
+            const batch = db.batch();
+            refs.slice(i, i + 400).forEach((ref) => batch.delete(ref));
+            await batch.commit();
+          }
+          toast(`已清除 ${refs.length} 筆名單`);
+          await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: project.id });
+        } catch (error) {
+          console.warn("[checkin-vote] 清除名單失敗", error);
+          toast("清除失敗，請稍後再試");
+        } finally {
+          clearBtn.disabled = false;
+        }
+      });
       if (exportXlsxBtn) exportXlsxBtn.addEventListener("click", () => cvExportRosterExcel(project));
       if (importXlsxBtn && xlsxInput) {
         importXlsxBtn.addEventListener("click", () => xlsxInput.click());
