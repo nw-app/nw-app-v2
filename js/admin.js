@@ -25969,7 +25969,7 @@
     }
     if (cvBlockIfArchivedProject(project)) return false;
     const cid = String(checkinVoteState.cid || resolveActiveCommunityId() || "default").trim() || "default";
-    const url = `qrcode-scan.html?v=11&c=${encodeURIComponent(cid)}&p=${encodeURIComponent(project.id)}`;
+    const url = `qrcode-scan.html?v=12&c=${encodeURIComponent(cid)}&p=${encodeURIComponent(project.id)}`;
     const width = 430;
     const height = 860;
     const left = Math.max(0, Math.round((Number(window.screen && window.screen.width) || width) - width) / 2);

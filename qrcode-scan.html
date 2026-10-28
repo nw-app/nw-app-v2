@@ -664,6 +664,21 @@
           renderCameraBtn();
         }
 
+        /* 相機啟動後再套用連續對焦（best-effort）。
+           注意：不可把 advanced 放進 cameraIdOrConfig，因為 html5-qrcode 規定該物件
+           只能有 1 個鍵（facingMode 或 deviceId），多帶鍵會直接拋錯導致相機無法開啟。 */
+        function applyContinuousFocus() {
+          try {
+            const video = document.querySelector("#reader video");
+            const stream = video && video.srcObject;
+            const track = stream && typeof stream.getVideoTracks === "function" ? stream.getVideoTracks()[0] : null;
+            if (!track || typeof track.applyConstraints !== "function") return;
+            const caps = typeof track.getCapabilities === "function" ? (track.getCapabilities() || {}) : {};
+            if (Array.isArray(caps.focusMode) && !caps.focusMode.includes("continuous")) return;
+            track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
+          } catch {}
+        }
+
         async function startScanner() {
           await stopScanner();
           if (typeof Html5Qrcode !== "function") {
@@ -682,8 +697,8 @@
           state.scanner = scanner;
           try {
             await scanner.start(
-              // 加上 continuous 對焦：近距離（貼近紙本 QR code）時鏡頭會持續對焦，避免模糊導致辨識失敗
-              { facingMode: "environment", advanced: [{ focusMode: "continuous" }] },
+              // cameraIdOrConfig 僅能有 1 個鍵，故只給 facingMode
+              { facingMode: "environment" },
               {
                 fps: 15,
                 aspectRatio: 1.0,
@@ -713,6 +728,8 @@
               },
               function () {}
             );
+            // 相機成功開啟後才套用連續對焦，避免對焦設定影響相機啟動
+            applyContinuousFocus();
           } catch {
             state.scanner = null;
             setStatus("無法開啟相機，請確認已授權鏡頭權限", "error");
