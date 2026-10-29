@@ -705,15 +705,10 @@
         return out.slice(0, baseDefaults.length);
       };
 
-      const rowAImages = (() => {
-        const defaults = [
-          { url: "photo/b01.png", data: "" },
-          { url: "photo/b02.png", data: "" }
-        ];
-        if (!Array.isArray(parsed.rowAImages)) return defaults;
-        const configured = parsed.rowAImages.filter(img => img && (img.url || img.data));
-        return configured.length > 0 ? configured : defaults;
-      })();
+      // 後台「圖覽」未設定任何圖片時，回傳空陣列，由前台改以文字呈現
+      const rowAImages = Array.isArray(parsed.rowAImages)
+        ? parsed.rowAImages.filter(img => img && (img.url || img.data))
+        : [];
 
       return { 
         residentButtons: { ...d.residentButtons, ...(parsed.residentButtons || {}) },
@@ -1688,9 +1683,26 @@
   function renderRowACarousel() {
     const cfg = loadConfig();
     const images = (cfg.rowAImages || []).filter(img => img.url || img.data);
+    const section = document.getElementById("rowACarousel");
     const track = document.getElementById("carouselTrack");
     const dotsContainer = document.getElementById("carouselDots");
-    if (!track || images.length === 0) return;
+    if (!section) return;
+
+    // 後台「圖覽」未設定任何圖片時，改顯示社區名稱與系統名稱文字
+    if (images.length === 0) {
+      const name = String(resolveHeaderCommunityName() || "").trim() || "社區名稱";
+      section.classList.add("row-a-placeholder");
+      section.innerHTML = `
+        <div class="row-a-empty">
+          <div class="row-a-name">${escapeHtml(name)}</div>
+          <div class="row-a-sub">社區智慧系統平台</div>
+        </div>
+      `;
+      return;
+    }
+
+    section.classList.remove("row-a-placeholder");
+    if (!track || !dotsContainer) return;
 
     track.innerHTML = images.map(img => `
       <div class="carousel-slide">
