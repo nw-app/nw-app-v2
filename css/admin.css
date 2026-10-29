@@ -2984,8 +2984,22 @@ a { color: inherit; text-decoration: none; }
 #visitorQrModal .visitor-qr-img a { display: inline-grid; place-items: center; }
 #visitorQrModal .visitor-qr-img img { width: min(260px, 100%); height: auto; image-rendering: pixelated; cursor: pointer; }
 
-#visitorQuickGuideModal .modal-dialog { width: min(1180px, 96vw); max-height: 88vh; overflow: auto; box-sizing: border-box; }
-#visitorQuickGuideModal .modal-body { display: grid; gap: 14px; }
+#visitorQuickGuideModal .modal-dialog {
+  width: min(1240px, 96vw);
+  height: min(88vh, 920px);
+  max-height: min(88vh, 920px);
+  overflow: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+#visitorQuickGuideModal .modal-body {
+  display: grid;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
 #visitorQuickGuideModal .visitor-guide-tip {
   padding: 12px 14px;
   border-radius: 16px;
@@ -3000,6 +3014,7 @@ a { color: inherit; text-decoration: none; }
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
+  min-height: 0;
 }
 #visitorQuickGuideModal .visitor-guide-slider > .btn {
   min-width: 54px;
@@ -3008,20 +3023,29 @@ a { color: inherit; text-decoration: none; }
   padding: 0;
   font-size: calc(24px * var(--fs));
   font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  text-align: center;
 }
 #visitorQuickGuideModal .visitor-guide-stage {
   min-width: 0;
   display: grid;
   gap: 10px;
+  min-height: 0;
 }
 #visitorQuickGuideModal .visitor-guide-card {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
-  padding: 14px;
+  padding: 12px;
   border-radius: 22px;
   background: #fff;
   border: 1px solid rgba(17, 24, 39, 0.1);
   box-shadow: 0 10px 22px rgba(17, 24, 39, 0.06);
+  min-height: 0;
+  overflow: hidden;
 }
 #visitorQuickGuideModal .visitor-guide-pager {
   display: flex;
@@ -3062,11 +3086,13 @@ a { color: inherit; text-decoration: none; }
 }
 #visitorQuickGuideModal .visitor-guide-card img {
   width: 100%;
-  height: auto;
+  height: 100%;
+  max-height: min(58vh, calc(100vh - 320px));
   display: block;
   border-radius: 20px;
   border: 1px solid rgba(17, 24, 39, 0.08);
   background: #fff;
+  object-fit: contain;
 }
 
 #visitorTokenModal .modal-dialog { width: min(920px, 90vw); max-height: 80vh; overflow: auto; box-sizing: border-box; }
@@ -3328,6 +3354,10 @@ a { color: inherit; text-decoration: none; }
   #visitorQuickGuideModal .visitor-guide-slider > .btn {
     width: 100%;
     height: 46px;
+  }
+
+  #visitorQuickGuideModal .visitor-guide-card img {
+    max-height: min(48vh, calc(100vh - 360px));
   }
 
   #visitorQuickGuideModal .visitor-guide-pager {
