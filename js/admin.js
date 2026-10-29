@@ -222,6 +222,8 @@
     unsubVisitors: null,
     unsubVisitorElevatorCards: null,
     unsubVisitorElevatorCardConfig: null,
+    unsubVisitorFrequent: null,
+    unsubVisitorFrequentDevices: null,
     unsubResidents: null,
     unsubPendingBadge: null,
     creatorLabelByUid: new Map(),
@@ -1036,6 +1038,18 @@
     if (state.unsubVisitorElevatorCardConfig) {
       try { state.unsubVisitorElevatorCardConfig(); } catch {}
       state.unsubVisitorElevatorCardConfig = null;
+    }
+  }
+  function stopVisitorFrequentSubscription() {
+    if (state.unsubVisitorFrequent) {
+      try { state.unsubVisitorFrequent(); } catch {}
+      state.unsubVisitorFrequent = null;
+    }
+  }
+  function stopVisitorFrequentDevicesSubscription() {
+    if (state.unsubVisitorFrequentDevices) {
+      try { state.unsubVisitorFrequentDevices(); } catch {}
+      state.unsubVisitorFrequentDevices = null;
     }
   }
 
@@ -2218,6 +2232,28 @@
     return modal;
   }
 
+  /* 對外可分享的站台根網址（本機／內網開發時導向正式站） */
+  function publicAppBaseUrl() {
+    const host = String(location.hostname || "").trim().toLowerCase();
+    const isLocal =
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host.startsWith("192.168.") ||
+      host.startsWith("10.") ||
+      host.startsWith("172.16.") ||
+      host.startsWith("172.17.") ||
+      host.startsWith("172.18.") ||
+      host.startsWith("172.19.") ||
+      host.startsWith("172.2") ||
+      host.startsWith("172.3");
+    if (isLocal) return "https://nw-app.github.io/nw-app-v2/";
+
+    const origin = location.origin.endsWith("/") ? location.origin.slice(0, -1) : location.origin;
+    const pathParts = location.pathname.split("/");
+    pathParts.pop();
+    return `${origin}${pathParts.join("/")}/`;
+  }
+
   function ensureVisitorQrModal80() {
     let modal = document.getElementById("visitorQrModal");
     if (modal) return modal;
@@ -2251,6 +2287,115 @@
     `.trim();
     document.body.appendChild(modal);
     return modal;
+  }
+
+  function ensureVisitorHistoryShareModal() {
+    let modal = document.getElementById("visitorHistoryShareModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "visitorHistoryShareModal";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="visitorHistoryShareTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="visitorHistoryShareTitle">分享訪客歷史紀錄</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="status" id="visitorHistoryShareScope"></div>
+          <div class="field">
+            <label for="visitorHistoryShareUrl">分享網址（不需登入）</label>
+            <input id="visitorHistoryShareUrl" type="text" autocomplete="off" readonly />
+          </div>
+          <div class="visitor-qr-box">
+            <div class="visitor-qr-img" id="visitorHistoryShareQr"></div>
+          </div>
+          <div class="status" id="visitorHistoryShareStatus" hidden></div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" type="button" id="btnCopyVisitorHistoryUrl">複製網址</button>
+          <button class="btn btn-primary" type="button" id="btnOpenVisitorHistoryUrl">開啟</button>
+          <button class="btn" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>
+    `.trim();
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  /* 分享訪客歷史紀錄：顯示 QR code 與可公開存取的網址（不需登入） */
+  function openVisitorHistoryShareModal({ url, scopeLabel }) {
+    const modal = ensureVisitorHistoryShareModal();
+    let detach = () => {};
+    detach = bindModalClose(modal, () => detach());
+
+    const scopeEl = modal.querySelector("#visitorHistoryShareScope");
+    const inputEl = modal.querySelector("#visitorHistoryShareUrl");
+    const qrWrap = modal.querySelector("#visitorHistoryShareQr");
+    const statusEl = modal.querySelector("#visitorHistoryShareStatus");
+    const btnCopy = modal.querySelector("#btnCopyVisitorHistoryUrl");
+    const btnOpen = modal.querySelector("#btnOpenVisitorHistoryUrl");
+    const target = String(url || "").trim();
+
+    const setStatus = (msg, isError) => {
+      if (!statusEl) return;
+      const t = String(msg || "").trim();
+      statusEl.textContent = t;
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("error", Boolean(isError));
+    };
+
+    if (scopeEl) scopeEl.textContent = String(scopeLabel || "");
+    if (inputEl) inputEl.value = target;
+    if (qrWrap) {
+      qrWrap.innerHTML = "";
+      if (target) {
+        const img = document.createElement("img");
+        img.alt = "QR Code";
+        img.decoding = "async";
+        img.loading = "eager";
+        img.src = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(target)}`;
+        img.addEventListener("error", () => {
+          try { qrWrap.innerHTML = `<div class="status error">QR code 產生失敗</div>`; } catch {}
+        });
+        qrWrap.appendChild(img);
+      }
+    }
+    setStatus("此網址不需登入即可查看，請妥善分享給需要的住戶或委員。", false);
+
+    const onCopy = async () => {
+      if (!target) return;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(target);
+        } else if (inputEl) {
+          inputEl.removeAttribute("readonly");
+          inputEl.select();
+          document.execCommand("copy");
+          inputEl.setAttribute("readonly", "readonly");
+        }
+        setStatus("已複製網址。", false);
+      } catch {
+        setStatus("複製失敗，請手動選取網址。", true);
+      }
+    };
+    const onOpen = () => {
+      if (!target) return;
+      try { window.open(target, "_blank", "noopener,noreferrer"); } catch { location.href = target; }
+    };
+
+    if (btnCopy) btnCopy.addEventListener("click", onCopy);
+    if (btnOpen) btnOpen.addEventListener("click", onOpen);
+    const oldDetach = detach;
+    detach = () => {
+      try { if (btnCopy) btnCopy.removeEventListener("click", onCopy); } catch {}
+      try { if (btnOpen) btnOpen.removeEventListener("click", onOpen); } catch {}
+      oldDetach();
+    };
+
+    modal.hidden = false;
   }
 
   function visitorGuideSvgDataUrl(svg) {
@@ -2622,27 +2767,7 @@
       const byUsername = (Array.isArray(state.communities) ? state.communities : []).find((x) => x && String(x.id || "") === cid) || null;
       return String((byUsername && byUsername.username) || cid).trim() || cid;
     })();
-    const publicBase = (() => {
-      const host = String(location.hostname || "").trim().toLowerCase();
-      const isLocal =
-        host === "localhost" ||
-        host === "127.0.0.1" ||
-        host.startsWith("192.168.") ||
-        host.startsWith("10.") ||
-        host.startsWith("172.16.") ||
-        host.startsWith("172.17.") ||
-        host.startsWith("172.18.") ||
-        host.startsWith("172.19.") ||
-        host.startsWith("172.2") ||
-        host.startsWith("172.3");
-      if (isLocal) return "https://nw-app.github.io/nw-app-v2/";
-
-      const origin = location.origin.endsWith("/") ? location.origin.slice(0, -1) : location.origin;
-      const pathParts = location.pathname.split("/");
-      pathParts.pop();
-      const basePath = pathParts.join("/");
-      return `${origin}${basePath}/`;
-    })();
+    const publicBase = publicAppBaseUrl();
 
     const renderQr = () => {
       const url = String(inputEl ? inputEl.value : "").trim();
@@ -4450,15 +4575,111 @@
     }
   }
 
+  /* 常用訪客掃碼：同一組 QR code 可重複使用，第一次＝進入、第二次＝離開，依此類推。
+     進入時建立一筆訪客紀錄（沿用既有訪客清單／歷史），離開時補上離開時間。 */
+  async function toggleFrequentVisit({ cid, code }) {
+    const communityId = String(cid || "default").trim() || "default";
+    const communityRef = db.collection("communities").doc(communityId);
+    const frequentRef = communityRef.collection("visitor_frequent").doc(String(code || "").trim());
+    const visitorsColl = communityRef.collection("visitors");
+    const newVisitorRef = visitorsColl.doc();
+    const nowDate = new Date();
+    const Timestamp = firebase.firestore.Timestamp;
+
+    const expireMs = (v) => {
+      if (v == null) return 0;
+      if (typeof v.toMillis === "function") { try { return v.toMillis(); } catch {} }
+      if (typeof v.toDate === "function") { try { return v.toDate().getTime(); } catch {} }
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    return db.runTransaction(async (tx) => {
+      const fSnap = await tx.get(frequentRef);
+      if (!fSnap || !fSnap.exists) return { kind: "missing" };
+      const f = fSnap.data() || {};
+      if (f.active === false) return { kind: "disabled" };
+      const expMs = expireMs(f.expiresAt);
+      if (expMs && expMs < nowDate.getTime()) return { kind: "expired" };
+
+      const name = String(f.name || "");
+      const openId = String(f.openVisitorId || "").trim();
+      if (openId) {
+        const vRef = visitorsColl.doc(openId);
+        const vSnap = await tx.get(vRef);
+        if (vSnap && vSnap.exists) {
+          const v = vSnap.data() || {};
+          /* 上一筆尚未登記離開 → 本次為離開 */
+          if (v.inAt && !v.outAt) {
+            const outAt = Timestamp.fromDate(nowDate);
+            tx.set(vRef, { outAt, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+            tx.set(frequentRef, { openVisitorId: "", lastOutAt: outAt, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+            return { kind: "out", visitorId: openId, stamp: outAt, date: nowDate, name };
+          }
+        }
+      }
+
+      /* 尚無進行中的紀錄 → 本次為進入 */
+      const inAt = Timestamp.fromDate(nowDate);
+      tx.set(newVisitorRef, {
+        name,
+        email: "",
+        phone: String(f.phone || ""),
+        unit: String(f.unit || ""),
+        plate: String(f.plate || ""),
+        purpose: String(f.purpose || ""),
+        purposeType: String(f.purposeType || ""),
+        purposeOther: String(f.purposeOther || ""),
+        note: "",
+        partySize: 1,
+        qrToken: String(f.code || code || ""),
+        qrInvalidated: false,
+        keep: {},
+        status: "approved",
+        passAuthorized: true,
+        frequent: true,
+        frequentCode: String(f.code || code || ""),
+        createdBy: "frequent-pass",
+        createdByName: "常用訪客",
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        inAt,
+        outAt: null,
+      });
+      tx.set(frequentRef, { openVisitorId: newVisitorRef.id, lastInAt: inAt, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return { kind: "in", visitorId: newVisitorRef.id, stamp: inAt, date: nowDate, name };
+    });
+  }
+
   function parseVisitorQrText(text) {
     const raw = String(text || "").trim();
     if (!raw) return null;
+
+    /* 常用訪客證：nwapp://frequent-pass?cid=...&k=... 或 visitor-frequent.html?c=...&k=... */
+    const pickFrequent = (uCid, uCode) => {
+      const c = String(uCid || "").trim();
+      const k = String(uCode || "").trim();
+      if (!c || !k) return null;
+      return { kind: "frequent", cid: c, code: k };
+    };
+    try {
+      const urlText = raw.replace(/^nwapp:\/\//i, "https://");
+      if (raw.includes("frequent-pass?") || raw.includes("visitor-frequent.html")) {
+        const u = new URL(urlText, "https://local.invalid/");
+        const r = pickFrequent(
+          u.searchParams.get("cid") || u.searchParams.get("c"),
+          u.searchParams.get("k")
+        );
+        if (r) return r;
+      }
+    } catch {}
+
     const pick = (u) => {
       const cid = String(u.searchParams.get("cid") || "").trim();
       const vid = String(u.searchParams.get("vid") || "").trim();
       const token = String(u.searchParams.get("t") || "").trim();
       if (!cid || !vid) return null;
-      return { cid, vid, token };
+      return { kind: "visitor", cid, vid, token };
     };
     try {
       if (raw.startsWith("nwapp://")) {
@@ -4480,7 +4701,7 @@
     const vid = decodeURIComponent(String(mVid[1] || "").trim());
     const token = mTok ? decodeURIComponent(String(mTok[1] || "").trim()) : "";
     if (!cid || !vid) return null;
-    return { cid, vid, token };
+    return { kind: "visitor", cid, vid, token };
   }
 
   function formatYmdHms(d) {
@@ -4601,6 +4822,42 @@
         speak("無法辨識QR code");
         return;
       }
+
+      /* 常用訪客證：一進一出交替登記，QR code 可重複使用 */
+      if (parsed.kind === "frequent") {
+        try {
+          const res = await toggleFrequentVisit({ cid, code: parsed.code });
+          if (res.kind === "missing") {
+            setStatus("無法辨識", true);
+            speak("無法辨識QR code");
+            return;
+          }
+          if (res.kind === "disabled" || res.kind === "expired") {
+            setStatus(res.kind === "disabled" ? "此常用訪客證已停用。" : "此常用訪客證已過期。", true);
+            speak(res.kind === "disabled" ? "此常用訪客證已停用" : "此常用訪客證已過期");
+            return;
+          }
+          const t = formatYmdHms(res.date);
+          const who = String(res.name || "常用訪客");
+          if (res.kind === "in") {
+            showScanResult("in", t);
+            if (hintEl) hintEl.textContent = `已登記進入：${who}（同一張 QR 再次掃描即登記離開）`;
+            speak("訪客登記成功，歡迎光臨");
+            if (typeof onApplied === "function") onApplied(res.visitorId, { inAt: res.stamp });
+            return;
+          }
+          showScanResult("out", t);
+          if (hintEl) hintEl.textContent = `已登記離開：${who}`;
+          speak("訪客登記成功，期待您再次光臨");
+          if (typeof onApplied === "function") onApplied(res.visitorId, { outAt: res.stamp });
+          return;
+        } catch (err) {
+          const c2 = String(err && err.code ? err.code : "");
+          setStatus(c2.includes("permission-denied") ? "沒有權限執行此操作。" : "更新失敗，請稍後再試。", true);
+          return;
+        }
+      }
+
       const vid = String(parsed.vid || "").trim();
       const tokenFromQr = String(parsed.token || "").trim();
       if (!vid) {
@@ -16774,9 +17031,11 @@
             <div class="field">
               <label for="modal_v_purposeType">到訪事由</label>
               <select id="modal_v_purposeType">
+                <option value="訪客到訪">訪客到訪</option>
                 <option value="親友拜訪">親友拜訪</option>
-                <option value="施工修繕">施工修繕</option>
-                <option value="快遞外送">快遞外送</option>
+                <option value="廠商施工">廠商施工</option>
+                <option value="外送">外送</option>
+                <option value="看房">看房</option>
                 <option value="其他">其他</option>
               </select>
             </div>
@@ -16848,6 +17107,8 @@
     stopVisitorsSubscription();
     stopVisitorElevatorCardsSubscription();
     stopVisitorElevatorCardConfigSubscription();
+    stopVisitorFrequentSubscription();
+    stopVisitorFrequentDevicesSubscription();
     if (!Array.isArray(state.communities) || state.communities.length === 0) {
       contentEl.innerHTML = `
         <section class="card">
@@ -16916,6 +17177,9 @@
         <button class="btn btn-sm" type="button" id="btnHistoryVisitors" data-filter="history">
           歷史訪客
         </button>
+        <button class="btn btn-sm" type="button" id="btnFrequentVisitors" data-filter="frequent">
+          常用訪客
+        </button>
         <button class="btn btn-sm" type="button" id="btnVisitorSettings" data-filter="settings">
           設定
         </button>
@@ -16974,7 +17238,7 @@
               <input id="visitorHistoryTo" type="date" />
             </div>
             <div class="history-toolbar-actions">
-              <button class="btn btn-sm" type="button" id="btnHistoryBrowse">手機版瀏覽</button>
+              <button class="btn btn-sm" type="button" id="btnHistoryBrowse">分享</button>
               <button class="btn btn-sm btn-ghost" type="button" id="btnHistoryExcel">下載 Excel</button>
               <button class="btn btn-sm btn-primary" type="button" id="btnHistoryPdf">下載 PDF</button>
               <button class="btn btn-sm btn-success" type="button" id="btnHistoryPrint">列印</button>
@@ -16986,6 +17250,11 @@
               <button class="btn btn-sm btn-ghost" type="button" id="btnOpenElevatorCardNameSettings" aria-label="設定" title="設定">
                 ${iconSvg("settings")}
               </button>
+            </div>
+          </div>
+          <div class="history-toolbar" id="visitorFrequentToolbar" hidden>
+            <div class="history-toolbar-actions">
+              <button class="btn btn-sm danger" type="button" id="btnAddFrequentVisitor">新增常用訪客</button>
             </div>
           </div>
           <div class="status" id="visitorStatus" hidden></div>
@@ -17008,6 +17277,8 @@
     const addBtn = document.getElementById("btnAddVisitor");
     const historyToolbarEl = document.getElementById("visitorHistoryToolbar");
     const settingsToolbarEl = document.getElementById("visitorSettingsToolbar");
+    const frequentToolbarEl = document.getElementById("visitorFrequentToolbar");
+    const addFrequentVisitorBtn = document.getElementById("btnAddFrequentVisitor");
     const historyUnitEl = document.getElementById("visitorHistoryUnit");
     const historyBrowseBtn = document.getElementById("btnHistoryBrowse");
     const historyExcelBtn = document.getElementById("btnHistoryExcel");
@@ -17082,7 +17353,10 @@
     };
 
     let visitors = [];
-    let currentFilter = 'overview'; // overview, pending, approved, inside, history, settings
+    let frequentVisitors = [];
+    /* code → Set(deviceId)，用於偵測常用訪客是否被不同裝置使用 */
+    let frequentDeviceMap = new Map();
+    let currentFilter = 'overview'; // overview, pending, approved, inside, history, frequent, settings
     let historyUnit = "";
     let historyUnitNames = new Map();
     const elevatorCardStatusMeta = (raw) => {
@@ -17144,6 +17418,90 @@
                       <div style="display:flex; gap:8px; align-items:center;">
                         <button class="btn btn-sm" type="button" data-card-edit="${escapeHtml(String(card.id || ""))}">編輯</button>
                         <button class="btn btn-sm danger" type="button" data-card-delete="${escapeHtml(String(card.id || ""))}">刪除</button>
+                      </div>
+                    </td>
+                  </tr>
+                `.trim();
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      `.trim();
+    };
+    const frequentExpiryMs = (v) => {
+      const d = toDate(v && v.expiresAt);
+      return d ? d.getTime() : null;
+    };
+    const frequentStatusMeta = (v) => {
+      if (!v) return { label: "—", cls: "" };
+      if (v.active === false) return { label: "已停用", cls: "" };
+      const exp = frequentExpiryMs(v);
+      if (exp != null && exp < Date.now()) return { label: "已過期", cls: "warning" };
+      return { label: "有效", cls: "success" };
+    };
+    const frequentDeviceCount = (code) => {
+      const set = frequentDeviceMap.get(String(code || "").trim());
+      return set ? set.size : 0;
+    };
+    const renderFrequentVisitors = () => {
+      if (!listEl) return;
+      const list = [...(Array.isArray(frequentVisitors) ? frequentVisitors : [])].sort((a, b) => {
+        const at = (toDate(a && a.createdAt) || new Date(0)).getTime();
+        const bt = (toDate(b && b.createdAt) || new Date(0)).getTime();
+        return bt - at;
+      });
+      if (!list.length) {
+        listEl.innerHTML = `<div class="status">尚未建立常用訪客。</div>`;
+        return;
+      }
+      const multiDevice = list.filter((x) => frequentDeviceCount(x.code) > 1);
+      const warnHtml = multiDevice.length
+        ? `<div class="status error" style="margin-bottom:10px;">偵測到 ${multiDevice.length} 位常用訪客曾以不同裝置開啟訪客證：${escapeHtml(multiDevice.map((x) => String(x.name || x.code || "")).join("、"))}。</div>`
+        : "";
+      listEl.innerHTML = `
+        ${warnHtml}
+        <div class="units-table-container" style="max-height: 560px; overflow-y: auto;">
+          <table class="units-table">
+            <thead>
+              <tr>
+                <th style="width:120px;">姓名</th>
+                <th style="width:96px;">拜訪戶號</th>
+                <th style="width:120px;">手機</th>
+                <th>事由</th>
+                <th style="width:56px;">人數</th>
+                <th style="width:96px;">車牌</th>
+                <th style="width:120px;">有效期限</th>
+                <th style="width:88px;">狀態</th>
+                <th style="width:96px;">裝置</th>
+                <th style="width:210px;">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map((x) => {
+                const st = frequentStatusMeta(x);
+                const exp = frequentExpiryMs(x);
+                const expText = exp != null ? formatMs(exp).slice(0, 10) : "永久";
+                const devCount = frequentDeviceCount(x.code);
+                const devHtml = devCount > 1
+                  ? `<span class="status-chip warning" title="曾以 ${devCount} 種不同裝置開啟">多裝置 ${devCount}</span>`
+                  : (devCount === 1 ? `<span class="status-chip success">單一</span>` : `<span class="status-chip">未使用</span>`);
+                const id = escapeHtml(String(x.id || ""));
+                return `
+                  <tr data-frequent-id="${id}">
+                    <td>${escapeHtml(String(x.name || "—"))}</td>
+                    <td>${escapeHtml(String(x.unit || "—"))}</td>
+                    <td>${escapeHtml(String(x.phone || "—"))}</td>
+                    <td>${escapeHtml(String(x.purpose || "—"))}</td>
+                    <td>${escapeHtml(String(x.partySize != null ? Number(x.partySize) : 1))}</td>
+                    <td>${escapeHtml(String(x.plate || "—"))}</td>
+                    <td>${escapeHtml(expText)}</td>
+                    <td><span class="status-chip ${st.cls}">${st.label}</span></td>
+                    <td>${devHtml}</td>
+                    <td>
+                      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <button class="btn btn-sm" type="button" data-frequent-edit="${id}">編輯</button>
+                        <button class="btn btn-sm btn-primary" type="button" data-frequent-qr="${id}">訪客證</button>
+                        <button class="btn btn-sm danger" type="button" data-frequent-delete="${id}">刪除</button>
                       </div>
                     </td>
                   </tr>
@@ -17254,11 +17612,13 @@
 
       const isOverviewTab = currentFilter === 'overview';
       const isHistoryTab = currentFilter === 'history';
+      const isFrequentTab = currentFilter === 'frequent';
       const isSettingsTab = currentFilter === 'settings';
       if (historyToolbarEl) historyToolbarEl.hidden = !isHistoryTab;
       if (settingsToolbarEl) settingsToolbarEl.hidden = !isSettingsTab;
+      if (frequentToolbarEl) frequentToolbarEl.hidden = !isFrequentTab;
       if (visitorToolbarEl) {
-        visitorToolbarEl.hidden = isSettingsTab;
+        visitorToolbarEl.hidden = isSettingsTab || isFrequentTab;
         visitorToolbarEl.querySelectorAll(".field").forEach((f) => { f.hidden = isOverviewTab; });
       }
       if (isOverviewTab) {
@@ -17266,6 +17626,10 @@
         return;
       }
       if (isHistoryTab) refreshHistoryUnitOptions();
+      if (isFrequentTab) {
+        renderFrequentVisitors();
+        return;
+      }
       if (isSettingsTab) {
         renderElevatorCards();
         return;
@@ -17422,11 +17786,8 @@
         .join("");
     };
 
-    const docIdForHistoryUnit = (unit) => {
-      let s = String(unit || "").trim().replace(/\//g, "_");
-      if (!s || s === "." || s === "..") s = `_${s}`;
-      return s;
-    };
+    /* 「全部戶號」公開分享文件的保留 docId（Firestore 禁止 __xxx__ 形式的保留 ID） */
+    const OVERVIEW_HISTORY_DOC_ID = "all-units-overview";
 
     const historyStatusLabel = (raw) => {
       const k = String(raw || "").toLowerCase();
@@ -17449,15 +17810,17 @@
       return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}`;
     };
 
-    const buildHistoryRecords = (unit) => {
+    const buildHistoryRecords = (unit, opts) => {
+      const all = Boolean(opts && opts.all);
       const u = String(unit || "").trim();
       return (Array.isArray(visitors) ? visitors : [])
-        .filter((v) => String(v.unit || "").trim() === u && isHistoryVisitor(v))
+        .filter((v) => (all ? isHistoryVisitor(v) : String(v.unit || "").trim() === u && isHistoryVisitor(v)))
         .map((v) => {
           const inDate = toDate(v.inAt);
           const outDate = toDate(v.outAt);
           const createdDate = toDate(v.createdAt);
           return {
+            unit: String(v.unit || "").trim(),
             id: String(v.id || ""),
             name: String(v.name || ""),
             phone: String(v.phone || ""),
@@ -17523,21 +17886,46 @@
       }
     };
 
-    const publishUnitHistory = async (unit) => {
-      const u = String(unit || "").trim();
-      if (!u) return false;
-      const records = buildHistoryRecords(u);
-      const docRef = db
-        .collection("communities")
-        .doc(String(visitorCommunitySlug || "default"))
-        .collection("visitor_history")
-        .doc(docIdForHistoryUnit(u));
-      await docRef.set({
-        unit: u,
-        name: String(historyUnitNames.get(u) || ""),
+    /* 發佈「全部戶號」的公開歷史訪客資料（供不需登入的分享頁讀取）
+       Firestore 單一文件上限 1MiB，資料量大時自動拆成多個分片文件。 */
+    const publishOverviewHistory = async () => {
+      const records = buildHistoryRecords("", { all: true });
+      const CHUNK_LIMIT = 700 * 1024;
+      const chunks = [];
+      let cur = [];
+      let size = 0;
+      records.forEach((r) => {
+        const bytes = JSON.stringify(r).length + 8;
+        if (cur.length && size + bytes > CHUNK_LIMIT) {
+          chunks.push(cur);
+          cur = [];
+          size = 0;
+        }
+        cur.push(r);
+        size += bytes;
+      });
+      if (cur.length) chunks.push(cur);
+
+      const coll = db.collection("communities").doc(String(visitorCommunitySlug || "default")).collection("visitor_history");
+      const metaRef = coll.doc(OVERVIEW_HISTORY_DOC_ID);
+      const prevSnap = await metaRef.get();
+      const prevChunks = prevSnap && prevSnap.exists ? Number((prevSnap.data() || {}).chunks || 0) : 0;
+
+      for (let i = 0; i < chunks.length; i += 1) {
+        await coll.doc(`${OVERVIEW_HISTORY_DOC_ID}_c${i}`).set({ idx: i, records: chunks[i] }, { merge: false });
+      }
+      for (let i = chunks.length; i < prevChunks; i += 1) {
+        try { await coll.doc(`${OVERVIEW_HISTORY_DOC_ID}_c${i}`).delete(); } catch {}
+      }
+
+      await metaRef.set({
+        unit: "",
+        name: "",
+        cname: String(cname || ""),
+        overview: true,
+        chunks: chunks.length,
         count: records.length,
         updatedAt: new Date(),
-        records,
       }, { merge: false });
       return true;
     };
@@ -17905,6 +18293,84 @@
     const collRef = () => db.collection("communities").doc(String(visitorCommunitySlug || "default")).collection("visitors");
     const elevatorCardCollRef = () => db.collection("communities").doc(String(visitorCommunitySlug || "default")).collection("visitor_elevator_cards");
     const elevatorCardConfigRef = () => db.collection("communities").doc(String(visitorCommunitySlug || "default")).collection("settings").doc("visitor_elevator_card_config");
+    const frequentCollRef = () => db.collection("communities").doc(String(visitorCommunitySlug || "default")).collection("visitor_frequent");
+    const frequentDeviceCollRef = () => db.collection("communities").doc(String(visitorCommunitySlug || "default")).collection("frequent_devices");
+
+    /* 短隨機碼：不含固定生成規則，僅使用不易混淆的英數字元，長度 8。 */
+    const FREQUENT_CODE_CHARS = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const genFrequentCode = () => {
+      let out = "";
+      for (let i = 0; i < 8; i += 1) {
+        out += FREQUENT_CODE_CHARS.charAt(Math.floor(Math.random() * FREQUENT_CODE_CHARS.length));
+      }
+      return out;
+    };
+    /* 產生不與現有常用訪客重複的 code */
+    const genUniqueFrequentCode = () => {
+      const used = new Set((Array.isArray(frequentVisitors) ? frequentVisitors : []).map((x) => String(x.code || "").trim()).filter(Boolean));
+      for (let i = 0; i < 20; i += 1) {
+        const c = genFrequentCode();
+        if (!used.has(c)) return c;
+      }
+      return genFrequentCode();
+    };
+
+    const subscribeFrequentVisitors = () => {
+      stopVisitorFrequentSubscription();
+      try {
+        state.unsubVisitorFrequent = frequentCollRef().onSnapshot((snap) => {
+          frequentVisitors = (snap && snap.docs ? snap.docs : []).map((d) => {
+            const v = d.data() || {};
+            return {
+              id: d.id,
+              code: String(v.code || d.id || ""),
+              name: String(v.name || ""),
+              unit: String(v.unit || ""),
+              phone: String(v.phone || ""),
+              purpose: String(v.purpose || ""),
+              partySize: v.partySize != null ? Number(v.partySize) : 1,
+              plate: String(v.plate || ""),
+              expiresAt: v.expiresAt || null,
+              active: v.active !== false,
+              createdBy: String(v.createdBy || ""),
+              createdByName: String(v.createdByName || ""),
+              createdAt: v.createdAt || null,
+              updatedAt: v.updatedAt || null,
+            };
+          });
+          renderList();
+        }, () => {
+          frequentVisitors = [];
+          renderList();
+        });
+      } catch {
+        frequentVisitors = [];
+      }
+    };
+
+    const subscribeFrequentDevices = () => {
+      stopVisitorFrequentDevicesSubscription();
+      try {
+        state.unsubVisitorFrequentDevices = frequentDeviceCollRef().onSnapshot((snap) => {
+          const map = new Map();
+          (snap && snap.docs ? snap.docs : []).forEach((d) => {
+            const v = d.data() || {};
+            const code = String(v.code || "").trim();
+            const dev = String(v.deviceId || "").trim();
+            if (!code || !dev) return;
+            if (!map.has(code)) map.set(code, new Set());
+            map.get(code).add(dev);
+          });
+          frequentDeviceMap = map;
+          renderList();
+        }, () => {
+          frequentDeviceMap = new Map();
+          renderList();
+        });
+      } catch {
+        frequentDeviceMap = new Map();
+      }
+    };
     const subscribeElevatorCards = () => {
       stopVisitorElevatorCardsSubscription();
       try {
@@ -17969,6 +18435,8 @@
           visitorCommunitySlug = String(slug || "").trim() || visitorCommunitySlug || "default";
           subscribeElevatorCards();
           subscribeElevatorCardConfig();
+          subscribeFrequentVisitors();
+          subscribeFrequentDevices();
           state.unsubVisitors = collRef()
             .orderBy("createdAt", "desc")
             .onSnapshot(
@@ -18503,6 +18971,488 @@
       });
     };
 
+    const ensureFrequentVisitorModal = () => {
+      let modal = document.getElementById("frequentVisitorModal");
+      if (modal) return modal;
+      modal = document.createElement("div");
+      modal.className = "modal";
+      modal.id = "frequentVisitorModal";
+      modal.hidden = true;
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-modal-close="1"></div>
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="frequentVisitorModalTitle">
+          <div class="modal-hd">
+            <h3 class="modal-title" id="frequentVisitorModalTitle">新增常用訪客</h3>
+            <button class="modal-close" type="button" id="btnCloseFrequentVisitorModal" aria-label="關閉">×</button>
+          </div>
+          <form id="frequentVisitorForm">
+            <div class="modal-body">
+              <div class="field">
+                <label for="nwfv_name">訪客姓名</label>
+                <input id="nwfv_name" type="text" autocomplete="off" required />
+              </div>
+              <div class="field">
+                <label for="nwfv_unit">拜訪戶號</label>
+                <div class="input-wrap">
+                  <input id="nwfv_unit" type="text" autocomplete="off" list="frequentUnitOptions" class="has-icon" />
+                  <button type="button" class="input-icon-btn" id="btnPickFrequentUnit" aria-label="顯示戶號清單" title="顯示戶號清單">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M12 8.1a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4Z" stroke="currentColor" stroke-width="1.8"/><path d="M8.3 17.4c.6-1.9 2.1-3 3.7-3s3.1 1.1 3.7 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                  </button>
+                </div>
+                <div class="unit-picker" id="frequentUnitPicker" hidden></div>
+                <datalist id="frequentUnitOptions"></datalist>
+              </div>
+              <div class="field">
+                <label for="nwfv_phone">手機號碼</label>
+                <input id="nwfv_phone" type="tel" autocomplete="tel" />
+              </div>
+              <div class="field">
+                <label for="nwfv_purposeType">到訪事由</label>
+                <select id="nwfv_purposeType">
+                  <option value="訪客到訪">訪客到訪</option>
+                  <option value="親友拜訪">親友拜訪</option>
+                  <option value="廠商施工">廠商施工</option>
+                  <option value="外送">外送</option>
+                  <option value="看房">看房</option>
+                  <option value="其他">其他</option>
+                </select>
+              </div>
+              <div class="field" id="nwfv_purposeOtherField" hidden>
+                <label for="nwfv_purposeOther">其他（自定義）</label>
+                <input id="nwfv_purposeOther" type="text" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label for="nwfv_partySize">來訪人數</label>
+                <input id="nwfv_partySize" type="text" value="1" readonly aria-readonly="true" />
+                <div class="muted" style="margin-top:6px;">常用訪客固定為 1 人。</div>
+              </div>
+              <div class="field">
+                <label for="nwfv_plate">車牌</label>
+                <input id="nwfv_plate" type="text" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label for="nwfv_expire">有效期限</label>
+                <input id="nwfv_expire" type="date" />
+                <div class="muted" style="margin-top:6px;">留空代表永久有效；調整日期即可延長。常用訪客證不受「使用 2 次即失效」限制。</div>
+              </div>
+              <div class="status" id="frequentVisitorStatus" hidden></div>
+            </div>
+            <div class="modal-ft">
+              <button class="btn" type="button" id="btnCancelFrequentVisitorModal">取消</button>
+              <button class="btn btn-primary" type="submit" id="btnSubmitFrequentVisitorModal">建立</button>
+            </div>
+          </form>
+        </div>
+      `.trim();
+      document.body.appendChild(modal);
+      return modal;
+    };
+
+    const ensureFrequentPassModal = () => {
+      let modal = document.getElementById("frequentPassModal");
+      if (modal) return modal;
+      modal = document.createElement("div");
+      modal.className = "modal";
+      modal.id = "frequentPassModal";
+      modal.hidden = true;
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-modal-close="1"></div>
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="frequentPassModalTitle">
+          <div class="modal-hd">
+            <h3 class="modal-title" id="frequentPassModalTitle">常用訪客證</h3>
+            <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+          </div>
+          <div class="modal-body">
+            <div id="frequentPassDetails"></div>
+            <div style="margin-top:12px;display:grid;place-items:center;padding:14px;border-radius:14px;background:rgba(17,24,39,0.03);border:1px dashed rgba(17,24,39,0.22);">
+              <div id="frequentPassQr"></div>
+            </div>
+            <div class="field" style="margin-top:12px;">
+              <label for="frequentPassUrl">訪客證專屬網址（即 QR code 內容）</label>
+              <input id="frequentPassUrl" type="text" autocomplete="off" readonly />
+            </div>
+            <div class="status" id="frequentPassStatus" hidden></div>
+          </div>
+          <div class="modal-ft">
+            <button class="btn" type="button" id="btnCopyFrequentPassUrl">複製網址</button>
+            <button class="btn btn-primary" type="button" id="btnOpenFrequentPassUrl">開啟</button>
+            <button class="btn" type="button" data-modal-close="1">關閉</button>
+          </div>
+        </div>
+      `.trim();
+      document.body.appendChild(modal);
+      return modal;
+    };
+
+    /* 開啟常用訪客證：顯示訪客證資訊與專屬 QR code（同一組 code） */
+    const openFrequentPassModal = (item) => {
+      const modal = ensureFrequentPassModal();
+      let detach = () => {};
+      detach = bindModalClose(modal, () => detach());
+
+      const detailsEl = modal.querySelector("#frequentPassDetails");
+      const qrWrap = modal.querySelector("#frequentPassQr");
+      const urlInput = modal.querySelector("#frequentPassUrl");
+      const statusEl = modal.querySelector("#frequentPassStatus");
+      const btnCopy = modal.querySelector("#btnCopyFrequentPassUrl");
+      const btnOpen = modal.querySelector("#btnOpenFrequentPassUrl");
+
+      const setStatus = (msg, isError) => {
+        if (!statusEl) return;
+        const t = String(msg || "").trim();
+        statusEl.textContent = t;
+        statusEl.hidden = !t;
+        statusEl.classList.toggle("error", Boolean(isError));
+      };
+
+      const code = String((item && item.code) || "").trim();
+      /* 以目前所在站台解析，開發／正式環境皆可開啟（QR code 內容＝此網址，內含同一組 code） */
+      const passUrl = new URL("visitor-frequent.html", location.href);
+      passUrl.searchParams.set("c", String(visitorCommunitySlug || ""));
+      passUrl.searchParams.set("k", code);
+      const target = passUrl.toString();
+
+      const st = frequentStatusMeta(item);
+      const exp = frequentExpiryMs(item);
+      const expText = exp != null ? formatMs(exp).slice(0, 10) : "永久有效";
+      const rows = [
+        ["訪客姓名", String((item && item.name) || "—")],
+        ["拜訪戶號", String((item && item.unit) || "—")],
+        ["手機", String((item && item.phone) || "—")],
+        ["到訪事由", String((item && item.purpose) || "—")],
+        ["拜訪人數", String(item && item.partySize != null ? Number(item.partySize) : 1)],
+        ["車牌", String((item && item.plate) || "—")],
+        ["有效期限", expText],
+        ["狀態", st.label],
+        ["專屬代碼", code || "—"],
+      ];
+      if (detailsEl) {
+        detailsEl.innerHTML = rows.map(([k, v]) => `
+          <div style="display:grid;grid-template-columns:92px 1fr;gap:10px;padding:7px 0;border-bottom:1px solid rgba(17,24,39,0.08);">
+            <div style="color:var(--muted);font-weight:800;">${escapeHtml(k)}</div>
+            <div style="word-break:break-word;">${escapeHtml(v)}</div>
+          </div>
+        `.trim()).join("");
+      }
+
+      if (qrWrap) {
+        qrWrap.innerHTML = "";
+        if (target) {
+          const img = document.createElement("img");
+          img.alt = "QR Code";
+          img.decoding = "async";
+          img.loading = "eager";
+          img.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(target)}`;
+          img.style.width = "min(240px, 100%)";
+          img.style.height = "auto";
+          img.addEventListener("error", () => { try { qrWrap.innerHTML = `<div class="status error">QR code 產生失敗</div>`; } catch {} });
+          qrWrap.appendChild(img);
+        }
+      }
+      if (urlInput) urlInput.value = target;
+      setStatus("此訪客證不需登入即可開啟，請分享給訪客。", false);
+
+      const onCopy = async () => {
+        if (!target) return;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(target);
+          else if (urlInput) { urlInput.removeAttribute("readonly"); urlInput.select(); document.execCommand("copy"); urlInput.setAttribute("readonly", "readonly"); }
+          setStatus("已複製網址。", false);
+        } catch {
+          setStatus("複製失敗，請手動選取網址。", true);
+        }
+      };
+      const onOpen = () => {
+        if (!target) return;
+        try { window.open(target, "_blank", "noopener,noreferrer"); } catch { location.href = target; }
+      };
+      if (btnCopy) btnCopy.addEventListener("click", onCopy);
+      if (btnOpen) btnOpen.addEventListener("click", onOpen);
+      const oldDetach = detach;
+      detach = () => {
+        try { if (btnCopy) btnCopy.removeEventListener("click", onCopy); } catch {}
+        try { if (btnOpen) btnOpen.removeEventListener("click", onOpen); } catch {}
+        oldDetach();
+      };
+
+      modal.hidden = false;
+    };
+
+    const openFrequentVisitorEditor = async (mode, item) => {
+      residentOptions = await loadResidentOptions();
+      const modal = ensureFrequentVisitorModal();
+      let detach = () => {};
+      const detachModalClose = bindModalClose(modal, () => detach());
+
+      const isEdit = mode === "edit";
+      const data = item || {};
+      const titleEl = modal.querySelector("#frequentVisitorModalTitle");
+      const form = modal.querySelector("#frequentVisitorForm");
+      const statusEl = modal.querySelector("#frequentVisitorStatus");
+      const inputName = modal.querySelector("#nwfv_name");
+      const inputUnit = modal.querySelector("#nwfv_unit");
+      const unitDatalist = modal.querySelector("#frequentUnitOptions");
+      const unitPicker = modal.querySelector("#frequentUnitPicker");
+      const pickUnitBtn = modal.querySelector("#btnPickFrequentUnit");
+      const inputPhone = modal.querySelector("#nwfv_phone");
+      const purposeTypeEl = modal.querySelector("#nwfv_purposeType");
+      const purposeOtherField = modal.querySelector("#nwfv_purposeOtherField");
+      const purposeOtherEl = modal.querySelector("#nwfv_purposeOther");
+      const inputPartySize = modal.querySelector("#nwfv_partySize");
+      const inputPlate = modal.querySelector("#nwfv_plate");
+      const inputExpire = modal.querySelector("#nwfv_expire");
+      const closeBtn = modal.querySelector("#btnCloseFrequentVisitorModal");
+      const cancelBtn = modal.querySelector("#btnCancelFrequentVisitorModal");
+      const submitBtn = modal.querySelector("#btnSubmitFrequentVisitorModal");
+
+      const setModalStatus = (msg, isError) => {
+        if (!statusEl) return;
+        const t = String(msg || "").trim();
+        statusEl.textContent = t;
+        statusEl.hidden = !t;
+        statusEl.classList.toggle("error", Boolean(isError));
+      };
+
+      if (titleEl) titleEl.textContent = isEdit ? "編輯常用訪客" : "新增常用訪客";
+      if (submitBtn) submitBtn.textContent = isEdit ? "更新" : "建立";
+      if (inputName) inputName.value = isEdit ? String(data.name || "") : "";
+      if (inputUnit) inputUnit.value = isEdit ? String(data.unit || "") : "";
+      if (inputPhone) inputPhone.value = isEdit ? String(data.phone || "") : "";
+      if (inputPartySize) inputPartySize.value = "1";
+      if (inputPlate) inputPlate.value = isEdit ? String(data.plate || "") : "";
+      const expireDate = isEdit ? toDate(data.expiresAt) : null;
+      if (inputExpire) {
+        inputExpire.value = expireDate
+          ? `${expireDate.getFullYear()}-${pad2(expireDate.getMonth() + 1)}-${pad2(expireDate.getDate())}`
+          : "";
+      }
+
+      const normalizePurposeType = (raw) => {
+        const v = String(raw || "").trim();
+        /* 舊資料別名對應到新選項 */
+        const alias = { "施工修繕": "廠商施工", "快遞外送": "外送" };
+        const mapped = alias[v] || v;
+        const known = ["訪客到訪", "親友拜訪", "廠商施工", "外送", "看房", "其他"];
+        if (known.includes(mapped)) return mapped;
+        if (!v) return "訪客到訪";
+        return "其他";
+      };
+      const existingPurpose = String(data.purpose || "");
+      const existingPurposeType = normalizePurposeType(String(data.purposeType || existingPurpose));
+      const existingOther = existingPurposeType === "其他" ? String(data.purposeOther || (existingPurposeType === existingPurpose ? "" : existingPurpose) || "") : "";
+      if (purposeTypeEl) purposeTypeEl.value = existingPurposeType;
+      if (purposeOtherEl) purposeOtherEl.value = existingOther;
+
+      const setPurposeOtherVisible = () => {
+        const isOther = purposeTypeEl && String(purposeTypeEl.value || "") === "其他";
+        if (purposeOtherField) {
+          purposeOtherField.hidden = !isOther;
+          purposeOtherField.style.display = isOther ? "" : "none";
+        }
+      };
+      setPurposeOtherVisible();
+      setModalStatus("", false);
+
+      if (unitDatalist) {
+        unitDatalist.innerHTML = residentOptions.map((u) => {
+          const uid = String(u.id || "");
+          const name = String(u.name || "");
+          return `<option value="${uid.replace(/"/g, "&quot;")}" label="${name.replace(/"/g, "&quot;")}"></option>`;
+        }).join("");
+      }
+
+      const closeUnitPicker = () => {
+        if (unitPicker) unitPicker.hidden = true;
+        if (pickUnitBtn) pickUnitBtn.classList.remove("active");
+      };
+      const renderUnitPicker = () => {
+        if (!unitPicker) return;
+        unitPicker.innerHTML = "";
+        let count = 0;
+        (Array.isArray(residentOptions) ? residentOptions : []).forEach((u) => {
+          const uid = String(u.id || "").trim();
+          if (!uid) return;
+          const name = String(u.name || "").trim();
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "unit-option";
+          const idSpan = document.createElement("span");
+          idSpan.className = "unit-id";
+          idSpan.textContent = uid;
+          btn.appendChild(idSpan);
+          if (name) {
+            const nameSpan = document.createElement("span");
+            nameSpan.className = "unit-name";
+            nameSpan.textContent = name;
+            btn.appendChild(nameSpan);
+          }
+          btn.addEventListener("click", () => {
+            if (inputUnit) {
+              inputUnit.value = uid;
+              inputUnit.dispatchEvent(new Event("input", { bubbles: true }));
+              inputUnit.focus();
+            }
+            closeUnitPicker();
+          });
+          unitPicker.appendChild(btn);
+          count += 1;
+        });
+        if (!count) {
+          const empty = document.createElement("div");
+          empty.className = "unit-empty";
+          empty.textContent = "尚無戶號資料";
+          unitPicker.appendChild(empty);
+        }
+      };
+      const onToggleUnitPicker = (e) => {
+        e.preventDefault();
+        if (!unitPicker) return;
+        if (unitPicker.hidden) {
+          renderUnitPicker();
+          unitPicker.hidden = false;
+          if (pickUnitBtn) pickUnitBtn.classList.add("active");
+        } else {
+          closeUnitPicker();
+        }
+      };
+      if (pickUnitBtn) pickUnitBtn.addEventListener("click", onToggleUnitPicker);
+
+      const onDocClickUnitPicker = (e) => {
+        if (!unitPicker || unitPicker.hidden) return;
+        const t = e.target;
+        if (unitPicker.contains(t)) return;
+        if (pickUnitBtn && pickUnitBtn.contains(t)) return;
+        closeUnitPicker();
+      };
+      document.addEventListener("click", onDocClickUnitPicker);
+      closeUnitPicker();
+
+      const onCancel = (e) => {
+        if (e) e.preventDefault();
+        modal.hidden = true;
+        detach();
+      };
+      if (cancelBtn) cancelBtn.addEventListener("click", onCancel);
+      if (closeBtn) closeBtn.addEventListener("click", onCancel);
+      if (purposeTypeEl) purposeTypeEl.addEventListener("change", setPurposeOtherVisible);
+
+      const onSubmit = async (e) => {
+        e.preventDefault();
+        if (submitBtn) submitBtn.disabled = true;
+        setModalStatus("儲存中...", false);
+
+        const name = normalizeText(inputName ? inputName.value : "");
+        const unit = normalizeText(inputUnit ? inputUnit.value : "");
+        const phone = normalizeText(inputPhone ? inputPhone.value : "");
+        const purposeType = normalizeText(purposeTypeEl ? purposeTypeEl.value : "");
+        const purposeOther = normalizeText(purposeOtherEl ? purposeOtherEl.value : "");
+        const purpose = purposeType === "其他" ? purposeOther : purposeType;
+        /* 常用訪客固定 1 人 */
+        const partySize = 1;
+        const plate = normalizeText(inputPlate ? inputPlate.value : "");
+        const expireRaw = String(inputExpire ? inputExpire.value : "").trim();
+
+        if (!name) {
+          setModalStatus("請填寫訪客姓名。", true);
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+        if (purposeType === "其他" && !purposeOther) {
+          setModalStatus("請填寫到訪事由。", true);
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+
+        const Timestamp = firebase.firestore.Timestamp;
+        const expiresAt = expireRaw ? Timestamp.fromDate(new Date(`${expireRaw}T23:59:59`)) : null;
+        const docRef = isEdit
+          ? frequentCollRef().doc(String(data.id || data.code || ""))
+          : frequentCollRef().doc(genUniqueFrequentCode());
+        const id = String(docRef.id || "");
+        const payload = {
+          code: id,
+          name,
+          unit,
+          phone,
+          purpose,
+          purposeType: purposeType === "其他" ? "其他" : purposeType,
+          purposeOther: purposeType === "其他" ? purposeOther : "",
+          partySize,
+          plate,
+          expiresAt,
+          cname: String(cname || ""),
+          active: isEdit ? data.active !== false : true,
+          updatedAt: FieldValue.serverTimestamp(),
+        };
+        if (!isEdit) {
+          payload.createdAt = FieldValue.serverTimestamp();
+          payload.createdBy = String((auth.currentUser && auth.currentUser.uid) || "");
+          payload.createdByName = String(creatorName || "");
+        }
+        try {
+          await docRef.set(payload, { merge: !isEdit ? false : true });
+        } catch (err) {
+          const c = String(err && err.code ? err.code : "");
+          setModalStatus(c.includes("permission-denied") ? "沒有權限執行此操作。" : "儲存失敗，請稍後再試。", true);
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+
+        modal.hidden = true;
+        detach();
+
+        try {
+          const nextItem = {
+            id,
+            code: id,
+            name,
+            unit,
+            phone,
+            purpose,
+            purposeType: payload.purposeType,
+            purposeOther: payload.purposeOther,
+            partySize,
+            plate,
+            expiresAt,
+            active: payload.active,
+            createdBy: !isEdit ? String((auth.currentUser && auth.currentUser.uid) || "") : String(data.createdBy || ""),
+            createdByName: !isEdit ? String(creatorName || "") : String(data.createdByName || ""),
+            createdAt: !isEdit ? Timestamp.fromDate(new Date()) : (data.createdAt || null),
+          };
+          const idx = frequentVisitors.findIndex((x) => String(x.id || "") === id);
+          if (idx >= 0) frequentVisitors[idx] = { ...(frequentVisitors[idx] || {}), ...nextItem };
+          else frequentVisitors.unshift(nextItem);
+          renderList();
+          if (!isEdit) toast("已新增常用訪客");
+          else toast("已更新");
+        } catch {
+          toast("已儲存，但畫面更新失敗");
+        }
+
+        if (submitBtn) submitBtn.disabled = false;
+      };
+
+      form.addEventListener("submit", onSubmit);
+      const oldDetach = detach;
+      detach = () => {
+        try { form.removeEventListener("submit", onSubmit); } catch {}
+        try {
+          if (cancelBtn) cancelBtn.removeEventListener("click", onCancel);
+          if (closeBtn) closeBtn.removeEventListener("click", onCancel);
+        } catch {}
+        try { if (purposeTypeEl) purposeTypeEl.removeEventListener("change", setPurposeOtherVisible); } catch {}
+        try { if (pickUnitBtn) pickUnitBtn.removeEventListener("click", onToggleUnitPicker); } catch {}
+        try { document.removeEventListener("click", onDocClickUnitPicker); } catch {}
+        closeUnitPicker();
+        oldDetach();
+      };
+
+      modal.hidden = false;
+      requestAnimationFrame(() => {
+        if (inputName) inputName.focus();
+      });
+    };
+
     const openVisitorEditor = async (mode, item) => {
       residentOptions = await loadResidentOptions();
       const modal = ensureVisitorModal();
@@ -18563,9 +19513,12 @@
 
       const normalizePurposeType = (raw) => {
         const v = String(raw || "").trim();
-        const known = ["親友拜訪", "施工修繕", "快遞外送", "其他"];
-        if (known.includes(v)) return v;
-        if (!v) return "親友拜訪";
+        /* 舊資料別名對應到新選項 */
+        const alias = { "施工修繕": "廠商施工", "快遞外送": "外送" };
+        const mapped = alias[v] || v;
+        const known = ["訪客到訪", "親友拜訪", "廠商施工", "外送", "看房", "其他"];
+        if (known.includes(mapped)) return mapped;
+        if (!v) return "訪客到訪";
         return "其他";
       };
       const existingPurpose = String(data.purpose || "");
@@ -18865,21 +19818,29 @@
     }
     if (historyBrowseBtn) {
       historyBrowseBtn.addEventListener("click", async () => {
-        if (!historyUnit) {
-          toast("請先選擇戶號。");
-          return;
-        }
+        const prevText = historyBrowseBtn.textContent;
         historyBrowseBtn.disabled = true;
+        historyBrowseBtn.textContent = "準備中...";
         try {
-          await publishUnitHistory(historyUnit);
+          await publishOverviewHistory();
         } catch (err) {
           const code = String(err && err.code ? err.code : "");
-          toast(code.includes("permission-denied") ? "公開資料發佈失敗：沒有權限。" : "公開資料發佈失敗，請稍後再試。");
-        } finally {
+          try { console.error("[visitor history share] publish failed", err); } catch {}
+          toast(code.includes("permission-denied")
+            ? "公開資料發佈失敗：沒有權限。"
+            : `公開資料發佈失敗${code ? `（${code}）` : ""}，請稍後再試。`);
           historyBrowseBtn.disabled = false;
+          historyBrowseBtn.textContent = prevText;
+          return;
         }
-        const url = `visitor-history.html?c=${encodeURIComponent(String(visitorCommunitySlug || ""))}&u=${encodeURIComponent(historyUnit)}&m=${encodeURIComponent(currentMonthKey())}`;
-        window.open(url, "_blank");
+        historyBrowseBtn.disabled = false;
+        historyBrowseBtn.textContent = prevText;
+
+        /* 以目前所在站台解析，確保開啟的頁面與後台同一份版本（正式站行為相同） */
+        const shareUrl = new URL("visitor-history.html", location.href);
+        shareUrl.searchParams.set("c", String(visitorCommunitySlug || ""));
+        const scopeLabel = `分享範圍：${cname || visitorCommunitySlug || "本社區"}｜全部戶號`;
+        openVisitorHistoryShareModal({ url: shareUrl.toString(), scopeLabel });
       });
     }
     if (historyExcelBtn) historyExcelBtn.addEventListener("click", exportHistoryExcel);
@@ -18891,10 +19852,55 @@
     });
 
     if (addBtn) addBtn.addEventListener("click", () => openVisitorEditor("create"));
+    if (addFrequentVisitorBtn) addFrequentVisitorBtn.addEventListener("click", () => openFrequentVisitorEditor("create"));
     if (addElevatorCardBtn) addElevatorCardBtn.addEventListener("click", () => openElevatorCardEditor("create"));
     if (openElevatorCardNameSettingsBtn) openElevatorCardNameSettingsBtn.addEventListener("click", openElevatorCardNameSettings);
     if (scanBtn) scanBtn.addEventListener("click", () => openVisitorScanModal80({ cid: visitorCommunitySlug, onApplied: applyLocalVisitorPatch }));
     if (visitorQrBtn) visitorQrBtn.addEventListener("click", () => openVisitorQrModal80({ communityId: cid, communityName: cname }));
+
+    if (listEl) {
+      listEl.addEventListener("click", async (e) => {
+        const frequentEditBtn = e.target && e.target.closest ? e.target.closest("[data-frequent-edit]") : null;
+        if (frequentEditBtn) {
+          const id = String(frequentEditBtn.getAttribute("data-frequent-edit") || "").trim();
+          const item = frequentVisitors.find((x) => String(x.id || "") === id) || null;
+          if (item) openFrequentVisitorEditor("edit", item);
+          return;
+        }
+        const frequentQrBtn = e.target && e.target.closest ? e.target.closest("[data-frequent-qr]") : null;
+        if (frequentQrBtn) {
+          const id = String(frequentQrBtn.getAttribute("data-frequent-qr") || "").trim();
+          const item = frequentVisitors.find((x) => String(x.id || "") === id) || null;
+          if (item) openFrequentPassModal(item);
+          return;
+        }
+        const frequentDelBtn = e.target && e.target.closest ? e.target.closest("[data-frequent-delete]") : null;
+        if (!frequentDelBtn) return;
+        const freqId = String(frequentDelBtn.getAttribute("data-frequent-delete") || "").trim();
+        const freqItem = frequentVisitors.find((x) => String(x.id || "") === freqId) || null;
+        if (!freqItem) return;
+        const ok = await (window.nwConfirm ? window.nwConfirm({
+          title: "確認刪除",
+          message: `確定要刪除常用訪客「${String(freqItem.name || freqId)}」？`,
+          okText: "刪除",
+          cancelText: "取消",
+          danger: true,
+        }) : Promise.resolve(window.confirm("確定要刪除？")));
+        if (!ok) return;
+        frequentDelBtn.disabled = true;
+        try {
+          await frequentCollRef().doc(freqId).delete();
+          frequentVisitors = frequentVisitors.filter((x) => String(x.id || "") !== freqId);
+          renderList();
+          toast("已刪除");
+        } catch (err) {
+          const codeText = String(err && err.code ? err.code : "");
+          toast(codeText.includes("permission-denied") ? "沒有權限刪除。" : "刪除失敗");
+        } finally {
+          frequentDelBtn.disabled = false;
+        }
+      });
+    }
 
     if (listEl) {
       listEl.addEventListener("click", async (e) => {

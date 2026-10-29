@@ -14,7 +14,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script defer src="./js/firebase-config.js"></script>
-    <script defer src="./js/visitor-history.js?v=1"></script>
+    <script defer src="./js/visitor-history.js?v=5"></script>
     <style>
       [hidden] { display: none !important; }
       body { background: var(--bg); }
@@ -38,16 +38,20 @@
       .vh-brand img { width: 28px; height: 28px; display: block; }
       .vh-title { font-size: 14px; font-weight: 900; color: rgba(31, 41, 55, 0.92); }
       .vh-sub { font-size: 13px; color: var(--muted); word-break: break-all; }
-      .vh-monthbar {
+      .vh-bar {
         display: grid;
-        grid-template-columns: 44px 1fr 44px;
-        align-items: center;
-        gap: 10px;
+        gap: 8px;
         padding: 10px 16px;
         background: rgba(255, 255, 255, 0.92);
         border-bottom: 1px solid rgba(17, 24, 39, 0.08);
       }
-      .vh-monthbar button {
+      .vh-datebar {
+        display: grid;
+        grid-template-columns: 44px 1fr 44px;
+        align-items: center;
+        gap: 10px;
+      }
+      .vh-bar button {
         height: 40px;
         border-radius: 14px;
         border: 1px solid rgba(17, 24, 39, 0.12);
@@ -62,8 +66,8 @@
         user-select: none;
         -webkit-touch-callout: none;
       }
-      .vh-monthbar button:disabled { opacity: 0.35; cursor: default; }
-      .vh-monthbar select {
+      .vh-bar button:disabled { opacity: 0.35; cursor: default; }
+      .vh-bar select {
         height: 40px;
         border-radius: 14px;
         border: 1px solid rgba(17, 24, 39, 0.12);
@@ -104,10 +108,23 @@
         border: 1px solid rgba(211, 47, 47, 0.22);
         white-space: nowrap;
       }
-      .vh-meta { display: grid; gap: 6px; }
-      .vh-meta-row { display: grid; grid-template-columns: 62px 1fr; gap: 8px; font-size: 13px; line-height: 1.5; }
-      .vh-k { color: var(--muted); font-weight: 900; }
-      .vh-v { color: var(--text); word-break: break-all; }
+      .vh-list { display: grid; gap: 10px; }
+      .vh-meta {
+        display: grid;
+        border: 1px solid rgba(17, 24, 39, 0.10);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .vh-meta-row { display: grid; grid-template-columns: 68px 1fr; font-size: 13px; line-height: 1.5; }
+      .vh-meta-row + .vh-meta-row { border-top: 1px solid rgba(17, 24, 39, 0.08); }
+      .vh-k {
+        color: var(--muted);
+        font-weight: 900;
+        padding: 6px 10px;
+        background: rgba(17, 24, 39, 0.03);
+        border-right: 1px solid rgba(17, 24, 39, 0.08);
+      }
+      .vh-v { color: var(--text); word-break: break-all; padding: 6px 10px; }
       .vh-empty { text-align: center; color: var(--muted); font-size: 14px; padding: 32px 12px; }
       #vhStatus { margin: 0 0 4px; }
     </style>
@@ -122,10 +139,15 @@
         <div class="vh-sub" id="vhSub">—</div>
       </header>
 
-      <div class="vh-monthbar">
-        <button type="button" id="vhPrev" aria-label="上一個月">‹</button>
-        <select id="vhMonth" aria-label="選擇月份"></select>
-        <button type="button" id="vhNext" aria-label="下一個月">›</button>
+      <div class="vh-bar">
+        <div id="vhUnitWrap" hidden>
+          <select id="vhUnit" aria-label="選擇戶號"></select>
+        </div>
+        <div class="vh-datebar">
+          <button type="button" id="vhPrev" aria-label="前一日">‹</button>
+          <select id="vhDate" aria-label="選擇日期"></select>
+          <button type="button" id="vhNext" aria-label="後一日">›</button>
+        </div>
       </div>
 
       <section class="vh-main">

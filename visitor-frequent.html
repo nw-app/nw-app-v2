@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>常用訪客證</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg?v=4" />
+    <meta name="theme-color" content="#d32f2f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="robots" content="noindex,nofollow" />
+    <link rel="apple-touch-icon" href="icon-192.png?v=2" />
+    <link rel="stylesheet" href="./css/index.css?v=3" />
+    <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script defer src="./js/firebase-config.js"></script>
+    <script defer src="./js/visitor-frequent.js?v=2"></script>
+    <style>
+      [hidden] { display: none !important; }
+      body { background: var(--bg); }
+      .vf-wrap {
+        min-height: 100dvh;
+        width: 100%;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        overflow-x: hidden;
+      }
+      .vf-hd {
+        padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+        display: grid;
+        gap: 6px;
+        align-content: center;
+        border-bottom: 1px solid rgba(17, 24, 39, 0.08);
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(10px);
+      }
+      .vf-brand { display: flex; align-items: center; gap: 10px; font-weight: 900; }
+      .vf-brand img { width: 28px; height: 28px; display: block; }
+      .vf-title { font-size: 14px; font-weight: 900; color: rgba(31, 41, 55, 0.92); }
+      .vf-sub { font-size: 13px; color: var(--muted); word-break: break-all; }
+      .vf-main {
+        padding: 16px 12px calc(24px + env(safe-area-inset-bottom));
+        display: grid;
+        gap: 14px;
+        align-content: start;
+      }
+      .vf-card {
+        background: #fff;
+        border: 1px solid rgba(17, 24, 39, 0.10);
+        border-radius: 20px;
+        padding: 18px 16px;
+        box-shadow: 0 8px 24px rgba(17, 24, 39, 0.08);
+        display: grid;
+        gap: 12px;
+      }
+      .vf-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .vf-name { font-size: 20px; font-weight: 900; color: var(--text); word-break: break-all; }
+      .vf-badge {
+        flex: 0 0 auto;
+        font-size: 12px;
+        font-weight: 900;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgba(22, 163, 74, 0.12);
+        color: #15803d;
+        border: 1px solid rgba(22, 163, 74, 0.28);
+        white-space: nowrap;
+      }
+      .vf-badge.warning {
+        background: rgba(211, 47, 47, 0.10);
+        color: #b91c1c;
+        border-color: rgba(211, 47, 47, 0.22);
+      }
+      .vf-meta {
+        display: grid;
+        border: 1px solid rgba(17, 24, 39, 0.10);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .vf-meta-row { display: grid; grid-template-columns: 88px 1fr; font-size: 14px; line-height: 1.5; }
+      .vf-meta-row + .vf-meta-row { border-top: 1px solid rgba(17, 24, 39, 0.08); }
+      .vf-k {
+        color: var(--muted);
+        font-weight: 900;
+        padding: 8px 10px;
+        background: rgba(17, 24, 39, 0.03);
+        border-right: 1px solid rgba(17, 24, 39, 0.08);
+      }
+      .vf-v { color: var(--text); word-break: break-all; padding: 8px 10px; }
+      .vf-foot { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.6; }
+      .vf-qr {
+        display: grid;
+        gap: 8px;
+        justify-items: center;
+        padding: 4px 0 2px;
+      }
+      .vf-qr img {
+        width: min(240px, 62vw);
+        height: auto;
+        aspect-ratio: 1 / 1;
+        display: block;
+        border-radius: 12px;
+        background: #fff;
+      }
+      .vf-qr-tip { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.6; }
+      #vfStatus { margin: 0; }
+    </style>
+  </head>
+  <body>
+    <main class="vf-wrap">
+      <header class="vf-hd">
+        <div class="vf-brand">
+          <img src="./logo.svg?v=4" alt="LOGO" />
+          <div class="vf-title">生活網 · 常用訪客證</div>
+        </div>
+        <div class="vf-sub" id="vfSub">—</div>
+      </header>
+
+      <section class="vf-main">
+        <div class="status" id="vfStatus" hidden></div>
+        <article class="vf-card" id="vfCard" hidden>
+          <div class="vf-top">
+            <div class="vf-name" id="vfName">—</div>
+            <span class="vf-badge" id="vfBadge">有效</span>
+          </div>
+          <div class="vf-qr" id="vfQrWrap" hidden>
+            <img id="vfQr" alt="訪客證 QR code" />
+            <div class="vf-qr-tip">請出示此 QR code 供社區管理人員掃描登記：第一次掃描為「進入」，第二次為「離開」。</div>
+          </div>
+          <div class="vf-meta" id="vfMeta"></div>
+          <div class="vf-foot" id="vfFoot"></div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
