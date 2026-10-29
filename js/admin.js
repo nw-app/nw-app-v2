@@ -24224,8 +24224,9 @@
     return (part / whole) * 100;
   }
 
+  // 百分比顯示：固定小數點後 2 位
   function cvFormatPct(value) {
-    return `${Math.round(Number(value) || 0)}%`;
+    return `${(Number(value) || 0).toFixed(2)}%`;
   }
 
   /* 報到統計：同時涵蓋「戶數（人數）」與「區分所有權比例」，
@@ -25450,8 +25451,8 @@
       ? `戶數 ${cvFormatPct(ck.countRatePct)}｜區分所有權 ${ck.shareKnown ? cvFormatPct(ck.shareRatePct) : "—"}`
       : `戶數 ${cvFormatPct(ck.countRatePct)}`;
     const ckTargetText = ck.showOwnership
-      ? `門檻 戶數 ${ck.targetCountPct}%／區分所有權 ${ck.targetSharePct}%`
-      : `門檻 戶數 ${ck.targetCountPct}%`;
+      ? `門檻 戶數 ${cvFormatPct(ck.targetCountPct)}／區分所有權 ${cvFormatPct(ck.targetSharePct)}`
+      : `門檻 戶數 ${cvFormatPct(ck.targetCountPct)}`;
     return `
       <div class="row" style="justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:14px;">
         <div>
@@ -25468,7 +25469,7 @@
         <div class="co-card tone-success"><div class="co-label">名單總數</div><div class="co-value">${roster.length}<span class="co-unit">人</span></div><div class="co-sub">本專案獨立名單</div></div>
         <div class="co-card ${checkedInCount ? "tone-success" : "tone-muted"}"><div class="co-label">已報到</div><div class="co-value">${checkedInCount}<span class="co-unit">人</span></div><div class="co-sub">${ckOwnershipText}</div></div>
         <div class="co-card ${ck.passed ? "tone-success" : "tone-muted"}"><div class="co-label">報到結果</div><div class="co-value">${ck.passed ? "通過" : "未通過"}</div><div class="co-sub">${ckTargetText}</div></div>
-        <div class="co-card ${votedResidents ? "tone-success" : "tone-muted"}"><div class="co-label">已投票</div><div class="co-value">${votedResidents}<span class="co-unit">人</span></div><div class="co-sub">投票率 ${voteBaseCount ? Math.round((votedResidents / voteBaseCount) * 100) : 0}%（以實際報到 ${voteBaseCount} 人為分母）</div></div>
+        <div class="co-card ${votedResidents ? "tone-success" : "tone-muted"}"><div class="co-label">已投票</div><div class="co-value">${votedResidents}<span class="co-unit">人</span></div><div class="co-sub">投票率 ${cvFormatPct(voteBaseCount ? (votedResidents / voteBaseCount) * 100 : 0)}（以實際報到 ${voteBaseCount} 人為分母）</div></div>
         <div class="co-card tone-primary"><div class="co-label">議題數</div><div class="co-value">${enabledTopics.length}<span class="co-unit">題</span></div><div class="co-sub">文件 ${documents.length} 筆</div></div>
       </div>
       <div class="row" style="margin-top:10px;">
@@ -25520,7 +25521,7 @@
           <div style="font-weight:700;">報到進度：戶數 ${cvFormatPct(ck.countRatePct)}（${ck.doneCount}/${ck.totalCount} 戶）${ck.showOwnership ? (ck.shareKnown ? `｜區分所有權比例 ${cvFormatPct(ck.shareRatePct)}` : "｜區分所有權比例未填") : ""}</div>
           <span class="status-chip ${ck.passed ? "success" : "warning"}">${ck.passed ? "已達通過門檻" : "未達通過門檻"}</span>
         </div>
-        <div class="muted" style="margin-top:6px;">通過門檻：${ck.showOwnership ? `戶數 ${ck.targetCountPct}%／區分所有權比例 ${ck.targetSharePct}%（兩者皆須達標）` : `戶數 ${ck.targetCountPct}%`}｜未到 ${ck.missCount} 戶</div>
+        <div class="muted" style="margin-top:6px;">通過門檻：${ck.showOwnership ? `戶數 ${cvFormatPct(ck.targetCountPct)}／區分所有權比例 ${cvFormatPct(ck.targetSharePct)}（兩者皆須達標）` : `戶數 ${cvFormatPct(ck.targetCountPct)}`}｜未到 ${ck.missCount} 戶</div>
       </div>
       <div class="row" style="justify-content:space-between; gap:12px; margin-bottom:14px;">
         <div class="muted">可用方式：${project.settings.allowManualCheckin ? "人工" : ""}${project.settings.allowManualCheckin && project.settings.allowQrCheckin ? "、" : ""}${project.settings.allowQrCheckin ? "QR" : ""}</div>
@@ -25591,7 +25592,7 @@
                   ${project.settings.allowManualVote ? `<button class="btn btn-sm btn-primary" type="button" data-cv-cast-topic="${escapeHtml(topic.id)}">人工投票</button>` : ""}
                 </div>
               </div>
-              <div class="muted" style="margin-bottom:10px;">通過門檻：${stats.showOwnership ? `得票戶數 ${stats.passCountPct}%／得票區分所有權 ${stats.passSharePct}%（兩者皆須達標）` : `得票戶數 ${stats.passCountPct}%`}${(stats.showOwnership ? (stats.usingDefaultCount || stats.usingDefaultShare) : stats.usingDefaultCount) ? "｜沿用專案預設" : "｜本議題自訂"}</div>
+              <div class="muted" style="margin-bottom:10px;">通過門檻：${stats.showOwnership ? `得票戶數 ${cvFormatPct(stats.passCountPct)}／得票區分所有權 ${cvFormatPct(stats.passSharePct)}（兩者皆須達標）` : `得票戶數 ${cvFormatPct(stats.passCountPct)}`}${(stats.showOwnership ? (stats.usingDefaultCount || stats.usingDefaultShare) : stats.usingDefaultCount) ? "｜沿用專案預設" : "｜本議題自訂"}</div>
               <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap:10px;">
                 ${(topic.options || []).map((option) => {
                   const opt = stats.options.find((item) => item.id === String(option.id || "").trim())

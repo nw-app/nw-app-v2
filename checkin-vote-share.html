@@ -702,7 +702,7 @@
           topics: [],
           elections: [],
           tab: "checkin",
-          voteIndex: 0,
+          voteFocus: -1,
           electionIndex: 0,
         };
         let db = null;
@@ -823,8 +823,9 @@
           return whole ? (part / whole) * 100 : 0;
         }
 
+        // 百分比顯示：固定小數點後 2 位
         function pctText(value) {
-          return `${Math.round(Number(value) || 0)}%`;
+          return `${(Number(value) || 0).toFixed(2)}%`;
         }
 
         function checkinStats() {
@@ -1092,47 +1093,55 @@
             return;
           }
 
-          state.voteIndex = Math.max(0, Math.min(topics.length - 1, Number(state.voteIndex) || 0));
-          const activeIndex = state.voteIndex;
-          const topic = topics[activeIndex];
-          const s = topicStats(topic);
+          // 預設顯示全部議題；點標籤只顯示單一議題，再按同一標籤回復顯示全部
+          const focus = Number.isInteger(state.voteFocus) ? state.voteFocus : -1;
+          const focusValid = focus >= 0 && focus < topics.length;
 
-          // 子分頁：一次只顯示一個議題
           if (chips) {
-            chips.innerHTML = topics.map((topic, index) =>
-              `<button class="topic-chip${index === activeIndex ? " is-active" : ""}" type="button" data-topic-index="${index}">${escapeHtml(topic.title)}</button>`
-            ).join("");
+            chips.innerHTML = topics.map((topic, index) => {
+              const active = focusValid && index === focus;
+              return `<button class="topic-chip${active ? " is-active" : ""}" type="button" data-topic-index="${index}">${escapeHtml(topic.title)}</button>`;
+            }).join("");
           }
 
-          const rows = topic.options.map((opt) => {
-            const o = s.options.find((item) => item.id === opt.id)
-              || { count: 0, countRatePct: 0, shareRatePct: 0, passed: false };
+          const cardOf = (topic, index) => {
+            const s = topicStats(topic);
+            const rows = topic.options.map((opt) => {
+              const o = s.options.find((item) => item.id === opt.id)
+                || { count: 0, countRatePct: 0, shareRatePct: 0, passed: false };
+              return `
+                <div class="opt-row${o.passed ? " is-pass" : ""}">
+                  <div class="opt-top">
+                    <span class="opt-label">${escapeHtml(opt.label)}</span>
+                    <span class="opt-count">${o.count} 票<br />戶數 ${pctText(o.countRatePct)}${s.showOwnership && s.shareKnown ? `<br />區分所有權 ${pctText(o.shareRatePct)}` : ""}</span>
+                  </div>
+                  <div class="opt-bar"><i style="width:${Math.min(100, o.countRatePct)}%"></i></div>
+                  ${o.passed ? `<div class="opt-flag">已達通過門檻</div>` : ""}
+                </div>
+              `;
+            }).join("");
             return `
-              <div class="opt-row${o.passed ? " is-pass" : ""}">
-                <div class="opt-top">
-                  <span class="opt-label">${escapeHtml(opt.label)}</span>
-                  <span class="opt-count">${o.count} 票<br />戶數 ${pctText(o.countRatePct)}${s.showOwnership && s.shareKnown ? `<br />區分所有權 ${pctText(o.shareRatePct)}` : ""}</span>
+              <article class="topic-card" data-topic-index="${index}">
+                <div class="topic-info">
+                  <div class="topic-hd">
+                    <span class="topic-title">${escapeHtml(topic.title)}</span>
+                    <span class="topic-tag">${topic.singleChoice ? "單選" : "多選"}</span>
+                  </div>
+                  <div class="topic-meta">投票 ${s.voterCount}/${s.totalCount} 戶</div>
                 </div>
-                <div class="opt-bar"><i style="width:${Math.min(100, o.countRatePct)}%"></i></div>
-                ${o.passed ? `<div class="opt-flag">已達通過門檻</div>` : ""}
-              </div>
+                <div class="opt-list">${rows}</div>
+              </article>
             `;
-          }).join("");
+          };
 
-          grid.innerHTML = `
-            <article class="topic-card" data-topic-index="${activeIndex}">
-              <div class="topic-info">
-                <div class="topic-hd">
-                  <span class="topic-title">${escapeHtml(topic.title)}</span>
-                  <span class="topic-tag">${topic.singleChoice ? "單選" : "多選"}</span>
-                </div>
-                <div class="topic-meta">投票 ${s.voterCount}/${s.totalCount} 戶</div>
-              </div>
-              <div class="opt-list">${rows}</div>
-            </article>
-          `;
+          const shown = focusValid ? [[topics[focus], focus]] : topics.map((topic, index) => [topic, index]);
+          grid.innerHTML = shown.map(([topic, index]) => cardOf(topic, index)).join("");
 
-          if (more) more.textContent = `子分頁 ${activeIndex + 1} / ${topics.length}`;
+          if (more) {
+            more.textContent = focusValid
+              ? `單一議題（${focus + 1} / ${topics.length}）`
+              : (topics.length > 1 ? `共 ${topics.length} 個議題` : "");
+          }
         }
 
         function renderElection() {
@@ -1270,14 +1279,30 @@
           btn.addEventListener("click", () => switchTab(String(btn.getAttribute("data-tab") || "checkin")));
         });
 
-        // 點擊投票子分頁標籤：切換目前議題
+        // 點擊議題標籤：按下只顯示該議題；再按同一標籤回復顯示全部議題
         const voteChipsEl = el("voteChips");
         if (voteChipsEl) {
           voteChipsEl.addEventListener("click", (evt) => {
             const btn = evt.target.closest(".topic-chip");
             if (!btn) return;
-            state.voteIndex = Math.max(0, Number(btn.getAttribute("data-topic-index") || 0) || 0);
-            renderVote();
+            const index = Math.max(0, Number(btn.getAttribute("data-topic-index") || 0) || 0);
+            const grid = el("voteGrid");
+            if (state.voteFocus === index) {
+              // 再按一次 → 回復顯示全部
+              state.voteFocus = -1;
+              renderVote();
+              grid.scrollTop = 0;
+            } else {
+              state.voteFocus = index;
+              renderVote();
+              const card = grid.querySelector(`.topic-card[data-topic-index="${index}"]`);
+              if (card) {
+                card.scrollIntoView({ behavior: "smooth", block: "start" });
+                card.classList.remove("is-flash");
+                void card.offsetWidth;
+                card.classList.add("is-flash");
+              }
+            }
           });
         }
 
