@@ -23868,6 +23868,14 @@
     return Math.min(100, Math.max(0, Math.round(n)));
   }
 
+  // 區分所有權比例顯示小數位數：限定 0～6 位整數，空值或無效值回退預設（4 位）
+  function cvClampDecimals(value, fallback) {
+    if (value === null || value === undefined || String(value).trim() === "") return fallback;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(6, Math.max(0, Math.round(n)));
+  }
+
   // 議題層級門檻：允許留空（null）表示沿用專案預設
   function cvOptionalPct(value) {
     if (value === null || value === undefined || String(value).trim() === "") return null;
@@ -23890,6 +23898,8 @@
       nameDisplay: String(v.nameDisplay || "").trim() === "mask" ? "mask" : "full",
       // 區分所有權顯示：預設開啟；關閉時報到與投票僅以票數（戶數）為準
       showOwnership: v.showOwnership !== false,
+      // 區分所有權比例顯示的小數位數（預設 4 位，可設定 0～6 位）
+      ownershipDecimals: cvClampDecimals(v.ownershipDecimals, 4),
       // 通過門檻：報到與議題皆需「戶數（人數）」與「區分所有權比例」同時達標
       checkinTargetCountPct: cvClampPct(v.checkinTargetCountPct, 50),
       checkinTargetSharePct: cvClampPct(v.checkinTargetSharePct, 50),
@@ -23974,6 +23984,16 @@
     if (!raw) return "";
     const num = Number(raw.replace(/[^0-9.-]/g, ""));
     return Number.isFinite(num) ? num.toFixed(2) : raw;
+  }
+
+  // 依專案設定的小數位數格式化「區分所有權比例」；非數值時原樣回傳
+  function cvFormatOwnership(value, project) {
+    const raw = String(value == null ? "" : value).trim();
+    if (!raw) return "";
+    const num = Number(raw.replace(/[^0-9.-]/g, ""));
+    if (!Number.isFinite(num)) return raw;
+    const settings = cvNormalizeProjectSettings(project && project.settings ? project.settings : {});
+    return num.toFixed(settings.ownershipDecimals);
   }
 
   // 議題選項代號：依選項順序固定對應（第 1 個 T、第 2 個 F…）
@@ -25639,7 +25659,7 @@
                   <td data-label="地址">${escapeHtml(entry.address || "—")}</td>
                   <td data-label="棟別">${escapeHtml(entry.building || "—")}</td>
                   <td data-label="坪數">${escapeHtml(cvFixed2(entry.area) || "—")}</td>
-                  <td data-label="區分所有權比例">${entry.ownership ? `${escapeHtml(cvFixed2(entry.ownership))}%` : "—"}</td>
+                  <td data-label="區分所有權比例">${entry.ownership ? `${escapeHtml(cvFormatOwnership(entry.ownership, project))}%` : "—"}</td>
                   <td data-label="報到">${entry.checkedIn ? `<span class="status-chip success">已報到</span>` : `<span class="status-chip gray">未報到</span>`}</td>
                   <td data-label="投票">${cvResidentVoteCount(entry)}/${topics.length}</td>
                   <td data-label="操作">
@@ -26057,7 +26077,7 @@
               <td>${escapeHtml(cvFormatUnit(entry))}</td>
               <td>${escapeHtml(entry.address || "")}</td>
               <td>${escapeHtml(entry.area || "")}</td>
-              ${showOwnership ? `<td>${entry.ownership ? `${escapeHtml(entry.ownership)}%` : ""}</td>` : ""}
+              ${showOwnership ? `<td>${entry.ownership ? `${escapeHtml(cvFormatOwnership(entry.ownership, project))}%` : ""}</td>` : ""}
               <td></td>
               <td></td>
             </tr>
@@ -26065,7 +26085,7 @@
           <tr>
             <td colspan="4" style="text-align:right;font-weight:700;">合計</td>
             ${showOwnership
-              ? `<td style="font-weight:700;">${entries.length} 戶${total > 0 ? `｜${total.toFixed(2).replace(/\.00$/, "")}%` : ""}</td><td></td><td></td>`
+              ? `<td style="font-weight:700;">${entries.length} 戶${total > 0 ? `｜${cvFormatOwnership(total, project)}%` : ""}</td><td></td><td></td>`
               : `<td style="font-weight:700;">${entries.length} 戶</td><td></td>`}
           </tr>
         </tbody>
@@ -26194,7 +26214,7 @@
               <td></td>
               <td class="cv-doc-roster-opts"><span>□本人</span><span>□委託</span></td>
               <td class="cv-doc-roster-opts"><span>□ 配偶</span><span>□ 有行為能力之直系血親</span><span>□ 其他區分所有權人</span><span>□ 承租人</span></td>
-              ${showOwnership ? `<td>${entry.ownership ? `${escapeHtml(cvFixed2(entry.ownership))}%` : ""}</td>` : ""}
+              ${showOwnership ? `<td>${entry.ownership ? `${escapeHtml(cvFormatOwnership(entry.ownership, project))}%` : ""}</td>` : ""}
               <td></td>
             </tr>
           `).join("")}
@@ -26255,7 +26275,7 @@
             ${meetingHtml}
             ${houseHtml}
             <div class="cv-pass-line">姓名：${escapeHtml(cvDisplayName(entry))}</div>
-            ${cvDocShowOwnership(project) && entry && entry.ownership ? `<div class="cv-pass-line">區分所有權比例：${escapeHtml(cvFixed2(entry.ownership))}%</div>` : ""}
+            ${cvDocShowOwnership(project) && entry && entry.ownership ? `<div class="cv-pass-line">區分所有權比例：${escapeHtml(cvFormatOwnership(entry.ownership, project))}%</div>` : ""}
           </div>
         </div>
       </div>
@@ -27108,6 +27128,11 @@
               <option value="no"${settings.showOwnership ? "" : " selected"}>關閉</option>
             </select>
             <span class="muted" style="display:block;margin-top:6px;">關閉後，報到與投票僅以票數（戶數）為準，不計算也不顯示區分所有權比例。</span>
+          </label>
+          <label class="field" style="display:block;">
+            <span>區分所有權比例顯示小數位數</span>
+            <input id="cvOwnershipDecimals" type="number" min="0" max="6" step="1" value="${escapeHtml(String(settings.ownershipDecimals))}" />
+            <span class="muted" style="display:block;margin-top:6px;">預設 4 位小數，可設定 0～6 位；套用於名單、報到單、委託書與出席證的「區分所有權比例」顯示。</span>
           </label>
         </div>
         <div id="cvOwnershipThreshold"${settings.showOwnership ? "" : ' style="display:none;"'}>
@@ -28310,6 +28335,7 @@
               defaultSingleChoice: String(document.getElementById("cvDefaultSingleChoice")?.value || "single") !== "multi",
               nameDisplay: String(document.getElementById("cvNameDisplay")?.value || "full") === "mask" ? "mask" : "full",
               showOwnership: String(document.getElementById("cvShowOwnership")?.value || "yes") === "yes",
+              ownershipDecimals: document.getElementById("cvOwnershipDecimals")?.value,
               checkinTargetCountPct: document.getElementById("cvCheckinTargetCountPct")?.value,
               checkinTargetSharePct: document.getElementById("cvCheckinTargetSharePct")?.value,
               topicPassCountPct: document.getElementById("cvTopicPassCountPct")?.value,
