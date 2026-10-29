@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>線上投票｜社區系統</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg?v=4" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#d32f2f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="icon-192.png?v=2" />
+    <link rel="stylesheet" href="css/parcel.css?v=5" />
+    <link rel="stylesheet" href="css/ads-footer.css?v=16" />
+    <link rel="stylesheet" href="css/pwa.css" />
+    <style>
+      /* 線上投票頁專用樣式（版面外框沿用 css/parcel.css） */
+
+      /* 摘要列：統計三格 + 結果按鈕一列 */
+      #voteSummary .btn-result {
+        grid-column: 1 / -1;
+      }
+
+      .btn-result {
+        height: 40px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--brand);
+        background: #fff;
+        color: var(--brand);
+        font-size: calc(14px * var(--fs, 1));
+        font-weight: 900;
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease;
+      }
+
+      .btn-result:active {
+        transform: translateY(1px);
+      }
+
+      .btn-result:hover {
+        box-shadow: 0 10px 22px rgba(211, 47, 47, 0.18);
+      }
+
+      /* 議題按鈕列（單列橫向捲動） */
+      .vote-topics {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        padding: 2px 0 4px;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+
+      .vote-topics::-webkit-scrollbar {
+        display: none;
+      }
+
+      .vote-topic-btn {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 40px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(17, 24, 39, 0.14);
+        background: #fff;
+        color: var(--text);
+        font-size: calc(13px * var(--fs, 1));
+        font-weight: 800;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
+
+      .vote-topic-btn:active {
+        transform: translateY(1px);
+      }
+
+      .vote-topic-btn.is-active {
+        background: var(--brand);
+        border-color: var(--brand);
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(211, 47, 47, 0.3);
+      }
+
+      .vote-topic-btn .vtt-title {
+        max-width: 42vw;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .vote-topic-btn .vtt-idx {
+        display: grid;
+        place-items: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 999px;
+        background: rgba(17, 24, 39, 0.08);
+        font-size: calc(11px * var(--fs, 1));
+        font-weight: 900;
+      }
+
+      .vote-topic-btn.is-active .vtt-idx {
+        background: rgba(255, 255, 255, 0.28);
+      }
+
+      .vtt-done {
+        padding: 1px 7px;
+        border-radius: 999px;
+        background: rgba(34, 197, 94, 0.14);
+        color: #166534;
+        font-size: calc(10.5px * var(--fs, 1));
+        font-weight: 900;
+      }
+
+      .vote-topic-btn.is-active .vtt-done {
+        background: rgba(255, 255, 255, 0.28);
+        color: #fff;
+      }
+
+      /* 單一議題內容 */
+      .vote-panel {
+        display: grid;
+        gap: 10px;
+      }
+
+      .vote-card {
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+        border-radius: 14px;
+        background: #fff;
+        border: 1px solid rgba(17, 24, 39, 0.10);
+        box-shadow: 0 8px 22px rgba(17, 24, 39, 0.06);
+      }
+
+      .vote-card.is-voted {
+        border-color: rgba(34, 197, 94, 0.32);
+      }
+
+      .vote-hd {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .vote-title {
+        font-size: calc(15px * var(--fs, 1));
+        font-weight: 900;
+        line-height: 1.45;
+        min-width: 0;
+        word-break: break-word;
+      }
+
+      .vote-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+
+      .vote-tag {
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: var(--panel-2);
+        border: 1px solid rgba(17, 24, 39, 0.08);
+        color: var(--muted);
+        font-size: calc(11px * var(--fs, 1));
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .vote-tag.done {
+        background: rgba(34, 197, 94, 0.12);
+        border-color: rgba(34, 197, 94, 0.24);
+        color: #166534;
+      }
+
+      .vote-desc {
+        font-size: calc(13px * var(--fs, 1));
+        color: var(--muted);
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .vote-options {
+        display: grid;
+        gap: 8px;
+      }
+
+      .vote-option {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 48px;
+        padding: 8px 12px;
+        border-radius: 12px;
+        border: 1.5px solid rgba(17, 24, 39, 0.14);
+        background: #fff;
+        cursor: pointer;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
+
+      .vote-option input {
+        width: 20px;
+        height: 20px;
+        flex: 0 0 auto;
+        accent-color: var(--brand);
+      }
+
+      .vote-option-label {
+        font-size: calc(14px * var(--fs, 1));
+        font-weight: 700;
+        min-width: 0;
+        word-break: break-word;
+      }
+
+      .vote-option-code {
+        margin-left: auto;
+        font-size: calc(11px * var(--fs, 1));
+        font-weight: 800;
+        color: var(--muted);
+      }
+
+      .vote-option.is-selected {
+        border-color: var(--brand);
+        background: rgba(211, 47, 47, 0.06);
+        box-shadow: 0 6px 14px rgba(211, 47, 47, 0.12);
+      }
+
+      .vote-option.is-locked {
+        opacity: 0.6;
+        cursor: default;
+      }
+
+      .vote-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .vote-hint {
+        font-size: calc(12px * var(--fs, 1));
+        color: var(--muted);
+        font-weight: 700;
+        min-width: 0;
+      }
+
+      .btn-vote {
+        flex: 0 0 auto;
+        height: 44px;
+        padding: 0 18px;
+        border-radius: 12px;
+        border: 1px solid var(--brand);
+        background: var(--brand);
+        color: #fff;
+        font-size: calc(14px * var(--fs, 1));
+        font-weight: 900;
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease;
+      }
+
+      .btn-vote:active {
+        transform: translateY(1px);
+      }
+
+      .btn-vote:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      .vote-notice {
+        display: grid;
+        gap: 4px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: rgba(211, 47, 47, 0.08);
+        border: 1px solid rgba(211, 47, 47, 0.24);
+        color: #9f1c1c;
+        font-size: calc(12.5px * var(--fs, 1));
+        font-weight: 700;
+        line-height: 1.6;
+      }
+
+      .vote-notice b {
+        font-weight: 900;
+      }
+
+      .vote-toast {
+        position: fixed;
+        left: 50%;
+        bottom: calc(88px + env(safe-area-inset-bottom));
+        transform: translateX(-50%);
+        max-width: min(92vw, 420px);
+        padding: 10px 16px;
+        border-radius: 999px;
+        background: rgba(17, 24, 39, 0.92);
+        color: #fff;
+        font-size: calc(13px * var(--fs, 1));
+        font-weight: 800;
+        text-align: center;
+        z-index: 60;
+        box-shadow: 0 12px 28px rgba(17, 24, 39, 0.28);
+      }
+
+      .vote-toast.error {
+        background: #b91c1c;
+      }
+
+      .vote-toast[hidden] {
+        display: none !important;
+      }
+
+      @media (max-width: 480px) {
+        .vote-card {
+          padding: 10px 12px;
+          gap: 8px;
+        }
+        .vote-foot {
+          flex-wrap: wrap;
+        }
+        .btn-vote {
+          flex: 1 1 100%;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .btn-result,
+        .btn-vote,
+        .vote-topic-btn {
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="parcel-layout">
+      <header class="parcel-hd">
+        <div class="parcel-hd-content">
+          <div class="parcel-title" id="voteMemberTitle">&lt;戶號&gt; &lt;姓名&gt;</div>
+        </div>
+      </header>
+
+      <div class="parcel-midtop">
+        <div class="parcel-tabs" id="voteProjectTabs">
+          <button class="tab-btn active" type="button" disabled>載入中...</button>
+        </div>
+      </div>
+
+      <main class="parcel-bd">
+        <div class="parcel-toolbar">
+          <div class="parcel-summary" id="voteSummary" hidden></div>
+          <div class="parcel-search">
+            <svg class="parcel-search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/>
+              <path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+            <input id="voteSearchInput" type="search" autocomplete="off" placeholder="搜尋議題名稱／選項" />
+            <button class="parcel-search-clear" type="button" id="btnVoteSearchClear" aria-label="清除搜尋" hidden>×</button>
+          </div>
+        </div>
+
+        <div class="parcel-list">
+          <div class="vote-topics" id="voteList"></div>
+          <div class="vote-panel" id="votePanel">
+            <div class="status">載入中...</div>
+          </div>
+        </div>
+      </main>
+
+      <footer class="parcel-ft" id="voteAdsFooter"></footer>
+    </div>
+
+    <div class="vote-toast" id="voteToast" hidden></div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/vote-member.js?v=2"></script>
+    <script src="js/ads-footer.js?v=16"></script>
+    <script src="js/pwa.js?v=6"></script>
+  </body>
+</html>

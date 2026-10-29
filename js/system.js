@@ -3082,6 +3082,7 @@
       // 內部連結選項
       const internalLinks = [
         { value: "parcel.html", label: "包裹郵件" },
+        { value: "vote-member.html", label: "線上投票" },
         { value: "facility.html", label: "公設預約" },
         { value: "bulletin-community.html", label: "社區園地" },
         { value: "bulletin-finance.html", label: "財務報表" },
