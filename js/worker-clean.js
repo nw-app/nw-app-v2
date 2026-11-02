@@ -825,6 +825,9 @@
       await loadProfile(user);
       await resolveCommunity();
       if (!isAllowedWorker(state.profile, user)) { state.ready = false; showDenied(); return; }
+      if (window.NwWorkerDuty && typeof window.NwWorkerDuty.bindCommunitySwitch === "function") {
+        window.NwWorkerDuty.bindCommunitySwitch({ el: el.communityName, profile: state.profile, activeKey: state.communityId });
+      }
       state.ready = true;
       renderTab();
       startSubscriptions();

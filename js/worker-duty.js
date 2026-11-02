@@ -636,6 +636,7 @@
   window.NwWorkerDuty = {
     tabs,
     teardown,
+    bindCommunitySwitch,
     utils: { esc, pad2, dateKey: dateKeyOf, todayKey, monthKeyOf, monthRange, daysInMonth, weekdayZh, fmtDateKey, fmtTime, fmtDateTime, msOf },
     DEFAULT_DUTY,
     ROLE_META,
@@ -694,6 +695,192 @@
       }
     }
     return name;
+  }
+
+  /* ==================================================================== */
+  /* 社區切換（服務多個社區的帳號）                                        */
+  /* ==================================================================== */
+  function servedCommunities(profile) {
+    const src = profile || {};
+    const ids = Array.isArray(src.communityIds) ? src.communityIds : [];
+    const codes = Array.isArray(src.communityCodes) ? src.communityCodes : [];
+    const names = Array.isArray(src.communityNames) ? src.communityNames : [];
+    const out = [];
+    const seen = new Set();
+    const add = (key, id, name) => {
+      const k = String(key || id || "").trim();
+      if (!k) return;
+      const low = k.toLowerCase();
+      if (seen.has(low)) return;
+      seen.add(low);
+      out.push({ key: k, id: String(id || "").trim(), name: String(name || "").trim() });
+    };
+    const n = Math.max(ids.length, codes.length, names.length);
+    for (let i = 0; i < n; i++) add(codes[i] || ids[i], ids[i], names[i]);
+    if (!out.length) add(src.community || src.communityCode || src.communityId || "", src.communityId || "", src.communityName || "");
+    return out;
+  }
+
+  function ensureSwitchStyles() {
+    if (document.getElementById("nwCommunitySwitchStyle")) return;
+    const st = document.createElement("style");
+    st.id = "nwCommunitySwitchStyle";
+    st.textContent = `
+.wc-brand .sub.clickable{cursor:pointer;}
+.wc-brand .sub.clickable::after{content:"▾";margin-left:4px;font-size:11px;line-height:1;opacity:.85;}
+.nw-switch-loading{padding:20px 4px;text-align:center;font-size:13px;font-weight:800;color:#6b7280;}`;
+    document.head.appendChild(st);
+  }
+
+  function ensureSwitchModal() {
+    let modal = document.getElementById("communityPickerModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "communityPickerModal";
+    modal.className = "modal modal-community-picker";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-modal-close="1"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="communityPickerTitle">
+        <div class="modal-hd">
+          <h3 class="modal-title" id="communityPickerTitle">切換社區</h3>
+          <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="community-picker-filters" id="communityPickerFilters" aria-label="社區區域篩選"></div>
+          <div class="community-picker-list" id="communityPickerList"></div>
+        </div>
+        <div class="modal-ft">
+          <button class="intercom-btn ghost community-picker-close" type="button" data-modal-close="1">關閉</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function switchToCommunity(key) {
+    const k = String(key || "").trim();
+    if (!k) return;
+    try { localStorage.setItem("csp_active_community_v1", k); } catch {}
+    try { sessionStorage.setItem("csp_last_cid", k); } catch {}
+    try {
+      const u = new URL(location.href);
+      u.searchParams.set("c", k);
+      location.href = u.toString();
+    } catch { location.href = `?c=${encodeURIComponent(k)}`; }
+  }
+
+  async function openSwitchModal(list, activeKey) {
+    const modal = ensureSwitchModal();
+    const listEl = modal.querySelector("#communityPickerList");
+    const filtersEl = modal.querySelector("#communityPickerFilters");
+    const active = String(activeKey || "").trim().toLowerCase();
+    const onKey = (e) => { if (e && e.key === "Escape") close(); };
+    function close() {
+      modal.hidden = true;
+      document.body.style.overflow = "";
+      modal.querySelectorAll("[data-modal-close]").forEach((x) => x.removeEventListener("click", close));
+      document.removeEventListener("keydown", onKey, true);
+    }
+    modal.hidden = false;
+    document.body.style.overflow = "hidden";
+    modal.querySelectorAll("[data-modal-close]").forEach((x) => x.addEventListener("click", close));
+    document.addEventListener("keydown", onKey, true);
+    if (filtersEl) filtersEl.innerHTML = "";
+    if (listEl) listEl.innerHTML = `<div class="nw-switch-loading">讀取中…</div>`;
+
+    const items = await Promise.all(list.map(async (it) => {
+      let name = it.name;
+      let area = "";
+      let key = it.key;
+      let id = it.id;
+      try {
+        let data = null;
+        if (it.id) {
+          const s = await db.collection("communities").doc(it.id).get();
+          if (s && s.exists) data = s.data() || {};
+        }
+        if (!data) {
+          for (const f of ["username", "id"]) {
+            const q = await db.collection("communities").where(f, "==", it.key).limit(1).get();
+            if (q && q.size) { data = q.docs[0].data() || {}; break; }
+          }
+        }
+        if (data) {
+          name = String(data.name || name || "").trim();
+          area = String(data.area || "").trim();
+          key = String(data.username || data.id || key).trim();
+          id = String(data.id || id).trim();
+        }
+      } catch (e) { console.warn("load community for switch failed", e); }
+      return { key: key || it.key, id, name: name || key || it.key, area };
+    }));
+
+    const areas = [];
+    items.forEach((x) => { if (x.area && !areas.includes(x.area)) areas.push(x.area); });
+    let activeArea = "";
+
+    const renderList = () => {
+      if (!listEl) return;
+      const shown = activeArea ? items.filter((x) => x.area === activeArea) : items;
+      if (!shown.length) {
+        listEl.innerHTML = `<div class="nw-switch-loading">目前沒有可切換的社區</div>`;
+        return;
+      }
+      listEl.innerHTML = shown.map((x) => {
+        const isActive = Boolean(active) && (x.key.toLowerCase() === active || String(x.id || "").toLowerCase() === active);
+        return `
+          <div class="community-picker-item">
+            <button type="button" class="${isActive ? "community-picker-btn active" : "community-picker-btn"}" data-community-key="${esc(x.key)}">
+              <span class="community-picker-name">${esc(x.name)}</span>
+              <span class="community-picker-code">${esc(x.key)}</span>
+            </button>
+          </div>`;
+      }).join("");
+      listEl.querySelectorAll("[data-community-key]").forEach((btn) => {
+        btn.onclick = () => {
+          const key = String(btn.getAttribute("data-community-key") || "").trim();
+          close();
+          if (key) switchToCommunity(key);
+        };
+      });
+    };
+
+    if (filtersEl && areas.length > 1) {
+      filtersEl.innerHTML = areas.map((a) => `<button type="button" class="community-picker-filter-btn" data-community-area="${esc(a)}">${esc(a)}</button>`).join("");
+      filtersEl.querySelectorAll("[data-community-area]").forEach((btn) => {
+        btn.onclick = () => {
+          const next = String(btn.getAttribute("data-community-area") || "").trim();
+          activeArea = activeArea === next ? "" : next;
+          filtersEl.querySelectorAll("[data-community-area]").forEach((b) => b.classList.toggle("active", String(b.getAttribute("data-community-area") || "") === activeArea));
+          renderList();
+        };
+      });
+    }
+    renderList();
+  }
+
+  function bindCommunitySwitch(opts) {
+    const el = opts && opts.el;
+    if (!el) return;
+    const list = servedCommunities(opts.profile);
+    if (list.length <= 1) return;
+    ensureSwitchStyles();
+    el.classList.add("clickable");
+    try {
+      if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "0");
+      if (!el.getAttribute("role")) el.setAttribute("role", "button");
+      if (!el.getAttribute("title")) el.setAttribute("title", "點擊切換社區");
+    } catch {}
+    const open = (e) => {
+      if (e) { try { e.preventDefault(); e.stopPropagation(); } catch {} }
+      openSwitchModal(list, (opts && opts.activeKey) || "");
+    };
+    el.onclick = open;
+    el.onkeydown = (e) => {
+      const k = String((e && e.key) || "");
+      if (k === "Enter" || k === " ") open(e);
+    };
   }
 
   function bootStandalone() {
@@ -850,6 +1037,7 @@
         profile,
       };
       if (!isAllowedWorker(profile, user)) { showDenied(); return; }
+      bindCommunitySwitch({ el: els.communityName, profile, activeKey: cid });
       showTab(currentTab);
     });
 
