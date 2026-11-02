@@ -402,6 +402,8 @@
         let _residentMissedCountsCid = "";
         let _residentMissedCountsByUid = new Map();
         let _residentMissedCountsByUnitKey = new Map();
+        /* 未接來電原始清單（不套用隱藏），供隱藏清單變動時即時重算 */
+        let _residentMissedRaw = [];
         let _hiddenCallIdsUid = "";
         let _hiddenCallIdsUnsub = null;
         let _hiddenCallIdSet = new Set();
@@ -514,6 +516,7 @@
           _residentMissedCountsCid = "";
           _residentMissedCountsByUid = new Map();
           _residentMissedCountsByUnitKey = new Map();
+          _residentMissedRaw = [];
         }
 
         function stopHiddenCallIdsSubscription() {
@@ -529,7 +532,7 @@
           const id = String(uid || "").trim();
           if (!id) {
             stopHiddenCallIdsSubscription();
-            updateResidentMissedBadgesInGrid();
+            recomputeResidentMissedCounts();
             return;
           }
           if (_hiddenCallIdsUid === id && _hiddenCallIdsUnsub) return;
@@ -540,7 +543,7 @@
               const data = snap && snap.exists ? (snap.data() || {}) : {};
               const list = Array.isArray(data.hiddenCallIds) ? data.hiddenCallIds : [];
               _hiddenCallIdSet = new Set(list.map((x) => String(x || "").trim()).filter(Boolean));
-              updateResidentMissedBadgesInGrid();
+              recomputeResidentMissedCounts();
             }, () => {});
           } catch {
             stopHiddenCallIdsSubscription();
@@ -576,6 +579,25 @@
           });
         }
 
+        /* 依「原始未接清單」與「已刪除（hiddenCallIds）」重算未接數並更新紅點 */
+        function recomputeResidentMissedCounts() {
+          const next = new Map();
+          const nextUnit = new Map();
+          const hidden = _hiddenCallIdSet || new Set();
+          (_residentMissedRaw || []).forEach((it) => {
+            const callId = String((it && it.callId) || "").trim();
+            if (callId && hidden.has(callId)) return;
+            const fromUid = String((it && it.fromUid) || "").trim();
+            if (!fromUid) return;
+            next.set(fromUid, Number(next.get(fromUid) || 0) + 1);
+            const fromUnitKey = String((it && it.fromUnitKey) || "").trim();
+            if (fromUnitKey) nextUnit.set(fromUnitKey, Number(nextUnit.get(fromUnitKey) || 0) + 1);
+          });
+          _residentMissedCountsByUid = next;
+          _residentMissedCountsByUnitKey = nextUnit;
+          updateResidentMissedBadgesInGrid();
+        }
+
         function ensureResidentMissedCountsSubscription(cid) {
           const communityId = String(cid || "").trim();
           if (!communityId) {
@@ -595,12 +617,10 @@
               : db.collection("calls").where("community", "==", communityId).where("toRole", "==", "admin").where("status", "==", "missed");
 
             _unsubResidentMissedCounts = baseQuery.onSnapshot((snap) => {
-              const next = new Map();
-              const nextUnit = new Map();
+              const rawList = [];
               try {
                 snap.forEach((doc) => {
                   const callId = String(doc && doc.id ? doc.id : "").trim();
-                  if (callId && _hiddenCallIdSet && _hiddenCallIdSet.has(callId)) return;
                   const d = doc && doc.data ? (doc.data() || {}) : {};
                   const st = String(d.status || "").trim();
                   if (st !== "missed") return;
@@ -621,15 +641,15 @@
                   if (toRole !== "admin") return;
                   if (fromRole !== "resident") return;
                   if (!fromUid) return;
-                  next.set(fromUid, (Number(next.get(fromUid) || 0) + 1));
-
-                  const fromUnitKey = buildUnitKey(d.fromHouseNo, d.fromSubHouseNo || d.fromSubUnit || d.subUnit);
-                  if (fromUnitKey) nextUnit.set(fromUnitKey, (Number(nextUnit.get(fromUnitKey) || 0) + 1));
+                  rawList.push({
+                    callId,
+                    fromUid,
+                    fromUnitKey: buildUnitKey(d.fromHouseNo, d.fromSubHouseNo || d.fromSubUnit || d.subUnit),
+                  });
                 });
               } catch {}
-              _residentMissedCountsByUid = next;
-              _residentMissedCountsByUnitKey = nextUnit;
-              updateResidentMissedBadgesInGrid();
+              _residentMissedRaw = rawList;
+              recomputeResidentMissedCounts();
             }, () => {});
           } catch {
             stopResidentMissedCountsSubscription();
@@ -1325,6 +1345,17 @@
         window.addEventListener("message", (ev) => {
           const data = ev.data;
           if (!data || typeof data !== "object") return;
+          // 通話紀錄（callrecord.html）刪除後，立即同步清除紅點
+          if (data.type === "nw:callrecord:deleted" && Array.isArray(data.ids)) {
+            const set = _hiddenCallIdSet instanceof Set ? _hiddenCallIdSet : new Set();
+            data.ids.forEach((x) => {
+              const s = String(x || "").trim();
+              if (s) set.add(s);
+            });
+            _hiddenCallIdSet = set;
+            recomputeResidentMissedCounts();
+            return;
+          }
           if (data.type === "nw:callrecord:callback" && data.uid) {
             const uid = String(data.uid || "").trim();
             if (!uid) return;

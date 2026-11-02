@@ -665,6 +665,14 @@
             ids.forEach((id) => hiddenCallIdSet.add(String(id || "").trim()));
             setSelectionMode(false, { clearSelection: true });
             renderHistory(currentAllItems, currentUserId);
+            if (window.parent && window.parent !== window) {
+              try {
+                window.parent.postMessage({
+                  type: "nw:callrecord:deleted",
+                  ids: ids.map((x) => String(x || "").trim()).filter(Boolean),
+                }, "*");
+              } catch {}
+            }
           } catch (err) {
             console.error(err);
             window.alert("刪除失敗，請稍後再試。");
