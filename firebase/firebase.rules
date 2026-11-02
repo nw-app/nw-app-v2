@@ -498,6 +498,75 @@ service cloud.firestore {
         allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
 
+      // 清潔位置設定：住戶端需讀取可選位置，故開放公開讀取；寫入限管理員／社區人員
+      match /clean_locations/{locationId} {
+        allow read: if true;
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      // 清潔巡邏打卡紀錄：管理員／社區人員（含清潔）可讀寫
+      match /clean_patrols/{recordId} {
+        allow read, write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      // 清潔通報：住戶可建立自己的通報並讀取自己的紀錄；社區人員（含清潔）可讀取與更新狀態
+      match /clean_reports/{reportId} {
+        allow read: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || resource.data.reporterUid == request.auth.uid
+        );
+        // 住戶建立時僅能建立自己的待處理通報；管理員／社區人員（含清潔）可建立任意狀態（例如直接指派）
+        allow create: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || (
+            request.resource.data.reporterUid == request.auth.uid
+            && request.resource.data.status == "pending"
+          )
+        );
+        allow update, delete: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      // 清潔人員上下班打卡：本人可讀寫自己的打卡紀錄；管理員／社區人員可讀取
+      match /clean_checkins/{recordId} {
+        allow read: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || resource.data.uid == request.auth.uid
+        );
+        allow create, update: if request.auth != null
+          && request.resource.data.uid == request.auth.uid;
+      }
+
+      // 勤務管理：出勤打卡（本人可讀寫自己的紀錄；管理員／社區人員可讀取全部）
+      match /duty_checkins/{recordId} {
+        allow read: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || resource.data.uid == request.auth.uid
+        );
+        allow create, update: if request.auth != null
+          && request.resource.data.uid == request.auth.uid;
+      }
+
+      // 勤務管理：班表（管理員／社區人員可讀寫）
+      match /duty_schedules/{recordId} {
+        allow read, write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      // 勤務管理：請假／補卡申請（送出即生效；本人可建立並讀取自己的申請）
+      match /duty_requests/{recordId} {
+        allow read: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || resource.data.uid == request.auth.uid
+        );
+        allow create: if request.auth != null
+          && request.resource.data.uid == request.auth.uid;
+        allow update, delete: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
       match /careCheckins/{recordId} {
         allow read, write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
@@ -764,6 +833,26 @@ service cloud.firestore {
       match /visitor_history/{unitKey} {
         allow read: if true;
         allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      /* 常用訪客：公開讀取（免登入訪客證頁），寫入需管理員／社區人員 */
+      match /visitor_frequent/{codeId} {
+        allow read: if true;
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      /* 常用訪客使用裝置紀錄：公開頁僅能新增（不可修改／刪除），讀取需管理員／社區人員 */
+      match /frequent_devices/{hitId} {
+        allow create: if request.resource.data.keys().hasOnly(["code", "deviceId", "ua", "at"])
+          && request.resource.data.code is string
+          && request.resource.data.code.size() <= 32
+          && request.resource.data.deviceId is string
+          && request.resource.data.deviceId.size() <= 64
+          && request.resource.data.ua is string
+          && request.resource.data.ua.size() <= 400
+          && request.resource.data.at is int;
+        allow read: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+        allow update, delete: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
 
       match /visitor_elevator_cards/{cardId} {
