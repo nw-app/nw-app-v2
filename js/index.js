@@ -46,8 +46,31 @@
     board: "ead.html",
     table: "tad.html",
     shop: "shop.html",
+    worker: "worker-clean.html",
   });
   const ADMIN_EMAILS = new Set(["nwapp.eason@gmail.com"]);
+
+  const WORKER_PAGE_BY_CATEGORY = {
+    "總幹事": "worker-manager.html",
+    "秘書": "worker-secretary.html",
+    "清潔": "worker-clean.html",
+    "清潔人員": "worker-clean.html",
+    "機電": "worker-electrical.html",
+    "保全": "worker-preservation.html",
+  };
+
+  async function resolveWorkerPage(uid) {
+    const fallback = "worker-clean.html";
+    if (!db || !uid) return fallback;
+    try {
+      const doc = await db.collection("users").doc(String(uid)).get();
+      const data = doc && doc.exists ? (doc.data() || {}) : {};
+      const cat = String(data.category || "").trim();
+      return WORKER_PAGE_BY_CATEGORY[cat] || fallback;
+    } catch {
+      return fallback;
+    }
+  }
 
   const loginForm = document.getElementById("loginForm");
   const btnLogin = document.getElementById("btnLogin");
@@ -77,7 +100,7 @@
     const cleaned = raw ? raw.replace(/\/+$/, "") : "";
     const lower = cleaned.toLowerCase();
     const ensureHtmlForRoute = () => {
-      const m = cleaned.match(/^\/?(admin|community|system|member|resident|ead|tad|shop)(\.html)?(#.*)?$/i);
+      const m = cleaned.match(/^\/?(admin|community|system|member|resident|ead|tad|shop|worker|worker-clean)(\.html)?(#.*)?$/i);
       if (!m) return "";
       const base = String(m[1] || "").toLowerCase();
       const hash = String(m[3] || "");
@@ -86,6 +109,7 @@
       if (base === "tad") return `tad.html${hash}`;
       if (base === "shop") return `shop.html${hash}`;
       if (base === "member" || base === "resident") return `member.html${hash}`;
+      if (base === "worker" || base === "worker-clean") return `worker-clean.html${hash}`;
       return `admin.html${hash || "#community/community-dashboard"}`;
     };
     const fixedRoute = ensureHtmlForRoute();
@@ -99,6 +123,7 @@
       lower === "ead" || lower === "/ead" || lower === "ead.html" || lower === "/ead.html" || lower === "board" || lower === "/board" ? routes.board :
       lower === "tad" || lower === "/tad" || lower === "tad.html" || lower === "/tad.html" || lower === "table" || lower === "/table" ? routes.table :
       lower === "shop" || lower === "/shop" || lower === "shop.html" || lower === "/shop.html" ? routes.shop :
+      lower === "worker" || lower === "/worker" || lower === "worker.html" || lower === "/worker.html" || lower === "worker-clean" || lower === "/worker-clean" || lower === "worker-clean.html" || lower === "/worker-clean.html" ? routes.worker :
       fixedRoute ? fixedRoute :
       cleaned.startsWith("/") ? cleaned.slice(1) :
       cleaned;
@@ -572,13 +597,14 @@
 
   function normalizeRole(input) {
     const r = String(input || "").trim().toLowerCase();
-    if (r === "admin" || r === "community" || r === "resident" || r === "board" || r === "table" || r === "shop") return r;
+    if (r === "admin" || r === "community" || r === "resident" || r === "board" || r === "table" || r === "shop" || r === "worker") return r;
     if (r === "系統管理員" || r === "系統管理者" || r === "系統") return "admin";
     if (r === "社區") return "community";
     if (r === "住戶") return "resident";
     if (r === "看板") return "board";
     if (r === "桌板") return "table";
     if (r === "商店") return "shop";
+    if (r === "工作" || r === "清潔" || r === "機電" || r === "總幹事" || r === "秘書" || r === "保全" || r === "清潔人員") return "worker";
     return "";
   }
 
@@ -773,12 +799,13 @@
 
   async function resolveCommunityAndUrl(user, role, defaultUrl) {
     if (!user || !db || role === "admin") return defaultUrl;
-    const buildCommunityRoleUrl = (cKey) => {
+    const buildCommunityRoleUrl = async (cKey) => {
       if (!cKey) return defaultUrl;
       if (role === "community") return `admin.html?c=${cKey}#community/community-dashboard`;
       if (role === "board") return `ead.html?c=${cKey}`;
       if (role === "table") return `tad.html?c=${cKey}`;
       if (role === "shop") return `shop.html?c=${cKey}`;
+      if (role === "worker") return `${await resolveWorkerPage(user.uid)}?c=${cKey}`;
       return `member.html?c=${cKey}`;
     };
     try {
@@ -787,14 +814,14 @@
         const data = doc.data() || {};
         const cidRaw = String(data.community || "").trim();
         const cKey = await resolveCommunityKey(cidRaw);
-        if (cKey) return buildCommunityRoleUrl(cKey);
+        if (cKey) return await buildCommunityRoleUrl(cKey);
       }
     } catch {}
     try {
       const snap = await db.collection("user_lookup").where("uid", "==", String(user.uid)).limit(1).get();
       const d = snap && snap.docs && snap.docs[0] ? snap.docs[0].data() || {} : {};
       const cKey = String(d.communityCode || "").trim() || String(d.community || "").trim();
-      if (cKey && cKey !== "default") return buildCommunityRoleUrl(cKey);
+      if (cKey && cKey !== "default") return await buildCommunityRoleUrl(cKey);
     } catch {}
     return defaultUrl;
   }
@@ -839,6 +866,7 @@
       }
 
       let url = routes[role] || routes.resident;
+      if (role === "worker") url = await resolveWorkerPage(user.uid);
       const cKey = lookupCommunityCode || (lookupCommunity ? await resolveCommunityKey(lookupCommunity) : "");
       if (cKey) {
         try {
@@ -848,6 +876,7 @@
         else if (role === "board") url = `ead.html?c=${cKey}`;
         else if (role === "table") url = `tad.html?c=${cKey}`;
         else if (role === "shop") url = `shop.html?c=${cKey}`;
+        else if (role === "worker") url = `${await resolveWorkerPage(user.uid)}?c=${cKey}`;
         else if (role === "resident") url = `member.html?c=${cKey}`;
       } else {
         url = await resolveCommunityAndUrl(user, role, url);
@@ -891,6 +920,7 @@
         return;
       }
       let url = routes[role] || routes.resident;
+      if (role === "worker") url = await resolveWorkerPage(user.uid);
       try {
         const lastCid = String(sessionStorage.getItem("csp_last_cid") || "").trim();
         if (lastCid && lastCid !== "default") {
@@ -898,6 +928,7 @@
           else if (role === "board") url = `ead.html?c=${lastCid}`;
           else if (role === "table") url = `tad.html?c=${lastCid}`;
           else if (role === "shop") url = `shop.html?c=${lastCid}`;
+          else if (role === "worker") url = `${await resolveWorkerPage(user.uid)}?c=${lastCid}`;
           else if (role === "resident") url = `member.html?c=${lastCid}`;
         } else {
           url = await resolveCommunityAndUrl(user, role, url);

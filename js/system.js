@@ -30,10 +30,13 @@
     table: { label: "桌板", roleValue: "桌板", sessionRole: "table", page: "tad.html" },
     shop: { label: "商店", roleValue: "商店", sessionRole: "shop", page: "shop.html" },
     community: { label: "社區", roleValue: "社區", sessionRole: "community", page: "admin.html" },
+    worker: { label: "工作", roleValue: "工作", sessionRole: "worker", page: "worker-clean.html" },
     admin: { label: "系統管理員", roleValue: "系統管理員", sessionRole: "admin", page: "system.html" },
   });
-  const ACCOUNT_ROLE_VIEWS = ["resident", "board", "table", "shop", "community", "admin"];
-  const COMMUNITY_LIKE_ROLE_VIEWS = new Set(["community", "board", "table", "shop"]);
+  const ACCOUNT_ROLE_VIEWS = ["resident", "board", "table", "shop", "community", "worker", "admin"];
+  const COMMUNITY_LIKE_ROLE_VIEWS = new Set(["community", "board", "table", "shop", "worker"]);
+  // 「工作」子分頁可建立的職務類別（未來擴充：機電、保全等）
+  const WORK_ROLE_CATEGORIES = ["總幹事", "秘書", "清潔", "機電", "保全"];
 
   function normalizeAccountRoleView(input) {
     const raw = String(input || "").trim().toLowerCase();
@@ -44,6 +47,7 @@
     if (raw === "看板") return "board";
     if (raw === "桌板") return "table";
     if (raw === "商店") return "shop";
+    if (raw === "工作" || raw === "清潔" || raw === "機電" || raw === "總幹事" || raw === "秘書" || raw === "保全" || raw === "清潔人員") return "worker";
     return "";
   }
 
@@ -72,6 +76,7 @@
     if (v === "board") return `ead.html${cPart}`;
     if (v === "table") return `tad.html${cPart}`;
     if (v === "shop") return `shop.html${cPart}`;
+    if (v === "worker") return `worker-clean.html${cPart}`;
     return `member.html${cPart}`;
   }
 
@@ -1159,6 +1164,10 @@
             <option value="秘書">秘書</option>
             <option value="保全">保全</option>
           `.trim();
+        } else if (modalRoleView === "worker") {
+          inputCategory.innerHTML = WORK_ROLE_CATEGORIES
+            .map((c) => `<option value="${c}"${c === "清潔" ? " selected" : ""}>${c}</option>`)
+            .join("");
         } else if (isCommunityLike) {
           inputCategory.innerHTML = `
             <option value="管理員" selected>管理員</option>
@@ -1217,11 +1226,13 @@
       }
 
       const title = getAccountRoleLabel(view);
-      const communityCatOptions = ["__all__", "管理員", "總幹事", "秘書", "保全"];
+      const communityCatOptions = view === "worker"
+        ? ["__all__", ...WORK_ROLE_CATEGORIES]
+        : ["__all__", "管理員", "總幹事", "秘書", "保全"];
       const residentCatOptions = ["__all__", "住戶", "委員"];
       const showFilterDiv = Boolean(fEl);
       if (showFilterDiv) {
-        if (view === "community") {
+        if (view === "community" || view === "worker") {
           const counts = new Map();
           communityCatOptions.forEach((c) => counts.set(c, 0));
           list.forEach((r) => {
@@ -1275,7 +1286,7 @@
         }
       }
 
-      if (showFilterDiv && (view === "community" || view === "resident")) {
+      if (showFilterDiv && (view === "community" || view === "resident" || view === "worker")) {
         const catFilter = String(state.categoryFilter || "__all__").trim();
         if (catFilter !== "__all__") {
           list = list.filter((r) => {
@@ -1303,7 +1314,7 @@
         const extraCount = cids.length > 1 ? (cids.length - 1) : 0;
         const communityDisplay = firstName ? `<span class="tag" style="margin-left:8px;">${firstName}${extraCount ? ` +${extraCount}` : ""}</span>` : "";
         const catRaw = String(r.category || "").trim();
-        const catLabel = view === "community" ? catRaw : (view === "resident" ? catRaw : "");
+        const catLabel = (view === "community" || view === "worker") ? catRaw : (view === "resident" ? catRaw : "");
         const catTag = catLabel ? `<span class="tag" style="margin-left:8px;">${catLabel}</span>` : "";
         const emailText = String(r.email || "").trim() || "—";
         const phoneText = String(r.phone || "").trim() || "—";
@@ -1851,7 +1862,8 @@
       if (modalTitleEl) modalTitleEl.setAttribute("data-mode", "create");
       if (submitBtn) submitBtn.textContent = "建立";
       if (inputCategory) {
-        if (COMMUNITY_LIKE_ROLE_VIEWS.has(modalRoleView)) inputCategory.value = "管理員";
+        if (modalRoleView === "worker") inputCategory.value = "清潔";
+        else if (COMMUNITY_LIKE_ROLE_VIEWS.has(modalRoleView)) inputCategory.value = "管理員";
         else if (modalRoleView === "admin") inputCategory.value = "";
         else inputCategory.value = "住戶";
       }
@@ -2369,6 +2381,13 @@
     const imagePlaceholder = document.getElementById("communityImagePlaceholder");
     const imageUploader = document.getElementById("communityImageUploader");
     const submitBtn = document.getElementById("btnSubmitCommunityModal");
+    const inputAddress = document.getElementById("modal_c_address");
+    const inputLat = document.getElementById("modal_c_lat");
+    const inputLng = document.getElementById("modal_c_lng");
+    const inputRange = document.getElementById("modal_c_range");
+    const btnLocate = document.getElementById("btnCommunityLocate");
+    const mapHost = document.getElementById("communityMapPreview");
+    const mapHint = document.getElementById("communityMapHint");
     const cancelBtn = document.getElementById("btnCancelCommunityModal");
     const closeBtn = document.getElementById("btnCloseCommunityModal");
     const backdrop = modal ? modal.querySelector("[data-modal-close]") : null;
@@ -2549,10 +2568,218 @@
       reader.readAsDataURL(file);
     });
 
+    /* ---- 社區定位與打卡範圍地圖預覽 ---- */
+    const RANGE_DEFAULT = 50;
+    let cMap = null;
+    let cMarker = null;
+    let cCircle = null;
+    let addrGeoSuppress = false;
+    let addrGeoTimer = 0;
+    let addrGeoSeq = 0;
+
+    const readCoordInputs = () => {
+      const lat = parseFloat(inputLat ? inputLat.value : "");
+      const lng = parseFloat(inputLng ? inputLng.value : "");
+      const r = parseFloat(inputRange ? inputRange.value : "");
+      return {
+        lat,
+        lng,
+        hasCoord:
+          Number.isFinite(lat) && Number.isFinite(lng) &&
+          Math.abs(lat) <= 90 && Math.abs(lng) <= 180,
+        range: Number.isFinite(r) && r > 0 ? r : RANGE_DEFAULT,
+      };
+    };
+
+    const ensureCommunityMap = () => {
+      if (cMap || !mapHost || typeof L === "undefined") return cMap;
+      cMap = L.map(mapHost, { zoomControl: true, scrollWheelZoom: false });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap",
+      }).addTo(cMap);
+      cMap.setView([25.033, 121.5654], 16);
+      return cMap;
+    };
+
+    const updateCommunityMap = (opts) => {
+      if (!ensureCommunityMap()) return;
+      const { lat, lng, hasCoord, range } = readCoordInputs();
+      if (!hasCoord) {
+        if (cMarker) { cMap.removeLayer(cMarker); cMarker = null; }
+        if (cCircle) { cMap.removeLayer(cCircle); cCircle = null; }
+        if (mapHint) mapHint.textContent = "輸入座標、按「使用目前位置」，或拖曳地圖紅點以設定位置。";
+        return;
+      }
+      const center = [lat, lng];
+      if (!cMarker) {
+        cMarker = L.marker(center, {
+          draggable: true,
+          autoPan: true,
+          keyboard: false,
+          icon: L.divIcon({
+            className: "",
+            html: '<div style="width:20px;height:20px;border-radius:50%;background:#d32f2f;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);box-sizing:border-box;"></div>',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10],
+          }),
+        }).addTo(cMap);
+        cMarker.on("drag", (e) => {
+          if (cCircle) cCircle.setLatLng(e.target.getLatLng());
+        });
+        cMarker.on("dragend", (e) => {
+          const p = e.target.getLatLng();
+          const nlat = +p.lat.toFixed(6);
+          const nlng = +p.lng.toFixed(6);
+          if (inputLat) inputLat.value = String(nlat);
+          if (inputLng) inputLng.value = String(nlng);
+          if (cCircle) cCircle.setLatLng([nlat, nlng]);
+          if (mapHint) {
+            mapHint.textContent = `打卡範圍半徑 ${readCoordInputs().range} 公尺；座標 ${nlat}, ${nlng}（拖曳調整後按「儲存」生效）`;
+          }
+        });
+      } else {
+        cMarker.setLatLng(center);
+      }
+      if (!cCircle) {
+        cCircle = L.circle(center, {
+          radius: range, color: "#d32f2f", fillColor: "#d32f2f", fillOpacity: 0.12, weight: 1.5,
+        }).addTo(cMap);
+      } else {
+        cCircle.setLatLng(center);
+        cCircle.setRadius(range);
+      }
+      if (!opts || opts.fit !== false) {
+        cMap.fitBounds(cCircle.getBounds().pad(0.35), { animate: false });
+      }
+      if (mapHint) {
+        mapHint.textContent = `打卡範圍半徑 ${range} 公尺；座標 ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      }
+    };
+
+    const syncCommunityMap = () => {
+      updateCommunityMap();
+      requestAnimationFrame(() => {
+        try { cMap.invalidateSize(); updateCommunityMap(); } catch (_) {}
+      });
+    };
+
+    [inputLat, inputLng, inputRange].forEach((el) => {
+      if (el) el.addEventListener("input", () => updateCommunityMap());
+    });
+
+    if (btnLocate) {
+      btnLocate.addEventListener("click", () => {
+        if (!navigator.geolocation) {
+          if (mapHint) mapHint.textContent = "此裝置不支援定位功能，請手動輸入座標。";
+          return;
+        }
+        const original = btnLocate.textContent;
+        btnLocate.disabled = true;
+        btnLocate.textContent = "定位中...";
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            const lat = +pos.coords.latitude.toFixed(6);
+            const lng = +pos.coords.longitude.toFixed(6);
+            if (inputLat) inputLat.value = String(lat);
+            if (inputLng) inputLng.value = String(lng);
+            updateCommunityMap();
+            if (inputAddress && !String(inputAddress.value || "").trim()) {
+              try {
+                const res = await fetch(
+                  `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=zh-TW`
+                );
+                const j = await res.json();
+                if (j && j.display_name) {
+                  addrGeoSuppress = true;
+                  inputAddress.value = j.display_name;
+                  addrGeoSuppress = false;
+                }
+              } catch (_) {}
+            }
+            btnLocate.disabled = false;
+            btnLocate.textContent = original;
+          },
+          () => {
+            if (mapHint) mapHint.textContent = "定位失敗，請確認已允許定位權限或手動輸入座標。";
+            btnLocate.disabled = false;
+            btnLocate.textContent = original;
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      });
+    }
+
+    const buildAddressCandidates = (raw) => {
+      const q = String(raw || "").trim();
+      const list = [];
+      const push = (s) => {
+        const t = String(s || "").trim();
+        if (t && !list.includes(t)) list.push(t);
+      };
+      push(q);
+      // 移除門牌號（例：1號、436號、12之3號）
+      push(q.replace(/[\d０-９]+(?:之[\d０-９]+)?號.*$/, ""));
+      // 移除巷弄（例：5巷3弄）
+      push(q.replace(/[\d０-９]+(?:巷|弄).*$/, ""));
+      // 只保留到「市/縣 + 區/鄉/鎮/市」
+      const m = q.match(/^(.*?[市縣].*?[區鄉鎮市])/);
+      if (m) push(m[1]);
+      return list;
+    };
+
+    const geocodeAddress = async () => {
+      if (!inputAddress) return;
+      const raw = String(inputAddress.value || "").trim();
+      if (!raw) return;
+      const seq = ++addrGeoSeq;
+      if (mapHint) mapHint.textContent = "地址定位中...";
+      const candidates = buildAddressCandidates(raw);
+      let hit = null;
+      for (const c of candidates) {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=tw&accept-language=zh-TW&q=${encodeURIComponent(c)}`
+          );
+          if (seq !== addrGeoSeq) return;
+          const arr = await res.json();
+          if (Array.isArray(arr) && arr[0]) { hit = arr[0]; break; }
+        } catch (_) {
+          // 續試下一個候選字串
+        }
+      }
+      if (seq !== addrGeoSeq) return;
+      if (!hit) {
+        if (mapHint) mapHint.textContent = "找不到此地址的座標，請確認地址或手動輸入座標。";
+        return;
+      }
+      const lat = +Number(hit.lat).toFixed(6);
+      const lng = +Number(hit.lon).toFixed(6);
+      if (inputLat) inputLat.value = String(lat);
+      if (inputLng) inputLng.value = String(lng);
+      updateCommunityMap();
+    };
+
+    if (inputAddress) {
+      inputAddress.addEventListener("input", () => {
+        if (addrGeoSuppress) return;
+        window.clearTimeout(addrGeoTimer);
+        addrGeoTimer = window.setTimeout(geocodeAddress, 700);
+      });
+      inputAddress.addEventListener("change", () => {
+        if (addrGeoSuppress) return;
+        window.clearTimeout(addrGeoTimer);
+        geocodeAddress();
+      });
+    }
+
     const closeModal = () => {
       if (!modal) return;
       modal.hidden = true;
       editCommunityId = "";
+      if (cMarker) { cMap.removeLayer(cMarker); cMarker = null; }
+      if (cCircle) { cMap.removeLayer(cCircle); cCircle = null; }
+      if (mapHint) mapHint.textContent = "輸入座標、按「使用目前位置」，或拖曳地圖紅點以設定位置。";
       modalImageFile = null;
       setImagePreview("");
       clearModalStatus();
@@ -2572,6 +2799,12 @@
       if (inputCode) inputCode.value = mode === "edit" && community ? String(community.username || "") : "";
       if (inputLevel) inputLevel.value = mode === "edit" && community ? String(community.level || "銅") : "銅";
       if (inputArea) inputArea.value = mode === "edit" && community ? String(community.area || "台北") : "台北";
+      if (inputAddress) inputAddress.value = mode === "edit" && community ? String(community.address || "") : "";
+      const cLat = mode === "edit" && community && community.latitude != null ? String(community.latitude) : "";
+      const cLng = mode === "edit" && community && community.longitude != null ? String(community.longitude) : "";
+      if (inputLat) inputLat.value = cLat;
+      if (inputLng) inputLng.value = cLng;
+      if (inputRange) inputRange.value = mode === "edit" && community && community.checkinRange != null ? String(community.checkinRange) : String(RANGE_DEFAULT);
       modalImageFile = null;
       if (imageInput) imageInput.value = "";
       setImagePreview(mode === "edit" && community ? String(community.imageDataUrl || "") : "");
@@ -2585,6 +2818,7 @@
 
       requestAnimationFrame(() => {
         if (inputName) inputName.focus();
+        syncCommunityMap();
       });
     };
 
@@ -2714,6 +2948,8 @@
               { enabled: Boolean(input.checked), updatedAt: FieldValue.serverTimestamp() },
               { merge: true }
             );
+            await reloadCommunities();
+            refresh();
           } catch {
           } finally {
             setBusy(false);
@@ -2782,6 +3018,8 @@
             if (localStorage.getItem(STORAGE_ACTIVE_COMMUNITY) === String(id)) {
               localStorage.removeItem(STORAGE_ACTIVE_COMMUNITY);
             }
+            await reloadCommunities();
+            refresh();
           } catch {
           } finally {
             setBusy(false);
@@ -3957,6 +4195,8 @@
         const code = normalizeText(inputCode ? inputCode.value : "");
         const level = normalizeText(inputLevel ? inputLevel.value : "銅") || "銅";
         const area = normalizeText(inputArea ? inputArea.value : "台北") || "台北";
+        const address = normalizeText(inputAddress ? inputAddress.value : "");
+        const coord = readCoordInputs();
         if (!name || !code) {
           showModalError("請填寫社區名稱與社區代號。");
           return;
@@ -3982,6 +4222,10 @@
             username: code,
             level,
             area,
+            address,
+            latitude: coord.hasCoord ? coord.lat : null,
+            longitude: coord.hasCoord ? coord.lng : null,
+            checkinRange: coord.range,
             imageDataUrl,
             updatedAt: FieldValue.serverTimestamp(),
           };
@@ -3992,6 +4236,8 @@
           if (!isEdit) await saveConfig(defaultConfig(), id);
           setActiveCommunityId(id);
           closeModal();
+          await reloadCommunities();
+          refresh();
         } catch (err) {
           const code = String(err && err.code ? err.code : "");
           if (code.includes("permission-denied")) {
@@ -4038,6 +4284,7 @@
           <button type="button" class="filter-btn ${rv === "table" ? "active" : ""}" data-accounts-role="table" aria-pressed="${rv === "table" ? "true" : "false"}">桌板</button>
           <button type="button" class="filter-btn ${rv === "shop" ? "active" : ""}" data-accounts-role="shop" aria-pressed="${rv === "shop" ? "true" : "false"}">商店</button>
           <button type="button" class="filter-btn ${rv === "community" ? "active" : ""}" data-accounts-role="community" aria-pressed="${rv === "community" ? "true" : "false"}">社區</button>
+          <button type="button" class="filter-btn ${rv === "worker" ? "active" : ""}" data-accounts-role="worker" aria-pressed="${rv === "worker" ? "true" : "false"}">工作</button>
           <button type="button" class="filter-btn ${rv === "admin" ? "active" : ""}" data-accounts-role="admin" aria-pressed="${rv === "admin" ? "true" : "false"}">系統</button>
         </div>
       `.trim();
@@ -4067,32 +4314,46 @@
     });
   }
 
+  function mapCommunityDoc(d) {
+    const v = d.data() || {};
+    const units = Array.isArray(v.units) ? v.units : [];
+    return {
+      id: String(v.id || d.id),
+      name: String(v.name || ""),
+      username: String(v.username || ""),
+      enabled: v.enabled !== false,
+      level: String(v.level || "銅"),
+      area: String(v.area || "台北"),
+      imageDataUrl: String(v.imageDataUrl || ""),
+      units,
+      address: String(v.address || ""),
+      latitude: v.latitude != null ? Number(v.latitude) : null,
+      longitude: v.longitude != null ? Number(v.longitude) : null,
+      checkinRange: v.checkinRange != null ? Number(v.checkinRange) : 50,
+    };
+  }
+
+  function sortCommunities(list) {
+    const areaOrder = { "台北": 1, "新北": 2, "桃園": 3 };
+    return list.sort((a, b) => {
+      const oA = areaOrder[a.area] || 99;
+      const oB = areaOrder[b.area] || 99;
+      if (oA !== oB) return oA - oB;
+      const cA = String(a.username || "");
+      const cB = String(b.username || "");
+      return cA.localeCompare(cB, "zh-TW", { numeric: true });
+    });
+  }
+
+  function reloadCommunities() {
+    return db.collection("communities").get().then((snap) => {
+      state.communities = sortCommunities(snap.docs.map(mapCommunityDoc));
+    }).catch(() => {});
+  }
+
   function ensureCommunitiesSubscription() {
     db.collection("communities").get().then(async (snap) => {
-      const list = snap.docs.map((d) => {
-        const v = d.data() || {};
-        const units = Array.isArray(v.units) ? v.units : [];
-        return {
-          id: String(v.id || d.id),
-          name: String(v.name || ""),
-          username: String(v.username || ""),
-          enabled: v.enabled !== false,
-          level: String(v.level || "銅"),
-          area: String(v.area || "台北"),
-          imageDataUrl: String(v.imageDataUrl || ""),
-          units,
-        };
-      });
-
-      const areaOrder = { "台北": 1, "新北": 2, "桃園": 3 };
-      state.communities = list.sort((a, b) => {
-        const oA = areaOrder[a.area] || 99;
-        const oB = areaOrder[b.area] || 99;
-        if (oA !== oB) return oA - oB;
-        const cA = String(a.username || "");
-        const cB = String(b.username || "");
-        return cA.localeCompare(cB, "zh-TW", { numeric: true });
-      });
+      state.communities = sortCommunities(snap.docs.map(mapCommunityDoc));
       console.log("[Debug] state.communities loaded:", state.communities.length);
       state.communities.forEach(c => console.log(`[Debug] Community: ${c.name}, Area: ${c.area}, ID: ${c.id}`));
       openPage(state.currentPage);

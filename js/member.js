@@ -479,6 +479,7 @@
     { name: "區大直播", icon: "photo/a08.png", url: "live-meeting.html" },
     { name: "會議記錄", icon: "photo/a09.png", url: "bulletin-meeting.html" },
     { name: "清潔通報", icon: "photo/a10.png", url: "bulletin-clean.html" },
+    { name: "通知清潔", icon: "photo/k08.png", url: "clean-report.html" },
     { name: "社區活動", icon: "photo/a11.png", url: "bulletin-activity.html" },
     { name: "AI對話", icon: "photo/a12.png", url: "https://gemini.google.com/?hl=zh-TW", openExternal: true },
   ];

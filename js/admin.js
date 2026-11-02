@@ -14475,7 +14475,7 @@
       const base = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}`;
       const url = new URL("chatphone.html", base);
       url.searchParams.set("c", communityId);
-      url.searchParams.set("v", "125");
+      url.searchParams.set("v", "126");
       if (titleEl) titleEl.textContent = `通話${cname ? `｜${String(cname).trim()}` : ""}`;
       if (frame) frame.src = url.toString();
       modal.hidden = false;
@@ -14766,7 +14766,7 @@
       const base = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}`;
       const url = new URL("chatphone.html", base);
       url.searchParams.set("c", communityId);
-      url.searchParams.set("v", "125");
+      url.searchParams.set("v", "126");
       if (titleEl) titleEl.textContent = `通話${cname ? `｜${String(cname).trim()}` : ""}`;
       if (frame) frame.src = url.toString();
       modal.hidden = false;
@@ -30042,6 +30042,12 @@
     if (moduleId !== "finance" && typeof window.__nwFinanceCleanup === "function") {
       try { window.__nwFinanceCleanup(); } catch {}
     }
+    if (moduleId !== "clean" && typeof window.__nwCleanCleanup === "function") {
+      try { window.__nwCleanCleanup(); } catch {}
+    }
+    if (moduleId !== "duty" && typeof window.__nwDutyCleanup === "function") {
+      try { window.__nwDutyCleanup(); } catch {}
+    }
     const gate = getButtonConfig(moduleId);
     if (gate && gate.enabled === false) {
       toast("此功能未開放（示意）");
@@ -30130,6 +30136,30 @@
         window.NwAdminCommunity.UI.renderCommunityStaffPage(contentEl, { communityId: cid, communityCode: cidKey, communityName: cname });
       } else {
         contentEl.innerHTML = `<div style="padding:24px;color:#d00;">管理帳號模組尚未載入，請稍後再試。</div>`;
+      }
+      updateFooterActiveNav();
+      return;
+    }
+    if (moduleId === "clean") {
+      if (subnavEl) subnavEl.innerHTML = "";
+      const cid = String(resolveActiveCommunityId() || "").trim() || "default";
+      const cname = (state.communities.find((c) => c.id === cid) || {}).name || "";
+      if (window.NwAdminClean && window.NwAdminClean.UI) {
+        window.NwAdminClean.UI.renderCleanPage(contentEl, { communityId: cid, communityName: cname });
+      } else {
+        contentEl.innerHTML = `<div style="padding:24px;color:#d00;">清潔通報模組尚未載入，請稍後再試。</div>`;
+      }
+      updateFooterActiveNav();
+      return;
+    }
+    if (moduleId === "duty") {
+      if (subnavEl) subnavEl.innerHTML = "";
+      const cid = String(resolveActiveCommunityId() || "").trim() || "default";
+      const cname = (state.communities.find((c) => c.id === cid) || {}).name || "";
+      if (window.NwAdminDuty && window.NwAdminDuty.UI) {
+        window.NwAdminDuty.UI.renderDutyPage(contentEl, { communityId: cid, communityName: cname });
+      } else {
+        contentEl.innerHTML = `<div style="padding:24px;color:#d00;">勤務管理模組尚未載入，請稍後再試。</div>`;
       }
       updateFooterActiveNav();
       return;

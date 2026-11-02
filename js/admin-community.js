@@ -15,7 +15,14 @@
       return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
     }
 
-    const COMMUNITY_STAFF_CATEGORIES = ["總幹事", "秘書", "保全"];
+    const COMMUNITY_STAFF_CATEGORIES = ["總幹事", "秘書", "清潔", "機電", "保全"];
+    const COMMUNITY_STAFF_TITLES = {
+      "總幹事": ["正總幹事", "副總幹事", "經理", "副經理"],
+      "秘書": ["秘書長", "行政秘書", "財務秘書", "吧檯秘書"],
+      "清潔": [],
+      "機電": [],
+      "保全": ["日班正職", "夜班正職", "日班機動", "夜班機動", "車道"]
+    };
     const DEFAULT_SUITE_FORMULA = Object.freeze({
       electric: { enabled: true, name: "電費", formula: "usage * unitPrice", unitPrice: 5.5, baseFee: 0, remark: "usage=本期度數；unitPrice 可自訂單價；baseFee 為基本費" },
       water: { enabled: true, name: "水費", formula: "usage * unitPrice + baseFee", unitPrice: 12, baseFee: 50, remark: "usage=本期用水量；unitPrice 每度單價；baseFee 基本費" },
@@ -137,14 +144,14 @@
       return false;
     }
 
-    async function saveCommunityStaffUser({ isEdit, userId, communityId, communityCode, communityName, category, name, loginAccount, email, phone, passwordPlain }) {
+    async function saveCommunityStaffUser({ isEdit, userId, communityId, communityCode, communityName, category, name, title, loginAccount, email, phone, passwordPlain }) {
       const fb = typeof window.firebase !== "undefined" ? window.firebase : null;
       const db = fb && fb.firestore ? fb.firestore() : null;
       if (!db) throw new Error("Firestore 尚未初始化");
       const cid = String(communityId || "").trim();
       if (!cid) throw new Error("缺少社區資訊");
       const cat = String(category || "").trim();
-      if (!COMMUNITY_STAFF_CATEGORIES.includes(cat)) throw new Error("類別僅限總幹事、秘書、保全");
+      if (!COMMUNITY_STAFF_CATEGORIES.includes(cat)) throw new Error("類別僅限總幹事、秘書、清潔、機電、保全");
       if (!String(name || "").trim()) throw new Error("姓名為必填");
       if (!String(loginAccount || "").trim()) throw new Error("登入帳號為必填");
       if (!isEdit && !String(passwordPlain || "").trim()) throw new Error("密碼為必填");
@@ -158,9 +165,12 @@
       if (!uid) throw new Error("無法取得使用者 ID");
       const passwordHash = (!isEdit || String(passwordPlain || "").trim()) ? (await sha256Hex(passwordPlain)) : "";
       const fbTs = (fb.firestore && fb.firestore.FieldValue && fb.firestore.FieldValue.serverTimestamp) ? fb.firestore.FieldValue.serverTimestamp() : Date.now();
+      const titleOptions = COMMUNITY_STAFF_TITLES[cat] || [];
+      const titleVal = titleOptions.includes(String(title || "").trim()) ? String(title).trim() : "";
       const payload = {
         role: "社區",
         category: cat,
+        title: titleVal,
         community: cid,
         communityIds: [cid],
         communityCodes: communityCode ? [String(communityCode).trim()] : [],
@@ -324,7 +334,7 @@
                     <div class="chip" aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:12px;background:rgba(37,99,235,.12);color:#2563eb;font-weight:900;">👥</div>
                     <div style="min-width:0;">
                       <h2>管理帳號</h2>
-                      <p>管理社區後台登入帳號（總幹事／秘書／保全），不包含管理員類別。</p>
+                      <p>管理社區後台登入帳號（總幹事／秘書／清潔／機電／保全），不包含管理員類別。</p>
                     </div>
                   </div>
                   <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
@@ -359,6 +369,8 @@
             const isMe = myUid && String(u.id || "") === myUid;
             const catTagColor = u.category === "總幹事" ? "background:rgba(194,24,91,.10);color:#9f1c1c;border:1px solid rgba(194,24,91,.22);"
               : u.category === "秘書" ? "background:rgba(37,99,235,.10);color:#1d4ed8;border:1px solid rgba(37,99,235,.22);"
+              : u.category === "清潔" ? "background:rgba(13,148,136,.10);color:#0f766e;border:1px solid rgba(13,148,136,.22);"
+              : u.category === "機電" ? "background:rgba(217,119,6,.10);color:#b45309;border:1px solid rgba(217,119,6,.22);"
               : "background:rgba(5,150,105,.10);color:#047857;border:1px solid rgba(5,150,105,.22);";
             return `
               <div style="display:grid;gap:10px;padding:14px;border-radius:18px;background:#fff;border:1px solid rgba(17,24,39,.10);box-shadow:0 8px 22px rgba(17,24,39,.06);">
@@ -372,7 +384,7 @@
                         ${u.enabled === false ? `<span class="tag" style="background:rgba(107,114,128,.12);color:#4b5563;border-radius:999px;padding:0 10px;height:22px;font-size:calc(12px * var(--fs, 1));">停用</span>` : ""}
                         ${isMe ? `<span class="tag" style="background:rgba(16,185,129,.12);color:#065f46;border-radius:999px;padding:0 10px;height:22px;font-size:calc(12px * var(--fs, 1));">本人</span>` : ""}
                       </div>
-                      <div style="margin-top:4px;font-size:calc(12px * var(--fs, 1));color:#6b7280;">帳號：${esc(u.username || "—")} ｜ Email：${esc(u.email || "—")} ｜ 手機：${esc(u.phone || "—")}</div>
+                      <div style="margin-top:4px;font-size:calc(12px * var(--fs, 1));color:#6b7280;">${u.title ? `職稱：${esc(u.title)} ｜ ` : ""}帳號：${esc(u.username || "—")} ｜ Email：${esc(u.email || "—")} ｜ 手機：${esc(u.phone || "—")}</div>
                       ${u.passwordPlain ? `<div style="margin-top:4px;font-size:calc(11px * var(--fs, 1));color:#6b7280;">密碼：<b style="color:#111827;">${esc(u.passwordPlain)}</b></div>` : ""}
                     </div>
                   </div>
@@ -431,6 +443,9 @@
                       ${COMMUNITY_STAFF_CATEGORIES.map((c) => `<option value="${esc(c)}" ${c === cat ? "selected" : ""}>${esc(c)}</option>`).join("")}
                     </select>
                   </div>
+                  <div class="field" style="gap:2px;margin:0;"><label style="font-size:calc(11px * var(--fs, 1));">職稱（選填）</label>
+                    <select id="acm_title" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"></select>
+                  </div>
                   <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
                     <div class="field" style="gap:2px;margin:0;"><label style="font-size:calc(11px * var(--fs, 1));">姓名 *</label><input id="acm_name" type="text" value="${esc(isEdit ? (user.name || "") : "")}" placeholder="真實姓名" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"/></div>
                     <div class="field" style="gap:2px;margin:0;"><label style="font-size:calc(11px * var(--fs, 1));">登入帳號 *</label><input id="acm_username" type="text" value="${esc(isEdit ? (user.username || "") : "")}" placeholder="例如：sec01" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.12);width:100%;font-weight:800;"/></div>
@@ -462,10 +477,25 @@
               statusEl.style.border = isErr ? "1px solid rgba(211,47,47,.22)" : "1px solid rgba(46,125,50,.22)";
             };
             m.modal.querySelector("#acm_cancel").onclick = () => m.close();
+            const catSel = m.modal.querySelector("#acm_category");
+            const titleSel = m.modal.querySelector("#acm_title");
+            if (catSel && titleSel) {
+              const initTitle = isEdit ? String(user.title || "") : "";
+              titleSel.dataset.value = initTitle;
+              const renderTitleOptions = () => {
+                const list = COMMUNITY_STAFF_TITLES[String(catSel.value || "").trim()] || [];
+                const keep = String(titleSel.dataset.value || "");
+                titleSel.innerHTML = `<option value="">（不設定）</option>` + list.map((t) => `<option value="${esc(t)}"${t === keep ? " selected" : ""}>${esc(t)}</option>`).join("");
+                titleSel.disabled = list.length === 0;
+              };
+              renderTitleOptions();
+              catSel.onchange = () => { titleSel.dataset.value = ""; renderTitleOptions(); };
+            }
             const saveBtn = m.modal.querySelector("#acm_save");
             if (saveBtn) saveBtn.onclick = async () => {
               const payload = {
                 category: String(m.modal.querySelector("#acm_category").value || "").trim(),
+                title: titleSel ? String(titleSel.value || "").trim() : "",
                 name: String(m.modal.querySelector("#acm_name").value || "").trim(),
                 loginAccount: String(m.modal.querySelector("#acm_username").value || "").trim(),
                 email: String(m.modal.querySelector("#acm_email").value || "").trim(),
@@ -554,6 +584,7 @@
                     list.push({
                       id: d.id,
                       category: String(v.category || ""),
+                      title: String(v.title || ""),
                       name: String(v.displayName || v.name || ""),
                       username: String(v.username || v.email || v.phone || ""),
                       email: String(v.email || ""),
