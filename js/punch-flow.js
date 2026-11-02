@@ -143,24 +143,39 @@
     });
   }
 
+  function parseCommunityDoc(v) {
+    if (!v) return null;
+    const rawLat = v.latitude != null ? v.latitude : v.lat;
+    const rawLng = v.longitude != null ? v.longitude : v.lng;
+    const rawRange = v.checkinRange != null ? v.checkinRange : v.range;
+    const lat = rawLat != null ? Number(rawLat) : NaN;
+    const lng = rawLng != null ? Number(rawLng) : NaN;
+    const range = rawRange != null ? Number(rawRange) : 50;
+    return {
+      name: String(v.name || ""),
+      lat: Number.isFinite(lat) ? lat : null,
+      lng: Number.isFinite(lng) ? lng : null,
+      range: Number.isFinite(range) && range > 0 ? range : 50,
+    };
+  }
+
   async function loadCommunity() {
     const o = ctx.opts || {};
     if (!o.db || !o.communityId) return null;
+    const cid = String(o.communityId).trim();
+    const col = o.db.collection("communities");
+    // 1) 以文件 ID 查（新版以亂碼 ID 建檔）
     try {
-      const snap = await o.db.collection("communities").doc(String(o.communityId)).get();
-      if (snap && snap.exists) {
-        const v = snap.data() || {};
-        const lat = v.latitude != null ? Number(v.latitude) : NaN;
-        const lng = v.longitude != null ? Number(v.longitude) : NaN;
-        const range = v.checkinRange != null ? Number(v.checkinRange) : 50;
-        return {
-          name: String(v.name || ""),
-          lat: Number.isFinite(lat) ? lat : null,
-          lng: Number.isFinite(lng) ? lng : null,
-          range: Number.isFinite(range) && range > 0 ? range : 50,
-        };
-      }
-    } catch (e) { console.warn("punch flow: load community failed", e); }
+      const snap = await col.doc(cid).get();
+      if (snap && snap.exists) return parseCommunityDoc(snap.data());
+    } catch (e) { console.warn("punch flow: load community by id failed", e); }
+    // 2) 以社區代號(username) 或 id 欄位查（舊版以社區代號建檔）
+    for (const field of ["username", "id"]) {
+      try {
+        const q = await col.where(field, "==", cid).limit(1).get();
+        if (q && q.size) return parseCommunityDoc(q.docs[0].data());
+      } catch (e) { console.warn(`punch flow: load community by ${field} failed`, e); }
+    }
     return null;
   }
 
@@ -218,11 +233,13 @@
     ctx.distance = distance;
     ctx.within = within;
 
-    const note = !hasCenter
-      ? `<div class="nwp-note warn"><b>此社區尚未設定打卡範圍</b><div>可直接進行自拍打卡。</div></div>`
-      : (within
-        ? `<div class="nwp-note ok"><b>已進入打卡範圍</b><div>距離社區中心約 ${Math.round(distance)} 公尺（允許 ${c.range} 公尺）</div></div>`
-        : `<div class="nwp-note bad"><b>不在打卡範圍內</b><div>距離社區中心約 ${Math.round(distance)} 公尺，需在 ${c.range} 公尺內才能打卡。</div></div>`);
+    const note = !c
+      ? `<div class="nwp-note warn"><b>查無社區資料</b><div>找不到社區設定，暫不限制打卡範圍。</div></div>`
+      : !hasCenter
+        ? `<div class="nwp-note warn"><b>此社區尚未設定打卡範圍</b><div>可直接進行自拍打卡。</div></div>`
+        : (within
+          ? `<div class="nwp-note ok"><b>已進入打卡範圍</b><div>距離社區中心約 ${Math.round(distance)} 公尺（允許 ${c.range} 公尺）</div></div>`
+          : `<div class="nwp-note bad"><b>不在打卡範圍內</b><div>距離社區中心約 ${Math.round(distance)} 公尺，需在 ${c.range} 公尺內才能打卡。</div></div>`);
 
     setBody(`
       <div class="nwp-map" id="nwpMap"></div>

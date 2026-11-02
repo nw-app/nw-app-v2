@@ -185,7 +185,7 @@
     }
   }
 
-  function resolveCommunity() {
+  async function resolveCommunity() {
     const cid = activeCommunityId();
     state.communityId = cid;
     const profile = state.profile || {};
@@ -195,6 +195,18 @@
     const idx = ids.map((x) => String(x || "").trim()).indexOf(String(cid).trim());
     if (idx >= 0 && names[idx]) name = String(names[idx]);
     if (!name && profile.communityName) name = String(profile.communityName);
+    if (!name && cid && cid !== "default") {
+      try {
+        const snap = await db.collection("communities").doc(String(cid)).get();
+        if (snap && snap.exists) name = String((snap.data() || {}).name || "").trim();
+      } catch (e) { console.warn("resolve community name failed", e); }
+      if (!name) {
+        try {
+          const q = await db.collection("communities").where("username", "==", String(cid)).limit(1).get();
+          if (q && q.size) name = String((q.docs[0].data() || {}).name || "").trim();
+        } catch (e) { console.warn("resolve community name by username failed", e); }
+      }
+    }
     state.communityName = name;
     if (el.communityName) el.communityName.textContent = name || cid || "社區智慧系統平台";
   }
@@ -811,7 +823,7 @@
       }
       state.user = user;
       await loadProfile(user);
-      resolveCommunity();
+      await resolveCommunity();
       if (!isAllowedWorker(state.profile, user)) { state.ready = false; showDenied(); return; }
       state.ready = true;
       renderTab();

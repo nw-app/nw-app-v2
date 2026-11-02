@@ -673,13 +673,26 @@
     return String((profile && (profile.displayName || profile.name || profile.fullName)) || (user && user.displayName) || (user && user.email) || "").trim();
   }
 
-  function resolveCommunityName(profile, cid) {
+  async function resolveCommunityName(profile, cid) {
     const names = Array.isArray(profile && profile.communityNames) ? profile.communityNames : [];
     const ids = Array.isArray(profile && profile.communityIds) ? profile.communityIds : [];
+    const key = String(cid || "").trim();
     let name = "";
-    const idx = ids.map((x) => String(x || "").trim()).indexOf(String(cid || "").trim());
+    const idx = ids.map((x) => String(x || "").trim()).indexOf(key);
     if (idx >= 0 && names[idx]) name = String(names[idx]);
     if (!name && profile && profile.communityName) name = String(profile.communityName);
+    if (!name && key && key !== "default") {
+      try {
+        const snap = await db.collection("communities").doc(key).get();
+        if (snap && snap.exists) name = String((snap.data() || {}).name || "").trim();
+      } catch (e) { console.warn("resolve community name failed", e); }
+      if (!name) {
+        try {
+          const q = await db.collection("communities").where("username", "==", key).limit(1).get();
+          if (q && q.size) name = String((q.docs[0].data() || {}).name || "").trim();
+        } catch (e) { console.warn("resolve community name by username failed", e); }
+      }
+    }
     return name;
   }
 
@@ -821,7 +834,7 @@
       }
       const profile = await loadProfile(user);
       const cid = activeCommunityId();
-      const communityName = resolveCommunityName(profile, cid);
+      const communityName = await resolveCommunityName(profile, cid);
       const name = displayName(profile, user);
       setHeader(name, communityName, profile);
       currentCtx = {
