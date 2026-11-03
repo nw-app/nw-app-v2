@@ -130,17 +130,66 @@
   }
 
   /* ---------- data ---------- */
-  function getPosition() {
+  function geoError(err) {
+    let m = "無法取得目前位置";
+    if (err && err.code === 1) m = "定位權限被拒絕，請於瀏覽器設定中允許存取位置";
+    else if (err && err.code === 2) m = "目前無法取得位置，請確認已開啟 GPS";
+    else if (err && err.code === 3) m = "定位逾時，請移至空曠處後重試";
+    if (err && err.message) m = err.message;
+    return new Error(m);
+  }
+
+  function askPosition(options) {
     return new Promise((res, rej) => {
-      if (!navigator.geolocation) { rej(new Error("此裝置不支援定位功能")); return; }
-      navigator.geolocation.getCurrentPosition(res, (err) => {
-        let m = "無法取得目前位置";
-        if (err && err.code === 1) m = "定位權限被拒絕，請於瀏覽器設定中允許存取位置";
-        else if (err && err.code === 2) m = "目前無法取得位置，請確認已開啟 GPS";
-        else if (err && err.code === 3) m = "定位逾時，請移至空曠處後重試";
-        rej(new Error(m));
-      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+      navigator.geolocation.getCurrentPosition(res, rej, options);
     });
+  }
+
+  /* 多元定位（一）：先高精度 GPS；若 GPS 關閉或收訊不佳，改用手機連網（網路定位）。 */
+  async function getPosition() {
+    if (!navigator.geolocation) throw new Error("此裝置不支援定位功能");
+    try {
+      return await askPosition({ enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+    } catch (err) {
+      // 使用者明確拒絕權限：不再嘗試其他方式
+      if (err && err.code === 1) throw geoError(err);
+      // GPS 關閉、逾時或無法取得 → 改用網路定位（手機連網功能，精度較低）
+      try {
+        const pos = await askPosition({ enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 });
+        pos.__network = true;
+        return pos;
+      } catch (err2) {
+        throw geoError(err2);
+      }
+    }
+  }
+
+  /* 多元定位（二）：IP 定位（免費 API，無需 GPS）。精度較低，僅約略位置。 */
+  async function getPositionByIP() {
+    const sources = [
+      {
+        url: "https://ipwho.is/",
+        pick: (d) => (d && d.success !== false && d.latitude != null ? d : null),
+        map: (d) => ({ lat: Number(d.latitude), lng: Number(d.longitude), label: [d.city, d.region].filter(Boolean).join("") })
+      },
+      {
+        url: "https://ipapi.co/json/",
+        pick: (d) => (d && d.latitude != null ? d : null),
+        map: (d) => ({ lat: Number(d.latitude), lng: Number(d.longitude), label: [d.city, d.region].filter(Boolean).join("") })
+      }
+    ];
+    for (const s of sources) {
+      try {
+        const r = await fetch(s.url, { cache: "no-store" });
+        if (!r.ok) continue;
+        const d = await r.json();
+        const hit = s.pick(d);
+        if (!hit) continue;
+        const p = s.map(hit);
+        if (Number.isFinite(p.lat) && Number.isFinite(p.lng) && (p.lat !== 0 || p.lng !== 0)) return p;
+      } catch (e) { /* 換下一個來源 */ }
+    }
+    throw new Error("目前無法以網路（IP）定位，請改用其他方式或稍後再試");
   }
 
   function parseCommunityDoc(v) {
@@ -197,7 +246,32 @@
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
         acc: Number(pos.coords.accuracy) || 0,
+        ip: false,
+        network: !!pos.__network,
       };
+      ctx.community = comm;
+      renderMapStep();
+    } catch (e) {
+      if (!ctx) return;
+      renderLocateError(e);
+    }
+  }
+
+  /* 以網路（IP）定位，供 GPS 無法使用時改用 */
+  async function locateByIP() {
+    if (!ctx) return;
+    setBody(`
+      <div class="nwp-loading">
+        <div class="nwp-spin"></div>
+        <div class="nwp-loading-t">正在以網路（IP）定位…</div>
+        <div class="nwp-loading-s">此方式不需開啟 GPS，位置僅約略</div>
+      </div>`);
+    try {
+      const ip = await getPositionByIP();
+      if (!ctx) return;
+      const comm = await loadCommunity();
+      if (!ctx) return;
+      ctx.pos = { lat: ip.lat, lng: ip.lng, acc: 0, ip: true, ipLabel: ip.label || "" };
       ctx.community = comm;
       renderMapStep();
     } catch (e) {
@@ -209,14 +283,18 @@
   function renderLocateError(e) {
     setBody(`
       <div class="nwp-note bad"><b>無法取得目前位置</b><div>${esc((e && e.message) || "請確認已開啟定位並允許權限")}</div></div>
+      <div class="nwp-note warn"><b>可改用其他定位方式</b><div>GPS 收訊不佳或未開啟時，可改用網路（IP）定位；此方式不需 GPS，位置僅約略。</div></div>
       <div class="nwp-actions">
         <button type="button" class="nwp-btn ghost" id="nwpCancel">取消</button>
-        <button type="button" class="nwp-btn primary" id="nwpRetry">重新定位</button>
+        <button type="button" class="nwp-btn ghost" id="nwpRetry">重新定位</button>
+        <button type="button" class="nwp-btn primary" id="nwpIp">網路定位</button>
       </div>`);
     const cx = overlay.querySelector("#nwpCancel");
     if (cx) cx.onclick = () => finish({ ok: false });
     const rt = overlay.querySelector("#nwpRetry");
     if (rt) rt.onclick = () => locate();
+    const ip = overlay.querySelector("#nwpIp");
+    if (ip) ip.onclick = () => locateByIP();
   }
 
   function renderMapStep() {
@@ -241,10 +319,21 @@
           ? `<div class="nwp-note ok"><b>已進入打卡範圍</b><div>距離社區中心約 ${Math.round(distance)} 公尺（允許 ${c.range} 公尺）</div></div>`
           : `<div class="nwp-note bad"><b>不在打卡範圍內</b><div>距離社區中心約 ${Math.round(distance)} 公尺，需在 ${c.range} 公尺內才能打卡。</div></div>`);
 
+    const srcNote = p.ip
+      ? `<div class="nwp-note warn"><b>目前使用網路（IP）定位</b><div>${p.ipLabel ? "約在 " + esc(p.ipLabel) + "；" : ""}位置為約略範圍，可能與實際位置有落差。</div></div>`
+      : (p.network
+        ? `<div class="nwp-note warn"><b>目前使用網路定位</b><div>GPS 未開啟或收訊不佳，已改用手機連網定位，精度較低。</div></div>`
+        : "");
+
+    const hint = p.ip
+      ? `網路（IP）定位：僅約略位置`
+      : (p.network ? `網路定位：精度較低` : `定位精度約 ±${Math.round(p.acc)} 公尺`);
+
     setBody(`
       <div class="nwp-map" id="nwpMap"></div>
       ${note}
-      <div class="nwp-hint">定位精度約 ±${Math.round(p.acc)} 公尺</div>
+      ${srcNote}
+      <div class="nwp-hint">${hint}</div>
       <div class="nwp-actions">
         <button type="button" class="nwp-btn ghost" id="nwpRelocate">重新定位</button>
         <button type="button" class="nwp-btn primary" id="nwpNext" ${within ? "" : "disabled"}>前往自拍</button>
@@ -287,7 +376,7 @@
       pts.push([c.lat, c.lng]);
     }
     L.circle([p.lat, p.lng], {
-      radius: Math.max(p.acc || 0, 10), color: "#2563eb", weight: 1, fillColor: "#2563eb", fillOpacity: 0.10,
+      radius: p.ip ? 3000 : Math.max(p.acc || 0, 10), color: "#2563eb", weight: 1, fillColor: "#2563eb", fillOpacity: 0.10,
     }).addTo(map);
     L.marker([p.lat, p.lng], {
       icon: L.divIcon({ className: "", html: '<div class="nwp-mepin"></div>', iconSize: [20, 20], iconAnchor: [10, 10] }),

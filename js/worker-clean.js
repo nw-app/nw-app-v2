@@ -555,20 +555,62 @@
     await ref.set(payload, { merge: true });
   }
 
+  function optimisticPunchRecord(base, type, photo, meta) {
+    const now = new Date();
+    const geo = {
+      latitude: meta && meta.latitude != null ? meta.latitude : null,
+      longitude: meta && meta.longitude != null ? meta.longitude : null,
+      distance: meta && meta.distance != null ? meta.distance : null,
+      accuracy: meta && meta.accuracy != null ? meta.accuracy : null,
+    };
+    const next = Object.assign({}, base || {}, {
+      uid: state.user ? state.user.uid : "",
+      name: state.userName || "",
+      workDate: todayKey(),
+      communityId: state.communityId,
+      updatedAt: now,
+    });
+    if (type === "in") {
+      next.inAt = now;
+      next.outAt = null;
+      next.inPhoto = photo || "";
+      next.inGeo = geo;
+    } else {
+      next.outAt = now;
+      next.outPhoto = photo || "";
+      next.outGeo = geo;
+    }
+    return next;
+  }
+
+  function applyOptimisticPunch(type, photo, meta) {
+    state.todayCheckin = optimisticPunchRecord(state.todayCheckin, type, photo, meta);
+    if (state.tab === "punch") renderPunch();
+  }
+
   function doPunch(type, btn) {
     if (!state.communityId) { toast("缺少社區資訊", true); return; }
     if (!state.user) { toast("尚未登入", true); return; }
     if (!window.NwPunchFlow) { toast("打卡模組載入失敗，請重新整理", true); return; }
     const isIn = type === "in";
+    let lastPhoto = "";
+    let lastMeta = null;
     if (btn) btn.disabled = true;
     window.NwPunchFlow.open({
       db,
       communityId: state.communityId,
       title: isIn ? "上班打卡" : "下班打卡",
-      onConfirm: (photo, meta) => savePunch(type, photo, meta),
+      onConfirm: (photo, meta) => {
+        lastPhoto = photo || "";
+        lastMeta = meta || null;
+        return savePunch(type, photo, meta);
+      },
     }).then((r) => {
       if (btn) { try { btn.disabled = false; } catch {} }
-      if (r && r.ok) toast((isIn ? "上班" : "下班") + "打卡成功 " + fmtTime(new Date()));
+      if (r && r.ok) {
+        applyOptimisticPunch(type, lastPhoto, lastMeta);
+        toast((isIn ? "上班" : "下班") + "打卡成功 " + fmtTime(new Date()));
+      }
     }).catch((e) => {
       console.error(e);
       if (btn) { try { btn.disabled = false; } catch {} }

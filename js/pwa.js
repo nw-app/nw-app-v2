@@ -1,6 +1,22 @@
 (() => {
   const DISMISS_KEY = "nw_pwa_install_dismissed_v1";
   const DISMISS_DAYS = 30;
+  const updateViewportSafeInsets = () => {
+    const root = document && document.documentElement;
+    if (!root) return;
+
+    let bottomInset = 0;
+    try {
+      const vv = window.visualViewport;
+      if (vv) {
+        // 在 Android PWA 三鍵導航下，visualViewport 常能反映被系統列吃掉的實際高度。
+        bottomInset = Math.max(0, Math.round((window.innerHeight || 0) - (vv.height + vv.offsetTop)));
+      }
+    } catch {}
+
+    root.style.setProperty("--nw-bottom-overlay", `${bottomInset}px`);
+    root.style.setProperty("--wc-bottom-overlay", `${bottomInset}px`);
+  };
   const shouldSuppressFirestoreAbort = (err) => {
     const msg = String((err && (err.message || err.reason?.message)) || err || "");
     if (!(msg.includes("net::ERR_ABORTED") || msg.includes("net::ERR_CONNECTION_RESET"))) return false;
@@ -18,6 +34,14 @@
     const msg = String((e && (e.error || e.message)) || "");
     if (shouldSuppressFirestoreAbort(msg)) e.preventDefault();
   });
+
+  updateViewportSafeInsets();
+  window.addEventListener("resize", updateViewportSafeInsets, { passive: true });
+  window.addEventListener("orientationchange", updateViewportSafeInsets, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", updateViewportSafeInsets, { passive: true });
+    window.visualViewport.addEventListener("scroll", updateViewportSafeInsets, { passive: true });
+  }
 
   function isPhoneLike() {
     const hasTouch = typeof navigator !== "undefined" && Number(navigator.maxTouchPoints || 0) > 0;

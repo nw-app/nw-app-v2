@@ -243,6 +243,7 @@
   }
 
   function subscribePunchTab(root, ctx, st, rerender) {
+    ctx.__punchUi = { st, rerender };
     subscribeDutySettings(ctx.communityId, (d) => { st.duty = mergedDuty(d); rerender(); });
     if (!ctx.communityId) return;
     const tk = todayKey();
@@ -303,20 +304,71 @@
     await ref.set(payload, { merge: true });
   }
 
+  function optimisticPunchRecord(base, ctx, type, photo, meta) {
+    const now = new Date();
+    const geo = {
+      latitude: meta && meta.latitude != null ? meta.latitude : null,
+      longitude: meta && meta.longitude != null ? meta.longitude : null,
+      distance: meta && meta.distance != null ? meta.distance : null,
+      accuracy: meta && meta.accuracy != null ? meta.accuracy : null,
+    };
+    const next = Object.assign({}, base || {}, {
+      uid: ctx.uid,
+      name: ctx.userName || "",
+      category: ctx.category || "",
+      workDate: todayKey(),
+      communityId: ctx.communityId,
+      updatedAt: now,
+    });
+    if (type === "in") {
+      next.inAt = now;
+      next.outAt = null;
+      next.inPhoto = photo || "";
+      next.inGeo = geo;
+    } else {
+      next.outAt = now;
+      next.outPhoto = photo || "";
+      next.outGeo = geo;
+    }
+    return next;
+  }
+
+  function applyOptimisticPunch(ctx, type, photo, meta) {
+    const ui = ctx && ctx.__punchUi;
+    if (!ui || !ui.st || typeof ui.rerender !== "function") return;
+    const next = optimisticPunchRecord(ui.st.checkin, ctx, type, photo, meta);
+    ui.st.checkin = next;
+    const monthList = Array.isArray(ui.st.monthCheckins) ? ui.st.monthCheckins.slice() : [];
+    const idx = monthList.findIndex((x) => x && String(x.workDate || "") === String(next.workDate || ""));
+    if (idx >= 0) monthList[idx] = Object.assign({}, monthList[idx], next);
+    else monthList.push(next);
+    ui.st.monthCheckins = monthList;
+    ui.rerender();
+  }
+
   function doPunch(ctx, type, btn) {
     if (!ctx || !ctx.communityId) { toast("缺少社區資訊", true); return; }
     if (!ctx.uid) { toast("尚未登入", true); return; }
     if (!window.NwPunchFlow) { toast("打卡模組載入失敗，請重新整理", true); return; }
     const isIn = type === "in";
+    let lastPhoto = "";
+    let lastMeta = null;
     if (btn) btn.disabled = true;
     window.NwPunchFlow.open({
       db,
       communityId: ctx.communityId,
       title: isIn ? "上班打卡" : "下班打卡",
-      onConfirm: (photo, meta) => savePunch(ctx, type, photo, meta),
+      onConfirm: (photo, meta) => {
+        lastPhoto = photo || "";
+        lastMeta = meta || null;
+        return savePunch(ctx, type, photo, meta);
+      },
     }).then((r) => {
       if (btn) { try { btn.disabled = false; } catch {} }
-      if (r && r.ok) toast((isIn ? "上班" : "下班") + "打卡成功 " + fmtTime(new Date()));
+      if (r && r.ok) {
+        applyOptimisticPunch(ctx, type, lastPhoto, lastMeta);
+        toast((isIn ? "上班" : "下班") + "打卡成功 " + fmtTime(new Date()));
+      }
     }).catch((e) => {
       console.error(e);
       if (btn) { try { btn.disabled = false; } catch {} }
