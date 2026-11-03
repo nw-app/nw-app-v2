@@ -1,21 +1,39 @@
 (() => {
   const DISMISS_KEY = "nw_pwa_install_dismissed_v1";
   const DISMISS_DAYS = 30;
+  const isStandaloneMode = () => {
+    try {
+      if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) return true;
+    } catch {}
+    try {
+      return Boolean(window.navigator && window.navigator.standalone);
+    } catch {
+      return false;
+    }
+  };
   const updateViewportSafeInsets = () => {
     const root = document && document.documentElement;
     if (!root) return;
 
     let bottomInset = 0;
-    try {
-      const vv = window.visualViewport;
-      if (vv) {
-        // 在 Android PWA 三鍵導航下，visualViewport 常能反映被系統列吃掉的實際高度。
-        bottomInset = Math.max(0, Math.round((window.innerHeight || 0) - (vv.height + vv.offsetTop)));
-      }
-    } catch {}
+    if (isStandaloneMode()) {
+      try {
+        const vv = window.visualViewport;
+        if (vv) {
+          // 僅在 PWA 模式下套用底部系統列補償，避免瀏覽器模式把網址列高度誤算成底部留白。
+          bottomInset = Math.max(0, Math.round((window.innerHeight || 0) - (vv.height + vv.offsetTop)));
+        }
+      } catch {}
+    }
 
     root.style.setProperty("--nw-bottom-overlay", `${bottomInset}px`);
     root.style.setProperty("--wc-bottom-overlay", `${bottomInset}px`);
+  };
+  const scheduleViewportSafeInsets = () => {
+    updateViewportSafeInsets();
+    [120, 360, 900].forEach((ms) => {
+      window.setTimeout(updateViewportSafeInsets, ms);
+    });
   };
   const shouldSuppressFirestoreAbort = (err) => {
     const msg = String((err && (err.message || err.reason?.message)) || err || "");
@@ -35,12 +53,17 @@
     if (shouldSuppressFirestoreAbort(msg)) e.preventDefault();
   });
 
-  updateViewportSafeInsets();
-  window.addEventListener("resize", updateViewportSafeInsets, { passive: true });
-  window.addEventListener("orientationchange", updateViewportSafeInsets, { passive: true });
+  scheduleViewportSafeInsets();
+  window.addEventListener("resize", scheduleViewportSafeInsets, { passive: true });
+  window.addEventListener("orientationchange", scheduleViewportSafeInsets, { passive: true });
+  window.addEventListener("load", scheduleViewportSafeInsets, { passive: true });
+  window.addEventListener("pageshow", scheduleViewportSafeInsets, { passive: true });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) scheduleViewportSafeInsets();
+  }, { passive: true });
   if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", updateViewportSafeInsets, { passive: true });
-    window.visualViewport.addEventListener("scroll", updateViewportSafeInsets, { passive: true });
+    window.visualViewport.addEventListener("resize", scheduleViewportSafeInsets, { passive: true });
+    window.visualViewport.addEventListener("scroll", scheduleViewportSafeInsets, { passive: true });
   }
 
   function isPhoneLike() {
@@ -76,14 +99,7 @@
   }
 
   function isStandalone() {
-    try {
-      if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) return true;
-    } catch {}
-    try {
-      return Boolean(window.navigator && window.navigator.standalone);
-    } catch {
-      return false;
-    }
+    return isStandaloneMode();
   }
 
   async function updateOrientationLock() {
