@@ -75,6 +75,16 @@
 .nwp-cam video,.nwp-cam img{width:100%;height:100%;object-fit:cover;display:block;background:#000;}
 .nwp-cam-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;text-align:center;color:#e5e7eb;font-size:13px;font-weight:800;background:rgba(0,0,0,.45);}
 .nwp-file{display:flex;align-items:center;justify-content:center;width:100%;height:100%;min-height:220px;color:#fff;font-size:14px;font-weight:900;cursor:pointer;text-decoration:underline;}
+/* 自拍步驟：全螢幕相機預覽 */
+.nwp-flow.full{align-items:stretch;padding:0;background:#000;}
+.nwp-flow.full .nwp-card{max-width:100%;width:100%;height:100vh;height:100dvh;max-height:none;border-radius:0;background:#000;}
+.nwp-flow.full .nwp-hd{background:#000;border-bottom:0;padding-top:calc(12px + env(safe-area-inset-top,0px));}
+.nwp-flow.full .nwp-hd-t{color:#fff;}
+.nwp-flow.full .nwp-x{background:rgba(255,255,255,.18);color:#fff;}
+.nwp-flow.full .nwp-body{display:flex;flex-direction:column;padding:0;overflow:hidden;}
+.nwp-flow.full .nwp-cam{flex:1 1 auto;margin-top:0;border-radius:0;aspect-ratio:auto;max-height:none;}
+.nwp-flow.full .nwp-actions{flex:0 0 auto;margin-top:0;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));background:rgba(0,0,0,.55);}
+.nwp-flow.full .nwp-err{margin:10px 16px 0;}
 .nwp-mepin{width:20px;height:20px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-sizing:border-box;animation:nwpPulse 1.7s infinite;}
 @keyframes nwpPulse{0%{box-shadow:0 0 0 0 rgba(37,99,235,.55);}70%{box-shadow:0 0 0 16px rgba(37,99,235,0);}100%{box-shadow:0 0 0 0 rgba(37,99,235,0);}}
 `;
@@ -393,6 +403,7 @@
   /* ---------- selfie ---------- */
   function renderSelfieStep() {
     capturedPhoto = "";
+    if (overlay) overlay.classList.add("full");
     setBody(`
       <div class="nwp-cam">
         <video id="nwpVideo" playsinline autoplay muted></video>
