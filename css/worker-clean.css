@@ -10,6 +10,7 @@
   --tap:44px;
   --text:#1f2937;
   --fs:1;
+  --wc-app-height:100dvh;
   --wc-bottom-overlay:0px;
   --wc-safe-bottom:max(0px, env(safe-area-inset-bottom,0px), var(--wc-bottom-overlay));
 }
@@ -50,7 +51,8 @@ body{
   display:flex;
   flex-direction:column;
   height:100vh;
-  height:100dvh;
+  height:var(--wc-app-height,100dvh);
+  min-height:var(--wc-app-height,100dvh);
   max-width:520px;
   margin:0 auto;
   background:var(--wc-bg);

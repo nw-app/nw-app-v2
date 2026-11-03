@@ -15,17 +15,24 @@
     const root = document && document.documentElement;
     if (!root) return;
 
+    let appHeight = 0;
     let bottomInset = 0;
+    try {
+      const vv = window.visualViewport;
+      appHeight = Math.max(0, Math.round((vv && vv.height) || (window.innerHeight || 0) || (document.documentElement && document.documentElement.clientHeight) || 0));
+    } catch {}
     if (isStandaloneMode()) {
       try {
         const vv = window.visualViewport;
         if (vv) {
           // 僅在 PWA 模式下套用底部系統列補償，避免瀏覽器模式把網址列高度誤算成底部留白。
-          bottomInset = Math.max(0, Math.round((window.innerHeight || 0) - (vv.height + vv.offsetTop)));
+          const baseHeight = Math.max(window.innerHeight || 0, (document.documentElement && document.documentElement.clientHeight) || 0);
+          bottomInset = Math.max(0, Math.round(baseHeight - (vv.height + vv.offsetTop)));
         }
       } catch {}
     }
 
+    root.style.setProperty("--wc-app-height", `${appHeight}px`);
     root.style.setProperty("--nw-bottom-overlay", `${bottomInset}px`);
     root.style.setProperty("--wc-bottom-overlay", `${bottomInset}px`);
   };
