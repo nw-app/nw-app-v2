@@ -82,12 +82,54 @@
   function fmtTime(ts) {
     const d = toDate(ts);
     if (!d) return "--:--";
-    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  }
+  /* 現在時間 HH:MM:SS（每秒更新） */
+  let clockTimer = null;
+  function fmtClock(d) {
+    const t = d instanceof Date ? d : new Date();
+    return `${pad2(t.getHours())}:${pad2(t.getMinutes())}:${pad2(t.getSeconds())}`;
+  }
+  function startClock() {
+    const tick = () => {
+      const n = document.getElementById("wdClock");
+      if (!n) { if (clockTimer) { clearInterval(clockTimer); clockTimer = null; } return; }
+      n.textContent = fmtClock(new Date());
+    };
+    tick();
+    if (!clockTimer) clockTimer = setInterval(tick, 1000);
   }
   function fmtDateTime(ts) {
     const d = toDate(ts);
     if (!d) return "";
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  }
+  /* 依班別時間判定打卡狀態：正常→ok（綠底）／遲到、早退→bad（紅底） */
+  function hmToMin(hm) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(hm || "").trim());
+    if (!m) return null;
+    const h = Number(m[1]), mi = Number(m[2]);
+    if (h > 23 || mi > 59) return null;
+    return h * 60 + mi;
+  }
+  function minOfDay(ts) {
+    const d = toDate(ts);
+    return d ? d.getHours() * 60 + d.getMinutes() : null;
+  }
+  function shiftWindow(duty, category, shiftName) {
+    const rs = (duty && duty.roleShifts) || {};
+    const list = Array.isArray(rs[category]) ? rs[category] : [];
+    const def = list.find((x) => x && String(x.name || "") === String(shiftName || ""));
+    const start = (def && def.start) || (duty && duty.workStart) || "";
+    const end = (def && def.end) || (duty && duty.workEnd) || "";
+    return { start: String(start || ""), end: String(end || "") };
+  }
+  function punchBoxCls(ts, limitMin, isIn) {
+    if (!ts) return "";
+    const cur = minOfDay(ts);
+    if (cur == null || limitMin == null) return "ok";
+    if (isIn) return cur > limitMin ? "bad" : "ok";
+    return cur < limitMin ? "bad" : "ok";
   }
   function msOf(ts) {
     const d = toDate(ts);
@@ -252,14 +294,18 @@
       ? `${leave.leaveType || "請假"}${leave.reason ? "（" + leave.reason + "）" : ""}`
       : "無";
     const shift = st.todayShift || "未排班";
+    const win = shiftWindow(duty, ctx.category, st.todayShift || "");
+    const inCls = punchBoxCls(inAt, hmToMin(win.start), true);
+    const outCls = punchBoxCls(outAt, hmToMin(win.end), false);
 
     root.innerHTML = `
       <section class="wc-card">
-        <div class="hd">
+        <div class="hd today-hd">
           <div>
             <h2>今日出勤</h2>
-            <p>${esc(fmtDateKey(todayKey()))}</p>
+            <p>今日班表：${esc(shift)}</p>
           </div>
+          <div id="wdClock" style="font-weight:900;letter-spacing:.5px;color:var(--wc-red);font-variant-numeric:tabular-nums;">--:--:--</div>
         </div>
         <div class="wc-status ${statusCls}">
           <div class="dot">${dotText}</div>
@@ -269,8 +315,8 @@
           </div>
         </div>
         <div class="wc-meta" style="margin-top:12px;">
-          <div class="box"><div class="k">上班打卡</div><div class="v">${fmtTime(inAt)}</div></div>
-          <div class="box"><div class="k">下班打卡</div><div class="v">${fmtTime(outAt)}</div></div>
+          <div class="box${inCls ? " " + inCls : ""}"><div class="k">上班打卡</div><div class="v">${fmtTime(inAt)}</div></div>
+          <div class="box${outCls ? " " + outCls : ""}"><div class="k">下班打卡</div><div class="v">${fmtTime(outAt)}</div></div>
         </div>
         <button class="wc-punch ${onDuty ? "out" : ""}" type="button" data-wd-punch="${onDuty ? "out" : "in"}">${btnLabel}</button>
       </section>
@@ -291,6 +337,7 @@
 
     const btn = root.querySelector("[data-wd-punch]");
     if (btn) btn.onclick = () => doPunch(ctx, btn.getAttribute("data-wd-punch"), btn);
+    startClock();
   }
 
   function subscribePunchTab(root, ctx, st, rerender) {

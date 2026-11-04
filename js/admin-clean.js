@@ -202,6 +202,8 @@
     { name: "頂樓", zone: "RF", kind: "patrol" },
     { name: "公共廁所", zone: "1F", kind: "both" },
   ];
+  /* 清潔重點常用項目（可自行新增） */
+  const POINT_OPTIONS = ["清潔", "消毒", "垃圾清運", "地板拖洗", "玻璃擦拭", "廁所清潔", "垃圾分類", "補充耗材"];
 
   function kindOf(loc) {
     const k = String((loc && loc.kind) || "").trim();
@@ -210,6 +212,28 @@
   function isReportLoc(loc) { const k = kindOf(loc); return k === "report" || k === "both"; }
   function isPatrolLoc(loc) { const k = kindOf(loc); return k === "patrol" || k === "both"; }
   function statusOf(r) { return String((r && r.status) || "pending"); }
+
+  /* 清潔重點：預設為「清潔」 */
+  function pointsOf(loc) {
+    const arr = (loc && loc.points) || [];
+    const list = Array.isArray(arr) ? arr.map((x) => String(x || "").trim()).filter(Boolean) : [];
+    return list.length ? list : ["清潔"];
+  }
+  function pointModeOf(loc) { return String((loc && loc.pointMode) || "multi") === "single" ? "single" : "multi"; }
+  /* 清潔頻率：一日多次 / 多日一次 */
+  function freqOf(loc) {
+    const f = (loc && loc.freq) || {};
+    const type = String(f.type || "day") === "span" ? "span" : "day";
+    return {
+      type,
+      times: Math.max(1, Number(f.times) || 1),
+      days: Math.max(1, Number(f.days) || 1),
+    };
+  }
+  function freqText(loc) {
+    const f = freqOf(loc);
+    return f.type === "span" ? `每 ${f.days} 日 1 次` : `一日 ${f.times} 次`;
+  }
 
   function reportStatusTag(status) {
     const s = statusOf({ status });
@@ -825,9 +849,14 @@
                     <span class="tag ${on ? "green" : ""}" style="${on ? "" : "background:rgba(107,114,128,.12);color:#4b5563;border-color:rgba(107,114,128,.24);"}">${on ? "啟用" : "停用"}</span>
                   </div>
                   <div class="muted">區域 ${esc(loc.zone || "未分區")}　· 排序 ${esc(loc.order == null ? 0 : loc.order)}　· 格位 (${esc(Number(loc.gridX) || 0)}, ${esc(Number(loc.gridY) || 0)})　· 代碼 ${esc(loc.code || "—")}</div>
+                  <div class="muted">清潔重點：${esc(pointsOf(loc).join("、"))}（${pointModeOf(loc) === "single" ? "單選" : "複選"}）　· 頻率：${esc(freqText(loc))}</div>
                   ${loc.note ? `<div class="muted">注意事項：${esc(loc.note)}</div>` : ""}
                 </div>
                 <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap;">
+                  <button class="btn btn-sm" type="button" data-cln-setting-loc="${esc(loc.id)}" title="清潔設定" aria-label="清潔設定" style="display:inline-flex;align-items:center;gap:6px;">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+                    設定
+                  </button>
                   <button class="btn btn-sm" type="button" data-cln-qr="${esc(loc.id)}">QR code${targets > 1 ? "（2）" : ""}</button>
                   <button class="btn btn-sm" type="button" data-cln-edit-loc="${esc(loc.id)}">編輯</button>
                   <button class="btn btn-sm btn-danger" type="button" data-cln-del-loc="${esc(loc.id)}">刪除</button>
@@ -959,6 +988,13 @@
               const id = String(b.getAttribute("data-cln-edit-loc") || "");
               const loc = state.locations.find((x) => x.id === id);
               if (loc) openLocationModal(loc);
+            };
+          });
+          container.querySelectorAll("[data-cln-setting-loc]").forEach((b) => {
+            b.onclick = () => {
+              const id = String(b.getAttribute("data-cln-setting-loc") || "");
+              const loc = state.locations.find((x) => x.id === id);
+              if (loc) openLocSettingModal(loc);
             };
           });
           container.querySelectorAll("[data-cln-del-loc]").forEach((b) => {
@@ -1247,6 +1283,9 @@
                 enabled: true,
                 note: "",
                 code: genCode(8),
+                points: ["清潔"],
+                pointMode: "multi",
+                freq: { type: "day", times: 1, days: 1 },
                 createdAt: serverTs(),
                 updatedAt: serverTs(),
               });
@@ -1319,6 +1358,125 @@
               toast(fbErr(e, "儲存失敗"), true);
               saveBtn.disabled = false;
               saveBtn.textContent = isEdit ? "儲存" : "建立";
+            }
+          };
+        }
+
+        /* ================= 清潔設定（清潔重點／頻率） ================= */
+        function openLocSettingModal(loc) {
+          if (!loc) return;
+          let points = pointsOf(loc).slice();
+          const mode0 = pointModeOf(loc);
+          const f0 = freqOf(loc);
+
+          const pointChip = (p) => {
+            const on = points.indexOf(p) >= 0;
+            return `<button type="button" data-set-point="${esc(p)}" style="padding:8px 12px;border-radius:999px;border:1px solid ${on ? "var(--brand, #d32f2f)" : "rgba(17,24,39,.14)"};background:${on ? "#fee2e2" : "#fff"};color:${on ? "#b91c1c" : "#374151"};font-weight:900;font-size:calc(13px * var(--fs,1));cursor:pointer;">${on ? "✓ " : ""}${esc(p)}</button>`;
+          };
+
+          const m = openSimpleModal({
+            title: `清潔設定｜${loc.name || "未命名位置"}`,
+            width: "min(560px, 94vw)",
+            bodyHtml: `
+              <div style="display:grid;gap:16px;">
+                <div style="display:grid;gap:8px;">
+                  <div style="font-weight:900;font-size:calc(13px * var(--fs,1));">清潔重點<span class="muted" style="font-weight:700;">（預設：清潔）</span></div>
+                  <div id="clnSetPts" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+                  <div style="display:flex;gap:8px;">
+                    <input id="clnSetNewPt" type="text" placeholder="新增項目，例如：飲水機擦拭" style="flex:1;padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.14);font-weight:800;font-family:inherit;"/>
+                    <button class="btn btn-sm" type="button" id="clnSetAddPt">新增</button>
+                  </div>
+                  <div class="muted">這些項目會出現在清潔人員掃碼後的勾選視窗。</div>
+                </div>
+
+                <div style="display:grid;gap:8px;">
+                  <div style="font-weight:900;font-size:calc(13px * var(--fs,1));">清潔人員勾選方式</div>
+                  <div style="display:flex;gap:18px;flex-wrap:wrap;">
+                    <label style="display:flex;align-items:center;gap:8px;font-weight:800;"><input type="radio" name="clnSetMode" value="single" ${mode0 === "single" ? "checked" : ""}/> 單選</label>
+                    <label style="display:flex;align-items:center;gap:8px;font-weight:800;"><input type="radio" name="clnSetMode" value="multi" ${mode0 === "multi" ? "checked" : ""}/> 複選</label>
+                  </div>
+                </div>
+
+                <div style="display:grid;gap:8px;">
+                  <div style="font-weight:900;font-size:calc(13px * var(--fs,1));">清潔頻率</div>
+                  <div style="display:flex;gap:18px;flex-wrap:wrap;">
+                    <label style="display:flex;align-items:center;gap:8px;font-weight:800;"><input type="radio" name="clnSetFreq" value="day" ${f0.type === "day" ? "checked" : ""}/> 一日多次</label>
+                    <label style="display:flex;align-items:center;gap:8px;font-weight:800;"><input type="radio" name="clnSetFreq" value="span" ${f0.type === "span" ? "checked" : ""}/> 多日一次</label>
+                  </div>
+                  <div id="clnSetFreqDay" style="display:${f0.type === "day" ? "flex" : "none"};align-items:center;gap:8px;font-weight:800;flex-wrap:wrap;">
+                    每 1 日
+                    <input id="clnSetTimes" type="number" min="1" max="48" value="${f0.times}" style="width:84px;padding:9px 10px;border-radius:10px;border:1px solid rgba(17,24,39,.14);font-weight:800;font-family:inherit;text-align:center;"/>
+                    次
+                  </div>
+                  <div id="clnSetFreqSpan" style="display:${f0.type === "span" ? "flex" : "none"};align-items:center;gap:8px;font-weight:800;flex-wrap:wrap;">
+                    每
+                    <input id="clnSetDays" type="number" min="1" max="365" value="${f0.days}" style="width:84px;padding:9px 10px;border-radius:10px;border:1px solid rgba(17,24,39,.14);font-weight:800;font-family:inherit;text-align:center;"/>
+                    日 1 次
+                  </div>
+                </div>
+              </div>
+            `,
+            footerHtml: `<button class="btn btn-ghost" type="button" id="clnSetCancel">取消</button><button class="btn btn-primary" type="button" id="clnSetSave">儲存設定</button>`,
+          });
+
+          const ptsBox = m.modal.querySelector("#clnSetPts");
+          const renderPts = () => {
+            const all = Array.from(new Set(POINT_OPTIONS.concat(points)));
+            ptsBox.innerHTML = all.map(pointChip).join("");
+            ptsBox.querySelectorAll("[data-set-point]").forEach((b) => {
+              b.onclick = () => {
+                const p = String(b.getAttribute("data-set-point") || "");
+                const i = points.indexOf(p);
+                if (i >= 0) points.splice(i, 1); else points.push(p);
+                renderPts();
+              };
+            });
+          };
+          renderPts();
+
+          m.modal.querySelector("#clnSetAddPt").onclick = () => {
+            const inp = m.modal.querySelector("#clnSetNewPt");
+            const v = String(inp.value || "").trim();
+            if (!v) { toast("請輸入清潔重點名稱", true); return; }
+            if (points.indexOf(v) < 0) points.push(v);
+            inp.value = "";
+            renderPts();
+          };
+
+          m.modal.querySelectorAll('input[name="clnSetFreq"]').forEach((r) => {
+            r.onchange = () => {
+              const day = m.modal.querySelector('input[name="clnSetFreq"]:checked');
+              const isDay = !day || day.value === "day";
+              m.modal.querySelector("#clnSetFreqDay").style.display = isDay ? "flex" : "none";
+              m.modal.querySelector("#clnSetFreqSpan").style.display = isDay ? "none" : "flex";
+            };
+          });
+
+          m.modal.querySelector("#clnSetCancel").onclick = m.close;
+          const saveBtn = m.modal.querySelector("#clnSetSave");
+          saveBtn.onclick = async () => {
+            const modeEl = m.modal.querySelector('input[name="clnSetMode"]:checked');
+            const freqEl = m.modal.querySelector('input[name="clnSetFreq"]:checked');
+            const freqType = freqEl && freqEl.value === "span" ? "span" : "day";
+            const times = Math.max(1, Number(m.modal.querySelector("#clnSetTimes").value) || 1);
+            const days = Math.max(1, Number(m.modal.querySelector("#clnSetDays").value) || 1);
+            const payload = {
+              points: points.length ? points : ["清潔"],
+              pointMode: modeEl && modeEl.value === "single" ? "single" : "multi",
+              freq: { type: freqType, times, days },
+              updatedAt: serverTs(),
+            };
+            saveBtn.disabled = true;
+            saveBtn.textContent = "儲存中…";
+            try {
+              await refLocations().doc(String(loc.id)).set(payload, { merge: true });
+              m.close();
+              toast("已更新清潔設定");
+            } catch (e) {
+              console.error(e);
+              toast(fbErr(e, "儲存失敗"), true);
+              saveBtn.disabled = false;
+              saveBtn.textContent = "儲存設定";
             }
           };
         }

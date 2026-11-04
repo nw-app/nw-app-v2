@@ -25,7 +25,11 @@
   function fmtTime(ts) {
     const d = tsToDate(ts);
     if (!d) return "";
-    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  }
+  function initial(name, email) {
+    const s = String(name || email || "人").trim();
+    return s ? s.slice(0, 1).toUpperCase() : "人";
   }
   function keyOfDate(d) {
     if (!d || isNaN(d.getTime())) return "";
@@ -134,6 +138,31 @@
     tEl.style.color = "#fff";
     tEl.style.zIndex = 999999;
     setTimeout(() => { tEl.classList.toggle("show", false); tEl.textContent = ""; }, 2200);
+  }
+  function mapIconSvg() {
+    return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s6.5-5.8 6.5-11A6.5 6.5 0 1 0 5.5 10c0 5.2 6.5 11 6.5 11Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 12.7a2.7 2.7 0 1 0 0-5.4 2.7 2.7 0 0 0 0 5.4Z" stroke="currentColor" stroke-width="1.7"/></svg>`;
+  }
+  function photoIconSvg() {
+    return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.5 7.5A2.5 2.5 0 0 1 7 5h2.2l1.2-1.5h3.2L14.8 5H17a2.5 2.5 0 0 1 2.5 2.5v9A2.5 2.5 0 0 1 17 19H7a2.5 2.5 0 0 1-2.5-2.5v-9Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 15.8a3.3 3.3 0 1 0 0-6.6 3.3 3.3 0 0 0 0 6.6Z" stroke="currentColor" stroke-width="1.7"/></svg>`;
+  }
+  function geoHref(geo) {
+    const lat = Number(geo && geo.latitude);
+    const lng = Number(geo && geo.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "";
+    return `https://www.google.com/maps?q=${encodeURIComponent(`${lat},${lng}`)}`;
+  }
+  function hasPhoto(url) {
+    return !!String(url || "").trim();
+  }
+  function previewActionButtons(kind, photoUrl, geo) {
+    const href = geoHref(geo);
+    const mapBtn = href
+      ? `<button class="icon-btn sm" type="button" data-duty-geo-lat="${esc(geo && geo.latitude)}" data-duty-geo-lng="${esc(geo && geo.longitude)}" data-duty-geo-accuracy="${esc(geo && geo.accuracy)}" data-duty-geo-distance="${esc(geo && geo.distance)}" data-duty-geo-title="${esc(kind)}定位" aria-label="查看${esc(kind)}定位" title="查看${esc(kind)}定位">${mapIconSvg()}</button>`
+      : `<button class="icon-btn sm" type="button" aria-label="${esc(kind)}無定位資料" title="${esc(kind)}無定位資料" disabled>${mapIconSvg()}</button>`;
+    const photoBtn = hasPhoto(photoUrl)
+      ? `<button class="icon-btn sm" type="button" data-duty-photo="${esc(photoUrl)}" data-duty-photo-title="${esc(kind)}自拍" aria-label="查看${esc(kind)}自拍" title="查看${esc(kind)}自拍">${photoIconSvg()}</button>`
+      : `<button class="icon-btn sm" type="button" aria-label="${esc(kind)}無自拍資料" title="${esc(kind)}無自拍資料" disabled>${photoIconSvg()}</button>`;
+    return `${mapBtn}${photoBtn}`;
   }
 
   /* 產生列印視窗（同時可另存為 PDF） */
@@ -345,13 +374,14 @@
           staff: [],
           schedules: [],
           settings: normalizeSettings(null),
+          communityRange: 0,
           todaySchedule: {},
           loading: true,
           scheduleWeekStart: startOfWeekKey(todayKey()),
           punchDate: todayKey(),
         };
-        const dayData = new Map();   // dateKey -> { checkins: [], legacyCheckins: [], requests: [], legacyRequests: [] }
-        const daySubs = new Map();   // dateKey -> { unsubCheckins, unsubRequests, unsubLegacyCheckins, unsubLegacyRequests, legacy }
+        const dayData = new Map();   // dateKey -> { checkins: [], legacyCheckins: [], cleanCheckins: [], legacyCleanCheckins: [], requests: [], legacyRequests: [] }
+        const daySubs = new Map();   // dateKey -> { unsubCheckins, unsubCleanCheckins, unsubRequests, unsubLegacyCheckins, unsubLegacyCleanCheckins, unsubLegacyRequests, legacy }
         let scheduleSubs = [];
         let scheduleMonthKeys = [];
         let unsubTodaySched = null;
@@ -364,8 +394,10 @@
         window.__nwDutyCleanup = () => {
           Array.from(daySubs.values()).forEach((e) => {
             try { e.unsubCheckins && e.unsubCheckins(); } catch {}
+            try { e.unsubCleanCheckins && e.unsubCleanCheckins(); } catch {}
             try { e.unsubRequests && e.unsubRequests(); } catch {}
             try { e.unsubLegacyCheckins && e.unsubLegacyCheckins(); } catch {}
+            try { e.unsubLegacyCleanCheckins && e.unsubLegacyCleanCheckins(); } catch {}
             try { e.unsubLegacyRequests && e.unsubLegacyRequests(); } catch {}
           });
           daySubs.clear();
@@ -382,11 +414,36 @@
         };
 
         const checkinsColOf = (c) => db.collection("communities").doc(String(c)).collection("duty_checkins");
+        const cleanCheckinsColOf = (c) => db.collection("communities").doc(String(c)).collection("clean_checkins");
         const requestsColOf = (c) => db.collection("communities").doc(String(c)).collection("duty_requests");
         const refCheckins = () => checkinsColOf(cid);
         const refSchedules = () => db.collection("communities").doc(cid).collection("duty_schedules");
         const refRequests = () => requestsColOf(cid);
         const refSettings = () => db.collection("communities").doc(cid).collection("settings");
+        // 管理端的 cid 可能是「社區文件 ID」或「社區代號」，而工作人員端的打卡可能寫在另一條路徑。
+        // 找出另一條可用路徑（文件 ID ↔ 社區代號），雙路徑訂閱才能在即時顯示所有打卡。
+        async function resolveAltCommunityPath(key) {
+          const k = String(key || "").trim();
+          if (!k || k === "default") return "";
+          try {
+            const s = await db.collection("communities").doc(k).get();
+            if (s && s.exists) {
+              const d = s.data() || {};
+              const u = String(d.username || "").trim();
+              const idf = String(d.id || "").trim();
+              if (u && u !== k) return u;
+              if (idf && idf !== k) return idf;
+            }
+          } catch (e) { console.warn("duty alt community lookup by id failed", e); }
+          try {
+            const q = await db.collection("communities").where("username", "==", k).limit(1).get();
+            if (q && q.size) {
+              const docId = String(q.docs[0].id || "").trim();
+              if (docId && docId !== k) return docId;
+            }
+          } catch (e) { console.warn("duty alt community lookup by username failed", e); }
+          return "";
+        }
         const serverTs = () => (fb.firestore.FieldValue.serverTimestamp ? fb.firestore.FieldValue.serverTimestamp() : new Date());
         const delField = () => (fb.firestore.FieldValue.delete ? fb.firestore.FieldValue.delete() : undefined);
         const tsOrDefault = (dt) => (fb.firestore.Timestamp && fb.firestore.Timestamp.fromDate ? fb.firestore.Timestamp.fromDate(dt) : dt);
@@ -406,6 +463,8 @@
             name,
             category: String(v.category || "").trim(),
             title: String(v.title || v.subCategory || "").trim(),
+            avatarUrl: String(v.avatarDataUrl || v.avatar || "").trim(),
+            avatarText: initial(name, v.email),
           };
         }
         async function loadStaff() {
@@ -459,19 +518,31 @@
             if (wanted.indexOf(k) >= 0) return;
             const e = daySubs.get(k);
             try { e.unsubCheckins && e.unsubCheckins(); } catch {}
+            try { e.unsubCleanCheckins && e.unsubCleanCheckins(); } catch {}
             try { e.unsubRequests && e.unsubRequests(); } catch {}
+            try { e.unsubLegacyCheckins && e.unsubLegacyCheckins(); } catch {}
+            try { e.unsubLegacyCleanCheckins && e.unsubLegacyCleanCheckins(); } catch {}
+            try { e.unsubLegacyRequests && e.unsubLegacyRequests(); } catch {}
             daySubs.delete(k);
             dayData.delete(k);
           });
           wanted.forEach((k) => {
             let entry = daySubs.get(k);
             if (!entry) {
-              entry = { unsubCheckins: null, unsubRequests: null, unsubLegacyCheckins: null, unsubLegacyRequests: null, legacy: "" };
+              entry = {
+                unsubCheckins: null,
+                unsubCleanCheckins: null,
+                unsubRequests: null,
+                unsubLegacyCheckins: null,
+                unsubLegacyCleanCheckins: null,
+                unsubLegacyRequests: null,
+                legacy: ""
+              };
               daySubs.set(k, entry);
-              dayData.set(k, { checkins: [], legacyCheckins: [], requests: [], legacyRequests: [] });
+              dayData.set(k, { checkins: [], legacyCheckins: [], cleanCheckins: [], legacyCleanCheckins: [], requests: [], legacyRequests: [] });
               entry.unsubCheckins = refCheckins().where("workDate", "==", k).onSnapshot((snap) => {
                 const list = [];
-                snap.forEach((d) => list.push(Object.assign({ id: d.id }, d.data())));
+                snap.forEach((d) => list.push(Object.assign({ id: d.id, __collection: "duty_checkins", __communityKey: cid }, d.data())));
                 const cur = dayData.get(k);
                 if (cur) cur.checkins = list;
                 render();
@@ -479,6 +550,18 @@
                 console.warn("duty checkins listen failed", err);
                 const cur = dayData.get(k);
                 if (cur) cur.checkins = [];
+                render();
+              });
+              entry.unsubCleanCheckins = cleanCheckinsColOf(cid).where("workDate", "==", k).onSnapshot((snap) => {
+                const list = [];
+                snap.forEach((d) => list.push(Object.assign({ id: d.id, __collection: "clean_checkins", __communityKey: cid }, d.data())));
+                const cur = dayData.get(k);
+                if (cur) cur.cleanCheckins = list;
+                render();
+              }, (err) => {
+                console.warn("clean checkins listen failed", err);
+                const cur = dayData.get(k);
+                if (cur) cur.cleanCheckins = [];
                 render();
               });
               entry.unsubRequests = refRequests().where("dateKey", "==", k).onSnapshot((snap) => {
@@ -497,11 +580,12 @@
             // 舊版（社區代號）路徑：舊資料寫在 communities/{代號}/...，一併讀取以即時顯示
             if (legacyCid && entry.legacy !== legacyCid) {
               try { entry.unsubLegacyCheckins && entry.unsubLegacyCheckins(); } catch {}
+              try { entry.unsubLegacyCleanCheckins && entry.unsubLegacyCleanCheckins(); } catch {}
               try { entry.unsubLegacyRequests && entry.unsubLegacyRequests(); } catch {}
               entry.legacy = legacyCid;
               entry.unsubLegacyCheckins = checkinsColOf(legacyCid).where("workDate", "==", k).onSnapshot((snap) => {
                 const list = [];
-                snap.forEach((d) => list.push(Object.assign({ id: d.id }, d.data())));
+                snap.forEach((d) => list.push(Object.assign({ id: d.id, __collection: "duty_checkins", __communityKey: legacyCid }, d.data())));
                 const cur = dayData.get(k);
                 if (cur) cur.legacyCheckins = list;
                 render();
@@ -509,6 +593,18 @@
                 console.warn("duty legacy checkins listen failed", err);
                 const cur = dayData.get(k);
                 if (cur) cur.legacyCheckins = [];
+                render();
+              });
+              entry.unsubLegacyCleanCheckins = cleanCheckinsColOf(legacyCid).where("workDate", "==", k).onSnapshot((snap) => {
+                const list = [];
+                snap.forEach((d) => list.push(Object.assign({ id: d.id, __collection: "clean_checkins", __communityKey: legacyCid }, d.data())));
+                const cur = dayData.get(k);
+                if (cur) cur.legacyCleanCheckins = list;
+                render();
+              }, (err) => {
+                console.warn("clean legacy checkins listen failed", err);
+                const cur = dayData.get(k);
+                if (cur) cur.legacyCleanCheckins = [];
                 render();
               });
               entry.unsubLegacyRequests = requestsColOf(legacyCid).where("dateKey", "==", k).onSnapshot((snap) => {
@@ -594,6 +690,18 @@
             const cur = map.get(uid);
             if (!cur || punchScore(c) > punchScore(cur)) map.set(uid, c);
           });
+          (d.cleanCheckins || []).forEach((c) => {
+            if (!c) return;
+            const uid = String(c.uid || "");
+            const cur = map.get(uid);
+            if (!cur || punchScore(c) > punchScore(cur)) map.set(uid, c);
+          });
+          (d.legacyCleanCheckins || []).forEach((c) => {
+            if (!c) return;
+            const uid = String(c.uid || "");
+            const cur = map.get(uid);
+            if (!cur || punchScore(c) > punchScore(cur)) map.set(uid, c);
+          });
           return Array.from(map.values());
         };
         const requestsFor = (dateKey) => {
@@ -670,9 +778,16 @@
                     const isHoliday = Boolean(shift) && holidaySet.has(shift);
                     const st = punchStatus(s.id, today);
                     return `<div class="duty-row">
-                      <div style="min-width:0;">
-                        <div class="nm">${esc(s.name)}</div>
-                        <div class="sub">${esc(s.title || s.category)}</div>
+                      <div style="min-width:0;display:flex;gap:10px;align-items:center;">
+                        <div style="width:44px;height:44px;border-radius:999px;overflow:hidden;flex:0 0 44px;background:linear-gradient(135deg,#fee2e2,#fecaca);border:1px solid rgba(17,24,39,.08);display:grid;place-items:center;font-weight:900;color:#991b1b;">
+                          ${s.avatarUrl
+                            ? `<img src="${esc(s.avatarUrl)}" alt="${esc(s.name)}" style="display:block;width:100%;height:100%;object-fit:cover;"/>`
+                            : `<span>${esc(s.avatarText || initial(s.name, ""))}</span>`}
+                        </div>
+                        <div style="min-width:0;">
+                          <div class="nm">${esc(s.name)}</div>
+                          <div class="sub">${esc(s.title || s.category)}</div>
+                        </div>
                       </div>
                       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
                         <span class="duty-tag ${shift ? (isLeave ? "leave" : (isHoliday ? "holiday" : "")) : "miss"}" style="${shift && !isLeave && !isHoliday ? "background:rgba(107,114,128,.10);color:#4b5563;border-color:rgba(107,114,128,.22);" : ""}">${esc(shift || "未排班")}</span>
@@ -794,17 +909,36 @@
                 : `<div style="display:grid;gap:8px;">${g.list.map((s) => {
                     const c = cmap.get(String(s.id));
                     const st = punchStatus(s.id, dk);
-                    return `<div class="duty-row" style="grid-template-columns:1fr auto auto;">
-                      <div style="min-width:0;">
-                        <div class="nm">${esc(s.name)}</div>
-                        <div class="sub">${esc(s.category)}${s.title ? "・" + esc(s.title) : ""}</div>
+                    return `<div class="duty-row" style="grid-template-columns:1fr auto;">
+                      <div style="min-width:0;display:flex;gap:10px;align-items:center;">
+                        <div style="width:44px;height:44px;border-radius:999px;overflow:hidden;flex:0 0 44px;background:linear-gradient(135deg,#fee2e2,#fecaca);border:1px solid rgba(17,24,39,.08);display:grid;place-items:center;font-weight:900;color:#991b1b;">
+                          ${s.avatarUrl
+                            ? `<img src="${esc(s.avatarUrl)}" alt="${esc(s.name)}" style="display:block;width:100%;height:100%;object-fit:cover;"/>`
+                            : `<span>${esc(s.avatarText || initial(s.name, ""))}</span>`}
+                        </div>
+                        <div style="min-width:0;">
+                          <div class="nm">${esc(s.name)}</div>
+                          <div class="sub">${esc(s.category)}${s.title ? "・" + esc(s.title) : ""}</div>
+                        </div>
                       </div>
-                      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-                        <span class="duty-tag ok">上班 ${esc(c && c.inAt ? fmtTime(c.inAt) : "—")}</span>
-                        <span class="duty-tag ok">下班 ${esc(c && c.outAt ? fmtTime(c.outAt) : "—")}</span>
-                        <span class="duty-tag ${st.tone}">${esc(st.label)}</span>
+                      <div style="display:grid;gap:6px;justify-items:end;">
+                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+                          <span class="duty-tag ok">上班 ${esc(c && c.inAt ? fmtTime(c.inAt) : "—")}</span>
+                          ${c && c.inAt ? previewActionButtons("上班", c && c.inPhoto, c && c.inGeo) : ""}
+                          ${c && c.inAt ? `<button class="btn btn-sm btn-ghost" type="button" data-duty-edit="${esc(s.id)}" data-duty-edit-type="in">編輯</button>` : ""}
+                          ${c && c.inAt ? `<button class="btn btn-sm btn-ghost" type="button" data-duty-del="${esc(s.id)}" data-duty-del-type="in" style="color:#dc2626;">刪除</button>` : ""}
+                        </div>
+                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+                          <span class="duty-tag ok">下班 ${esc(c && c.outAt ? fmtTime(c.outAt) : "—")}</span>
+                          ${c && c.outAt ? previewActionButtons("下班", c && c.outPhoto, c && c.outGeo) : ""}
+                          ${c && c.outAt ? `<button class="btn btn-sm btn-ghost" type="button" data-duty-edit="${esc(s.id)}" data-duty-edit-type="out">編輯</button>` : ""}
+                          ${c && c.outAt ? `<button class="btn btn-sm btn-ghost" type="button" data-duty-del="${esc(s.id)}" data-duty-del-type="out" style="color:#dc2626;">刪除</button>` : ""}
+                        </div>
+                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+                          <span class="duty-tag ${st.tone}">${esc(st.label)}</span>
+                          <button class="btn btn-sm btn-ghost" type="button" data-duty-makeup="${esc(s.id)}">補登</button>
+                        </div>
                       </div>
-                      <button class="btn btn-sm btn-ghost" type="button" data-duty-makeup="${esc(s.id)}">補登</button>
                     </div>`;
                   }).join("")}</div>`}
             </section>`).join("");
@@ -1043,6 +1177,24 @@
           container.querySelectorAll("[data-duty-makeup]").forEach((b) => {
             b.onclick = () => openMakeupModal(b.getAttribute("data-duty-makeup"));
           });
+          container.querySelectorAll("[data-duty-edit]").forEach((b) => {
+            b.onclick = () => openPunchEditModal(b.getAttribute("data-duty-edit"), b.getAttribute("data-duty-edit-type"));
+          });
+          container.querySelectorAll("[data-duty-del]").forEach((b) => {
+            b.onclick = () => deletePunchField(b.getAttribute("data-duty-del"), b.getAttribute("data-duty-del-type"), b);
+          });
+          container.querySelectorAll("[data-duty-photo]").forEach((b) => {
+            b.onclick = () => openPunchPhotoModal(b.getAttribute("data-duty-photo"), b.getAttribute("data-duty-photo-title"));
+          });
+          container.querySelectorAll("[data-duty-geo-lat]").forEach((b) => {
+            b.onclick = () => openPunchGeoModal({
+              title: b.getAttribute("data-duty-geo-title"),
+              latitude: b.getAttribute("data-duty-geo-lat"),
+              longitude: b.getAttribute("data-duty-geo-lng"),
+              accuracy: b.getAttribute("data-duty-geo-accuracy"),
+              distance: b.getAttribute("data-duty-geo-distance"),
+            });
+          });
           const printP = container.querySelector("#dutyPrintPunch");
           if (printP) printP.onclick = () => printPunch(false);
           const pdfP = container.querySelector("#dutyPdfPunch");
@@ -1256,6 +1408,176 @@
           };
         }
 
+        function defaultPunchCollection(staff) {
+          return String((staff && staff.category) || "").trim() === "清潔" ? "clean_checkins" : "duty_checkins";
+        }
+        function checkinDocRef(staff, record) {
+          const col = String((record && record.__collection) || defaultPunchCollection(staff)).trim() || "duty_checkins";
+          const communityKey = String((record && record.__communityKey) || cid).trim() || cid;
+          return db.collection("communities").doc(communityKey).collection(col).doc(`${String(staff.id || "").trim()}_${state.punchDate}`);
+        }
+        function punchTimeValue(record, punchType) {
+          // <input type="time"> 需要 HH:MM，故不沿用含秒數的 fmtTime
+          const d = tsToDate(punchType === "out" ? (record && record.outAt) : (record && record.inAt));
+          if (d) return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+          return punchType === "out" ? "18:00" : "08:00";
+        }
+        function punchLabel(punchType) {
+          return String(punchType || "") === "out" ? "下班" : "上班";
+        }
+        function openPunchEditModal(uid, punchType) {
+          const s = state.staff.find((x) => String(x.id) === String(uid));
+          if (!s) return;
+          const cmap = checkinMapFor(state.punchDate);
+          const c = cmap.get(String(s.id));
+          const label = punchLabel(punchType);
+          const m = openSimpleModal({
+            title: `編輯${label}｜${s.name}`,
+            width: "min(460px, 92vw)",
+            bodyHtml: `
+              <div style="display:grid;gap:12px;">
+                <div class="muted">日期：<b>${esc(fmtDateKey(state.punchDate))}</b>　類別：${esc(s.category || "—")}<br/>目前上班 ${esc(c && c.inAt ? fmtTime(c.inAt) : "—")}　下班 ${esc(c && c.outAt ? fmtTime(c.outAt) : "—")}</div>
+                <div class="field" style="gap:4px;margin:0;">
+                  <label style="font-size:calc(12px * var(--fs,1));font-weight:800;">${label}時間 *</label>
+                  <input id="duty_edit_time" type="time" value="${esc(punchTimeValue(c, punchType))}" style="padding:11px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.14);width:100%;font-weight:800;font-family:inherit;"/>
+                </div>
+              </div>
+            `,
+            footerHtml: `<button class="btn btn-ghost" type="button" id="duty_edit_cancel">取消</button><button class="btn btn-primary" type="button" id="duty_edit_save">儲存</button>`,
+          });
+          m.modal.querySelector("#duty_edit_cancel").onclick = m.close;
+          const saveBtn = m.modal.querySelector("#duty_edit_save");
+          saveBtn.onclick = async () => {
+            const timeHM = String((m.modal.querySelector("#duty_edit_time") || {}).value || "").trim();
+            if (!timeHM) { toast(`請選擇${label}時間`, true); return; }
+            const dt = tsFromDateHM(state.punchDate, timeHM);
+            if (!dt) { toast("時間格式錯誤", true); return; }
+            saveBtn.disabled = true;
+            saveBtn.textContent = "儲存中…";
+            try {
+              const ref = checkinDocRef(s, c);
+              const patch = {
+                uid: s.id,
+                name: s.name,
+                category: s.category || "",
+                workDate: state.punchDate,
+                communityId: cid,
+                updatedAt: serverTs(),
+                updatedBy: myName || "管理室",
+              };
+              if (String(punchType || "") === "out") patch.outAt = tsOrDefault(dt);
+              else patch.inAt = tsOrDefault(dt);
+              await ref.set(patch, { merge: true });
+              m.close();
+              toast(`已更新${label}時間`);
+            } catch (e) {
+              console.error(e);
+              toast(fbErr(e, `更新${label}失敗`), true);
+              saveBtn.disabled = false;
+              saveBtn.textContent = "儲存";
+            }
+          };
+        }
+        async function deletePunchField(uid, punchType, btn) {
+          const s = state.staff.find((x) => String(x.id) === String(uid));
+          if (!s) return;
+          const cmap = checkinMapFor(state.punchDate);
+          const c = cmap.get(String(s.id));
+          const label = punchLabel(punchType);
+          const hasValue = String(punchType || "") === "out" ? !!(c && c.outAt) : !!(c && c.inAt);
+          if (!hasValue) return;
+          const ok = await (window.nwConfirm ? window.nwConfirm({
+            title: `刪除${label}時間`,
+            message: `確認要刪除 ${s.name} 的${label}打卡時間嗎？此動作會立即生效。`,
+            okText: "確認刪除",
+            cancelText: "取消",
+          }) : Promise.resolve(window.confirm(`確認要刪除 ${s.name} 的${label}打卡時間嗎？`)));
+          if (!ok) return;
+          const d = delField();
+          if (d === undefined) { toast("此環境不支援刪除欄位", true); return; }
+          if (btn) btn.disabled = true;
+          try {
+            const ref = checkinDocRef(s, c);
+            const patch = {
+              updatedAt: serverTs(),
+              updatedBy: myName || "管理室",
+            };
+            if (String(punchType || "") === "out") {
+              patch.outAt = d;
+              patch.outPhoto = d;
+              patch.outGeo = d;
+            } else {
+              patch.inAt = d;
+              patch.inPhoto = d;
+              patch.inGeo = d;
+            }
+            await ref.set(patch, { merge: true });
+            toast(`已刪除${label}時間`);
+          } catch (e) {
+            console.error(e);
+            toast(fbErr(e, `刪除${label}失敗`), true);
+            if (btn) btn.disabled = false;
+          }
+        }
+        function openPunchPhotoModal(photoUrl, title) {
+          const url = String(photoUrl || "").trim();
+          if (!url) { toast("沒有自拍資料", true); return; }
+          const m = openSimpleModal({
+            title: title || "自拍檢視",
+            width: "min(520px, 94vw)",
+            bodyHtml: `
+              <div style="display:grid;gap:10px;">
+                <div style="display:flex;justify-content:center;">
+                  <img src="${esc(url)}" alt="${esc(title || "自拍")}" style="display:block;max-width:100%;max-height:68vh;border-radius:16px;border:1px solid rgba(17,24,39,.10);background:#111827;object-fit:contain;"/>
+                </div>
+              </div>
+            `,
+            footerHtml: `<button class="btn btn-ghost" type="button" id="duty_photo_close">關閉</button>`,
+          });
+          const closeBtn = m.modal.querySelector("#duty_photo_close");
+          if (closeBtn) closeBtn.onclick = m.close;
+        }
+        function openPunchGeoModal(meta) {
+          const lat = Number(meta && meta.latitude);
+          const lng = Number(meta && meta.longitude);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) { toast("沒有定位資料", true); return; }
+          const accuracy = Number(meta && meta.accuracy);
+          const distance = Number(meta && meta.distance);
+          const range = Number(state.communityRange);
+          const withinRange = Number.isFinite(distance) && Number.isFinite(range) && range > 0 ? distance <= range : null;
+          const href = geoHref({ latitude: lat, longitude: lng });
+          const embedHref = `https://www.google.com/maps?q=${encodeURIComponent(`${lat},${lng}`)}&z=18&output=embed`;
+          const m = openSimpleModal({
+            title: String((meta && meta.title) || "定位檢視"),
+            width: "min(520px, 94vw)",
+            bodyHtml: `
+              <div style="display:grid;gap:12px;">
+                <div style="overflow:hidden;border-radius:16px;border:1px solid rgba(17,24,39,.10);background:#e5e7eb;">
+                  <iframe
+                    src="${esc(embedHref)}"
+                    title="${esc(String((meta && meta.title) || "定位地圖"))}"
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"
+                    style="display:block;width:100%;height:260px;border:0;background:#e5e7eb;"
+                  ></iframe>
+                </div>
+                <div style="padding:14px;border-radius:16px;border:1px solid rgba(17,24,39,.10);background:#fff;">
+                  <div style="font-weight:900;font-size:calc(15px * var(--fs,1));margin-bottom:8px;">定位資訊</div>
+                  <div class="muted">緯度：<b>${esc(lat.toFixed(7))}</b></div>
+                  <div class="muted">經度：<b>${esc(lng.toFixed(7))}</b></div>
+                  <div class="muted">定位精度：<b>${Number.isFinite(accuracy) ? esc(`${accuracy.toFixed(0)} 公尺`) : "—"}</b></div>
+                  <div class="muted">與社區距離：<b>${Number.isFinite(distance) ? esc(`${distance.toFixed(0)} 公尺`) : "—"}</b></div>
+                  <div class="muted">社區打卡範圍：<b>${Number.isFinite(range) && range > 0 ? esc(`${range.toFixed(0)} 公尺`) : "—"}</b></div>
+                  <div class="muted">範圍判斷：<b style="color:${withinRange === true ? "#16a34a" : (withinRange === false ? "#dc2626" : "#111827")};">${withinRange === true ? "在打卡範圍內" : (withinRange === false ? "不在打卡範圍內" : "無法判斷")}</b></div>
+                </div>
+              </div>
+            `,
+            footerHtml: `<button class="btn btn-ghost" type="button" id="duty_geo_close">關閉</button><a class="btn btn-primary" href="${esc(href)}" target="_blank" rel="noopener" id="duty_geo_open">開啟地圖</a>`,
+          });
+          const closeBtn = m.modal.querySelector("#duty_geo_close");
+          if (closeBtn) closeBtn.onclick = m.close;
+        }
+
         /* ================= 動作：設定 ================= */
         function collectRoleShifts() {
           const out = {};
@@ -1312,13 +1634,22 @@
         }
 
         /* ================= boot ================= */
-        // 取得社區代號(username)：舊版工作人員端以代號作為資料路徑，需一併訂閱才能顯示舊打卡
+        // cid 與工作人員端打卡路徑可能不一致（文件 ID ↔ 社區代號），找出另一條路徑一併訂閱，
+        // 才能即時顯示員工打卡；無論 cid 是文件 ID 或代號都能正確解析。
         (async () => {
           try {
-            const s = await db.collection("communities").doc(cid).get();
-            const u = String((s && s.exists ? (s.data() || {}).username : "") || "").trim();
-            if (u && u !== cid) { legacyCid = u; syncDaySubs(); }
-          } catch (e) { console.warn("duty legacy community lookup failed", e); }
+            const comm = await db.collection("communities").doc(cid).get();
+            const commData = comm && comm.exists ? (comm.data() || {}) : {};
+            const commRange = Number(commData.checkinRange != null ? commData.checkinRange : commData.range);
+            state.communityRange = Number.isFinite(commRange) && commRange > 0 ? commRange : 0;
+          } catch (e) {
+            console.warn("duty community range lookup failed", e);
+            state.communityRange = 0;
+          }
+          try {
+            const alt = await resolveAltCommunityPath(cid);
+            if (alt && alt !== cid) { legacyCid = alt; syncDaySubs(); }
+          } catch (e) { console.warn("duty alt community lookup failed", e); }
         })();
         subscribe();
         loadStaff();
