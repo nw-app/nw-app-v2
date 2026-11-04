@@ -350,18 +350,23 @@
           scheduleWeekStart: startOfWeekKey(todayKey()),
           punchDate: todayKey(),
         };
-        const dayData = new Map();   // dateKey -> { checkins: [], requests: [] }
-        const daySubs = new Map();   // dateKey -> { unsubCheckins, unsubRequests }
+        const dayData = new Map();   // dateKey -> { checkins: [], legacyCheckins: [], requests: [], legacyRequests: [] }
+        const daySubs = new Map();   // dateKey -> { unsubCheckins, unsubRequests, unsubLegacyCheckins, unsubLegacyRequests, legacy }
         let scheduleSubs = [];
         let scheduleMonthKeys = [];
         let unsubTodaySched = null;
         let unsubSettings = null;
         let myName = "";
+        // 舊版工作人員端以「社區代號」作為資料路徑，導致打卡寫在 communities/{代號}/...；
+        // 新舊並存期間同時讀取該路徑，避免歷史打卡因路徑正規化而消失。
+        let legacyCid = "";
 
         window.__nwDutyCleanup = () => {
           Array.from(daySubs.values()).forEach((e) => {
             try { e.unsubCheckins && e.unsubCheckins(); } catch {}
             try { e.unsubRequests && e.unsubRequests(); } catch {}
+            try { e.unsubLegacyCheckins && e.unsubLegacyCheckins(); } catch {}
+            try { e.unsubLegacyRequests && e.unsubLegacyRequests(); } catch {}
           });
           daySubs.clear();
           dayData.clear();
@@ -376,9 +381,11 @@
           window.__nwDutyCleanup = null;
         };
 
-        const refCheckins = () => db.collection("communities").doc(cid).collection("duty_checkins");
+        const checkinsColOf = (c) => db.collection("communities").doc(String(c)).collection("duty_checkins");
+        const requestsColOf = (c) => db.collection("communities").doc(String(c)).collection("duty_requests");
+        const refCheckins = () => checkinsColOf(cid);
         const refSchedules = () => db.collection("communities").doc(cid).collection("duty_schedules");
-        const refRequests = () => db.collection("communities").doc(cid).collection("duty_requests");
+        const refRequests = () => requestsColOf(cid);
         const refSettings = () => db.collection("communities").doc(cid).collection("settings");
         const serverTs = () => (fb.firestore.FieldValue.serverTimestamp ? fb.firestore.FieldValue.serverTimestamp() : new Date());
         const delField = () => (fb.firestore.FieldValue.delete ? fb.firestore.FieldValue.delete() : undefined);
@@ -457,34 +464,66 @@
             dayData.delete(k);
           });
           wanted.forEach((k) => {
-            if (daySubs.has(k)) return;
-            const entry = { unsubCheckins: null, unsubRequests: null };
-            daySubs.set(k, entry);
-            dayData.set(k, { checkins: [], requests: [] });
-            entry.unsubCheckins = refCheckins().where("workDate", "==", k).onSnapshot((snap) => {
-              const list = [];
-              snap.forEach((d) => list.push(Object.assign({ id: d.id }, d.data())));
-              const cur = dayData.get(k);
-              if (cur) cur.checkins = list;
-              render();
-            }, (err) => {
-              console.warn("duty checkins listen failed", err);
-              const cur = dayData.get(k);
-              if (cur) cur.checkins = [];
-              render();
-            });
-            entry.unsubRequests = refRequests().where("dateKey", "==", k).onSnapshot((snap) => {
-              const list = [];
-              snap.forEach((d) => list.push(Object.assign({ id: d.id }, d.data())));
-              const cur = dayData.get(k);
-              if (cur) cur.requests = list;
-              render();
-            }, (err) => {
-              console.warn("duty requests listen failed", err);
-              const cur = dayData.get(k);
-              if (cur) cur.requests = [];
-              render();
-            });
+            let entry = daySubs.get(k);
+            if (!entry) {
+              entry = { unsubCheckins: null, unsubRequests: null, unsubLegacyCheckins: null, unsubLegacyRequests: null, legacy: "" };
+              daySubs.set(k, entry);
+              dayData.set(k, { checkins: [], legacyCheckins: [], requests: [], legacyRequests: [] });
+              entry.unsubCheckins = refCheckins().where("workDate", "==", k).onSnapshot((snap) => {
+                const list = [];
+                snap.forEach((d) => list.push(Object.assign({ id: d.id }, d.data())));
+                const cur = dayData.get(k);
+                if (cur) cur.checkins = list;
+                render();
+              }, (err) => {
+                console.warn("duty checkins listen failed", err);
+                const cur = dayData.get(k);
+                if (cur) cur.checkins = [];
+                render();
+              });
+              entry.unsubRequests = refRequests().where("dateKey", "==", k).onSnapshot((snap) => {
+                const list = [];
+                snap.forEach((d) => list.push(Object.assign({ id: d.id }, d.data())));
+                const cur = dayData.get(k);
+                if (cur) cur.requests = list;
+                render();
+              }, (err) => {
+                console.warn("duty requests listen failed", err);
+                const cur = dayData.get(k);
+                if (cur) cur.requests = [];
+                render();
+              });
+            }
+            // 舊版（社區代號）路徑：舊資料寫在 communities/{代號}/...，一併讀取以即時顯示
+            if (legacyCid && entry.legacy !== legacyCid) {
+              try { entry.unsubLegacyCheckins && entry.unsubLegacyCheckins(); } catch {}
+              try { entry.unsubLegacyRequests && entry.unsubLegacyRequests(); } catch {}
+              entry.legacy = legacyCid;
+              entry.unsubLegacyCheckins = checkinsColOf(legacyCid).where("workDate", "==", k).onSnapshot((snap) => {
+                const list = [];
+                snap.forEach((d) => list.push(Object.assign({ id: d.id }, d.data())));
+                const cur = dayData.get(k);
+                if (cur) cur.legacyCheckins = list;
+                render();
+              }, (err) => {
+                console.warn("duty legacy checkins listen failed", err);
+                const cur = dayData.get(k);
+                if (cur) cur.legacyCheckins = [];
+                render();
+              });
+              entry.unsubLegacyRequests = requestsColOf(legacyCid).where("dateKey", "==", k).onSnapshot((snap) => {
+                const list = [];
+                snap.forEach((d) => list.push(Object.assign({ id: d.id }, d.data())));
+                const cur = dayData.get(k);
+                if (cur) cur.legacyRequests = list;
+                render();
+              }, (err) => {
+                console.warn("duty legacy requests listen failed", err);
+                const cur = dayData.get(k);
+                if (cur) cur.legacyRequests = [];
+                render();
+              });
+            }
           });
         }
         function watchScheduleWeeks(weekStartKey) {
@@ -540,8 +579,31 @@
         }
 
         /* ---------- 取值 ---------- */
-        const checkinsFor = (dateKey) => (dayData.get(dateKey) || { checkins: [] }).checkins;
-        const requestsFor = (dateKey) => (dayData.get(dateKey) || { requests: [] }).requests;
+        // 打卡完整度分數：同時有上下班時間者優先，避免舊路徑資料覆蓋新資料
+        function punchScore(c) {
+          if (!c) return -1;
+          return (c.inAt ? 1 : 0) + (c.outAt ? 1 : 0);
+        }
+        const checkinsFor = (dateKey) => {
+          const d = dayData.get(dateKey) || {};
+          const map = new Map();
+          (d.checkins || []).forEach((c) => map.set(String(c.uid || ""), c));
+          (d.legacyCheckins || []).forEach((c) => {
+            if (!c) return;
+            const uid = String(c.uid || "");
+            const cur = map.get(uid);
+            if (!cur || punchScore(c) > punchScore(cur)) map.set(uid, c);
+          });
+          return Array.from(map.values());
+        };
+        const requestsFor = (dateKey) => {
+          const d = dayData.get(dateKey) || {};
+          const map = new Map();
+          const keyOf = (r) => `${String(r.uid || "")}|${String(r.type || "")}|${String(r.dateKey || "")}`;
+          (d.requests || []).forEach((r) => map.set(keyOf(r), r));
+          (d.legacyRequests || []).forEach((r) => { if (r && !map.has(keyOf(r))) map.set(keyOf(r), r); });
+          return Array.from(map.values());
+        };
         function checkinMapFor(dateKey) {
           const map = new Map();
           checkinsFor(dateKey).forEach((c) => map.set(String(c.uid || ""), c));
@@ -1250,6 +1312,14 @@
         }
 
         /* ================= boot ================= */
+        // 取得社區代號(username)：舊版工作人員端以代號作為資料路徑，需一併訂閱才能顯示舊打卡
+        (async () => {
+          try {
+            const s = await db.collection("communities").doc(cid).get();
+            const u = String((s && s.exists ? (s.data() || {}).username : "") || "").trim();
+            if (u && u !== cid) { legacyCid = u; syncDaySubs(); }
+          } catch (e) { console.warn("duty legacy community lookup failed", e); }
+        })();
         subscribe();
         loadStaff();
         loadMyName();
