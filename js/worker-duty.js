@@ -104,6 +104,21 @@
     const stored = String(localStorage.getItem("csp_active_community_v1") || "").trim();
     return p || stored || "";
   }
+  // ?c= 可能是社區代號(username)或社區文件 ID；統一解析為文件 ID，
+  // 確保與住戶端/管理端寫入的 communities/{docId}/... 路徑一致，才能即時同步勤務資料。
+  async function resolveCommunityDocId(key) {
+    const k = String(key || "").trim();
+    if (!k || k === "default") return k;
+    try {
+      const byId = await db.collection("communities").doc(k).get();
+      if (byId && byId.exists) return k;
+    } catch (e) { console.warn("resolve community by id failed", e); }
+    try {
+      const snap = await db.collection("communities").where("username", "==", k).limit(1).get();
+      if (snap && snap.size) return String(snap.docs[0].id || k);
+    } catch (e) { console.warn("resolve community by username failed", e); }
+    return k;
+  }
   function initial(name, email) {
     const s = String(name || email || "工").trim();
     return s ? s.slice(0, 1).toUpperCase() : "工";
@@ -151,6 +166,42 @@
     track(dutySettingRef(cid).onSnapshot((doc) => {
       cb(doc && doc.exists ? (doc.data() || {}) : null);
     }, (err) => { console.warn("duty settings listen failed", err); cb(null); }));
+  }
+
+  // 舊版勤務資料可能寫在「社區代號」路徑下，搬移到社區文件 ID 路徑，
+  // 讓本人與管理端都能看到相同資料（僅搬移本人本月紀錄，失敗時靜默略過）。
+  async function migrateLegacyDutyData(legacyKey, cid, uid) {
+    const legacy = String(legacyKey || "").trim();
+    const target = String(cid || "").trim();
+    const me = String(uid || "").trim();
+    if (!legacy || !target || !me || legacy === target) return;
+    const flagKey = `csp_duty_migrated_${target}`;
+    try { if (sessionStorage.getItem(flagKey)) return; } catch {}
+    const r = monthRange(monthKeyOf(new Date()));
+    let checkins = null, requests = null;
+    try {
+      checkins = await checkinsCol(legacy).where("workDate", ">=", r.start).where("workDate", "<=", r.end).get();
+    } catch (e) { console.warn("legacy duty checkins read failed", e); }
+    try {
+      requests = await requestsCol(legacy).where("dateKey", ">=", r.start).where("dateKey", "<=", r.end).get();
+    } catch (e) { console.warn("legacy duty requests read failed", e); }
+    try { sessionStorage.setItem(flagKey, "1"); } catch {}
+    const batch = db.batch();
+    let n = 0;
+    const put = (col, snap) => {
+      if (!snap || !snap.size) return;
+      snap.forEach((d) => {
+        const x = d.data() || {};
+        if (String(x.uid || "") !== me) return;
+        batch.set(col.doc(String(d.id)), x, { merge: true });
+        n += 1;
+      });
+    };
+    put(checkinsCol(target), checkins);
+    put(requestsCol(target), requests);
+    if (!n) return;
+    try { await batch.commit(); console.info(`migrated ${n} legacy duty records`); }
+    catch (e) { console.warn("legacy duty migrate failed", e); }
   }
 
   /* ==================================================================== */
@@ -1098,7 +1149,9 @@
         return;
       }
       const profile = await loadProfile(user);
-      const cid = activeCommunityId();
+      const rawCid = activeCommunityId();
+      const cid = await resolveCommunityDocId(rawCid);
+      const legacyCid = (rawCid && rawCid !== cid) ? rawCid : "";
       const communityName = await resolveCommunityName(profile, cid);
       const name = displayName(profile, user);
       setHeader(name, communityName, profile);
@@ -1115,6 +1168,7 @@
         profile,
       };
       if (!isAllowedWorker(profile, user)) { showDenied(); return; }
+      migrateLegacyDutyData(legacyCid, cid, user.uid).catch(() => {});
       bindCommunitySwitch({ el: els.communityName, profile, activeKey: cid });
       showTab(currentTab);
     });

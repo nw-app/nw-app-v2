@@ -314,6 +314,7 @@
         let unsubCheckins = null;
         let patrolDateBound = "";
         let myName = "";
+        let myRole = "";
 
         window.__nwCleanCleanup = () => {
           try { unsubReports && unsubReports(); } catch {}
@@ -420,6 +421,7 @@
             const snap = await db.collection("users").doc(String(u.uid)).get();
             const d = snap && snap.exists ? (snap.data() || {}) : {};
             myName = String(d.displayName || d.name || u.displayName || u.email || "").trim();
+            myRole = String(d.category || d.role || "").trim();
           } catch (e) { /* ignore */ }
         }
 
@@ -602,6 +604,17 @@
         }
 
         /* ================= 通報 ================= */
+        // 社區後台帳號顯示「角色名稱 + 姓名」；住戶端通報顯示「戶號」。
+        function reporterLabel(r) {
+          const isAdminSrc = String(r.source || "resident") === "admin";
+          const name = String(r.reporterName || "").trim();
+          if (isAdminSrc) {
+            const role = String(r.reporterRole || "").trim() || "管理室";
+            return [role, name].filter(Boolean).join(" ");
+          }
+          const house = String(r.reporterHouseNo || "").trim();
+          return [house ? `戶號 ${house}` : "", name].filter(Boolean).join("　");
+        }
         function reportCard(r) {
           const status = statusOf(r);
           const src = String(r.source || "resident") === "admin" ? "管理室" : "住戶";
@@ -611,7 +624,7 @@
               <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
                 <div style="min-width:0;">
                   <div style="font-weight:900;font-size:calc(16px * var(--fs,1));">${esc(r.locationName || r.location || "未指定位置")}</div>
-                  <div class="muted" style="margin-top:4px;">${esc(src)}通報${r.reporterHouseNo ? `　戶號 ${esc(r.reporterHouseNo)}` : ""}${r.reporterName ? `　${esc(r.reporterName)}` : ""}</div>
+                  <div class="muted" style="margin-top:4px;">${esc(src)}通報　${esc(reporterLabel(r))}</div>
                 </div>
                 <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
                   ${assignee ? `<span class="cln-tag report">指派 ${esc(assignee)}</span>` : `<span class="cln-tag" style="background:rgba(107,114,128,.12);color:#4b5563;border-color:rgba(107,114,128,.24);">未指派</span>`}
@@ -681,7 +694,7 @@
                 <td>${esc(fmtDateTime(r.createdAt))}</td>
                 <td>${esc(r.locationName || r.location || "未指定位置")}</td>
                 <td>${esc(String(r.source || "resident") === "admin" ? "管理室" : "住戶")}</td>
-                <td>${esc((r.reporterHouseNo ? `戶號 ${r.reporterHouseNo} ` : "") + (r.reporterName || ""))}</td>
+                <td>${esc(reporterLabel(r))}</td>
                 <td>${esc(statusLabel(statusOf(r)))}</td>
                 <td>${esc(r.assigneeName || "—")}</td>
                 <td>${esc(r.note || "")}</td>
@@ -1095,6 +1108,7 @@
                 source: "admin",
                 reporterUid: uidOf(),
                 reporterName: myName || "管理室",
+                reporterRole: myRole || "管理室",
                 reporterHouseNo: "",
                 assigneeUid: "",
                 assigneeName: "",

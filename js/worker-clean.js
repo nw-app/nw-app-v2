@@ -187,9 +187,28 @@
     }
   }
 
+  async function resolveCommunityDocId(key) {
+    const k = String(key || "").trim();
+    if (!k || k === "default") return k;
+    try {
+      const byId = await db.collection("communities").doc(k).get();
+      if (byId && byId.exists) return k;
+    } catch (e) { console.warn("resolve community by id failed", e); }
+    try {
+      const snap = await db.collection("communities").where("username", "==", k).limit(1).get();
+      if (snap && snap.size) return String(snap.docs[0].id || k);
+    } catch (e) { console.warn("resolve community by username failed", e); }
+    return k;
+  }
+
   async function resolveCommunity() {
-    const cid = activeCommunityId();
+    // ?c= 可能是社區代號(username)或社區文件 ID；統一解析為文件 ID，
+    // 確保與住戶端/管理端寫入的 communities/{docId}/... 路徑一致，才能即時同步清潔通報等資料。
+    const rawKey = activeCommunityId();
+    const cid = await resolveCommunityDocId(rawKey);
     state.communityId = cid;
+    // 舊版打卡可能寫在 communities/{代號}/clean_checkins，記錄下來以便搬移
+    state.legacyCommunityId = (rawKey && rawKey !== cid) ? rawKey : "";
     const profile = state.profile || {};
     const names = Array.isArray(profile.communityNames) ? profile.communityNames : [];
     const ids = Array.isArray(profile.communityIds) ? profile.communityIds : [];
@@ -211,6 +230,35 @@
     }
     state.communityName = name;
     if (el.communityName) el.communityName.textContent = name || cid || "社區智慧系統平台";
+  }
+
+  // 舊版打卡資料可能寫在「社區代號」路徑下，搬移到社區文件 ID 路徑，
+  // 讓本人與管理端都能看到相同資料（僅搬移本人本月紀錄，失敗時靜默略過）。
+  async function migrateLegacyCheckins() {
+    const legacyKey = String(state.legacyCommunityId || "").trim();
+    const uid = String(state.user && state.user.uid || "").trim();
+    if (!legacyKey || !uid) return;
+    const flagKey = `csp_clean_checkin_migrated_${state.communityId}`;
+    try { if (sessionStorage.getItem(flagKey)) return; } catch {}
+    const mk = todayKey().slice(0, 7);
+    let snap = null;
+    try {
+      snap = await db.collection("communities").doc(legacyKey).collection("clean_checkins")
+        .where("workDate", ">=", `${mk}-01`).where("workDate", "<=", `${mk}-31`).get();
+    } catch (e) { console.warn("legacy checkins read failed", e); return; }
+    try { sessionStorage.setItem(flagKey, "1"); } catch {}
+    if (!snap || !snap.size) return;
+    const batch = db.batch();
+    let n = 0;
+    snap.forEach((d) => {
+      const x = d.data() || {};
+      if (String(x.uid || "") !== uid) return;
+      batch.set(checkinsRef().doc(String(d.id)), x, { merge: true });
+      n += 1;
+    });
+    if (!n) return;
+    try { await batch.commit(); console.info(`migrated ${n} legacy clean checkins`); }
+    catch (e) { console.warn("legacy checkins migrate failed", e); }
   }
 
   /* ---------- subscriptions ---------- */
@@ -342,6 +390,40 @@
     return state.reports.filter((r) => String(r.status || "pending") !== "done").length;
   }
 
+  // 通報人顯示：社區後台帳號顯示「角色名稱 + 姓名」；住戶端通報顯示「戶號」。
+  const reporterRoleCache = Object.create(null);
+  function isStaffReport(r) {
+    return String((r && r.source) || "") === "admin" || !!String((r && r.reporterRole) || "").trim();
+  }
+  function reporterRoleOf(r) {
+    const uid = String((r && r.reporterUid) || "").trim();
+    if (!uid) return "";
+    if (Object.prototype.hasOwnProperty.call(reporterRoleCache, uid)) return reporterRoleCache[uid];
+    reporterRoleCache[uid] = "";
+    db.collection("users").doc(uid).get().then((snap) => {
+      const d = snap && snap.exists ? (snap.data() || {}) : {};
+      const role = String(d.category || d.role || "").trim();
+      reporterRoleCache[uid] = role;
+      if (role) {
+        if (state.tab === "clean") renderClean();
+        else if (state.tab === "punch") renderPunch();
+      }
+    }).catch(() => {});
+    return "";
+  }
+  function reporterDisplay(r) {
+    const name = String((r && r.reporterName) || "").trim();
+    const house = String((r && r.reporterHouseNo) || "").trim();
+    if (isStaffReport(r)) {
+      const role = String((r && r.reporterRole) || "").trim() || reporterRoleOf(r) || "管理室";
+      return [role, name].filter(Boolean).join(" ");
+    }
+    const parts = [];
+    if (house) parts.push(`戶號 ${house}`);
+    if (name) parts.push(name);
+    return parts.join("　");
+  }
+
   function renderReportItems(list, compact) {
     if (!list || !list.length) return `<div class="wc-empty">目前沒有通報</div>`;
     return `<div class="wc-list">${list.map((r) => {
@@ -353,7 +435,7 @@
             <span class="wc-tag ${meta.cls}">${meta.label}</span>
           </div>
           ${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}
-          <div class="who">${esc(r.reporterHouseNo ? `戶號 ${r.reporterHouseNo}` : "")}${r.reporterName ? `　${esc(r.reporterName)}` : ""}</div>
+          <div class="who">通報人員：${esc(reporterDisplay(r))}</div>
           <div class="who">指派人員：${r.assigneeName ? esc(r.assigneeName) : "未指派"}</div>
           <div class="time">${esc(fmtDateTime(r.createdAt))}${r.handledByName ? `　· 由 ${esc(r.handledByName)} 完成` : ""}</div>
           ${compact ? "" : (String(r.status || "pending") === "done" ? "" : `<button class="wc-btn-sm" type="button" data-done="${esc(r.id)}">標記完成</button>`)}
@@ -892,6 +974,7 @@
       state.ready = true;
       renderTab();
       startSubscriptions();
+      migrateLegacyCheckins().catch(() => {});
     });
   }
 

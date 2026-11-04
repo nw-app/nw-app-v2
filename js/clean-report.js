@@ -83,6 +83,21 @@
     const stored = String(localStorage.getItem("csp_active_community_v1") || "").trim();
     return p || stored || "";
   }
+  // ?c= 可能是社區代號(username)或社區文件 ID；統一解析為文件 ID，
+  // 確保與管理端/清潔人員端讀寫的 communities/{docId}/... 路徑一致。
+  async function resolveCommunityDocId(key) {
+    const k = String(key || "").trim();
+    if (!k || k === "default") return k;
+    try {
+      const byId = await db.collection("communities").doc(k).get();
+      if (byId && byId.exists) return k;
+    } catch (e) { console.warn("resolve community by id failed", e); }
+    try {
+      const snap = await db.collection("communities").where("username", "==", k).limit(1).get();
+      if (snap && snap.size) return String(snap.docs[0].id || k);
+    } catch (e) { console.warn("resolve community by username failed", e); }
+    return k;
+  }
   function reportsRef() { return db.collection("communities").doc(state.communityId).collection("clean_reports"); }
   function locationsRef() { return db.collection("communities").doc(state.communityId).collection("clean_locations"); }
   function kindOf(loc) {
@@ -302,7 +317,7 @@
         return;
       }
       state.user = user;
-      state.communityId = activeCommunityId();
+      state.communityId = await resolveCommunityDocId(activeCommunityId());
       await loadProfile(user);
       if (!state.communityId) {
         if (el.locations) el.locations.innerHTML = `<div class="status error">缺少社區資訊</div>`;
