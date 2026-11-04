@@ -282,6 +282,49 @@
     }, (err) => { console.warn("duty today leave listen failed", err); st.todayLeave = null; rerender(); }));
   }
 
+  /* ==================================================================== */
+  /* 打卡紀錄                                                              */
+  /* ==================================================================== */
+  function recordRow(c) {
+    const x = c || {};
+    const done = !!(x.inAt && x.outAt);
+    const tag = done ? "已完成" : (x.inAt ? "上班中" : "未完成");
+    return `
+      <div class="wc-item">
+        <div class="row1">
+          <div class="loc">${esc(fmtDateKey(x.workDate))}</div>
+          <span class="wc-tag ${done ? "done" : ""}">${tag}</span>
+        </div>
+        <div class="time">上班 ${esc(fmtTime(x.inAt))}　·　下班 ${esc(fmtTime(x.outAt))}</div>
+      </div>`;
+  }
+
+  function renderRecordTab(root, ctx, st) {
+    const list = (st.monthCheckins || []).slice().sort((a, b) => String((b && b.workDate) || "").localeCompare(String((a && a.workDate) || "")));
+    root.innerHTML = `
+      <section class="wc-card">
+        <div class="hd">
+          <div><h2>打卡紀錄</h2><p>${esc(monthKeyOf(new Date()))}　本月出勤明細</p></div>
+        </div>
+        ${list.length ? `<div class="wc-list">${list.map(recordRow).join("")}</div>` : `<div class="wc-empty">本月尚無打卡紀錄。</div>`}
+      </section>
+    `;
+  }
+
+  function subscribeRecordTab(root, ctx, st, rerender) {
+    if (!ctx.communityId) { st.monthCheckins = []; return; }
+    const r = monthRange(monthKeyOf(new Date()));
+    track(checkinsCol(ctx.communityId).where("workDate", ">=", r.start).where("workDate", "<=", r.end).onSnapshot((snap) => {
+      const list = [];
+      snap.forEach((d) => {
+        const x = d.data() || {};
+        if (String(x.uid) === String(ctx.uid)) list.push(x);
+      });
+      st.monthCheckins = list;
+      rerender();
+    }, (err) => { console.warn("duty record checkins listen failed", err); st.monthCheckins = []; rerender(); }));
+  }
+
   async function savePunch(ctx, type, photo, meta) {
     const tk = todayKey();
     const ref = checkinsCol(ctx.communityId).doc(`${ctx.uid}_${tk}`);
@@ -630,59 +673,13 @@
   }
 
   /* ==================================================================== */
-  /* 設定                                                                  */
-  /* ==================================================================== */
-  function renderSettingTab(root, ctx, st) {
-    const duty = st.duty || DEFAULT_DUTY;
-    const cat = String((ctx && ctx.category) || "").trim();
-    const roleList = (duty.roleShifts && duty.roleShifts[cat]) || [];
-    const shifts = roleList.length
-      ? roleList.map((x) => ({ name: String(x.name || ""), start: String(x.start || ""), end: String(x.end || "") }))
-      : (Array.isArray(duty.shifts) ? duty.shifts : DEFAULT_DUTY.shifts).filter((n) => String(n) !== "休假").map((n) => ({ name: String(n), start: "", end: "" }));
-    root.innerHTML = `
-      <section class="wc-card">
-        <div class="hd"><div><h2>個人資訊</h2><p>帳號與權限</p></div></div>
-        <div class="wc-info">
-          <div class="r"><span class="k">姓名</span><span class="v">${esc(ctx.userName || "—")}</span></div>
-          <div class="r"><span class="k">角色</span><span class="v">${esc(ctx.category || "—")}</span></div>
-          <div class="r"><span class="k">社區</span><span class="v">${esc(ctx.communityName || ctx.communityId || "—")}</span></div>
-        </div>
-      </section>
-
-      <section class="wc-card">
-        <div class="hd"><div><h2>班別時間</h2><p>${esc(cat || "我的角色")}　由社區管理員設定</p></div></div>
-        <div class="wc-info">
-          ${shifts.length
-            ? shifts.map((s) => `<div class="r"><span class="k">${esc(s.name)}</span><span class="v">${s.start && s.end ? esc(s.start) + " ~ " + esc(s.end) : "—"}</span></div>`).join("")
-            : `<div class="r"><span class="k">班別</span><span class="v">尚未設定</span></div>`}
-        </div>
-        ${duty.note ? `<div class="note" style="margin-top:10px;">${esc(duty.note)}</div>` : ""}
-      </section>
-
-      <section class="wc-card">
-        <button class="wc-btn primary" type="button" id="wdSignOut">登出</button>
-      </section>
-    `;
-    const out = root.querySelector("#wdSignOut");
-    if (out) out.onclick = () => {
-      out.disabled = true;
-      out.textContent = "登出中…";
-      auth.signOut().then(() => { location.href = "index.html"; }).catch(() => { out.disabled = false; out.textContent = "登出"; });
-    };
-  }
-
-  function subscribeSettingTab(root, ctx, st, rerender) {
-    subscribeDutySettings(ctx.communityId, (d) => { st.duty = mergedDuty(d); rerender(); });
-  }
-
-  /* ==================================================================== */
   /* exports                                                              */
   /* ==================================================================== */
   const tabs = {
     punch: makeTab({ render: renderPunchTab, subscribe: subscribePunchTab }),
     schedule: makeTab({ render: renderScheduleTab, subscribe: subscribeScheduleTab }),
     leave: makeTab({ render: renderLeaveTab, subscribe: subscribeLeaveTab }),
-    setting: makeTab({ render: renderSettingTab, subscribe: subscribeSettingTab }),
+    record: makeTab({ render: renderRecordTab, subscribe: subscribeRecordTab }),
   };
 
   window.NwWorkerDuty = {
@@ -1005,6 +1002,35 @@
       modal.hidden = false;
       if (els.userChip) els.userChip.setAttribute("aria-expanded", "true");
       document.body.style.overflow = "hidden";
+      fillProfileShift();
+    }
+
+    /* 將原「設定」分頁的班別時間填入個人資訊彈窗 */
+    async function fillProfileShift() {
+      const host = document.getElementById("profileShiftList");
+      const noteEl = document.getElementById("profileShiftNote");
+      if (!host) return;
+      const cid = currentCtx && currentCtx.communityId;
+      let data = null;
+      try {
+        if (cid) {
+          const snap = await dutySettingRef(cid).get();
+          data = snap && snap.exists ? (snap.data() || {}) : null;
+        }
+      } catch (e) { console.warn("load duty settings for profile failed", e); }
+      const duty = mergedDuty(data);
+      const cat = String((currentCtx && currentCtx.category) || "").trim();
+      const roleList = (duty.roleShifts && duty.roleShifts[cat]) || [];
+      const shifts = roleList.length
+        ? roleList.map((x) => ({ name: String(x.name || ""), start: String(x.start || ""), end: String(x.end || "") }))
+        : (Array.isArray(duty.shifts) ? duty.shifts : DEFAULT_DUTY.shifts).filter((n) => String(n) !== "休假").map((n) => ({ name: String(n), start: "", end: "" }));
+      host.innerHTML = shifts.length
+        ? shifts.map((s) => `<div class="r"><span class="k">${esc(s.name)}</span><span class="v">${s.start && s.end ? esc(s.start) + " ~ " + esc(s.end) : "—"}</span></div>`).join("")
+        : `<div class="r"><span class="k">班別</span><span class="v">尚未設定</span></div>`;
+      if (noteEl) {
+        if (duty.note) { noteEl.textContent = duty.note; noteEl.style.display = "block"; }
+        else { noteEl.textContent = ""; noteEl.style.display = "none"; }
+      }
     }
 
     function closeProfileModal() {

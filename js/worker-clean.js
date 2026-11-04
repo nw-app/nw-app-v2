@@ -43,6 +43,7 @@
     tab: "punch",
     cleanFilter: "all",
     todayCheckin: null,
+    records: [],
     reports: [],
     locations: [],
     patrols: [],
@@ -52,6 +53,7 @@
     reportsUnsub: null,
     locationsUnsub: null,
     checkinUnsub: null,
+    recordsUnsub: null,
     patrolsUnsub: null,
     scanner: null,
     ready: false,
@@ -220,6 +222,22 @@
       if (state.tab === "punch") renderPunch();
     }, (err) => console.warn("checkin listen failed", err));
 
+    const mk = todayKey().slice(0, 7);
+    state.recordsUnsub = checkinsRef().where("workDate", ">=", `${mk}-01`).where("workDate", "<=", `${mk}-31`).onSnapshot((snap) => {
+      const list = [];
+      const uid = String(state.user && state.user.uid || "");
+      snap.forEach((d) => {
+        const x = d.data() || {};
+        if (String(x.uid || "") === uid) list.push(x);
+      });
+      state.records = list;
+      if (state.tab === "record") renderRecord();
+    }, (err) => {
+      console.warn("month checkins listen failed", err);
+      state.records = [];
+      if (state.tab === "record") renderRecord();
+    });
+
     state.reportsUnsub = reportsRef().orderBy("createdAt", "desc").limit(100).onSnapshot((snap) => {
       const list = [];
       snap.forEach((d) => list.push(Object.assign({ id: d.id }, d.data())));
@@ -259,8 +277,8 @@
     });
   }
   function stopSubscriptions() {
-    [state.reportsUnsub, state.locationsUnsub, state.checkinUnsub, state.patrolsUnsub].forEach((u) => { try { u && u(); } catch {} });
-    state.reportsUnsub = state.locationsUnsub = state.checkinUnsub = state.patrolsUnsub = null;
+    [state.reportsUnsub, state.locationsUnsub, state.checkinUnsub, state.recordsUnsub, state.patrolsUnsub].forEach((u) => { try { u && u(); } catch {} });
+    state.reportsUnsub = state.locationsUnsub = state.checkinUnsub = state.recordsUnsub = state.patrolsUnsub = null;
   }
 
   /* ---------- views ---------- */
@@ -441,44 +459,31 @@
     });
   }
 
-  function renderSetting() {
-    const p = state.profile || {};
-    const roleLabel = String(p.category || p.role || "工作人員");
+  /* 打卡紀錄：本月出勤明細 */
+  function recordRow(c) {
+    const x = c || {};
+    const done = !!(x.inAt && x.outAt);
+    const tag = done ? "已完成" : (x.inAt ? "上班中" : "未完成");
+    return `
+      <div class="wc-item">
+        <div class="row1">
+          <div class="loc">${esc(fmtDateKey(x.workDate))}</div>
+          <span class="wc-tag ${done ? "done" : ""}">${tag}</span>
+        </div>
+        <div class="time">上班 ${esc(fmtTime(x.inAt))}　·　下班 ${esc(fmtTime(x.outAt))}</div>
+      </div>`;
+  }
+
+  function renderRecord() {
+    const list = (state.records || []).slice().sort((a, b) => String((b && b.workDate) || "").localeCompare(String((a && a.workDate) || "")));
     el.body.innerHTML = `
       <section class="wc-card">
         <div class="hd">
-          <div><h2>個人資訊</h2><p>帳號與權限</p></div>
+          <div><h2>打卡紀錄</h2><p>${esc(todayKey().slice(0, 7))}　本月出勤明細</p></div>
         </div>
-        <div class="wc-info">
-          <div class="r"><span class="k">姓名</span><span class="v">${esc(state.userName || "—")}</span></div>
-          <div class="r"><span class="k">角色</span><span class="v">${esc(roleLabel)}</span></div>
-          <div class="r"><span class="k">社區</span><span class="v">${esc(state.communityName || state.communityId || "—")}</span></div>
-          <div class="r"><span class="k">登入帳號</span><span class="v">${esc(p.username || (state.user && state.user.email) || "—")}</span></div>
-          <div class="r"><span class="k">手機</span><span class="v">${esc(p.phone || "—")}</span></div>
-        </div>
-      </section>
-
-      <section class="wc-card">
-        <div class="hd"><div><h2>今日出勤紀錄</h2><p>${esc(todayKey())}</p></div></div>
-        <div class="wc-info">
-          <div class="r"><span class="k">上班</span><span class="v">${fmtTime(state.todayCheckin && state.todayCheckin.inAt)}</span></div>
-          <div class="r"><span class="k">下班</span><span class="v">${fmtTime(state.todayCheckin && state.todayCheckin.outAt)}</span></div>
-        </div>
-      </section>
-
-      <section class="wc-card">
-        <button class="wc-btn ghost" type="button" id="btnReload" style="margin-bottom:10px;">重新載入資料</button>
-        <button class="wc-btn primary" type="button" id="btnSignOut">登出</button>
+        ${list.length ? `<div class="wc-list">${list.map(recordRow).join("")}</div>` : `<div class="wc-empty">本月尚無打卡紀錄。</div>`}
       </section>
     `;
-    const reload = document.getElementById("btnReload");
-    if (reload) reload.onclick = () => { location.reload(); };
-    const out = document.getElementById("btnSignOut");
-    if (out) out.onclick = () => {
-      out.disabled = true;
-      out.textContent = "登出中…";
-      auth.signOut().then(() => { location.href = "index.html"; }).catch(() => { out.disabled = false; out.textContent = "登出"; });
-    };
   }
 
   function renderTab() {
@@ -487,8 +492,8 @@
     if (state.tab === "punch") renderPunch();
     else if (state.tab === "clean") renderClean();
     else if (state.tab === "patrol") renderPatrol();
-    else if (state.tab === "schedule" || state.tab === "leave") renderDutyTab(state.tab);
-    else renderSetting();
+    else if (state.tab === "record") renderRecord();
+    else renderDutyTab(state.tab);
     el.nav.querySelectorAll("[data-wc-tab]").forEach((b) => {
       const on = b.getAttribute("data-wc-tab") === state.tab;
       if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
@@ -812,6 +817,20 @@
     modal.hidden = false;
     if (el.userChip) el.userChip.setAttribute("aria-expanded", "true");
     document.body.style.overflow = "hidden";
+    fillProfileInfo();
+  }
+
+  /* 將原「設定」分頁內容填入個人資訊彈窗 */
+  function fillProfileInfo() {
+    const p = state.profile || {};
+    const acc = document.getElementById("profileAccountText");
+    if (acc) acc.textContent = String(p.username || (state.user && state.user.email) || "—");
+    const phone = document.getElementById("profilePhoneText");
+    if (phone) phone.textContent = String(p.phone || "—");
+    const inEl = document.getElementById("profileInText");
+    if (inEl) inEl.textContent = fmtTime(state.todayCheckin && state.todayCheckin.inAt);
+    const outEl = document.getElementById("profileOutText");
+    if (outEl) outEl.textContent = fmtTime(state.todayCheckin && state.todayCheckin.outAt);
   }
 
   function closeProfileModal() {
@@ -843,7 +862,7 @@
 
   /* ---------- boot ---------- */
   function switchTab(t) {
-    if (t !== "punch" && t !== "clean" && t !== "patrol" && t !== "schedule" && t !== "leave" && t !== "setting") return;
+    if (t !== "punch" && t !== "clean" && t !== "patrol" && t !== "schedule" && t !== "leave" && t !== "record") return;
     if (state.tab !== t) stopDutyTabs();
     state.tab = t;
     renderTab();
@@ -878,4 +897,15 @@
 
   document.addEventListener("DOMContentLoaded", init);
   window.addEventListener("pagehide", () => { try { stopPatrolScan(); } catch {} stopDutyTabs(); stopSubscriptions(); });
+
+  // PWA 由背景返回前景時，重新建立即時監聽，確保清潔通報等資料能即時同步
+  function resumeSubscriptions() {
+    if (!state.ready || !state.communityId) return;
+    startSubscriptions();
+    if (state.tab === "schedule" || state.tab === "leave") renderTab();
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") resumeSubscriptions();
+  });
+  window.addEventListener("pageshow", (e) => { if (e && e.persisted) resumeSubscriptions(); });
 })();
