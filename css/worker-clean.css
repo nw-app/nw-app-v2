@@ -134,6 +134,11 @@ body{
 }
 .wc-card .hd h2{margin:0;font-size:15px;font-weight:900;}
 .wc-card .hd p{margin:2px 0 0;font-size:11px;color:var(--wc-muted);font-weight:700;}
+/* 今日出勤標題列放大字體 */
+.wc-card .hd.today-hd h2{font-size:20px;}
+.wc-card .hd.today-hd p{margin-top:4px;font-size:14px;}
+.wc-card .hd.today-hd #wcClock,
+.wc-card .hd.today-hd #wdClock{font-size:24px;}
 
 .wc-status{
   display:flex;align-items:center;gap:12px;
@@ -175,6 +180,13 @@ body{
 }
 .wc-meta .box .k{font-size:11px;color:var(--wc-muted);font-weight:800;}
 .wc-meta .box .v{font-size:16px;font-weight:900;margin-top:2px;}
+/* 打卡狀態：正常=綠底、遲到／早退=紅底 */
+.wc-meta .box.ok{background:#16a34a;border-color:#16a34a;}
+.wc-meta .box.ok .k{color:rgba(255,255,255,.88);}
+.wc-meta .box.ok .v{color:#fff;}
+.wc-meta .box.bad{background:#d32f2f;border-color:#d32f2f;}
+.wc-meta .box.bad .k{color:rgba(255,255,255,.88);}
+.wc-meta .box.bad .v{color:#fff;}
 
 .wc-list{display:grid;gap:10px;}
 .wc-item{

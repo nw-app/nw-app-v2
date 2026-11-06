@@ -463,7 +463,7 @@ async function loadFacilities(userData) {
   }
 
   function formatTime(date) {
-    return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+    return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
   }
 
   function pad2(num) {

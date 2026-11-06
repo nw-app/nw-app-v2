@@ -1225,6 +1225,19 @@
         list = currentUsers || [];
       }
 
+      // 同一登入帳號（Email／帳號）僅顯示一筆：Firebase Auth 已保證 Email 唯一，
+      // 若 Firestore 存在多筆相同 Email 的文件（歷史重複建立），只保留第一筆。
+      const seenAccountKeys = new Set();
+      list = list.filter((r) => {
+        const emailKey = String(r.email || "").trim().toLowerCase();
+        const usernameKey = String(r.username || "").trim().toLowerCase();
+        const phoneKey = String(r.phone || "").trim();
+        const key = emailKey || usernameKey || phoneKey || String(r.id || "");
+        if (seenAccountKeys.has(key)) return false;
+        seenAccountKeys.add(key);
+        return true;
+      });
+
       const title = getAccountRoleLabel(view);
       const communityCatOptions = view === "worker"
         ? ["__all__", ...WORK_ROLE_CATEGORIES]
@@ -1312,10 +1325,10 @@
         const firstId = String(r.communityId || (cids[0] || "")).trim();
         const firstName = firstId ? (communityMap.get(firstId) || "") : "";
         const extraCount = cids.length > 1 ? (cids.length - 1) : 0;
-        const communityDisplay = firstName ? `<span class="tag" style="margin-left:8px;">${firstName}${extraCount ? ` +${extraCount}` : ""}</span>` : "";
+        const communityDisplay = firstName ? `<span class="tag">${firstName}${extraCount ? ` +${extraCount}` : ""}</span>` : "";
         const catRaw = String(r.category || "").trim();
         const catLabel = (view === "community" || view === "worker") ? catRaw : (view === "resident" ? catRaw : "");
-        const catTag = catLabel ? `<span class="tag" style="margin-left:8px;">${catLabel}</span>` : "";
+        const catTag = catLabel ? `<span class="tag">${catLabel}</span>` : "";
         const emailText = String(r.email || "").trim() || "—";
         const phoneText = String(r.phone || "").trim() || "—";
         const pwPlain = String(r.passwordPlain || "").trim();
@@ -1338,7 +1351,7 @@
               <div class="account-left">
                 <div class="avatar-sm">${avatarHtml(r)}</div>
                 <div class="account-text">
-                  <div style="display:flex;align-items:center;">
+                  <div class="account-name-row">
                     <div class="account-name">${String(r.name || "—")}</div>
                     ${communityDisplay}
                     ${catTag}

@@ -28,7 +28,7 @@
     const d = new Date(Number(ms));
     if (!Number.isFinite(d.getTime())) return "";
     const date = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-    return withTime ? `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` : date;
+    return withTime ? `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}` : date;
   };
 
   const statusLabel = (raw) => {

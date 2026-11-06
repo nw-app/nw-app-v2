@@ -20,7 +20,7 @@
   function fmtDateTime(ts) {
     const d = tsToDate(ts);
     if (!d) return "";
-    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   }
   function fmtTime(ts) {
     const d = tsToDate(ts);

@@ -33,7 +33,7 @@
     const d = typeof v.toDate === "function" ? v.toDate() : v instanceof Date ? v : new Date(v);
     if (!Number.isFinite(d.getTime())) return "";
     const pad = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   }
 
   const tabsEl = document.getElementById("parkingTabs");
@@ -175,7 +175,7 @@
     const d = v && typeof v.toDate === "function" ? v.toDate() : v instanceof Date ? v : v ? new Date(v) : null;
     if (!d || !Number.isFinite(d.getTime())) return "";
     const pad2 = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   }
 
   function computeFee({ pricingMode, price, startAt, endAt }) {

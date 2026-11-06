@@ -47,7 +47,7 @@
   // YYYY-MM-DD HH:mm
   function formatDateTime(date) {
     if (!date || !(date instanceof Date) || Number.isNaN(date.getTime())) return "";
-    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
   }
 
   // YYYY-MM-DDTHH:mm（給 datetime-local input 用）

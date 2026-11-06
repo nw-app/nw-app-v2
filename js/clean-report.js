@@ -57,7 +57,7 @@
     else if (ts instanceof Date) d = ts;
     else d = new Date(ts);
     if (!d || isNaN(d.getTime())) return "";
-    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   }
   function msOf(ts) {
     if (!ts) return 0;

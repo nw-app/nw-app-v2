@@ -165,7 +165,7 @@
     const chargeAmount = Number(data.chargeAmount || 0) || 0;
     const orderRaw = Number(data.order);
     const order = Number.isFinite(orderRaw) ? orderRaw : null;
-    const slotMinutes = Math.max(15, Math.min(240, Number(data.slotMinutes || data.slot || 60) || 60);
+    const slotMinutes = Math.max(15, Math.min(240, Number(data.slotMinutes || data.slot || 60) || 60));
     const openTime = String(data.openTime || "09:00").trim() || "09:00";
     const closeTime = String(data.closeTime || "21:00").trim() || "21:00";
     const capacity = Math.max(1, Math.min(500, Number(data.capacity || data.quota || 1) || 1));
@@ -191,7 +191,7 @@
         const ao = Number.isFinite(Number(a.order)) ? Number(a.order) : 1e9;
         const bo = Number.isFinite(Number(b.order)) ? Number(b.order) : 1e9;
         return ao - bo || String(a.name || "").localeCompare(String(b.name || "")) || String(a.id || "").localeCompare(String(b.id || ""));
-      };
+      });
       return list;
     } catch {
       return [];
@@ -463,7 +463,7 @@
   }
 
   function formatTime(date) {
-    return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+    return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
   }
 
   function pad2(num) {

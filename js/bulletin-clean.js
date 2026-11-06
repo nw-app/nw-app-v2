@@ -69,7 +69,8 @@
     const da = String(d.getDate()).padStart(2, "0");
     const h = String(d.getHours()).padStart(2, "0");
     const mi = String(d.getMinutes()).padStart(2, "0");
-    return `${y}-${m}-${da} ${h}:${mi}`;
+    const s = String(d.getSeconds()).padStart(2, "0");
+    return `${y}-${m}-${da} ${h}:${mi}:${s}`;
   }
 
   function openImageModal(images, title) {

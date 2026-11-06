@@ -1657,7 +1657,7 @@
         const phone = String(v.phone || "—");
         const purpose = String(v.purpose || "—");
         const createdAt = v.createdAt ? (v.createdAt.toDate ? v.createdAt.toDate() : new Date(v.createdAt)) : null;
-        const createdText = createdAt ? `${createdAt.getFullYear()}-${pad2(createdAt.getMonth()+1)}-${pad2(createdAt.getDate())} ${pad2(createdAt.getHours())}:${pad2(createdAt.getMinutes())}` : "—";
+        const createdText = createdAt ? `${createdAt.getFullYear()}-${pad2(createdAt.getMonth()+1)}-${pad2(createdAt.getDate())} ${pad2(createdAt.getHours())}:${pad2(createdAt.getMinutes())}:${pad2(createdAt.getSeconds())}` : "—";
 
         return `
           <div class="pending-item" data-id="${id}">
@@ -8627,7 +8627,7 @@
         const stText = st === "approved" ? "已核准" : (st === "rejected" ? "已拒絕" : (st === "canceled" ? "已取消" : "待審核"));
         const tagClass = st === "approved" ? "green" : (st === "rejected" ? "red" : (st === "canceled" ? "gray" : "yellow"));
         const createdAt = r.createdAt ? (r.createdAt.toDate ? r.createdAt.toDate() : new Date(r.createdAt)) : null;
-        const createdText = createdAt ? `${pad2(createdAt.getMonth() + 1)}/${pad2(createdAt.getDate())} ${pad2(createdAt.getHours())}:${pad2(createdAt.getMinutes())}` : "—";
+        const createdText = createdAt ? `${pad2(createdAt.getMonth() + 1)}/${pad2(createdAt.getDate())} ${pad2(createdAt.getHours())}:${pad2(createdAt.getMinutes())}:${pad2(createdAt.getSeconds())}` : "—";
         const slotUsed = used[String(r.startTime || "")] || 0;
         const capText = cfg ? `${slotUsed}/${cap}` : "";
         const capHint = cfg && slotUsed >= cap && ["pending", "approved"].includes(st) ? `<span class="tag red" style="margin-left:8px;">已滿</span>` : "";
@@ -8933,7 +8933,7 @@
       if (!overviewContainer) return;
       const now = new Date();
       const todayKey = ymd80(now);
-      const nowText = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+      const nowText = `${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`;
 
       const stats = new Map();
       (todayReservations || []).forEach((r) => {
@@ -9683,7 +9683,8 @@
       const da = String(d.getDate()).padStart(2, "0");
       const h = String(d.getHours()).padStart(2, "0");
       const mi = String(d.getMinutes()).padStart(2, "0");
-      return `${y}-${m}-${da} ${h}:${mi}`;
+      const s = String(d.getSeconds()).padStart(2, "0");
+      return `${y}-${m}-${da} ${h}:${mi}:${s}`;
     };
 
     // 取得時間毫秒（相容 Firestore Timestamp / Date / 數字 / 字串）
@@ -10702,7 +10703,7 @@
       const company = escapeHtml(p.company || "其他物流");
       const trackNo = escapeHtml(p.trackNo || "—");
       const time = p.createdAt ? (p.createdAt.toDate ? p.createdAt.toDate() : new Date(p.createdAt)) : null;
-      const timeText = time ? `${pad2(time.getMonth()+1)}/${pad2(time.getDate())} ${pad2(time.getHours())}:${pad2(time.getMinutes())}` : "—";
+      const timeText = time ? `${pad2(time.getMonth()+1)}/${pad2(time.getDate())} ${pad2(time.getHours())}:${pad2(time.getMinutes())}:${pad2(time.getSeconds())}` : "—";
       const serial = normalizeParcelSerial(p.internalSerial) || "配號中";
       return `
         <div class="parcel-card" data-id="${String(id || "")}">
@@ -11483,9 +11484,9 @@
             const statusLabel = p.status === "received" ? "已領取" : "待領取";
             const statusClass = p.status === "received" ? "tag green" : "tag yellow";
             const time = p.createdAt ? (p.createdAt.toDate ? p.createdAt.toDate() : new Date(p.createdAt)) : null;
-            const timeText = time ? `${pad2(time.getMonth()+1)}/${pad2(time.getDate())} ${pad2(time.getHours())}:${pad2(time.getMinutes())}` : "—";
+            const timeText = time ? `${pad2(time.getMonth()+1)}/${pad2(time.getDate())} ${pad2(time.getHours())}:${pad2(time.getMinutes())}:${pad2(time.getSeconds())}` : "—";
             const rtime = p.receivedAt ? (p.receivedAt.toDate ? p.receivedAt.toDate() : new Date(p.receivedAt)) : null;
-            const rtimeText = rtime ? `${pad2(rtime.getMonth()+1)}/${pad2(rtime.getDate())} ${pad2(rtime.getHours())}:${pad2(rtime.getMinutes())}` : "";
+            const rtimeText = rtime ? `${pad2(rtime.getMonth()+1)}/${pad2(rtime.getDate())} ${pad2(rtime.getHours())}:${pad2(rtime.getMinutes())}:${pad2(rtime.getSeconds())}` : "";
             const handlerAccountRaw = String(p.receivedByAccount || "").trim();
             const handlerNameRaw = String(p.receivedByDisplayName || p.receivedByName || "").trim();
             const handlerAccount = handlerAccountRaw || "";
@@ -11953,7 +11954,7 @@
     const serial = normalizeParcelSerial(p.internalSerial) || "—";
     const arrivalTime = toDate80(p.createdAt);
     const arrivalText = arrivalTime
-      ? `${arrivalTime.getFullYear()}/${pad2(arrivalTime.getMonth() + 1)}/${pad2(arrivalTime.getDate())} ${pad2(arrivalTime.getHours())}:${pad2(arrivalTime.getMinutes())}`
+      ? `${arrivalTime.getFullYear()}/${pad2(arrivalTime.getMonth() + 1)}/${pad2(arrivalTime.getDate())} ${pad2(arrivalTime.getHours())}:${pad2(arrivalTime.getMinutes())}:${pad2(arrivalTime.getSeconds())}`
       : "";
     const notifyCtx = {
       communityName,
@@ -12124,7 +12125,7 @@
     ];
     const arrival = toDate80(p.createdAt);
     const arrivalText = arrival
-      ? `${arrival.getFullYear()}/${pad2(arrival.getMonth() + 1)}/${pad2(arrival.getDate())} ${pad2(arrival.getHours())}:${pad2(arrival.getMinutes())}`
+      ? `${arrival.getFullYear()}/${pad2(arrival.getMonth() + 1)}/${pad2(arrival.getDate())} ${pad2(arrival.getHours())}:${pad2(arrival.getMinutes())}:${pad2(arrival.getSeconds())}`
       : "—";
     return "<!doctype html><html lang=\"zh-Hant\"><head><meta charset=\"utf-8\"/><title>到貨標籤</title>" +
       "<style>" +
@@ -12543,7 +12544,7 @@
   function auditTimeText80(value) {
     const d = toDate80(value);
     if (!d) return "—";
-    return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   }
 
   function renderParcelAuditRows80(records) {
@@ -13085,9 +13086,9 @@
             const id = doc.id;
             const isDone = String(p.status || "pending") === "done";
             const time = toDate80(p.createdAt);
-            const timeText = time ? `${pad2(time.getMonth() + 1)}/${pad2(time.getDate())} ${pad2(time.getHours())}:${pad2(time.getMinutes())}` : "—";
+            const timeText = time ? `${pad2(time.getMonth() + 1)}/${pad2(time.getDate())} ${pad2(time.getHours())}:${pad2(time.getMinutes())}:${pad2(time.getSeconds())}` : "—";
             const doneTime = toDate80(p.doneAt);
-            const doneText = doneTime ? `${pad2(doneTime.getMonth() + 1)}/${pad2(doneTime.getDate())} ${pad2(doneTime.getHours())}:${pad2(doneTime.getMinutes())}` : "";
+            const doneText = doneTime ? `${pad2(doneTime.getMonth() + 1)}/${pad2(doneTime.getDate())} ${pad2(doneTime.getHours())}:${pad2(doneTime.getMinutes())}:${pad2(doneTime.getSeconds())}` : "";
             const guestText = [String(p.guestName || "").trim(), String(p.guestPhone || "").trim()].filter(Boolean).join(" ");
             const qty = String(p.itemQty || "").trim();
             const note = String(p.note || "").trim();
@@ -15463,7 +15464,8 @@
             const day = String(d.getDate()).padStart(2, "0");
             const hour = String(d.getHours()).padStart(2, "0");
             const minute = String(d.getMinutes()).padStart(2, "0");
-            return `${year}-${month}-${day} ${hour}:${minute}`;
+            const s = String(d.getSeconds()).padStart(2, "0");
+            return `${year}-${month}-${day} ${hour}:${minute}:${s}`;
           };
 
           unsubscribe = db.collection("pointsHistory")
@@ -15553,7 +15555,8 @@
           const day = String(d.getDate()).padStart(2, "0");
           const hour = String(d.getHours()).padStart(2, "0");
           const minute = String(d.getMinutes()).padStart(2, "0");
-          return `${year}-${month}-${day} ${hour}:${minute}`;
+          const s = String(d.getSeconds()).padStart(2, "0");
+          return `${year}-${month}-${day} ${hour}:${minute}:${s}`;
         };
 
         // 监听历史纪录变化
@@ -17802,7 +17805,7 @@
       if (ms == null || !Number.isFinite(Number(ms))) return "";
       const d = new Date(Number(ms));
       if (!Number.isFinite(d.getTime())) return "";
-      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
     };
 
     const currentMonthKey = (d) => {
@@ -22272,7 +22275,7 @@
     if (!ms) return "—";
     const d = new Date(ms);
     if (Number.isNaN(d.getTime())) return "—";
-    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   }
 
   function formatCareRelativeMs(value) {
@@ -23785,7 +23788,7 @@
     const n = Number(ms || 0);
     if (!n) return "—";
     const d = new Date(n);
-    return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   }
 
   function cvCheckinMethodLabel(method) {
@@ -26167,7 +26170,7 @@
     const ms = Number((project && project.meetingAtMs) || 0) || 0;
     if (!ms) return "";
     const d = new Date(ms);
-    return `${d.getFullYear() - 1911}年${pad2(d.getMonth() + 1)}月${pad2(d.getDate())}日 ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    return `${d.getFullYear() - 1911}年${pad2(d.getMonth() + 1)}月${pad2(d.getDate())}日 ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   }
 
   // 名冊式表格（個人式沿用同一格式，只帶入單一住戶）
@@ -29121,7 +29124,8 @@
     const da = String(d.getDate()).padStart(2, "0");
     const hh = String(d.getHours()).padStart(2, "0");
     const mm = String(d.getMinutes()).padStart(2, "0");
-    return `${y}-${mo}-${da} ${hh}:${mm}`;
+    const ss = String(d.getSeconds()).padStart(2, "0");
+    return `${y}-${mo}-${da} ${hh}:${mm}:${ss}`;
   }
   function toMillis850(v) {
     if (v == null || v === "") return 0;

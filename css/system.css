@@ -238,6 +238,8 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid rgba(17, 24, 39, 0.14);
   background: var(--panel-2);
   color: var(--muted);
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .tag.red { background: rgba(211, 47, 47, 0.1); border-color: rgba(211, 47, 47, 0.24); color: #9f1c1c; }
 .form { display: grid; gap: 12px; }
@@ -287,11 +289,11 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid rgba(17, 24, 39, 0.1);
 }
 .account-item {
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 .account-left {
   display: grid;
-  grid-template-columns: 44px 1fr;
+  grid-template-columns: 44px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -328,7 +330,8 @@ input:focus, select:focus, textarea:focus {
 }
 .avatar-crown svg { width: 12px; height: 12px; display: block; }
 .account-text { min-width: 0; }
-.account-name { font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-name-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.account-name { font-weight: 900; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-sub { margin-top: 2px; font-size: 12px; color: rgba(31, 41, 55, 0.65); font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-meta { display: inline-flex; align-items: center; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
 .account-actions { display: inline-flex; gap: 8px; align-items: center; justify-content: flex-end; }
@@ -637,6 +640,62 @@ input:focus, select:focus, textarea:focus {
   .community-actions .icon-btn svg {
     width: 16px;
     height: 16px;
+  }
+}
+/* 帳號清單：手機直屏重新排版，避免文字超出卡片或與圖示重疊 */
+@media (max-width: 560px) {
+  .item.account-item {
+    padding: 10px;
+    gap: 8px;
+    align-items: start;
+  }
+  .account-left {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+  }
+  .avatar-sm {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    flex-basis: 40px;
+  }
+  .account-name-row {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .account-name {
+    flex: 0 1 100%;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    line-height: 1.3;
+  }
+  .account-meta {
+    margin-top: 4px;
+    gap: 8px;
+  }
+  .account-actions {
+    gap: 6px;
+    align-self: start;
+  }
+  .account-actions .icon-btn {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+  }
+  .account-actions .icon-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+  .account-detail-row {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 8px;
+  }
+  .account-detail-val {
+    font-size: 12px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
