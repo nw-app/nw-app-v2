@@ -28,6 +28,9 @@
       .share-app {
         height: 100dvh;
         display: grid;
+        /* 單一欄位明確夾在容器寬度內（minmax(0,1fr)），
+           避免標題列的 nowrap 文字把隱含 auto 欄撐寬導致右側被裁切 */
+        grid-template-columns: minmax(0, 1fr);
         grid-template-rows: auto minmax(0, 1fr) auto;
       }
 
