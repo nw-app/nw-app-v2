@@ -61,11 +61,12 @@
       #reader { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
       /* 重要：不可用 CSS 強制 video 的 width / height 為 100%（或 object-fit: cover）。
          html5-qrcode 以 scaleX = videoWidth / video.clientWidth、scaleY = videoHeight / video.clientHeight
-         換算掃描區域；函式庫本身只設定 video 的寬度、高度維持自然比例，
-         此時 scaleX 與 scaleY 相等，取樣區域不變形。
-         一旦用 CSS 把 video 拉成容器大小（容器與鏡頭比例不同），scaleX ≠ scaleY，
-         取樣區域會被拉扁變形 → 永遠無法辨識（在 PWA 獨立視窗的長版面最明顯）。 */
-      #reader video { object-fit: fill; margin: 0 auto; }
+         換算掃描區域；一旦 video 的長寬比與鏡頭比例不同（scaleX ≠ scaleY），
+         取樣區域會被拉扁變形 → 永遠無法辨識（在 PWA 獨立視窗的長版面最明顯）。
+         因此改由 fitPreview() 以「維持鏡頭比例」為前提，用像素指定 video 寬高，
+         讓預覽畫面盡量填滿掃描區（手機直屏時以高度為主、左右自然裁切）；
+         此時 video 元素長寬比仍等於鏡頭比例，scaleX 與 scaleY 相等，取樣不變形。 */
+      #reader video { flex: none; object-fit: fill; margin: 0 auto; }
       .scan-frame { position: absolute; inset: 0; pointer-events: none; }
       .scan-frame::after {
         content: "";
@@ -318,7 +319,7 @@
           const n = Number(ms || 0);
           if (!n) return "—";
           const d = new Date(n);
-          return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+          return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
         }
 
         function formatUnit(item) {
@@ -683,6 +684,49 @@
           return stream && typeof stream.getVideoTracks === "function" ? (stream.getVideoTracks()[0] || null) : null;
         }
 
+        /* 放大預覽畫面：依鏡頭比例與掃描區大小，以像素指定 video 寬高，
+           使其盡量填滿整個掃描區（手機直屏時以高度為主，左右自然裁切）。
+           一律維持「video 元素長寬比 ＝ 鏡頭比例」，確保函式庫取樣不變形。 */
+        function fitPreview() {
+          const video = document.querySelector("#reader video");
+          const stage = document.querySelector(".scan-stage");
+          if (!video || !stage) return;
+          const vw = Number(video.videoWidth) || 0;
+          const vh = Number(video.videoHeight) || 0;
+          const sw = stage.clientWidth || 0;
+          const sh = stage.clientHeight || 0;
+          if (!vw || !vh || !sw || !sh) return;
+          let width;
+          let height;
+          if (sw / sh > vw / vh) {
+            // 掃描區比鏡頭畫面寬 → 以寬度填滿，高度等比延伸（上下裁切）
+            width = sw;
+            height = Math.round((sw * vh) / vw);
+          } else {
+            // 掃描區比鏡頭畫面高 → 以高度填滿，寬度等比延伸（左右裁切）
+            height = sh;
+            width = Math.round((sh * vw) / vh);
+          }
+          video.style.setProperty("width", `${width}px`, "important");
+          video.style.setProperty("height", `${height}px`, "important");
+        }
+
+        /* 監看 #reader：相機 video 一出現就綁定，於函式庫量測畫面尺寸前先套用放大設定 */
+        let readerObserver = null;
+        function watchReaderVideo() {
+          const reader = el("reader");
+          if (!reader || readerObserver) return;
+          readerObserver = new MutationObserver(() => {
+            const video = reader.querySelector("video");
+            if (!video || video.dataset.nwFit === "1") return;
+            video.dataset.nwFit = "1";
+            video.addEventListener("loadedmetadata", fitPreview);
+            video.addEventListener("playing", fitPreview);
+            fitPreview();
+          });
+          readerObserver.observe(reader, { childList: true });
+        }
+
         function getCameraCapabilities() {
           const track = getVideoTrack();
           if (!track || typeof track.getCapabilities !== "function") return {};
@@ -788,6 +832,8 @@
             return;
           }
           state.scanner = scanner;
+          // 先掛上監看，待相機 video 出現即套用放大，確保函式庫量測前尺寸已就緒
+          watchReaderVideo();
           try {
             await scanner.start(
               // cameraIdOrConfig 僅能有 1 個鍵，故只給 facingMode
@@ -798,9 +844,14 @@
                 disableFlip: false,
                 experimentalFeatures: { useBarCodeDetectorIfSupported: true },
                 qrbox: function (w, h) {
-                  // 取樣框放大至畫面 85%：近距離時 QR code 在畫面上較大，
-                  // 若取樣框太小（舊版固定 260px）會框不住整個碼而無法辨識
-                  const size = Math.floor(Math.min(w, h) * 0.85);
+                  // 取樣框放大至「實際可見」範圍的 85%：近距離時 QR code 在畫面上較大，
+                  // 若取樣框太小（舊版固定 260px）會框不住整個碼而無法辨識。
+                  // 預覽畫面已放大到填滿掃描區（可能左右被裁切），故以 stage 可視範圍
+                  // 計算取樣框大小，避免白色框超出可視區域。
+                  const stage = document.querySelector(".scan-stage");
+                  const visW = stage ? Math.min(w, stage.clientWidth) : w;
+                  const visH = stage ? Math.min(h, stage.clientHeight) : h;
+                  const size = Math.floor(Math.min(visW, visH) * 0.85);
                   // 讓白色掃描框與函式庫實際取樣的區域一致
                   try { document.documentElement.style.setProperty("--scan-box", size + "px"); } catch {}
                   return { width: size, height: size };
@@ -1012,6 +1063,10 @@
           if (projectUnsub) projectUnsub();
           stopScanner();
         });
+
+        /* 視窗尺寸或方向改變時，重新計算預覽畫面大小（維持填滿掃描區） */
+        window.addEventListener("resize", fitPreview);
+        window.addEventListener("orientationchange", () => setTimeout(fitPreview, 300));
 
         function boot() {
           try {
