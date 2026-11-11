@@ -4663,6 +4663,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .cv-doc-editor input[type="text"],
+.cv-doc-editor input[type="number"],
 .cv-doc-editor textarea {
   border-radius: 10px;
   border: 1px solid rgba(17, 24, 39, 0.14);
@@ -4671,6 +4672,24 @@ a { color: inherit; text-decoration: none; }
   font-family: inherit;
   resize: vertical;
   color: #111827;
+}
+
+.cv-doc-size-group {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px dashed rgba(17, 24, 39, 0.18);
+  border-radius: 10px;
+  background: #f9fafb;
+}
+
+.cv-doc-size-group .cv-doc-size-title {
+  grid-column: 1 / -1;
+  font-size: calc(13px * var(--fs, 1));
+  font-weight: 800;
+  color: #374151;
 }
 
 .cv-doc-editor .cv-doc-logo-field input[type="file"] {
@@ -5057,6 +5076,31 @@ input.cv-toggle:focus-visible {
   color: var(--brand, #d32f2f);
   font-size: calc(12px * var(--fs, 1));
   font-weight: 900;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* 投票議題卡片標題：過長自動換行，不撐破父容器 */
+.card-hd h2.cv-topic-title {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.35;
+}
+
+/* 投票議題卡片標題上方的議題序號 */
+.cv-topic-idx {
+  display: inline-block;
+  margin-bottom: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(211, 47, 47, 0.1);
+  color: var(--brand, #d32f2f);
+  font-size: calc(12px * var(--fs, 1));
+  font-weight: 900;
+  letter-spacing: 0.02em;
   white-space: nowrap;
   vertical-align: middle;
 }

@@ -24064,6 +24064,7 @@
     const options = Array.isArray(v.options) ? v.options : [];
     return {
       id: String(id || v.id || "").trim(),
+      no: String(v.no || "").trim(),
       title: String(v.title || "").trim() || "未命名議題",
       code: String(v.code || "").trim(),
       description: String(v.description || "").trim(),
@@ -24732,6 +24733,7 @@
       ? payload.singleChoice !== false
       : cvNormalizeProjectSettings(project && project.settings ? project.settings : {}).defaultSingleChoice !== false;
     const topicPayload = {
+      no: String(payload.no || "").trim(),
       title: String(payload.title || "").trim() || "未命名議題",
       code: String(payload.code || "").trim(),
       description: String(payload.description || "").trim(),
@@ -25570,14 +25572,15 @@
           ${project.settings.allowQrVote ? `<button class="btn btn-primary" type="button" data-cv-go="scan">掃碼投票</button>` : ""}
         </div>
       </div>
-      ${topics.length ? topics.map((topic) => {
+      ${topics.length ? topics.map((topic, index) => {
         const stats = cvTopicStats(topic, project, roster);
         return `
           <div class="card" style="margin-bottom:12px;">
             <div class="card-hd">
               <div class="left">
                 <div style="min-width:0;">
-                  <h2 style="font-size:calc(22px * var(--fs, 1));">${escapeHtml(topic.title)}</h2>
+                  <span class="cv-topic-idx">${escapeHtml(String(topic.no || "").trim() || `議題${index + 1}`)}</span>
+                  <h2 class="cv-topic-title" style="font-size:16px;">${escapeHtml(topic.title)}</h2>
                   <p>${escapeHtml(topic.description || cvTopicTypeLabel(topic))}</p>
                 </div>
               </div>
@@ -25820,17 +25823,36 @@
   }
 
   // ==== 文件產生器（報到單 / 投票單）====
+  // 可調字級／圖片大小（px）：LOGO 高度、標題、副標題、會議時間、備註
+  const cvDocFontDefaults = { logo: 44, title: 26, subtitle: 19, meta: 13, note: 13, topic: 26 };
+  function cvDocNormalizeFonts(fonts) {
+    const src = fonts || {};
+    const pick = (key, min, max) => {
+      const n = Number(src[key]);
+      return Number.isFinite(n) && n > 0 ? Math.min(max, Math.max(min, Math.round(n))) : cvDocFontDefaults[key];
+    };
+    return {
+      logo: pick("logo", 16, 140),
+      title: pick("title", 12, 72),
+      subtitle: pick("subtitle", 10, 60),
+      meta: pick("meta", 8, 48),
+      note: pick("note", 8, 48),
+      topic: pick("topic", 10, 48),
+    };
+  }
   const cvDocPrefs = {
-    checkin: { layout: "personal", targetId: "__all__", targetIds: ["__all__"], perPage: 10, mergeOwner: false },
-    vote: { layout: "single", targetId: "__all__", topicId: "__all__", mergeOwner: false, perPage: 5 },
-    pass: { layout: "biz", targetIds: ["__all__"], heading: "出席證" },
+    checkin: { layout: "personal", targetId: "__all__", targetIds: ["__all__"], perPage: 10, mergeOwner: false, fonts: { ...cvDocFontDefaults } },
+    vote: { layout: "single", targetId: "__all__", targetIds: ["__all__"], topicId: "__all__", mergeOwner: false, perPage: 5, multiMode: "merged", fonts: { ...cvDocFontDefaults } },
+    pass: { layout: "biz", targetIds: ["__all__"], heading: "出席證", fonts: { ...cvDocFontDefaults } },
   };
   const cvDocPageCss = `
-    .cv-doc-page { width: 210mm; height: 297mm; box-sizing: border-box; padding: 18mm 16mm; background: #fff; color: #111827; display: flex; flex-direction: column; font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif; overflow: hidden; }
+    .cv-doc-page { position: relative; width: 210mm; height: 297mm; box-sizing: border-box; padding: 18mm 16mm; background: #fff; color: #111827; display: flex; flex-direction: column; font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif; overflow: hidden; }
     .cv-doc-hd { border-bottom: 3px solid #d32f2f; padding-bottom: 10px; margin-bottom: 16px; }
     .cv-doc-hd h1 { margin: 0; font-size: 26px; letter-spacing: 2px; font-weight: 800; }
     .cv-doc-title-row { position: relative; display: flex; align-items: center; justify-content: center; gap: 12px; }
-    .cv-doc-house { position: absolute; right: 0; top: 0; font-size: 28px; font-weight: 800; color: #374151; }
+    .cv-doc-tag-row { display: flex; justify-content: flex-end; align-items: flex-start; min-height: 32px; margin-bottom: 2px; }
+    .cv-doc-house { font-size: 28px; font-weight: 800; color: #d32f2f; line-height: 1.1; text-align: right; }
+    .cv-doc-house--bldg { position: absolute; right: 16mm; top: 5mm; color: #d32f2f; }
     .cv-doc-logo { height: 44px; width: auto; max-width: 120px; object-fit: contain; flex: 0 0 auto; }
     .cv-doc-subrow { position: relative; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 6px; }
     .cv-doc-subrow .cv-doc-sub, .cv-doc-subrow .cv-doc-meta { margin: 0; }
@@ -25839,7 +25861,6 @@
     .cv-doc-sub { margin: 6px 0 0; font-size: 19px; font-weight: 600; text-align: center; color: #374151; }
     .cv-doc-meta { margin: 4px 0 0; font-size: 13px; color: #6b7280; }
     .cv-doc-bd { flex: 1; }
-    .cv-doc-ft { border-top: 1px solid #e5e7eb; padding-top: 8px; margin-top: 12px; display: flex; justify-content: space-between; font-size: 12px; color: #9ca3af; }
     .cv-doc-info { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
     .cv-doc-info th, .cv-doc-info td { border: 1px solid #d1d5db; padding: 10px 12px; font-size: 14px; text-align: left; }
     .cv-doc-info th { background: #f9fafb; width: 88px; font-weight: 700; }
@@ -25873,9 +25894,10 @@
     .cv-doc-qr-item .cv-doc-qr-cap { font-size: 11px; }
     .cv-doc-note { border: 1px dashed #d1d5db; border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #4b5563; line-height: 1.7; }
     .cv-doc-topic { border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
-    .cv-doc-topic-title { font-size: 26px; font-weight: 800; }
+    .cv-doc-topic-title { font-size: 26px; font-weight: 400; }
+    .cv-doc-topic-title strong { font-weight: 800; }
     .cv-doc-topic-desc { font-size: 15px; color: #6b7280; margin-top: 6px; }
-    .cv-doc-options { list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+    .cv-doc-options { list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .cv-doc-options li { display: flex; align-items: center; gap: 10px; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; background: #f9fafb; }
     .cv-doc-box { width: 24px; height: 24px; border: 2px solid #374151; border-radius: 3px; flex: 0 0 auto; }
     .cv-doc-opt-label { font-size: 19px; flex: 1; }
@@ -25909,6 +25931,11 @@
     .cv-log-table th, .cv-log-table td { font-size: 13px; padding: 8px 10px; vertical-align: middle; }
     .cv-log-table td:first-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
     .cv-log-table td:nth-child(2) { white-space: nowrap; }
+    /* 投票單「分開」模式：依每頁議題數由上而下平均分配頁面範圍，區塊間以水平虛線分隔 */
+    .cv-doc-split { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .cv-doc-split-sec { flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+    .cv-doc-split-sec + .cv-doc-split-sec { border-top: 1px dashed #9ca3af; padding-top: 18mm; }
+    .cv-doc-split-sec .cv-doc-hd { margin-bottom: 10px; }
   `;
   const cvDocPrintCss = `
     @page { size: A4 portrait; margin: 0; }
@@ -26032,6 +26059,20 @@
     `;
   }
 
+  // 由文件對象設定取出已選取的「棟別」名稱（供文件右上角以紅字標示）
+  function cvDocPickedBuildingLabel(prefs) {
+    const raw = (prefs && Array.isArray(prefs.targetIds) && prefs.targetIds.length)
+      ? prefs.targetIds
+      : [prefs && prefs.targetId];
+    const names = [];
+    raw.map((item) => String(item == null ? "" : item).trim()).filter(Boolean).forEach((token) => {
+      if (token.slice(0, 2) !== "b:") return;
+      const name = token.slice(2).trim();
+      if (name && !names.includes(name)) names.push(name);
+    });
+    return names.join("、");
+  }
+
   function cvDocPickTargets(roster, targetIds) {
     const list = Array.isArray(roster) ? roster : [];
     const tokens = (Array.isArray(targetIds) ? targetIds : [targetIds])
@@ -26118,16 +26159,21 @@
     `;
   }
 
-  function cvDocTopicBlock(topic, index, project, ownerQrToken) {
+  function cvDocTopicBlock(topic, index, project, ownerQrToken, topicFont) {
     const options = Array.isArray(topic.options) ? topic.options : [];
     const token = String(ownerQrToken || "").trim();
     const topicCode = String(topic.code || "").trim();
+    // 選項排版：預設一行 2 個、最多 3 個；4 個（含）以上時回到一行 2 個，第 4 個換行
+    const cols = options.length >= 4 ? 2 : Math.max(1, Math.min(options.length, 3));
+    const font = Number(topicFont) > 0 ? Math.round(Number(topicFont)) : 26;
+    // 抬頭議題編號沿用管理者設定的「編號」（topic.no），未設定時才以順序帶入
+    const topicNo = String(topic.no || "").trim() || `議題${index}`;
     return `
       <div class="cv-doc-topic">
-        <div class="cv-doc-topic-title">議題 ${index}：${escapeHtml(topic.title)}（${topic.singleChoice ? "單選" : "可多選"}）</div>
+        <div class="cv-doc-topic-title" style="font-size:${font}px;"><strong>${escapeHtml(topicNo)}：</strong>${escapeHtml(topic.title)}（${topic.singleChoice ? "單選" : "複選"}。請在□內打勾，謝謝！）</div>
         ${topic.description ? `<div class="cv-doc-topic-desc">${escapeHtml(topic.description)}</div>` : ""}
         ${options.length ? `
-          <ul class="cv-doc-options">
+          <ul class="cv-doc-options" style="grid-template-columns: repeat(${cols}, minmax(0, 1fr));">
             ${options.map((opt) => {
               // 與人工投票的選項 QR 相同來源：住戶 QR code碼 ＋ 議題代號 ＋ 選項代號（例：A001M01T）
               const payload = `${token}${topicCode}${String(opt.code || "").trim()}`;
@@ -26179,6 +26225,7 @@
     const list = Array.isArray(rows) ? rows : [];
     const meetingText = cvDocMeetingText(header, project);
     const showOwnership = cvDocShowOwnership(project);
+    const noteFont = cvDocNormalizeFonts(header && header.fonts).note;
     const colCount = showOwnership ? 9 : 8;
     const proxyLines = [
       `致  ${cvDocCommunityName()}  社區：預定於${meetingText || "       "}舉行之第一次區分所有權人會議， 本人謹委託`,
@@ -26234,7 +26281,7 @@
           </td></tr>
         </tfoot>` : ""}
       </table>
-      <div class="cv-doc-note" style="margin-top:16px;">${escapeHtml(header.note)}</div>
+      <div class="cv-doc-note" style="margin-top:16px; font-size:${noteFont}px;">${escapeHtml(header.note)}</div>
     `;
   }
 
@@ -26294,7 +26341,28 @@
     return `<div class="cv-doc-pass-grid cv-doc-pass-grid--${isBiz ? "biz" : "tall"}">${cards}</div>`;
   }
 
-  function cvDocPageHtml(page, project, header, pageNo, totalPages) {
+  // 文件頁首區塊（戶號列＋標題列＋副標題列）；棟別另於頁面層級以紅字顯示
+  function cvDocHeaderBlockHtml(header, fonts, houseNo) {
+    const no = String(houseNo || "").trim();
+    return `
+      <header class="cv-doc-hd">
+        ${no ? `<div class="cv-doc-tag-row"><span class="cv-doc-house">${escapeHtml(no)}</span></div>` : ""}
+        <div class="cv-doc-title-row">
+          ${header.logo ? `<img class="cv-doc-logo" style="height:${fonts.logo}px;" src="${escapeHtml(header.logo)}" alt="社區LOGO" />` : ""}
+          <h1 style="font-size:${fonts.title}px;">${escapeHtml(header.title)}</h1>
+        </div>
+        ${(header.subtitle || header.meetingLine) ? `
+          <div class="cv-doc-subrow">
+            ${header.subtitle ? `<p class="cv-doc-sub" style="font-size:${fonts.subtitle}px;">${escapeHtml(header.subtitle)}</p>` : "<span></span>"}
+            ${header.meetingLine ? `<p class="cv-doc-meta" style="font-size:${fonts.meta}px;">${escapeHtml(header.meetingLine)}</p>` : ""}
+          </div>
+        ` : ""}
+      </header>
+    `;
+  }
+
+  function cvDocPageHtml(page, project, header, pageNo, totalPages, buildingLabel) {
+    const fonts = cvDocNormalizeFonts(header && header.fonts);
     let body = "";
     if (page.kind === "pass-biz") {
       body = cvDocPassGridHtml(page.rows, header, project, "biz");
@@ -26306,20 +26374,20 @@
       body = `
         ${cvDocOwnerUnitsTable(page.group, "報到時間", project)}
         ${cvDocOwnerQrBlock(page.group, project)}
-        <div class="cv-doc-note">${escapeHtml(header.note)}</div>
+        <div class="cv-doc-note" style="font-size:${fonts.note}px;">${escapeHtml(header.note)}</div>
       `;
     } else if (page.kind === "checkin-roster") {
       body = cvDocRosterTableHtml(page.rows, header, project, { withProxy: false });
     } else if (page.kind === "vote-single") {
-      body = cvDocTopicBlock(page.topic, 1, project, page.entry && page.entry.qrToken);
+      body = cvDocTopicBlock(page.topic, 1, project, page.entry && page.entry.qrToken, fonts.topic);
     } else if (page.kind === "vote-multi") {
-      body = page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project, page.entry && page.entry.qrToken)).join("");
+      body = page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project, page.entry && page.entry.qrToken, fonts.topic)).join("");
     } else if (page.kind === "vote-owner-single") {
       body = cvDocOwnerUnitsTable(page.group, "投票時間", project)
-        + cvDocTopicBlock(page.topic, 1, project, cvDocOwnerQrToken(page.group));
+        + cvDocTopicBlock(page.topic, 1, project, cvDocOwnerQrToken(page.group), fonts.topic);
     } else if (page.kind === "vote-owner-multi") {
       body = cvDocOwnerUnitsTable(page.group, "投票時間", project)
-        + page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project, cvDocOwnerQrToken(page.group))).join("");
+        + page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project, cvDocOwnerQrToken(page.group), fonts.topic)).join("");
     }
     const isVotePage = String(page.kind || "").indexOf("vote-") === 0;
     // 報到證：不使用頁首／頁尾區塊，卡片直接鋪滿整頁
@@ -26330,28 +26398,31 @@
         </section>
       `;
     }
-    // 右上角僅顯示戶號（不含子戶號）
+    // 右上角僅顯示戶號（不含子戶號）；若文件對象已選取「棟別」，則改以紅字標示於頁面右上角（距上邊界 5mm）
+    const building = String(buildingLabel || "").trim();
     const houseNo = isVotePage && page.entry ? String(page.entry.houseNo || "").trim() : "";
+    const buildingHtml = building ? `<span class="cv-doc-house cv-doc-house--bldg">${escapeHtml(building)}</span>` : "";
+    // 投票單「分開」：依每頁議題數由上而下平均分配區塊，各區塊自帶抬頭，區塊間以水平虛線分隔
+    if (page.kind === "vote-multi-split") {
+      const token = page.entry && page.entry.qrToken;
+      const regions = page.topics.map((topic, index) => `
+        <div class="cv-doc-split-sec">
+          ${cvDocHeaderBlockHtml(header, fonts, houseNo)}
+          ${cvDocTopicBlock(topic, index + 1, project, token, fonts.topic)}
+        </div>
+      `).join("");
+      return `
+        <section class="cv-doc-page">
+          ${buildingHtml}
+          <div class="cv-doc-split">${regions}</div>
+        </section>
+      `;
+    }
     return `
       <section class="cv-doc-page">
-        <header class="cv-doc-hd">
-          <div class="cv-doc-title-row">
-            ${header.logo ? `<img class="cv-doc-logo" src="${escapeHtml(header.logo)}" alt="社區LOGO" />` : ""}
-            <h1>${escapeHtml(header.title)}</h1>
-            ${houseNo ? `<span class="cv-doc-house">${escapeHtml(houseNo)}</span>` : ""}
-          </div>
-          ${(header.subtitle || header.meetingLine) ? `
-            <div class="cv-doc-subrow">
-              ${header.subtitle ? `<p class="cv-doc-sub">${escapeHtml(header.subtitle)}</p>` : "<span></span>"}
-              ${header.meetingLine ? `<p class="cv-doc-meta">${escapeHtml(header.meetingLine)}</p>` : ""}
-            </div>
-          ` : ""}
-        </header>
+        ${buildingHtml}
+        ${cvDocHeaderBlockHtml(header, fonts, building ? "" : houseNo)}
         <div class="cv-doc-bd">${body}</div>
-        <footer class="cv-doc-ft">
-          <span>${escapeHtml(cvDocCommunityName())}</span>
-          ${(page.kind === "checkin-personal" || String(page.kind || "").startsWith("vote")) ? "" : `<span>第 ${pageNo} / ${totalPages} 頁</span>`}
-        </footer>
       </section>
     `;
   }
@@ -26362,6 +26433,7 @@
     const targets = cvDocPickTargets(roster, prefs.targetIds && prefs.targetIds.length ? prefs.targetIds : prefs.targetId);
     const mergeOwner = prefs.mergeOwner === true;
     const groups = mergeOwner ? cvGroupRosterByOwner(targets) : [];
+    const buildingLabel = cvDocPickedBuildingLabel(prefs);
     const pageItems = [];
     if (kind === "pass") {
       const isTall = prefs.layout === "tall";
@@ -26369,7 +26441,7 @@
       for (let i = 0; i < targets.length; i += per) {
         pageItems.push({ kind: isTall ? "pass-tall" : "pass-biz", rows: targets.slice(i, i + per) });
       }
-      return pageItems.map((page, index) => cvDocPageHtml(page, project, header, index + 1, pageItems.length));
+      return pageItems.map((page, index) => cvDocPageHtml(page, project, header, index + 1, pageItems.length, buildingLabel));
     }
     if (kind === "checkin") {
       if (mergeOwner) {
@@ -26399,16 +26471,17 @@
           groups.forEach((group) => pickedTopics.forEach((topic) => pageItems.push({ kind: "vote-owner-single", group, topic })));
         }
       } else if (prefs.layout === "multi") {
+        const split = prefs.multiMode === "split";
         targets.forEach((entry) => {
           for (let i = 0; i < pickedTopics.length; i += perPage) {
-            pageItems.push({ kind: "vote-multi", entry, topics: pickedTopics.slice(i, i + perPage) });
+            pageItems.push({ kind: split ? "vote-multi-split" : "vote-multi", entry, topics: pickedTopics.slice(i, i + perPage) });
           }
         });
       } else {
         targets.forEach((entry) => pickedTopics.forEach((topic) => pageItems.push({ kind: "vote-single", entry, topic })));
       }
     }
-    return pageItems.map((page, index) => cvDocPageHtml(page, project, header, index + 1, pageItems.length));
+    return pageItems.map((page, index) => cvDocPageHtml(page, project, header, index + 1, pageItems.length, buildingLabel));
   }
 
   function cvDocSafeFileName(text) {
@@ -26512,7 +26585,10 @@
     }
     cvEnsureDocCss();
     const prefs = kind === "vote" ? cvDocPrefs.vote : (kind === "pass" ? cvDocPrefs.pass : cvDocPrefs.checkin);
+    prefs.fonts = cvDocNormalizeFonts(prefs.fonts);
+    const fonts = prefs.fonts;
     const header = cvDocDefaultHeader(project, kind);
+    header.fonts = fonts;
     if (kind === "checkin" && prefs.layout === "roster") {
       header.subtitle = "出席人員名冊";
     }
@@ -26553,6 +26629,17 @@
               <label>會議時間<input id="cvDocInputMeeting" type="text" value="${escapeHtml(header.meetingLine)}" /></label>
               ${showDeadline ? `<label>補發時間<input id="cvDocInputDeadline" type="text" value="${escapeHtml(header.deadlineLine || "")}" placeholder="例：115年05月14日" /></label>` : ""}
               ${showNote ? `<label>備註說明<textarea id="cvDocInputNote" rows="2">${escapeHtml(header.note)}</textarea></label>` : ""}
+              ${showHeaderFields ? `
+              <div class="cv-doc-size-group">
+                <div class="cv-doc-size-title">字級／圖片大小（px）</div>
+                <label>LOGO 圖片大小<input id="cvDocFontLogo" type="number" min="16" max="140" step="1" value="${fonts.logo}" /></label>
+                <label>標題字級<input id="cvDocFontTitle" type="number" min="12" max="72" step="1" value="${fonts.title}" /></label>
+                <label>副標題字級<input id="cvDocFontSubtitle" type="number" min="10" max="60" step="1" value="${fonts.subtitle}" /></label>
+                <label>會議時間字級<input id="cvDocFontMeta" type="number" min="8" max="48" step="1" value="${fonts.meta}" /></label>
+                ${showNote ? `<label>備註字級<input id="cvDocFontNote" type="number" min="8" max="48" step="1" value="${fonts.note}" /></label>` : ""}
+                ${kind === "vote" ? `<label>議題字級<input id="cvDocFontTopic" type="number" min="10" max="48" step="1" value="${fonts.topic}" /></label>` : ""}
+              </div>
+              ` : ""}
             </div>
             <div class="cv-doc-preview" id="cvDocPreviewArea">${renderPreview()}</div>
           </div>
@@ -26585,6 +26672,31 @@
     ["#cvDocInputTitle", "#cvDocInputSubtitle", "#cvDocInputMeeting", "#cvDocInputDeadline", "#cvDocInputNote"].forEach((sel) => {
       const input = modal.querySelector(sel);
       if (input) input.addEventListener("input", syncHeader);
+    });
+
+    // 字級／圖片大小：即時套用至預覽、列印與 PDF
+    const fontBindings = [
+      ["#cvDocFontLogo", "logo"],
+      ["#cvDocFontTitle", "title"],
+      ["#cvDocFontSubtitle", "subtitle"],
+      ["#cvDocFontMeta", "meta"],
+      ["#cvDocFontNote", "note"],
+      ["#cvDocFontTopic", "topic"],
+    ];
+    const syncFonts = () => {
+      fontBindings.forEach(([sel, key]) => {
+        const input = modal.querySelector(sel);
+        if (!input) return;
+        const n = Number(input.value);
+        if (Number.isFinite(n) && n > 0) fonts[key] = n;
+      });
+      prefs.fonts = cvDocNormalizeFonts(fonts);
+      Object.assign(fonts, prefs.fonts);
+      syncHeader();
+    };
+    fontBindings.forEach(([sel]) => {
+      const input = modal.querySelector(sel);
+      if (input) input.addEventListener("input", syncFonts);
     });
 
     // 社區 LOGO：上傳後縮圖存成 Base64 並寫入專案設定，之後開啟可直接沿用
@@ -26716,10 +26828,6 @@
             <tbody>${tableRows(chunk)}</tbody>
           </table>
         </div>
-        <footer class="cv-doc-ft">
-          <span>${escapeHtml(cvDocCommunityName())}</span>
-          <span>第 ${index + 1} / ${chunks.length} 頁</span>
-        </footer>
       </section>
     `);
   }
@@ -26832,15 +26940,6 @@
     });
   }
 
-  function cvDocTargetOptionsHtml(roster, selectedId) {
-    const list = Array.isArray(roster) ? roster : [];
-    const current = String(selectedId || "__all__").trim() || "__all__";
-    return [
-      `<option value="__all__"${current === "__all__" ? " selected" : ""}>全部名單（${list.length} 人）</option>`,
-      ...list.map((entry) => `<option value="${escapeHtml(entry.id)}"${current === String(entry.id) ? " selected" : ""}>${escapeHtml(entry.name)}（${escapeHtml(cvFormatUnit(entry))}）</option>`),
-    ].join("");
-  }
-
   function cvRenderFilesContent(project, documents, roster) {
     if (!project) return `<div class="status">請先新增專案。</div>`;
     const residentList = Array.isArray(roster) ? roster : [];
@@ -26888,8 +26987,14 @@
                 ${[2, 3, 4, 5].map((n) => `<option value="${n}"${(Math.max(2, Math.min(5, Number(votePrefs.perPage) || 5))) === n ? " selected" : ""}>${n} 個議題</option>`).join("")}
               </select>
             </label>
-            <label>對象
-              <select id="cvVoteTarget">${cvDocTargetOptionsHtml(residentList, votePrefs.targetId)}</select>
+            <label id="cvVoteMultiModeWrap"${votePrefs.layout === "multi" ? "" : " hidden"}>議題排列
+              <select id="cvVoteMultiMode">
+                <option value="merged"${votePrefs.multiMode !== "split" ? " selected" : ""}>集合（多議題共用同一個抬頭）</option>
+                <option value="split"${votePrefs.multiMode === "split" ? " selected" : ""}>分開（每議題獨立抬頭，平均分配頁面並加水平虛線）</option>
+              </select>
+            </label>
+            <label>對象（可複選）
+              ${cvDocTargetPickerHtml(residentList, votePrefs.targetIds, "cvVoteTargetPicker")}
             </label>
             <label id="cvVoteTopicWrap"${votePrefs.layout === "single" ? "" : " hidden"}>議題
               <select id="cvVoteTopic">
@@ -27495,6 +27600,10 @@
     const topicCodeValue = current && String(current.code || "").trim()
       ? String(current.code).trim()
       : `M${String(topicSequence).padStart(2, "0")}`;
+    // 議題編號：預設「議題1」遞增，可自行修改
+    const topicNoValue = current && String(current.no || "").trim()
+      ? String(current.no).trim()
+      : `議題${topicSequence}`;
     const modal = ensureModal("checkinVoteTopicModal", "modal-checkin-vote-topic", "min(620px, 92vw)");
     bindModalClose(modal);
     modal.innerHTML = `
@@ -27519,7 +27628,11 @@
               <input id="cvTopicOrder" type="number" min="0" step="1" value="${escapeHtml(String(current ? current.order : checkinVoteState.topics.length + 1))}" />
             </div>
             <div class="field" style="display:block;">
-              <label for="cvTopicName">議題名稱</label>
+              <label for="cvTopicNo">編號</label>
+              <input id="cvTopicNo" type="text" value="${escapeHtml(topicNoValue)}" />
+            </div>
+            <div class="field" style="display:block;">
+              <label for="cvTopicName">主題</label>
               <input id="cvTopicName" type="text" value="${escapeHtml(current ? current.title : "")}" required />
             </div>
             <div class="field" style="display:block;">
@@ -27608,6 +27721,7 @@
       }
       await cvSaveTopic(cid, pid, current ? current.id : "", {
         title,
+        no: modal.querySelector("#cvTopicNo")?.value || "",
         code: modal.querySelector("#cvTopicCode")?.value || "",
         description: modal.querySelector("#cvTopicDesc")?.value || "",
         options: optionLines.map((label) => ({ label })),
@@ -28238,9 +28352,25 @@
       if (votePerPageSel) votePerPageSel.addEventListener("change", () => {
         cvDocPrefs.vote.perPage = Math.max(2, Math.min(5, Number(votePerPageSel.value) || 5));
       });
-      const voteTargetSel = document.getElementById("cvVoteTarget");
-      if (voteTargetSel) voteTargetSel.addEventListener("change", () => {
-        cvDocPrefs.vote.targetId = String(voteTargetSel.value || "__all__").trim() || "__all__";
+      const voteMultiModeSel = document.getElementById("cvVoteMultiMode");
+      if (voteMultiModeSel) voteMultiModeSel.addEventListener("change", () => {
+        cvDocPrefs.vote.multiMode = String(voteMultiModeSel.value || "merged").trim() === "split" ? "split" : "merged";
+      });
+      const voteTargetPicker = document.getElementById("cvVoteTargetPicker");
+      if (voteTargetPicker) voteTargetPicker.addEventListener("click", (event) => {
+        const chip = event.target.closest("[data-cv-target]");
+        if (!chip || !voteTargetPicker.contains(chip)) return;
+        const allChip = voteTargetPicker.querySelector('[data-cv-target="__all__"]');
+        const chips = Array.from(voteTargetPicker.querySelectorAll("[data-cv-target]"));
+        if (chip === allChip || String(chip.getAttribute("data-cv-target")) === "__all__") {
+          chips.forEach((item) => item.classList.toggle("is-on", item === allChip));
+        } else {
+          chip.classList.toggle("is-on");
+          const othersOn = chips.some((item) => item !== allChip && item.classList.contains("is-on"));
+          if (allChip) allChip.classList.toggle("is-on", !othersOn);
+        }
+        const picked = chips.filter((item) => item.classList.contains("is-on")).map((item) => String(item.getAttribute("data-cv-target") || "").trim()).filter(Boolean);
+        cvDocPrefs.vote.targetIds = picked.length ? picked : ["__all__"];
       });
       const voteTopicSel = document.getElementById("cvVoteTopic");
       if (voteTopicSel) voteTopicSel.addEventListener("change", () => {
