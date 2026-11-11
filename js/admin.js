@@ -25861,6 +25861,7 @@
     .cv-doc-sub { margin: 6px 0 0; font-size: 19px; font-weight: 600; text-align: center; color: #374151; }
     .cv-doc-meta { margin: 4px 0 0; font-size: 13px; color: #6b7280; }
     .cv-doc-bd { flex: 1; }
+    .cv-doc-ft { margin-top: 10px; padding-top: 8px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; text-align: right; }
     .cv-doc-info { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
     .cv-doc-info th, .cv-doc-info td { border: 1px solid #d1d5db; padding: 10px 12px; font-size: 14px; text-align: left; }
     .cv-doc-info th { background: #f9fafb; width: 88px; font-weight: 700; }
@@ -26418,11 +26419,17 @@
         </section>
       `;
     }
+    // 報到名冊（含個人式、名冊式、合併戶）於頁尾顯示頁數／總頁數；投票單與報到證不顯示
+    const isCheckinPage = String(page.kind || "").indexOf("checkin-") === 0;
+    const footerHtml = isCheckinPage
+      ? `<footer class="cv-doc-ft">第 ${pageNo} / ${totalPages} 頁</footer>`
+      : "";
     return `
       <section class="cv-doc-page">
         ${buildingHtml}
         ${cvDocHeaderBlockHtml(header, fonts, building ? "" : houseNo)}
         <div class="cv-doc-bd">${body}</div>
+        ${footerHtml}
       </section>
     `;
   }

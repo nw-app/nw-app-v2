@@ -4642,6 +4642,12 @@ a { color: inherit; text-decoration: none; }
   max-height: min(72vh, 780px);
 }
 
+/* 左（文件設定）與右（A4 預覽）各自獨立上下捲動 */
+.cv-doc-layout .cv-doc-editor {
+  max-height: min(72vh, 780px);
+  overflow-y: auto;
+}
+
 @media (max-width: 900px) {
   .cv-doc-layout {
     grid-template-columns: minmax(0, 1fr);
