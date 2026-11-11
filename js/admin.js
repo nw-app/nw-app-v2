@@ -25433,6 +25433,7 @@
         <select id="cvActiveProjectSelect" style="min-width:220px;">
           ${list.map((project) => `<option value="${escapeHtml(project.id)}"${project.id === activeProjectId ? " selected" : ""}>${escapeHtml(project.name)}${project.archived ? "（封存）" : ""}</option>`).join("")}
         </select>
+        <button class="btn btn-sm" type="button" id="btnCvRenameProject">更改名稱</button>
       </div>
     `;
   }
@@ -28086,6 +28087,36 @@
         const nextId = String(activeProjectSelect.value || "").trim();
         if (!nextId || nextId === checkinVoteState.activeProjectId) return;
         await cvSetActiveProject(cid, nextId);
+      });
+    }
+    const btnRenameProject = document.getElementById("btnCvRenameProject");
+    if (btnRenameProject) {
+      btnRenameProject.addEventListener("click", async () => {
+        const currentId = String(checkinVoteState.activeProjectId || "").trim();
+        const current = checkinVoteState.projects.find((item) => String(item.id || "") === currentId) || null;
+        if (!current) {
+          toast("請先選擇專案");
+          return;
+        }
+        if (cvBlockIfArchived(currentId)) return;
+        const nextName = await promptTextModal80({
+          id: "cvProjectRenameModal80",
+          title: "更改專案名稱",
+          label: "專案名稱",
+          defaultValue: current.name || "",
+          okText: "儲存",
+          minLength: 1,
+        });
+        if (nextName == null) return;
+        const name = String(nextName).trim();
+        if (!name || name === String(current.name || "").trim()) return;
+        await cvRefProject(cid, currentId).set({
+          name,
+          updatedAt: FieldValue.serverTimestamp(),
+          updatedAtMs: cvNow(),
+        }, { merge: true });
+        toast("已更新專案名稱");
+        await cvReloadAndMaybeRender({ communityId: cid, force: true, activeProjectId: currentId });
       });
     }
 
