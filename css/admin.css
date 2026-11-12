@@ -4638,8 +4638,61 @@ a { color: inherit; text-decoration: none; }
   align-items: start;
 }
 
-.cv-doc-layout .cv-doc-preview {
+/* 右側預覽欄：工具列（縮放／頁碼）＋可捲動的 A4 預覽 */
+.cv-doc-layout .cv-doc-preview-col {
+  min-width: 0;
   max-height: min(72vh, 780px);
+}
+
+.cv-doc-preview-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.cv-doc-preview-col .cv-doc-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.cv-doc-preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid rgba(17, 24, 39, 0.1);
+  border-radius: 10px;
+}
+
+.cv-doc-zoom-ctl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cv-doc-zoom-ctl .btn {
+  min-width: 34px;
+  padding: 4px 10px;
+  line-height: 1.1;
+}
+
+.cv-doc-zoom-val {
+  min-width: 52px;
+  text-align: center;
+  font-weight: 800;
+  font-size: calc(13px * var(--fs, 1));
+  color: #374151;
+}
+
+.cv-doc-page-ind {
+  font-weight: 800;
+  font-size: calc(13px * var(--fs, 1));
+  color: #374151;
+  white-space: nowrap;
 }
 
 /* 左（文件設定）與右（A4 預覽）各自獨立上下捲動 */
@@ -4735,6 +4788,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .cv-doc-preview {
+  --cv-doc-zoom: 0.62;
   background: #f0f2f5;
   border-radius: 12px;
   padding: 16px;
@@ -4747,29 +4801,21 @@ a { color: inherit; text-decoration: none; }
 }
 
 .cv-doc-slot {
-  width: calc(210mm * 0.62);
-  height: calc(297mm * 0.62);
+  width: calc(210mm * var(--cv-doc-zoom));
+  height: calc(297mm * var(--cv-doc-zoom));
   flex: 0 0 auto;
   overflow: hidden;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
 }
 
 .cv-doc-slot > .cv-doc-page {
-  transform: scale(0.62);
+  transform: scale(var(--cv-doc-zoom));
   transform-origin: top left;
 }
 
 @media (max-width: 720px) {
-  .cv-doc-slot {
-    width: calc(210mm * 0.42);
-    height: calc(297mm * 0.42);
-  }
-
-  .cv-doc-slot > .cv-doc-page {
-    transform: scale(0.42);
-  }
-
   .cv-doc-preview {
+    --cv-doc-zoom: 0.42;
     max-height: 52vh;
     padding: 10px;
   }

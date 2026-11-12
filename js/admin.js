@@ -26433,7 +26433,11 @@
     }
     // 戶號顯示於頁首左上角；有戶號時棟別以紅字同列顯示於右側，否則棟別維持頁面右上角
     const building = String(buildingLabel || "").trim();
-    const houseNo = isVotePage && page.entry ? String(page.entry.houseNo || "").trim() : "";
+    const houseEntry = isVotePage ? page.entry : null;
+    const houseNo = houseEntry ? String(houseEntry.houseNo || "").trim() : "";
+    // 投票單戶號後方加上該住戶的「編號」（例如 510-03F-3 (001)）
+    const houseRosterNo = houseEntry ? String(houseEntry.rosterNo || "").trim() : "";
+    const houseNoLabel = (houseNo && houseRosterNo) ? `${houseNo} (${houseRosterNo})` : houseNo;
     const headerBuilding = houseNo ? building : "";
     const cornerBuildingHtml = (!houseNo && building) ? `<span class="cv-doc-house cv-doc-house--bldg" style="font-size:${fonts.house}px;">${escapeHtml(building)}</span>` : "";
     // 投票單「分開」：依每頁議題數由上而下平均分配區塊，各區塊自帶抬頭，區塊間以水平虛線分隔
@@ -26441,7 +26445,7 @@
       const token = page.entry && page.entry.qrToken;
       const regions = page.topics.map((topic, index) => `
         <div class="cv-doc-split-sec">
-          ${cvDocHeaderBlockHtml(header, fonts, houseNo, headerBuilding)}
+          ${cvDocHeaderBlockHtml(header, fonts, houseNoLabel, headerBuilding)}
           ${cvDocTopicBlock(topic, index + 1, project, token, fonts.topic, fonts.option)}
         </div>
       `).join("");
@@ -26459,7 +26463,7 @@
     return `
       <section class="cv-doc-page${isVotePage ? " cv-doc-page--vote" : ""}">
         ${cornerBuildingHtml}
-        ${cvDocHeaderBlockHtml(header, fonts, houseNo, headerBuilding)}
+        ${cvDocHeaderBlockHtml(header, fonts, houseNoLabel, headerBuilding)}
         <div class="cv-doc-bd">${body}</div>
         ${footerHtml}
       </section>
@@ -26758,7 +26762,18 @@
               </div>
               ` : ""}
             </div>
-            <div class="cv-doc-preview" id="cvDocPreviewArea">${renderPreview()}</div>
+            <div class="cv-doc-preview-col">
+              <div class="cv-doc-preview-bar">
+                <div class="cv-doc-zoom-ctl" role="group" aria-label="預覽縮放">
+                  <button class="btn btn-sm" type="button" id="cvDocZoomOut" aria-label="縮小">－</button>
+                  <span class="cv-doc-zoom-val" id="cvDocZoomVal">62%</span>
+                  <button class="btn btn-sm" type="button" id="cvDocZoomIn" aria-label="放大">＋</button>
+                  <button class="btn btn-sm" type="button" id="cvDocZoomReset">重設</button>
+                </div>
+                <div class="cv-doc-page-ind" id="cvDocPageInd">第 1 / ${Math.max(pageList.length, 1)} 頁</div>
+              </div>
+              <div class="cv-doc-preview" id="cvDocPreviewArea">${renderPreview()}</div>
+            </div>
           </div>
           <div class="muted">共 ${pageList.length} 頁（A4 直式）。可直接編輯上方文字，預覽與列印內容會同步更新。</div>
         </div>
@@ -26770,6 +26785,41 @@
       </div>
     `.trim();
     modal.hidden = false;
+
+    // 預覽縮放（放大／縮小 section）與頁碼指示（第 X / 共 N 頁）
+    const previewArea = modal.querySelector("#cvDocPreviewArea");
+    const zoomValEl = modal.querySelector("#cvDocZoomVal");
+    const pageIndEl = modal.querySelector("#cvDocPageInd");
+    let previewZoom = Number.parseFloat(getComputedStyle(previewArea).getPropertyValue("--cv-doc-zoom")) || 0.62;
+    const applyZoom = (next) => {
+      previewZoom = Math.min(1.6, Math.max(0.3, Math.round(next * 100) / 100));
+      previewArea.style.setProperty("--cv-doc-zoom", String(previewZoom));
+      if (zoomValEl) zoomValEl.textContent = `${Math.round(previewZoom * 100)}%`;
+    };
+    const updatePageInd = () => {
+      const slots = previewArea.querySelectorAll(".cv-doc-slot");
+      const total = slots.length;
+      if (!total) {
+        if (pageIndEl) pageIndEl.textContent = "第 1 / 1 頁";
+        return;
+      }
+      const areaRect = previewArea.getBoundingClientRect();
+      const centerY = areaRect.top + areaRect.height / 2;
+      let current = 1;
+      slots.forEach((slot, index) => {
+        if (slot.getBoundingClientRect().top <= centerY) current = index + 1;
+      });
+      if (pageIndEl) pageIndEl.textContent = `第 ${current} / ${total} 頁`;
+    };
+    applyZoom(previewZoom);
+    updatePageInd();
+    previewArea.addEventListener("scroll", updatePageInd, { passive: true });
+    const zoomOutBtn = modal.querySelector("#cvDocZoomOut");
+    const zoomInBtn = modal.querySelector("#cvDocZoomIn");
+    const zoomResetBtn = modal.querySelector("#cvDocZoomReset");
+    if (zoomOutBtn) zoomOutBtn.addEventListener("click", () => applyZoom(previewZoom - 0.1));
+    if (zoomInBtn) zoomInBtn.addEventListener("click", () => applyZoom(previewZoom + 0.1));
+    if (zoomResetBtn) zoomResetBtn.addEventListener("click", () => applyZoom(0.62));
 
     const syncHeader = () => {
       if (showHeaderFields) {
@@ -26784,6 +26834,7 @@
       next.forEach((html) => pageList.push(html));
       const area = modal.querySelector("#cvDocPreviewArea");
       if (area) area.innerHTML = renderPreview();
+      updatePageInd();
     };
 
     ["#cvDocInputTitle", "#cvDocInputSubtitle", "#cvDocInputMeeting", "#cvDocInputDeadline", "#cvDocInputNote"].forEach((sel) => {
