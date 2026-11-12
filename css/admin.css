@@ -4846,6 +4846,30 @@ a { color: inherit; text-decoration: none; }
   gap: 6px 14px;
 }
 
+/* 報到名單：最右側獨立的住戶「編號」欄位 */
+.cv-ck-no {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 0 2px 12px;
+  margin-left: 4px;
+  border-left: 1px solid rgba(17, 24, 39, 0.12);
+  min-width: 72px;
+}
+
+.cv-ck-no > span {
+  font-size: calc(11px * var(--fs, 1));
+  font-weight: 700;
+  color: var(--muted, #6b7280);
+}
+
+.cv-ck-no > b {
+  font-size: calc(14px * var(--fs, 1));
+  font-weight: 800;
+  color: #111827;
+}
+
 .cv-ck-meta > div {
   font-size: calc(13px * var(--fs, 1));
   color: #374151;

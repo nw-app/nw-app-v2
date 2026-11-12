@@ -23678,6 +23678,7 @@
     topics: [],
     elections: [],
     documents: [],
+    checkinFilter: "all",
   };
   const CHECKIN_VOTE_FILE_LIMIT = 450 * 1024;
   let cvRosterWatchUnsub = null;
@@ -25521,6 +25522,11 @@
       `;
     }
     const ck = cvCheckinStats(project, roster);
+    const ckFilter = ["all", "checked", "unchecked"].includes(checkinVoteState.checkinFilter) ? checkinVoteState.checkinFilter : "all";
+    const ckDoneCount = roster.filter((entry) => entry.checkedIn).length;
+    const ckTodoCount = roster.length - ckDoneCount;
+    const ckList = roster.filter((entry) => ckFilter === "checked" ? entry.checkedIn : ckFilter === "unchecked" ? !entry.checkedIn : true);
+    const ckFilterBtn = (key, label) => `<button class="btn btn-sm ${ckFilter === key ? "btn-primary" : ""}" type="button" data-cv-ck-filter="${key}">${label}</button>`;
     return `
       <div class="list-item" style="display:block; margin-bottom:14px;">
         <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
@@ -25536,20 +25542,29 @@
           <button class="btn btn-success" type="button" data-cv-go="roster">管理名單</button>
         </div>
       </div>
+      <div class="row" style="gap:8px; margin-bottom:14px;">
+        ${ckFilterBtn("all", `全部 ${roster.length}`)}
+        ${ckFilterBtn("checked", `已報到 ${ckDoneCount}`)}
+        ${ckFilterBtn("unchecked", `未報到 ${ckTodoCount}`)}
+      </div>
       <div style="display:flex; flex-direction:column; gap:12px;">
-        ${roster.map((entry) => `
+        ${ckList.length ? ckList.map((entry) => `
           <div class="list-item" style="display:block;">
             <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap;">
               <div>
                 <div style="font-size:calc(16px * var(--fs, 1)); font-weight:800; color:#111827;">${escapeHtml(cvDisplayName(entry))}</div>
                 <div class="muted" style="margin-top:4px;">${escapeHtml(cvFormatUnit(entry))}${entry.phone ? `｜${escapeHtml(entry.phone)}` : ""}</div>
               </div>
-              <div class="row" style="gap:8px; align-items:center;">
+              <div class="row" style="gap:8px; align-items:center; margin-left:auto;">
                 <span class="status-chip ${entry.checkedIn ? "success" : "warning"}">${entry.checkedIn ? "已報到" : "待報到"}</span>
                 <button class="btn btn-sm" type="button" data-cv-person-qr="${escapeHtml(entry.id)}">QR</button>
                 ${project.settings.allowManualCheckin ? (entry.checkedIn
                   ? `<button class="btn btn-sm" type="button" data-cv-undo-checkin="${escapeHtml(entry.id)}">取消報到</button>`
                   : `<button class="btn btn-sm btn-primary" type="button" data-cv-checkin="${escapeHtml(entry.id)}">人工報到</button>`) : ""}
+              </div>
+              <div class="cv-ck-no">
+                <span>編號</span>
+                <b>${escapeHtml(entry.rosterNo || "—")}</b>
               </div>
             </div>
             <div class="cv-ck-meta">
@@ -25558,7 +25573,7 @@
               <div><span>操作人員</span><b>${entry.checkedIn ? escapeHtml(entry.checkedInByName || "—") : "—"}</b></div>
             </div>
           </div>
-        `).join("")}
+        `).join("") : `<div class="status">${ckFilter === "checked" ? "目前沒有已報到的住戶" : "目前沒有未報到的住戶"}</div>`}
       </div>
     `;
   }
@@ -25824,8 +25839,8 @@
   }
 
   // ==== 文件產生器（報到單 / 投票單）====
-  // 可調字級／圖片大小（px）：LOGO 高度、標題、副標題、會議時間、備註
-  const cvDocFontDefaults = { logo: 44, title: 26, subtitle: 19, meta: 13, note: 13, topic: 26 };
+  // 可調字級／圖片大小（px）：LOGO 高度、標題、副標題、會議時間、備註、議題、戶號／棟別、選項卡片
+  const cvDocFontDefaults = { logo: 40, title: 20, subtitle: 18, meta: 12, note: 12, topic: 18, house: 20, option: 19 };
   function cvDocNormalizeFonts(fonts) {
     const src = fonts || {};
     const pick = (key, min, max) => {
@@ -25839,6 +25854,8 @@
       meta: pick("meta", 8, 48),
       note: pick("note", 8, 48),
       topic: pick("topic", 10, 48),
+      house: pick("house", 10, 72),
+      option: pick("option", 8, 48),
     };
   }
   const cvDocPrefs = {
@@ -25851,9 +25868,10 @@
     .cv-doc-hd { border-bottom: 3px solid #d32f2f; padding-bottom: 10px; margin-bottom: 16px; }
     .cv-doc-hd h1 { margin: 0; font-size: 26px; letter-spacing: 2px; font-weight: 800; }
     .cv-doc-title-row { position: relative; display: flex; align-items: center; justify-content: center; gap: 12px; }
-    .cv-doc-tag-row { display: flex; justify-content: flex-end; align-items: flex-start; min-height: 32px; margin-bottom: 2px; }
-    .cv-doc-house { font-size: 28px; font-weight: 800; color: #d32f2f; line-height: 1.1; text-align: right; }
+    .cv-doc-tag-row { display: flex; align-items: flex-start; justify-content: flex-start; gap: 12px; min-height: 32px; margin-bottom: 2px; }
+    .cv-doc-house { font-size: 28px; font-weight: 800; color: #d32f2f; line-height: 1.1; }
     .cv-doc-house--bldg { position: absolute; right: 16mm; top: 5mm; color: #d32f2f; }
+    .cv-doc-tag-row .cv-doc-house--bldg { position: static; right: auto; top: auto; margin-left: auto; }
     .cv-doc-logo { height: 44px; width: auto; max-width: 120px; object-fit: contain; flex: 0 0 auto; }
     .cv-doc-subrow { position: relative; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 6px; }
     .cv-doc-subrow .cv-doc-sub, .cv-doc-subrow .cv-doc-meta { margin: 0; }
@@ -25899,13 +25917,14 @@
     .cv-doc-topic-title { font-size: 26px; font-weight: 400; }
     .cv-doc-topic-title strong { font-weight: 800; }
     .cv-doc-topic-desc { font-size: 15px; color: #6b7280; margin-top: 6px; }
-    .cv-doc-options { list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-    .cv-doc-options li { display: flex; align-items: center; gap: 10px; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; background: #f9fafb; }
-    .cv-doc-box { width: 24px; height: 24px; border: 2px solid #374151; border-radius: 3px; flex: 0 0 auto; }
-    .cv-doc-opt-label { font-size: 19px; flex: 1; }
-    .cv-doc-opt-qrwrap { flex: 0 0 auto; width: 120px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-    .cv-doc-opt-qr { width: 96px; height: 96px; border: 1px solid #e5e7eb; padding: 2px; }
-    .cv-doc-opt-qr-txt { font-size: 8px; line-height: 1.3; color: #4b5563; text-align: center; word-break: break-all; }
+    /* 選項卡片整體以 em 為單位，隨 .cv-doc-options 的 font-size 設定等比縮放（比例不變） */
+    .cv-doc-options { list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; font-size: 19px; }
+    .cv-doc-options li { display: flex; align-items: center; gap: 0.5em; border: 1px solid #d1d5db; border-radius: 0.5em; padding: 0.5em 0.6em; background: #f9fafb; }
+    .cv-doc-box { width: 1.26em; height: 1.26em; border: 0.105em solid #374151; border-radius: 0.16em; flex: 0 0 auto; }
+    .cv-doc-opt-label { font-size: 1em; flex: 1; }
+    .cv-doc-opt-qrwrap { flex: 0 0 auto; width: 6.3em; display: flex; flex-direction: column; align-items: center; gap: 0.16em; }
+    .cv-doc-opt-qr { width: 5em; height: 5em; border: 1px solid #e5e7eb; padding: 2px; }
+    .cv-doc-opt-qr-txt { font-size: 0.42em; line-height: 1.3; color: #4b5563; text-align: center; word-break: break-all; }
     /* 報到證：名片式 9cm × 5cm（每頁 10 張＝2 欄×5 列）與直立式 4cm × 6cm（每頁 20 張＝5 欄×4 列），卡片相鄰無間距 */
     .cv-doc-page--pass { padding: 0; }
     .cv-doc-pass-grid { display: grid; gap: 0; height: 100%; justify-content: center; align-content: center; }
@@ -25933,10 +25952,15 @@
     .cv-log-table th, .cv-log-table td { font-size: 13px; padding: 8px 10px; vertical-align: middle; }
     .cv-log-table td:first-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
     .cv-log-table td:nth-child(2) { white-space: nowrap; }
-    /* 投票單「分開」模式：依每頁議題數由上而下平均分配頁面範圍，區塊間以水平虛線分隔 */
+    /* 投票單：戶號／棟別列距頁面上邊界 5mm；上下留白對稱，使分開模式的水平虛線落在 A4 正中間 */
+    .cv-doc-page--vote { padding-top: 5mm; padding-bottom: 5mm; }
+    /* 投票單「分開」模式：整頁高度依議題數平均分配（每區塊＝整頁高÷議題數），區塊間以水平虛線分隔。
+       分開模式取消頁面上下留白，改由各區塊自己的 padding 產生 5mm 留白，
+       使區塊高度（頁頂→虛線、虛線→虛線、虛線→頁底）完全均等，虛線精準落在 1/N 與 2/N 的位置 */
+    .cv-doc-page--vote-split { padding-top: 0; padding-bottom: 0; }
     .cv-doc-split { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-    .cv-doc-split-sec { flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
-    .cv-doc-split-sec + .cv-doc-split-sec { border-top: 1px dashed #9ca3af; padding-top: 18mm; }
+    .cv-doc-split-sec { flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 5mm 0; }
+    .cv-doc-split-sec + .cv-doc-split-sec { border-top: 1px dashed #9ca3af; }
     .cv-doc-split-sec .cv-doc-hd { margin-bottom: 10px; }
   `;
   const cvDocPrintCss = `
@@ -26161,13 +26185,14 @@
     `;
   }
 
-  function cvDocTopicBlock(topic, index, project, ownerQrToken, topicFont) {
+  function cvDocTopicBlock(topic, index, project, ownerQrToken, topicFont, optionFont) {
     const options = Array.isArray(topic.options) ? topic.options : [];
     const token = String(ownerQrToken || "").trim();
     const topicCode = String(topic.code || "").trim();
     // 選項排版：預設一行 2 個、最多 3 個；4 個（含）以上時回到一行 2 個，第 4 個換行
     const cols = options.length >= 4 ? 2 : Math.max(1, Math.min(options.length, 3));
     const font = Number(topicFont) > 0 ? Math.round(Number(topicFont)) : 26;
+    const optFont = Number(optionFont) > 0 ? Math.round(Number(optionFont)) : 19;
     // 抬頭議題編號沿用管理者設定的「編號」（topic.no），未設定時才以順序帶入
     const topicNo = String(topic.no || "").trim() || `議題${index}`;
     return `
@@ -26175,7 +26200,7 @@
         <div class="cv-doc-topic-title" style="font-size:${font}px;"><strong>${escapeHtml(topicNo)}：</strong>${escapeHtml(topic.title)}（${topic.singleChoice ? "單選" : "複選"}。請在□內打勾，謝謝！）</div>
         ${topic.description ? `<div class="cv-doc-topic-desc">${escapeHtml(topic.description)}</div>` : ""}
         ${options.length ? `
-          <ul class="cv-doc-options" style="grid-template-columns: repeat(${cols}, minmax(0, 1fr));">
+          <ul class="cv-doc-options" style="font-size:${optFont}px; grid-template-columns: repeat(${cols}, minmax(0, 1fr));">
             ${options.map((opt) => {
               // 與人工投票的選項 QR 相同來源：住戶 QR code碼 ＋ 議題代號 ＋ 選項代號（例：A001M01T）
               const payload = `${token}${topicCode}${String(opt.code || "").trim()}`;
@@ -26343,12 +26368,18 @@
     return `<div class="cv-doc-pass-grid cv-doc-pass-grid--${isBiz ? "biz" : "tall"}">${cards}</div>`;
   }
 
-  // 文件頁首區塊（戶號列＋標題列＋副標題列）；棟別另於頁面層級以紅字顯示
-  function cvDocHeaderBlockHtml(header, fonts, houseNo) {
+  // 文件頁首區塊（戶號＋棟別同列於左上／右上＋標題列＋副標題列）
+  function cvDocHeaderBlockHtml(header, fonts, houseNo, building) {
     const no = String(houseNo || "").trim();
+    const bldg = String(building || "").trim();
+    const tagRowHtml = (no || bldg) ? `
+      <div class="cv-doc-tag-row">
+        ${no ? `<span class="cv-doc-house" style="font-size:${fonts.house}px;">${escapeHtml(no)}</span>` : ""}
+        ${bldg ? `<span class="cv-doc-house cv-doc-house--bldg" style="font-size:${fonts.house}px;">${escapeHtml(bldg)}</span>` : ""}
+      </div>` : "";
     return `
       <header class="cv-doc-hd">
-        ${no ? `<div class="cv-doc-tag-row"><span class="cv-doc-house">${escapeHtml(no)}</span></div>` : ""}
+        ${tagRowHtml}
         <div class="cv-doc-title-row">
           ${header.logo ? `<img class="cv-doc-logo" style="height:${fonts.logo}px;" src="${escapeHtml(header.logo)}" alt="社區LOGO" />` : ""}
           <h1 style="font-size:${fonts.title}px;">${escapeHtml(header.title)}</h1>
@@ -26381,15 +26412,15 @@
     } else if (page.kind === "checkin-roster") {
       body = cvDocRosterTableHtml(page.rows, header, project, { withProxy: false });
     } else if (page.kind === "vote-single") {
-      body = cvDocTopicBlock(page.topic, 1, project, page.entry && page.entry.qrToken, fonts.topic);
+      body = cvDocTopicBlock(page.topic, 1, project, page.entry && page.entry.qrToken, fonts.topic, fonts.option);
     } else if (page.kind === "vote-multi") {
-      body = page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project, page.entry && page.entry.qrToken, fonts.topic)).join("");
+      body = page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project, page.entry && page.entry.qrToken, fonts.topic, fonts.option)).join("");
     } else if (page.kind === "vote-owner-single") {
       body = cvDocOwnerUnitsTable(page.group, "投票時間", project)
-        + cvDocTopicBlock(page.topic, 1, project, cvDocOwnerQrToken(page.group), fonts.topic);
+        + cvDocTopicBlock(page.topic, 1, project, cvDocOwnerQrToken(page.group), fonts.topic, fonts.option);
     } else if (page.kind === "vote-owner-multi") {
       body = cvDocOwnerUnitsTable(page.group, "投票時間", project)
-        + page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project, cvDocOwnerQrToken(page.group), fonts.topic)).join("");
+        + page.topics.map((topic, index) => cvDocTopicBlock(topic, index + 1, project, cvDocOwnerQrToken(page.group), fonts.topic, fonts.option)).join("");
     }
     const isVotePage = String(page.kind || "").indexOf("vote-") === 0;
     // 報到證：不使用頁首／頁尾區塊，卡片直接鋪滿整頁
@@ -26400,22 +26431,22 @@
         </section>
       `;
     }
-    // 右上角僅顯示戶號（不含子戶號）；若文件對象已選取「棟別」，則改以紅字標示於頁面右上角（距上邊界 5mm）
+    // 戶號顯示於頁首左上角；有戶號時棟別以紅字同列顯示於右側，否則棟別維持頁面右上角
     const building = String(buildingLabel || "").trim();
     const houseNo = isVotePage && page.entry ? String(page.entry.houseNo || "").trim() : "";
-    const buildingHtml = building ? `<span class="cv-doc-house cv-doc-house--bldg">${escapeHtml(building)}</span>` : "";
+    const headerBuilding = houseNo ? building : "";
+    const cornerBuildingHtml = (!houseNo && building) ? `<span class="cv-doc-house cv-doc-house--bldg" style="font-size:${fonts.house}px;">${escapeHtml(building)}</span>` : "";
     // 投票單「分開」：依每頁議題數由上而下平均分配區塊，各區塊自帶抬頭，區塊間以水平虛線分隔
     if (page.kind === "vote-multi-split") {
       const token = page.entry && page.entry.qrToken;
       const regions = page.topics.map((topic, index) => `
         <div class="cv-doc-split-sec">
-          ${cvDocHeaderBlockHtml(header, fonts, houseNo)}
-          ${cvDocTopicBlock(topic, index + 1, project, token, fonts.topic)}
+          ${cvDocHeaderBlockHtml(header, fonts, houseNo, headerBuilding)}
+          ${cvDocTopicBlock(topic, index + 1, project, token, fonts.topic, fonts.option)}
         </div>
       `).join("");
       return `
-        <section class="cv-doc-page">
-          ${buildingHtml}
+        <section class="cv-doc-page cv-doc-page--vote cv-doc-page--vote-split">
           <div class="cv-doc-split">${regions}</div>
         </section>
       `;
@@ -26426,9 +26457,9 @@
       ? `<footer class="cv-doc-ft">第 ${pageNo} / ${totalPages} 頁</footer>`
       : "";
     return `
-      <section class="cv-doc-page">
-        ${buildingHtml}
-        ${cvDocHeaderBlockHtml(header, fonts, building ? "" : houseNo)}
+      <section class="cv-doc-page${isVotePage ? " cv-doc-page--vote" : ""}">
+        ${cornerBuildingHtml}
+        ${cvDocHeaderBlockHtml(header, fonts, houseNo, headerBuilding)}
         <div class="cv-doc-bd">${body}</div>
         ${footerHtml}
       </section>
@@ -26496,6 +26527,55 @@
     return String(text || "document").replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, "").slice(0, 60) || "document";
   }
 
+  // 等待容器內所有圖片（含 QR code 圖形）載入完成，避免列印出缺少 QR 圖片的文件
+  function cvDocWaitImages(root) {
+    const imgs = root ? Array.from(root.querySelectorAll("img")) : [];
+    if (!imgs.length) return Promise.resolve();
+    return Promise.all(imgs.map((img) => new Promise((resolve) => {
+      if (img.complete) { resolve(); return; }
+      const timer = setTimeout(resolve, 8000);
+      const done = () => { clearTimeout(timer); resolve(); };
+      img.addEventListener("load", done, { once: true });
+      img.addEventListener("error", done, { once: true });
+    })));
+  }
+
+  // 以隱藏容器預載頁面清單中的圖片（無預覽區時使用）
+  function cvDocPreloadPageListImages(pageList) {
+    const host = document.createElement("div");
+    host.style.cssText = "position:fixed;left:-10000px;top:0;width:210mm;height:0;overflow:hidden;opacity:0;pointer-events:none;";
+    host.innerHTML = (Array.isArray(pageList) ? pageList : []).join("");
+    document.body.appendChild(host);
+    return cvDocWaitImages(host).then(() => host.remove(), () => host.remove());
+  }
+
+  // 列印前先確保 QR code 圖片載入完成，按鈕顯示載入狀態，完成後才開啟列印視窗
+  async function cvDocPrintWithLoading(btn, header, pageList, previewEl) {
+    if (!Array.isArray(pageList) || !pageList.length) {
+      toast("目前沒有可列印的內容");
+      return;
+    }
+    const originalText = btn ? String(btn.textContent || "").trim() || "列印" : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "載入 QR 圖形…";
+      btn.setAttribute("aria-busy", "true");
+    }
+    try {
+      if (previewEl) await cvDocWaitImages(previewEl);
+      else await cvDocPreloadPageListImages(pageList);
+    } catch (error) {
+      console.warn("[checkin-vote] QR 圖形載入等待失敗", error);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        btn.removeAttribute("aria-busy");
+      }
+    }
+    cvDocOpenPrintWindow(header, pageList);
+  }
+
   function cvDocOpenPrintWindow(header, pageList) {
     if (!pageList.length) {
       toast("目前沒有可列印的內容");
@@ -26506,6 +26586,7 @@
       toast("請允許彈出視窗以列印文件");
       return;
     }
+    // 列印前等待所有 QR code 圖片載入完成，避免列印出缺少 QR 圖片的文件
     win.document.write(`<!doctype html>
 <html lang="zh-Hant">
 <head>
@@ -26513,7 +26594,33 @@
 <title>${escapeHtml(header.title)}</title>
 <style>${cvDocPageCss}${cvDocPrintCss}</style>
 </head>
-<body onload="window.print();"><div class="cv-doc-print-root">${pageList.join("")}</div></body>
+<body>
+<div class="cv-doc-print-root">${pageList.join("")}</div>
+<script>
+(function () {
+  function waitImages() {
+    var imgs = Array.prototype.slice.call(document.images || []);
+    if (!imgs.length) return Promise.resolve();
+    return Promise.all(imgs.map(function (img) {
+      if (img.complete) return Promise.resolve();
+      return new Promise(function (resolve) {
+        var timer = setTimeout(resolve, 8000);
+        function done() { clearTimeout(timer); resolve(); }
+        img.addEventListener("load", done, { once: true });
+        img.addEventListener("error", done, { once: true });
+      });
+    }));
+  }
+  function start() {
+    waitImages().then(function () {
+      setTimeout(function () { window.focus(); window.print(); }, 80);
+    });
+  }
+  if (document.readyState === "complete") start();
+  else window.addEventListener("load", start, { once: true });
+})();
+<\/script>
+</body>
 </html>`);
     win.document.close();
   }
@@ -26644,8 +26751,10 @@
                 <label>標題字級<input id="cvDocFontTitle" type="number" min="12" max="72" step="1" value="${fonts.title}" /></label>
                 <label>副標題字級<input id="cvDocFontSubtitle" type="number" min="10" max="60" step="1" value="${fonts.subtitle}" /></label>
                 <label>會議時間字級<input id="cvDocFontMeta" type="number" min="8" max="48" step="1" value="${fonts.meta}" /></label>
+                <label>戶號／棟別字級<input id="cvDocFontHouse" type="number" min="10" max="72" step="1" value="${fonts.house}" /></label>
                 ${showNote ? `<label>備註字級<input id="cvDocFontNote" type="number" min="8" max="48" step="1" value="${fonts.note}" /></label>` : ""}
                 ${kind === "vote" ? `<label>議題字級<input id="cvDocFontTopic" type="number" min="10" max="48" step="1" value="${fonts.topic}" /></label>` : ""}
+                ${kind === "vote" ? `<label>選項字級（卡片等比縮放）<input id="cvDocFontOption" type="number" min="8" max="48" step="1" value="${fonts.option}" /></label>` : ""}
               </div>
               ` : ""}
             </div>
@@ -26688,8 +26797,10 @@
       ["#cvDocFontTitle", "title"],
       ["#cvDocFontSubtitle", "subtitle"],
       ["#cvDocFontMeta", "meta"],
+      ["#cvDocFontHouse", "house"],
       ["#cvDocFontNote", "note"],
       ["#cvDocFontTopic", "topic"],
+      ["#cvDocFontOption", "option"],
     ];
     const syncFonts = () => {
       fontBindings.forEach(([sel, key]) => {
@@ -26749,7 +26860,9 @@
     }
     if (logoClearBtn) logoClearBtn.addEventListener("click", () => setLogo(""));
 
-    modal.querySelector("#btnCvDocPrint").addEventListener("click", () => cvDocOpenPrintWindow(header, pageList));
+    modal.querySelector("#btnCvDocPrint").addEventListener("click", (event) => {
+      cvDocPrintWithLoading(event.currentTarget, header, pageList, modal.querySelector("#cvDocPreviewArea"));
+    });
     modal.querySelector("#btnCvDocDownload").addEventListener("click", (event) => {
       cvDocDownloadPdf(header, pageList, event.currentTarget);
     });
@@ -26941,7 +27054,9 @@
         rebuild();
       });
     });
-    modal.querySelector("#btnCvLogPrint").addEventListener("click", () => cvDocOpenPrintWindow(header, pageList));
+    modal.querySelector("#btnCvLogPrint").addEventListener("click", (event) => {
+      cvDocPrintWithLoading(event.currentTarget, header, pageList, modal.querySelector("#cvLogPreviewArea"));
+    });
     modal.querySelector("#btnCvLogPdf").addEventListener("click", () => {
       const fileName = cvDocSafeFileName(`${header.title}${header.subtitle ? `_${header.subtitle}` : ""}_${cvLogStamp()}`);
       cvExportLogPdf(header, pageList, fileName);
@@ -28277,6 +28392,14 @@
     }
 
     if (currentPage === "checkin" && project) {
+      contentEl.querySelectorAll("[data-cv-ck-filter]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const next = String(btn.getAttribute("data-cv-ck-filter") || "all").trim() || "all";
+          if (next === checkinVoteState.checkinFilter) return;
+          checkinVoteState.checkinFilter = next;
+          cvRefreshCheckinVoteLive();
+        });
+      });
       contentEl.querySelectorAll("[data-cv-checkin]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const entryId = String(btn.getAttribute("data-cv-checkin") || "").trim();
