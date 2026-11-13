@@ -25840,7 +25840,7 @@
 
   // ==== 文件產生器（報到單 / 投票單）====
   // 可調字級／圖片大小（px）：LOGO 高度、標題、副標題、會議時間、備註、議題、戶號／棟別、選項卡片
-  const cvDocFontDefaults = { logo: 40, title: 20, subtitle: 18, meta: 12, note: 12, topic: 18, house: 20, option: 19 };
+  const cvDocFontDefaults = { logo: 40, title: 20, subtitle: 18, meta: 12, note: 12, topic: 18, house: 20, option: 19, rosterNo: 11, rosterName: 11, rosterHead: 11 };
   function cvDocNormalizeFonts(fonts) {
     const src = fonts || {};
     const pick = (key, min, max) => {
@@ -25856,10 +25856,32 @@
       topic: pick("topic", 10, 48),
       house: pick("house", 10, 72),
       option: pick("option", 8, 48),
+      rosterNo: pick("rosterNo", 6, 48),
+      rosterName: pick("rosterName", 6, 48),
+      rosterHead: pick("rosterHead", 6, 48),
+    };
+  }
+  // 名冊表格欄寬（px）預設值，可於編輯區調整；「地址」欄自動撐滿剩餘寬度
+  const cvDocColDefaults = { rosterNo: 48, rosterQr: 66, rosterName: 76, rosterSign: 70, rosterProxy: 60, rosterRel: 124, rosterOwn: 62, rosterNote: 78 };
+  function cvDocNormalizeCols(cols) {
+    const src = cols || {};
+    const pick = (key, min, max) => {
+      const n = Number(src[key]);
+      return Number.isFinite(n) && n > 0 ? Math.min(max, Math.max(min, Math.round(n))) : cvDocColDefaults[key];
+    };
+    return {
+      rosterNo: pick("rosterNo", 24, 200),
+      rosterQr: pick("rosterQr", 30, 240),
+      rosterName: pick("rosterName", 30, 240),
+      rosterSign: pick("rosterSign", 30, 240),
+      rosterProxy: pick("rosterProxy", 30, 240),
+      rosterRel: pick("rosterRel", 40, 360),
+      rosterOwn: pick("rosterOwn", 30, 240),
+      rosterNote: pick("rosterNote", 30, 240),
     };
   }
   const cvDocPrefs = {
-    checkin: { layout: "personal", targetId: "__all__", targetIds: ["__all__"], perPage: 10, mergeOwner: false, fonts: { ...cvDocFontDefaults } },
+    checkin: { layout: "personal", targetId: "__all__", targetIds: ["__all__"], perPage: 10, mergeOwner: false, fonts: { ...cvDocFontDefaults }, cols: { ...cvDocColDefaults } },
     vote: { layout: "single", targetId: "__all__", targetIds: ["__all__"], topicId: "__all__", mergeOwner: false, perPage: 5, multiMode: "merged", fonts: { ...cvDocFontDefaults } },
     pass: { layout: "biz", targetIds: ["__all__"], heading: "出席證", fonts: { ...cvDocFontDefaults } },
   };
@@ -25890,7 +25912,7 @@
     .cv-doc-table td { height: 34px; }
     .cv-doc-roster-table { table-layout: fixed; }
     .cv-doc-roster-table th, .cv-doc-roster-table td { padding: 4px 5px; font-size: 11px; text-align: center; word-break: break-word; vertical-align: middle; }
-    .cv-doc-roster-table th { line-height: 1.25; }
+    .cv-doc-roster-table th { font-size: var(--cv-doc-roster-head, 11px); line-height: 1.25; }
     .cv-doc-roster-table td { height: 48px; }
     .cv-doc-roster-table td:nth-child(3), .cv-doc-roster-table td:nth-child(4) { text-align: left; }
     .cv-doc-roster-table tfoot td { padding: 10px 8px; font-size: 12px; text-align: left; }
@@ -26252,7 +26274,9 @@
     const list = Array.isArray(rows) ? rows : [];
     const meetingText = cvDocMeetingText(header, project);
     const showOwnership = cvDocShowOwnership(project);
-    const noteFont = cvDocNormalizeFonts(header && header.fonts).note;
+    const fonts = cvDocNormalizeFonts(header && header.fonts);
+    const cols = cvDocNormalizeCols(header && header.cols);
+    const noteFont = fonts.note;
     const colCount = showOwnership ? 9 : 8;
     const proxyLines = [
       `致  ${cvDocCommunityName()}  社區：預定於${meetingText || "       "}舉行之第一次區分所有權人會議， 本人謹委託`,
@@ -26268,26 +26292,26 @@
       `2.區權人資料如有錯誤或遺失時，請於${String(header.deadlineLine || "").trim() || "       "}前至管理服務中心更正及申請補發，管理服務中心將於會議前一天投進區權人信箱。`,
     ];
     return `
-      <table class="cv-doc-table cv-doc-roster-table">
+      <table class="cv-doc-table cv-doc-roster-table" style="--cv-doc-roster-head:${fonts.rosterHead}px;">
         <thead>
           <tr>
-            <th style="width:48px;">編號</th>
-            <th style="width:66px;">個人報到 QR code</th>
-            <th style="width:76px;">姓名</th>
+            <th style="width:${cols.rosterNo}px;">編號</th>
+            <th style="width:${cols.rosterQr}px;">QR code</th>
+            <th style="width:${cols.rosterName}px;">姓名</th>
             <th>地址</th>
-            <th style="width:70px;">簽到</th>
-            <th style="width:60px;">是否委託出席</th>
-            <th style="width:124px;">委託關係</th>
-            ${showOwnership ? `<th style="width:62px;">區分所有權比例</th>` : ""}
-            <th style="width:78px;">備註／簽退</th>
+            <th style="width:${cols.rosterSign}px;">簽到</th>
+            <th style="width:${cols.rosterProxy}px;">是否委託出席</th>
+            <th style="width:${cols.rosterRel}px;">委託關係</th>
+            ${showOwnership ? `<th style="width:${cols.rosterOwn}px;">區分所有權比例</th>` : ""}
+            <th style="width:${cols.rosterNote}px;">備註／簽退</th>
           </tr>
         </thead>
         <tbody>
           ${list.map((entry) => `
             <tr>
-              <td>${escapeHtml(entry.rosterNo || "")}</td>
+              <td style="font-size:${fonts.rosterNo}px;">${escapeHtml(entry.rosterNo || "")}</td>
               <td class="cv-doc-roster-qr">${entry.qrToken ? `<span class="cv-doc-roster-qr-unit">${escapeHtml(String(entry.houseNo || "").trim())}</span><img src="${escapeHtml(cvQrImageUrl(cvPersonQrPayload(entry)))}" alt="QR" /><span class="cv-doc-roster-qr-txt">${escapeHtml(cvPersonQrPayload(entry))}</span>` : escapeHtml(String(entry.houseNo || "").trim())}</td>
-              <td>${escapeHtml(cvDisplayName(entry))}</td>
+              <td style="font-size:${fonts.rosterName}px;">${escapeHtml(cvDisplayName(entry))}</td>
               <td>${escapeHtml(entry.address || "")}</td>
               <td></td>
               <td class="cv-doc-roster-opts"><span>□本人</span><span>□委託</span></td>
@@ -26708,6 +26732,11 @@
     const fonts = prefs.fonts;
     const header = cvDocDefaultHeader(project, kind);
     header.fonts = fonts;
+    if (kind === "checkin") {
+      prefs.cols = cvDocNormalizeCols(prefs.cols);
+      header.cols = prefs.cols;
+    }
+    const cols = header.cols || cvDocColDefaults;
     if (kind === "checkin" && prefs.layout === "roster") {
       header.subtitle = "出席人員名冊";
     }
@@ -26756,9 +26785,25 @@
                 <label>副標題字級<input id="cvDocFontSubtitle" type="number" min="10" max="60" step="1" value="${fonts.subtitle}" /></label>
                 <label>會議時間字級<input id="cvDocFontMeta" type="number" min="8" max="48" step="1" value="${fonts.meta}" /></label>
                 <label>戶號／棟別字級<input id="cvDocFontHouse" type="number" min="10" max="72" step="1" value="${fonts.house}" /></label>
+                ${kind === "checkin" ? `<label>名冊「編號」字級<input id="cvDocFontRosterNo" type="number" min="6" max="48" step="1" value="${fonts.rosterNo}" /></label>` : ""}
+                ${kind === "checkin" ? `<label>名冊「姓名」字級<input id="cvDocFontRosterName" type="number" min="6" max="48" step="1" value="${fonts.rosterName}" /></label>` : ""}
+                ${kind === "checkin" ? `<label>名冊表頭字級<input id="cvDocFontRosterHead" type="number" min="6" max="48" step="1" value="${fonts.rosterHead}" /></label>` : ""}
                 ${showNote ? `<label>備註字級<input id="cvDocFontNote" type="number" min="8" max="48" step="1" value="${fonts.note}" /></label>` : ""}
                 ${kind === "vote" ? `<label>議題字級<input id="cvDocFontTopic" type="number" min="10" max="48" step="1" value="${fonts.topic}" /></label>` : ""}
                 ${kind === "vote" ? `<label>選項字級（卡片等比縮放）<input id="cvDocFontOption" type="number" min="8" max="48" step="1" value="${fonts.option}" /></label>` : ""}
+              </div>
+              ` : ""}
+              ${kind === "checkin" ? `
+              <div class="cv-doc-size-group">
+                <div class="cv-doc-size-title">名冊欄寬（px）</div>
+                <label>編號欄寬<input id="cvDocColRosterNo" type="number" min="24" max="200" step="1" value="${cols.rosterNo}" /></label>
+                <label>QR code 欄寬<input id="cvDocColRosterQr" type="number" min="30" max="240" step="1" value="${cols.rosterQr}" /></label>
+                <label>姓名欄寬<input id="cvDocColRosterName" type="number" min="30" max="240" step="1" value="${cols.rosterName}" /></label>
+                <label>簽到欄寬<input id="cvDocColRosterSign" type="number" min="30" max="240" step="1" value="${cols.rosterSign}" /></label>
+                <label>是否委託出席欄寬<input id="cvDocColRosterProxy" type="number" min="30" max="240" step="1" value="${cols.rosterProxy}" /></label>
+                <label>委託關係欄寬<input id="cvDocColRosterRel" type="number" min="40" max="360" step="1" value="${cols.rosterRel}" /></label>
+                <label>區分所有權比例欄寬<input id="cvDocColRosterOwn" type="number" min="30" max="240" step="1" value="${cols.rosterOwn}" /></label>
+                <label>備註／簽退欄寬<input id="cvDocColRosterNote" type="number" min="30" max="240" step="1" value="${cols.rosterNote}" /></label>
               </div>
               ` : ""}
             </div>
@@ -26849,6 +26894,9 @@
       ["#cvDocFontSubtitle", "subtitle"],
       ["#cvDocFontMeta", "meta"],
       ["#cvDocFontHouse", "house"],
+      ["#cvDocFontRosterNo", "rosterNo"],
+      ["#cvDocFontRosterName", "rosterName"],
+      ["#cvDocFontRosterHead", "rosterHead"],
       ["#cvDocFontNote", "note"],
       ["#cvDocFontTopic", "topic"],
       ["#cvDocFontOption", "option"],
@@ -26867,6 +26915,34 @@
     fontBindings.forEach(([sel]) => {
       const input = modal.querySelector(sel);
       if (input) input.addEventListener("input", syncFonts);
+    });
+
+    // 名冊欄寬：即時套用至預覽、列印與 PDF
+    const colBindings = [
+      ["#cvDocColRosterNo", "rosterNo"],
+      ["#cvDocColRosterQr", "rosterQr"],
+      ["#cvDocColRosterName", "rosterName"],
+      ["#cvDocColRosterSign", "rosterSign"],
+      ["#cvDocColRosterProxy", "rosterProxy"],
+      ["#cvDocColRosterRel", "rosterRel"],
+      ["#cvDocColRosterOwn", "rosterOwn"],
+      ["#cvDocColRosterNote", "rosterNote"],
+    ];
+    const syncCols = () => {
+      const cols = prefs.cols || cvDocColDefaults;
+      colBindings.forEach(([sel, key]) => {
+        const input = modal.querySelector(sel);
+        if (!input) return;
+        const n = Number(input.value);
+        if (Number.isFinite(n) && n > 0) cols[key] = n;
+      });
+      prefs.cols = cvDocNormalizeCols(cols);
+      header.cols = prefs.cols;
+      syncHeader();
+    };
+    colBindings.forEach(([sel]) => {
+      const input = modal.querySelector(sel);
+      if (input) input.addEventListener("input", syncCols);
     });
 
     // 社區 LOGO：上傳後縮圖存成 Base64 並寫入專案設定，之後開啟可直接沿用
