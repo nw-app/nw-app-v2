@@ -397,30 +397,198 @@
       </div>`;
   }
 
+  /* 目前檢視日期（預設當日） */
+  function recDateKey(st) {
+    const v = String((st && st.recDate) || "").trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : todayKey();
+  }
+
+  function shiftDateKey(key, delta) {
+    const p = String(key || "").split("-").map((x) => Number(x));
+    const d = new Date(p[0], (p[1] || 1) - 1, p[2] || 1);
+    d.setDate(d.getDate() + Number(delta || 0));
+    return dateKeyOf(d);
+  }
+
   function renderRecordTab(root, ctx, st) {
-    const list = (st.monthCheckins || []).slice().sort((a, b) => String((b && b.workDate) || "").localeCompare(String((a && a.workDate) || "")));
+    st.recSub = st.recSub === "schedule" ? "schedule" : "checkin";
+    root.innerHTML = `
+      <div class="wc-subtabs" role="tablist" aria-label="紀錄子分頁">
+        <button class="wc-subtab" type="button" role="tab" data-wd-recsub="checkin"${st.recSub === "checkin" ? ' aria-current="page"' : ""}>打卡</button>
+        <button class="wc-subtab" type="button" role="tab" data-wd-recsub="schedule"${st.recSub === "schedule" ? ' aria-current="page"' : ""}>班表</button>
+      </div>
+      <div id="wdRecPane"></div>
+    `;
+    root.querySelectorAll("[data-wd-recsub]").forEach((b) => {
+      b.onclick = () => {
+        const k = b.getAttribute("data-wd-recsub");
+        if (k === st.recSub) return;
+        st.recSub = k;
+        renderRecordTab(root, ctx, st);
+      };
+    });
+    const pane = root.querySelector("#wdRecPane");
+    if (!pane) return;
+    if (st.recSub === "schedule") {
+      st.schedView = st.schedView === "cal" ? "cal" : "list";
+      pane.innerHTML = scheduleCardHtml(st);
+      bindScheduleCard(pane, st, ctx, {
+        onMonth: (mk) => {
+          st.schedMonth = mk;
+          watchScheduleMonth(ctx.communityId, ctx.uid, st, st.rerenderAll);
+          if (typeof st.rerenderAll === "function") st.rerenderAll();
+        },
+        onView: (v) => {
+          st.schedView = v;
+          if (typeof st.rerenderAll === "function") st.rerenderAll();
+        },
+      });
+      return;
+    }
+    renderCheckinPane(pane, ctx, st);
+  }
+
+  function renderCheckinPane(root, ctx, st) {
+    const key = recDateKey(st);
+    const today = todayKey();
+    const day = st.recordDay || null;
+    const has = !!(day && (day.inAt || day.outAt));
     root.innerHTML = `
       <section class="wc-card">
         <div class="hd">
-          <div><h2>打卡紀錄</h2><p>${esc(monthKeyOf(new Date()))}　本月出勤明細</p></div>
+          <div><h2>打卡紀錄</h2></div>
         </div>
-        ${list.length ? `<div class="wc-list">${list.map(recordRow).join("")}</div>` : `<div class="wc-empty">本月尚無打卡紀錄。</div>`}
+        <div class="wc-field">
+          <label>日期</label>
+          <div class="wc-datebar">
+            <button type="button" class="wc-date-arrow" id="wdRecPrev" aria-label="前一日">‹</button>
+            <button type="button" class="wc-date-view" id="wdRecDateBtn" aria-label="選擇日期">${esc(key)}</button>
+            <button type="button" class="wc-date-arrow" id="wdRecNext" aria-label="後一日"${key >= today ? " hidden" : ""}>›</button>
+          </div>
+        </div>
+        ${has ? `<div class="wc-list">${recordRow(day)}</div>` : `<div class="wc-empty">此日期尚無打卡紀錄。</div>`}
       </section>
     `;
+    const go = (k) => { st.recDate = k; if (typeof st.reloadRecord === "function") st.reloadRecord(); };
+    const prev = root.querySelector("#wdRecPrev");
+    if (prev) prev.onclick = () => go(shiftDateKey(key, -1));
+    const next = root.querySelector("#wdRecNext");
+    if (next) next.onclick = () => { const k = shiftDateKey(key, 1); go(k > today ? today : k); };
+    const view = root.querySelector("#wdRecDateBtn");
+    if (view) view.onclick = () => openRecordDatePicker(ctx, st, go);
+  }
+
+  /* 打卡紀錄日期選擇：只列出有打卡紀錄的日期，且不顯示今日之後 */
+  function openRecordDatePicker(ctx, st, onPick) {
+    const today = todayKey();
+    const selected = recDateKey(st);
+    const marks = st.calMarks || (st.calMarks = {});
+    let month = selected.slice(0, 7);
+
+    const wrap = document.createElement("div");
+    wrap.className = "wc-datewrap";
+    wrap.innerHTML = `<div class="wc-datecard"><div class="wc-dateloading">載入中…</div></div>`;
+    document.body.appendChild(wrap);
+    const close = () => { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); };
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    const card = wrap.querySelector(".wc-datecard");
+
+    const marksOf = (mk) => (marks[mk] instanceof Set
+      ? Promise.resolve(marks[mk])
+      : loadRecordMarks(ctx, mk).then((set) => { marks[mk] = set; return set; }));
+
+    const paint = (set) => {
+      const p = month.split("-").map((x) => Number(x));
+      const y = p[0], m = p[1];
+      const startDow = new Date(y, m - 1, 1).getDay();
+      const daysIn = new Date(y, m, 0).getDate();
+      let cells = "";
+      for (let i = 0; i < startDow; i++) cells += "<div></div>";
+      for (let d = 1; d <= daysIn; d++) {
+        const dayKey = `${y}-${pad2(m)}-${pad2(d)}`;
+        if (dayKey > today) { cells += "<div></div>"; continue; }
+        const hasRec = set.has(dayKey);
+        const isSel = dayKey === selected;
+        const isTod = dayKey === today;
+        const bg = isSel ? "#d32f2f" : (hasRec ? "#fee2e2" : "#f3f4f6");
+        const fg = isSel ? "#fff" : (hasRec ? "#b91c1c" : "#cbd5e1");
+        const ring = isTod && !isSel ? "box-shadow:inset 0 0 0 2px rgba(211,47,47,.5);" : "";
+        const dot = hasRec && !isSel ? `<span style="display:block;width:5px;height:5px;border-radius:50%;background:#d32f2f;margin:2px auto 0;"></span>` : "";
+        cells += `<button type="button" data-day="${dayKey}"${hasRec ? "" : " disabled"} style="height:40px;border:0;background:${bg};color:${fg};border-radius:10px;font-size:15px;font-weight:${hasRec || isSel ? 900 : 700};cursor:${hasRec ? "pointer" : "not-allowed"};${ring}">${d}${dot}</button>`;
+      }
+      const canNext = month < today.slice(0, 7);
+      card.innerHTML = `
+        <div class="wc-datehead">
+          <button type="button" class="wc-date-arrow" data-nv="-1" aria-label="上個月">‹</button>
+          <div class="wc-dateym">${y} 年 ${m} 月</div>
+          <button type="button" class="wc-date-arrow" data-nv="1" aria-label="下個月"${canNext ? "" : " disabled"}>›</button>
+        </div>
+        <div class="wc-dateweek">${["日", "一", "二", "三", "四", "五", "六"].map((w) => `<div>${w}</div>`).join("")}</div>
+        <div class="wc-dategrid">${cells}</div>
+        <div class="wc-datefoot">
+          <span>● 僅有打卡紀錄的日期可點選</span>
+          <div>
+            <button type="button" class="wc-date-today" data-today="1">今天</button>
+            <button type="button" class="wc-date-close" data-close="1">關閉</button>
+          </div>
+        </div>
+      `;
+      card.querySelectorAll("[data-nv]").forEach((b) => {
+        b.onclick = () => {
+          if (b.disabled) return;
+          const p2 = month.split("-").map((x) => Number(x));
+          const nd = new Date(p2[0], p2[1] - 1 + (Number(b.getAttribute("data-nv")) || 0), 1);
+          const nm = `${nd.getFullYear()}-${pad2(nd.getMonth() + 1)}`;
+          if (nm > today.slice(0, 7)) return;
+          month = nm;
+          marksOf(nm).then((s) => { if (wrap.parentNode) paint(s); });
+        };
+      });
+      card.querySelectorAll("[data-day]").forEach((b) => {
+        b.onclick = () => { if (b.disabled) return; close(); onPick(b.getAttribute("data-day")); };
+      });
+      const tb = card.querySelector("[data-today]");
+      if (tb) tb.onclick = () => { close(); onPick(today); };
+      const cb = card.querySelector("[data-close]");
+      if (cb) cb.onclick = close;
+    };
+
+    marksOf(month).then((set) => { if (wrap.parentNode) paint(set); });
+  }
+
+  function loadRecordMarks(ctx, mk) {
+    const r = monthRange(mk);
+    if (!ctx.communityId || !ctx.uid) return Promise.resolve(new Set());
+    return checkinsCol(ctx.communityId).where("workDate", ">=", r.start).where("workDate", "<=", r.end).get()
+      .then((snap) => {
+        const set = new Set();
+        snap.forEach((d) => {
+          const x = d.data() || {};
+          if (String(x.uid) === String(ctx.uid)) set.add(String(x.workDate || ""));
+        });
+        return set;
+      })
+      .catch((err) => { console.warn("duty record marks failed", err); return new Set(); });
+  }
+
+  function watchRecordDay(ctx, st, rerender) {
+    if (st.recUnsub) { try { st.recUnsub(); } catch {} st.recUnsub = null; }
+    st.recordDay = null;
+    rerender();
+    if (!ctx.communityId || !ctx.uid) return;
+    const key = recDateKey(st);
+    st.recUnsub = track(checkinsCol(ctx.communityId).doc(`${ctx.uid}_${key}`).onSnapshot((doc) => {
+      st.recordDay = doc && doc.exists ? (doc.data() || {}) : null;
+      rerender();
+    }, (err) => { console.warn("duty record day listen failed", err); st.recordDay = null; rerender(); }));
   }
 
   function subscribeRecordTab(root, ctx, st, rerender) {
-    if (!ctx.communityId) { st.monthCheckins = []; return; }
-    const r = monthRange(monthKeyOf(new Date()));
-    track(checkinsCol(ctx.communityId).where("workDate", ">=", r.start).where("workDate", "<=", r.end).onSnapshot((snap) => {
-      const list = [];
-      snap.forEach((d) => {
-        const x = d.data() || {};
-        if (String(x.uid) === String(ctx.uid)) list.push(x);
-      });
-      st.monthCheckins = list;
-      rerender();
-    }, (err) => { console.warn("duty record checkins listen failed", err); st.monthCheckins = []; rerender(); }));
+    st.recDate = recDateKey(st);
+    st.rerenderAll = rerender;
+    st.reloadRecord = () => watchRecordDay(ctx, st, rerender);
+    watchRecordDay(ctx, st, rerender);
+    subscribeSchedule(ctx.communityId, ctx.uid, st, rerender);
   }
 
   async function savePunch(ctx, type, photo, meta) {
@@ -520,59 +688,341 @@
   /* ==================================================================== */
   /* 班表                                                                  */
   /* ==================================================================== */
-  function renderScheduleTab(root, ctx, st) {
-    const mk = monthKeyOf(new Date());
-    const sched = st.schedule || {};
+  /* 依班別名稱判斷標籤色系（一般班別／請假／例假） */
+  function scheduleTag(duty, s) {
+    const d = duty || DEFAULT_DUTY;
+    const leaveTypes = Array.isArray(d.leaveTypes) && d.leaveTypes.length ? d.leaveTypes : DEFAULT_DUTY.leaveTypes;
+    const holidayTypes = Array.isArray(d.holidayTypes) && d.holidayTypes.length ? d.holidayTypes : DEFAULT_DUTY.holidayTypes;
+    const v = String(s || "");
+    if (!v) return { kind: "", cls: "", style: "" };
+    if (leaveTypes.map((x) => String(x)).includes(v) || v === "休假") {
+      return { kind: "leave", cls: "", style: ' style="background:rgba(37,99,235,.10);color:#1d4ed8;"' };
+    }
+    if (holidayTypes.map((x) => String(x)).includes(v)) {
+      return { kind: "holiday", cls: "", style: ' style="background:rgba(14,116,144,.12);color:#0e7490;"' };
+    }
+    return { kind: "shift", cls: "done", style: "" };
+  }
+
+  /* 目前檢視月份（預設當月） */
+  function schedMonthOf(st) {
+    const v = String((st && st.schedMonth) || "").trim();
+    return /^\d{4}-\d{2}$/.test(v) ? v : monthKeyOf(new Date());
+  }
+
+  function shiftMonthKey(mk, delta) {
+    const p = String(mk || "").split("-").map((x) => Number(x));
+    const d = new Date(p[0], (p[1] || 1) - 1 + Number(delta || 0), 1);
+    return monthKeyOf(isNaN(d.getTime()) ? new Date() : d);
+  }
+
+  /* 班表列表：同一列依序顯示 日期／排班狀況／打卡狀況（上班、下班）／申請按鈕 */
+  function scheduleListHtml(mk, sched, duty, checkins) {
     const tk = todayKey();
-    const days = daysInMonth(mk);
-    const duty = st.duty || DEFAULT_DUTY;
-    const leaveTypes = Array.isArray(duty.leaveTypes) && duty.leaveTypes.length ? duty.leaveTypes : DEFAULT_DUTY.leaveTypes;
-    const holidayTypes = Array.isArray(duty.holidayTypes) && duty.holidayTypes.length ? duty.holidayTypes : DEFAULT_DUTY.holidayTypes;
-    const leaveSet = new Set(leaveTypes.map((x) => String(x)));
-    const holidaySet = new Set(holidayTypes.map((x) => String(x)));
-    const rows = days.map((k) => {
-      const s = sched[k] || "";
-      const isLeave = Boolean(s) && (leaveSet.has(s) || s === "休假");
-      const isHoliday = Boolean(s) && holidaySet.has(s);
-      const tagCls = isLeave || isHoliday ? "" : (s ? "done" : "");
-      const tagStyle = isLeave
-        ? ' style="background:rgba(37,99,235,.10);color:#1d4ed8;"'
-        : (isHoliday ? ' style="background:rgba(14,116,144,.12);color:#0e7490;"' : "");
+    const rows = daysInMonth(mk).map((k) => {
+      const s = (sched && sched[k]) || "";
+      const tag = scheduleTag(duty, s);
+      const isShift = tag.kind === "shift";
+      const ck = (checkins && checkins[k]) || null;
+      const hasIn = Boolean(isShift && ck && ck.inAt);
+      const hasOut = Boolean(isShift && ck && ck.outAt);
+      const needIn = isShift && k <= tk && !hasIn;
+      const needOut = isShift && k <= tk && !hasOut;
       const rowStyle = k === tk ? ' style="border-color:var(--wc-red);"' : "";
+      const punch = isShift
+        ? `<div class="punch">
+             <span class="pu${hasIn ? "" : " miss"}">上班 ${esc(hasIn ? fmtTime(ck.inAt) : "--:--")}</span>
+             <span class="pu${hasOut ? "" : " miss"}">下班 ${esc(hasOut ? fmtTime(ck.outAt) : "--:--")}</span>
+           </div>`
+        : `<div class="punch"></div>`;
       return `
-        <div class="wc-item"${rowStyle}>
-          <div class="row1">
-            <div class="loc">${esc(fmtDateKey(k))}</div>
-            <span class="wc-tag ${tagCls}"${tagStyle}>${esc(s || "未排班")}</span>
-          </div>
+        <div class="wc-item sched-row"${rowStyle}>
+          <div class="loc">${esc(fmtDateKey(k))}</div>
+          <span class="wc-tag ${tag.cls}"${tag.style}>${esc(s || "未排班")}</span>
+          ${punch}
+          <button type="button" class="wc-apply" data-sched-apply="${esc(k)}" data-sched-shift="${esc(s)}"${needIn ? ' data-apply-in="1"' : ""}${needOut ? ' data-apply-out="1"' : ""}${isShift ? "" : " disabled"}>申請</button>
         </div>`;
     }).join("");
+    return `<div class="wc-list">${rows}</div>`;
+  }
 
-    root.innerHTML = `
+  function scheduleCalendarHtml(mk, sched, duty) {
+    const p = String(mk).split("-").map((x) => Number(x));
+    const y = p[0], m = p[1];
+    const startDow = new Date(y, m - 1, 1).getDay();
+    const n = new Date(y, m, 0).getDate();
+    const tk = todayKey();
+    let cells = "";
+    for (let i = 0; i < startDow; i++) cells += `<div class="wc-cal-cell empty"></div>`;
+    for (let d = 1; d <= n; d++) {
+      const k = `${y}-${pad2(m)}-${pad2(d)}`;
+      const s = (sched && sched[k]) || "";
+      const tag = scheduleTag(duty, s);
+      const cls = ["wc-cal-cell", tag.kind, k === tk ? "today" : ""].filter(Boolean).join(" ");
+      cells += `<div class="${cls}"><span class="d">${d}</span><span class="s">${esc(s || "—")}</span></div>`;
+    }
+    return `
+      <div class="wc-cal-week">${["日", "一", "二", "三", "四", "五", "六"].map((w) => `<div>${w}</div>`).join("")}</div>
+      <div class="wc-cal-grid">${cells}</div>`;
+  }
+
+  function scheduleCardHtml(st) {
+    const cur = monthKeyOf(new Date());
+    const mk = schedMonthOf(st);
+    const view = (st && st.schedView) === "cal" ? "cal" : "list";
+    const sched = (st && st.schedule) || {};
+    const duty = (st && st.duty) || DEFAULT_DUTY;
+    const body = view === "cal"
+      ? scheduleCalendarHtml(mk, sched, duty)
+      : scheduleListHtml(mk, sched, duty, (st && st.schedCheckins) || {});
+    return `
       <section class="wc-card">
-        <div class="hd">
-          <div><h2>本月班表</h2><p>${esc(mk)}　個人班別（由後台編排）</p></div>
+        <div class="hd"><div><h2>班表</h2></div></div>
+        <div class="wc-datebar">
+          <button type="button" class="wc-date-arrow" data-sched-nav="-1" aria-label="前一月">‹</button>
+          <button type="button" class="wc-date-view" data-sched-month aria-label="選擇月份">${esc(mk)}</button>
+          <button type="button" class="wc-date-arrow" data-sched-nav="1" aria-label="後一月"${mk >= cur ? " hidden" : ""}>›</button>
         </div>
-        <div class="wc-list">${rows}</div>
+        <div class="wc-mode-toggle" role="tablist" aria-label="檢視模式">
+          <button type="button" class="wc-mode-btn" data-sched-view="list"${view === "list" ? ' aria-current="page"' : ""}>列表模式</button>
+          <button type="button" class="wc-mode-btn" data-sched-view="cal"${view === "cal" ? ' aria-current="page"' : ""}>月曆模式</button>
+        </div>
+        ${body}
       </section>
     `;
   }
 
-  function subscribeScheduleTab(root, ctx, st, rerender) {
-    subscribeDutySettings(ctx.communityId, (d) => { st.duty = mergedDuty(d); rerender(); });
-    if (!ctx.communityId) { st.schedule = {}; return; }
-    const mk = monthKeyOf(new Date());
-    track(schedulesCol(ctx.communityId).where("month", "==", mk).onSnapshot((snap) => {
+  /* 綁定班表卡片互動：前後月、月份選擇、列表／月曆切換 */
+  function bindScheduleCard(root, st, ctx, hooks) {
+    const cur = monthKeyOf(new Date());
+    const mk = schedMonthOf(st);
+    const modes = hooks || {};
+    root.querySelectorAll("[data-sched-nav]").forEach((b) => {
+      b.onclick = () => {
+        const next = shiftMonthKey(mk, Number(b.getAttribute("data-sched-nav")) || 0);
+        if (next > cur) return;
+        if (typeof modes.onMonth === "function") modes.onMonth(next);
+      };
+    });
+    const mb = root.querySelector("[data-sched-month]");
+    if (mb) mb.onclick = () => openScheduleMonthPicker(ctx, st, mk, modes.onMonth);
+    root.querySelectorAll("[data-sched-view]").forEach((b) => {
+      b.onclick = () => {
+        const v = b.getAttribute("data-sched-view") === "cal" ? "cal" : "list";
+        if (v === ((st && st.schedView) === "cal" ? "cal" : "list")) return;
+        if (typeof modes.onView === "function") modes.onView(v);
+      };
+    });
+    root.querySelectorAll("[data-sched-apply]").forEach((b) => {
+      if (b.disabled) { b.onclick = null; return; }
+      b.onclick = () => openApplyModal(ctx, {
+        dateKey: b.getAttribute("data-sched-apply"),
+        duty: (st && st.duty) || DEFAULT_DUTY,
+        sched: (st && st.schedule) || {},
+        makeupIn: b.getAttribute("data-apply-in") === "1",
+        makeupOut: b.getAttribute("data-apply-out") === "1",
+      });
+    });
+  }
+
+  /* 申請彈窗（瀏覽器 90% 大小，以分頁按鈕切換 上班補卡／下班補卡／請假申請） */
+  function openApplyModal(ctx, opts) {
+    const o = opts || {};
+    const c = ctx || {};
+    const duty = o.duty || DEFAULT_DUTY;
+    const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(String(o.dateKey)) ? String(o.dateKey) : todayKey();
+    const leaveTypes = Array.isArray(duty.leaveTypes) && duty.leaveTypes.length ? duty.leaveTypes : DEFAULT_DUTY.leaveTypes;
+    const draftSt = { draft: {} };
+    const tabs = [];
+    if (o.makeupIn) tabs.push(["makeup-in", "上班補卡"]);
+    if (o.makeupOut) tabs.push(["makeup-out", "下班補卡"]);
+    tabs.push(["leave", "請假申請"]);
+    let cur = tabs[0][0];
+    const activeStyle = "border-color:var(--wc-red);color:var(--wc-red-dark);font-weight:900;background:rgba(211,47,47,.06);";
+    const punchOf = (k) => (k === "makeup-out" ? "out" : "in");
+    /* 依日期取當日排班班別，回傳該班別的上下班時間（自動帶入請假時間） */
+    const schedMap = (o.sched && typeof o.sched === "object") ? o.sched : {};
+    const shiftTimeOf = (dk) => {
+      const nm = String(schedMap[dk] || "").trim();
+      if (!nm) return "";
+      const w = shiftWindow(duty, c.category, nm);
+      return w.start ? `${w.start} ~ ${w.end}` : "";
+    };
+
+    const makeupForm = (k) => {
+      const d = draftSt.draft || {};
+      const punch = punchOf(k);
+      const makeDate = d.wdMakeupDate || dateKey;
+      const makeTime = d.wdMakeupTime || (punch === "out" ? duty.workEnd : duty.workStart) || "08:00";
+      const makeReason = d.wdMakeupReason || "";
+      return `
+        <section class="wc-card">
+          <div class="wc-field"><label>日期</label><input type="date" id="wdMakeupDate" value="${esc(makeDate)}"></div>
+          <div class="wc-field"><label>補卡別</label><div class="wc-applytype">${punch === "out" ? "下班補卡" : "上班補卡"}</div></div>
+          <div class="wc-field"><label>時間</label><input type="time" id="wdMakeupTime" value="${esc(makeTime)}"></div>
+          <div class="wc-field"><label>事由</label><textarea id="wdMakeupReason" placeholder="請輸入補卡事由">${esc(makeReason)}</textarea></div>
+          <button class="wc-btn primary" type="button" id="wdMakeupSubmit">送出補卡</button>
+        </section>`;
+    };
+
+    const leaveForm = () => {
+      const d = draftSt.draft || {};
+      const leaveDate = d.wdLeaveDate || dateKey;
+      const leaveType = d.wdLeaveType || leaveTypes[0] || "";
+      const leaveTime = typeof d.wdLeaveTime === "string" ? d.wdLeaveTime : shiftTimeOf(leaveDate);
+      const leaveReason = d.wdLeaveReason || "";
+      return `
+        <section class="wc-card">
+          <div class="wc-field"><label>日期</label><input type="date" id="wdLeaveDate" value="${esc(leaveDate)}"></div>
+          <div class="wc-field"><label>時間</label><input type="text" id="wdLeaveTime" value="${esc(leaveTime)}" placeholder="例：08:00 ~ 17:00"></div>
+          <div class="wc-field"><label>假別</label><select id="wdLeaveType">${leaveTypes.map((t) => `<option value="${esc(t)}"${t === leaveType ? " selected" : ""}>${esc(t)}</option>`).join("")}</select></div>
+          <div class="wc-field"><label>事由</label><textarea id="wdLeaveReason" placeholder="請輸入請假事由">${esc(leaveReason)}</textarea></div>
+          <button class="wc-btn primary" type="button" id="wdLeaveSubmit">送出請假</button>
+        </section>`;
+    };
+
+    const wrap = document.createElement("div");
+    wrap.className = "wc-applywrap";
+    wrap.innerHTML = `
+      <div class="wc-applycard" role="dialog" aria-modal="true" aria-label="申請">
+        <div class="wc-applyhd">
+          <div class="t">申請　${esc(fmtDateKey(dateKey))}</div>
+          <button type="button" class="wc-applyclose" data-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="wc-applytabs" role="tablist" aria-label="申請類別"></div>
+        <div class="wc-applybd"></div>
+      </div>`;
+    document.body.appendChild(wrap);
+
+    const tabsEl = wrap.querySelector(".wc-applytabs");
+    const bdEl = wrap.querySelector(".wc-applybd");
+
+    const paint = () => {
+      if (cur !== "leave") draftSt.draft.wdMakeupType = punchOf(cur);
+      tabsEl.innerHTML = tabs.map(([k, label]) => `<button type="button" class="wc-btn-sm" role="tab" data-apply-tab="${k}"${k === cur ? ' aria-current="page"' : ""} style="${k === cur ? activeStyle : ""}">${label}</button>`).join("");
+      bdEl.innerHTML = cur === "leave" ? leaveForm() : makeupForm(cur);
+      tabsEl.querySelectorAll("[data-apply-tab]").forEach((b) => {
+        b.onclick = () => {
+          const k = b.getAttribute("data-apply-tab");
+          if (k === cur) return;
+          readForm(bdEl, draftSt);
+          cur = k;
+          paint();
+        };
+      });
+      const ls = bdEl.querySelector("#wdLeaveSubmit");
+      if (ls) ls.onclick = () => submitLeave(c, draftSt, bdEl, ls);
+      const ms = bdEl.querySelector("#wdMakeupSubmit");
+      if (ms) ms.onclick = () => submitMakeup(c, draftSt, bdEl, ms);
+      /* 改日期時，時間自動帶入該日排班班別的上下班時間 */
+      const ld = bdEl.querySelector("#wdLeaveDate");
+      const lt = bdEl.querySelector("#wdLeaveTime");
+      if (ld && lt) ld.onchange = () => {
+        const t = shiftTimeOf(String(ld.value || ""));
+        lt.value = t;
+        draftSt.draft.wdLeaveTime = t;
+      };
+    };
+    paint();
+
+    const close = () => { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); };
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    const cb = wrap.querySelector("[data-close]");
+    if (cb) cb.onclick = close;
+  }
+
+  /* 僅列出（且不快於當月）後台已編排班表的月份 */
+  function loadScheduleMonths(cid) {
+    if (!cid) return Promise.resolve([]);
+    return schedulesCol(cid).where("month", "<=", monthKeyOf(new Date())).get()
+      .then((snap) => {
+        const set = new Set();
+        snap.forEach((d) => {
+          const m = String((d.data() || {}).month || "").trim();
+          if (/^\d{4}-\d{2}$/.test(m)) set.add(m);
+        });
+        return Array.from(set).sort((a, b) => b.localeCompare(a));
+      })
+      .catch((err) => { console.warn("schedule months load failed", err); return []; });
+  }
+
+  function openScheduleMonthPicker(ctx, st, current, onPick) {
+    const cur = monthKeyOf(new Date());
+    const wrap = document.createElement("div");
+    wrap.className = "wc-datewrap";
+    wrap.innerHTML = `<div class="wc-datecard"><div class="wc-dateloading">載入中…</div></div>`;
+    document.body.appendChild(wrap);
+    const close = () => { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); };
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    const card = wrap.querySelector(".wc-datecard");
+    const paint = (months) => {
+      const list = (months || []).slice();
+      list.push(cur);
+      list.push(current);
+      const uniq = Array.from(new Set(list)).filter((m) => /^\d{4}-\d{2}$/.test(m) && m <= cur).sort((a, b) => b.localeCompare(a));
+      const btns = uniq.length
+        ? uniq.map((m) => `<button type="button" class="wc-monthbtn" data-month="${esc(m)}"${m === current ? ' aria-current="page"' : ""}>${esc(m)}</button>`).join("")
+        : `<div class="wc-dateloading">目前沒有班表資料</div>`;
+      card.innerHTML = `
+        <div class="wc-datehead">
+          <div class="wc-dateym">選擇月份</div>
+          <button type="button" class="wc-date-arrow" data-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="wc-monthgrid">${btns}</div>
+      `;
+      card.querySelectorAll("[data-month]").forEach((b) => {
+        b.onclick = () => { close(); if (typeof onPick === "function") onPick(b.getAttribute("data-month")); };
+      });
+      const cb = card.querySelector("[data-close]");
+      if (cb) cb.onclick = close;
+    };
+    loadScheduleMonths(ctx && ctx.communityId).then((months) => { if (wrap.parentNode) paint(months); });
+  }
+
+  /* 監聽指定月份本人的打卡紀錄，用於班表顯示打卡狀況 */
+  function watchScheduleCheckins(cid, uid, st, rerender) {
+    if (st.schedCkUnsub) { try { st.schedCkUnsub(); } catch {} st.schedCkUnsub = null; }
+    st.schedCheckins = {};
+    if (!cid || !uid) return;
+    const r = monthRange(st.schedMonth);
+    st.schedCkUnsub = track(checkinsCol(cid).where("workDate", ">=", r.start).where("workDate", "<=", r.end).onSnapshot((snap) => {
+      const map = {};
+      snap.forEach((d) => {
+        const x = d.data() || {};
+        if (String(x.uid) !== String(uid)) return;
+        map[String(x.workDate || "")] = { inAt: x.inAt || null, outAt: x.outAt || null };
+      });
+      st.schedCheckins = map;
+      if (typeof rerender === "function") rerender();
+    }, (err) => { console.warn("duty schedule checkins listen failed", err); st.schedCheckins = {}; if (typeof rerender === "function") rerender(); }));
+  }
+
+  /* 監聽指定月份的本人的班別 */
+  function watchScheduleMonth(cid, uid, st, rerender) {
+    if (st.schedUnsub) { try { st.schedUnsub(); } catch {} st.schedUnsub = null; }
+    st.schedule = {};
+    st.schedMonth = schedMonthOf(st);
+    if (!cid) { if (typeof rerender === "function") rerender(); return; }
+    const mk = st.schedMonth;
+    st.schedUnsub = schedulesCol(cid).where("month", "==", mk).onSnapshot((snap) => {
       const map = {};
       snap.forEach((d) => {
         const x = d.data() || {};
         const shifts = x.shifts || {};
-        const s = shifts[ctx.uid];
+        const s = shifts[uid];
         if (s) map[String(x.dateKey || d.id)] = String(s);
       });
       st.schedule = map;
-      rerender();
-    }, (err) => { console.warn("duty schedule month listen failed", err); st.schedule = {}; rerender(); }));
+      if (typeof rerender === "function") rerender();
+    }, (err) => { console.warn("duty schedule month listen failed", err); st.schedule = {}; if (typeof rerender === "function") rerender(); });
+    watchScheduleCheckins(cid, uid, st, rerender);
+  }
+
+  function subscribeSchedule(cid, uid, st, rerender) {
+    st.schedMonth = monthKeyOf(new Date());
+    st.schedView = st.schedView === "cal" ? "cal" : "list";
+    subscribeDutySettings(cid, (d) => { st.duty = mergedDuty(d); rerender(); });
+    watchScheduleMonth(cid, uid, st, rerender);
   }
 
   /* ==================================================================== */
@@ -580,7 +1030,7 @@
   /* ==================================================================== */
   function readForm(root, st) {
     st.draft = st.draft || {};
-    const ids = ["wdLeaveDate", "wdLeaveType", "wdLeaveReason", "wdMakeupDate", "wdMakeupType", "wdMakeupTime", "wdMakeupReason"];
+    const ids = ["wdLeaveDate", "wdLeaveTime", "wdLeaveType", "wdLeaveReason", "wdMakeupDate", "wdMakeupType", "wdMakeupTime", "wdMakeupReason"];
     ids.forEach((id) => {
       const e = root.querySelector("#" + id);
       if (e && typeof e.value === "string") st.draft[id] = e.value;
@@ -691,6 +1141,7 @@
     const draft = st.draft || {};
     const dateKey = String(draft.wdLeaveDate || "").trim() || todayKey();
     const leaveType = String(draft.wdLeaveType || "").trim();
+    const timeRange = String(draft.wdLeaveTime || "").trim();
     const reason = String(draft.wdLeaveReason || "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) { toast("請選擇請假日期", true); return; }
     if (!leaveType) { toast("請選擇假別", true); return; }
@@ -704,6 +1155,7 @@
         category: ctx.category || "",
         dateKey,
         leaveType,
+        timeRange,
         reason,
         createdAt: serverTs(),
         createdBy: ctx.uid,
@@ -775,7 +1227,6 @@
   /* ==================================================================== */
   const tabs = {
     punch: makeTab({ render: renderPunchTab, subscribe: subscribePunchTab }),
-    schedule: makeTab({ render: renderScheduleTab, subscribe: subscribeScheduleTab }),
     leave: makeTab({ render: renderLeaveTab, subscribe: subscribeLeaveTab }),
     record: makeTab({ render: renderRecordTab, subscribe: subscribeRecordTab }),
   };
@@ -784,7 +1235,10 @@
     tabs,
     teardown,
     bindCommunitySwitch,
-    utils: { esc, pad2, dateKey: dateKeyOf, todayKey, monthKeyOf, monthRange, daysInMonth, weekdayZh, fmtDateKey, fmtTime, fmtDateTime, msOf },
+    scheduleCardHtml,
+    bindScheduleCard,
+    openApplyModal,
+    utils: { esc, pad2, dateKey: dateKeyOf, todayKey, monthKeyOf, monthRange, daysInMonth, weekdayZh, fmtDateKey, fmtTime, fmtDateTime, msOf, mergedDuty },
     DEFAULT_DUTY,
     ROLE_META,
   };
@@ -875,7 +1329,7 @@
     st.textContent = `
 .wc-brand .sub.clickable{cursor:pointer;}
 .wc-brand .sub.clickable::after{content:"▾";margin-left:4px;font-size:11px;line-height:1;opacity:.85;}
-.nw-switch-loading{padding:20px 4px;text-align:center;font-size:13px;font-weight:800;color:#6b7280;}`;
+.nw-switch-loading{padding:20px 4px;text-align:center;font-size:15px;font-weight:800;color:#6b7280;}`;
     document.head.appendChild(st);
   }
 

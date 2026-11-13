@@ -46,7 +46,13 @@
     todayCheckin: null,
     todayShift: "",
     dutySettings: null,
-    records: [],
+    recordDay: null,
+    recordDate: "",
+    recSub: "checkin",
+    schedule: {},
+    schedMonth: "",
+    schedView: "list",
+    schedCheckins: {},
     reports: [],
     locations: [],
     patrols: [],
@@ -58,7 +64,9 @@
     checkinUnsub: null,
     shiftUnsub: null,
     settingsUnsub: null,
-    recordsUnsub: null,
+    recordUnsub: null,
+    scheduleUnsub: null,
+    schedCkUnsub: null,
     patrolsUnsub: null,
     scanner: null,
     ready: false,
@@ -74,6 +82,10 @@
   function todayKey(d) {
     const t = d instanceof Date ? d : new Date();
     return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}`;
+  }
+  function monthKeyOf(d) {
+    const t = d instanceof Date ? d : new Date();
+    return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}`;
   }
   function weekdayZh(key) {
     const parts = String(key || "").split("-").map((x) => Number(x));
@@ -430,21 +442,10 @@
       if (state.tab === "punch") renderPunch();
     }, (err) => { console.warn("duty settings listen failed", err); state.dutySettings = null; });
 
-    const mk = todayKey().slice(0, 7);
-    state.recordsUnsub = checkinsRef().where("workDate", ">=", `${mk}-01`).where("workDate", "<=", `${mk}-31`).onSnapshot((snap) => {
-      const list = [];
-      const uid = String(state.user && state.user.uid || "");
-      snap.forEach((d) => {
-        const x = d.data() || {};
-        if (String(x.uid || "") === uid) list.push(x);
-      });
-      state.records = list;
-      if (state.tab === "record") renderRecord();
-    }, (err) => {
-      console.warn("month checkins listen failed", err);
-      state.records = [];
-      if (state.tab === "record") renderRecord();
-    });
+    watchRecordDay(state.recordDate || todayKey());
+
+    state.schedMonth = monthKeyOf(new Date());
+    watchScheduleMonth();
 
     state.reportsUnsub = reportsRef().orderBy("createdAt", "desc").limit(100).onSnapshot((snap) => {
       const list = [];
@@ -486,9 +487,73 @@
       if (state.tab === "patrol") renderPatrol();
     });
   }
+  /* 打卡紀錄：監聽指定日期（預設當日）的打卡單據 */
+  function watchRecordDay(dateKey) {
+    if (state.recordUnsub) { try { state.recordUnsub(); } catch {} state.recordUnsub = null; }
+    state.recordDate = /^\d{4}-\d{2}-\d{2}$/.test(String(dateKey || "")) ? String(dateKey) : todayKey();
+    state.recordDay = null;
+    if (state.tab === "record") renderRecord();
+    const uid = String(state.user && state.user.uid || "").trim();
+    if (!uid) return;
+    state.recordUnsub = checkinsRef().doc(`${uid}_${state.recordDate}`).onSnapshot((doc) => {
+      state.recordDay = doc && doc.exists ? (doc.data() || {}) : null;
+      if (state.tab === "record") renderRecord();
+    }, (err) => {
+      console.warn("record day listen failed", err);
+      state.recordDay = null;
+      if (state.tab === "record") renderRecord();
+    });
+  }
+  /* 班表：監聽指定月份（預設當月）中本人的班別 */
+  function watchScheduleMonth() {
+    if (state.scheduleUnsub) { try { state.scheduleUnsub(); } catch {} state.scheduleUnsub = null; }
+    state.schedule = {};
+    if (!/^\d{4}-\d{2}$/.test(String(state.schedMonth || ""))) state.schedMonth = monthKeyOf(new Date());
+    if (!state.communityId) { watchScheduleCheckins(); if (state.tab === "record") renderRecord(); return; }
+    const uid = String(state.user && state.user.uid || "");
+    const mk = state.schedMonth;
+    state.scheduleUnsub = schedulesRef().where("month", "==", mk).onSnapshot((snap) => {
+      const map = {};
+      snap.forEach((d) => {
+        const x = d.data() || {};
+        const shifts = x.shifts || {};
+        const s = shifts[uid];
+        if (s) map[String(x.dateKey || d.id)] = String(s);
+      });
+      state.schedule = map;
+      if (state.tab === "record") renderRecord();
+    }, (err) => {
+      console.warn("schedule month listen failed", err);
+      state.schedule = {};
+      if (state.tab === "record") renderRecord();
+    });
+    watchScheduleCheckins();
+  }
+  /* 班表：監聽指定月份本人的打卡紀錄，用於顯示打卡狀況 */
+  function watchScheduleCheckins() {
+    if (state.schedCkUnsub) { try { state.schedCkUnsub(); } catch {} state.schedCkUnsub = null; }
+    state.schedCheckins = {};
+    const uid = String(state.user && state.user.uid || "");
+    if (!state.communityId || !uid) return;
+    const mk = state.schedMonth;
+    state.schedCkUnsub = checkinsRef().where("workDate", ">=", `${mk}-01`).where("workDate", "<=", `${mk}-31`).onSnapshot((snap) => {
+      const map = {};
+      snap.forEach((d) => {
+        const x = d.data() || {};
+        if (String(x.uid || "") !== uid) return;
+        map[String(x.workDate || "")] = { inAt: x.inAt || null, outAt: x.outAt || null };
+      });
+      state.schedCheckins = map;
+      if (state.tab === "record") renderRecord();
+    }, (err) => {
+      console.warn("schedule checkins listen failed", err);
+      state.schedCheckins = {};
+      if (state.tab === "record") renderRecord();
+    });
+  }
   function stopSubscriptions() {
-    [state.reportsUnsub, state.locationsUnsub, state.checkinUnsub, state.shiftUnsub, state.settingsUnsub, state.recordsUnsub, state.patrolsUnsub].forEach((u) => { try { u && u(); } catch {} });
-    state.reportsUnsub = state.locationsUnsub = state.checkinUnsub = state.shiftUnsub = state.settingsUnsub = state.recordsUnsub = state.patrolsUnsub = null;
+    [state.reportsUnsub, state.locationsUnsub, state.checkinUnsub, state.shiftUnsub, state.settingsUnsub, state.recordUnsub, state.scheduleUnsub, state.schedCkUnsub, state.patrolsUnsub].forEach((u) => { try { u && u(); } catch {} });
+    state.reportsUnsub = state.locationsUnsub = state.checkinUnsub = state.shiftUnsub = state.settingsUnsub = state.recordUnsub = state.scheduleUnsub = state.schedCkUnsub = state.patrolsUnsub = null;
   }
 
   /* ---------- views ---------- */
@@ -746,17 +811,17 @@
           <div style="font-size:16px;font-weight:900;">${y} 年 ${m} 月</div>
           ${nextBtn}
         </div>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:0 12px 6px;color:var(--wc-muted);font-size:11px;font-weight:900;text-align:center;">
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:0 12px 6px;color:var(--wc-muted);font-size:13px;font-weight:900;text-align:center;">
           ${["日", "一", "二", "三", "四", "五", "六"].map((w) => `<div>${w}</div>`).join("")}
         </div>
         <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:0 12px 12px;">
           ${cells}
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px 14px;border-top:1px solid var(--wc-line);">
-          <span style="font-size:12px;color:var(--wc-muted);font-weight:700;">● 僅有紀錄的日期可點選</span>
+          <span style="font-size:14px;color:var(--wc-muted);font-weight:700;">● 僅有紀錄的日期可點選</span>
           <div style="display:flex;gap:8px;">
-            <button type="button" data-today="1" style="border:1px solid var(--wc-line);background:#fff;border-radius:10px;padding:8px 12px;font-size:13px;font-weight:900;cursor:pointer;">今天</button>
-            <button type="button" data-close="1" style="border:0;background:#d32f2f;color:#fff;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:900;cursor:pointer;">關閉</button>
+            <button type="button" data-today="1" style="border:1px solid var(--wc-line);background:#fff;border-radius:10px;padding:8px 12px;font-size:15px;font-weight:900;cursor:pointer;">今天</button>
+            <button type="button" data-close="1" style="border:0;background:#d32f2f;color:#fff;border-radius:10px;padding:8px 14px;font-size:15px;font-weight:900;cursor:pointer;">關閉</button>
           </div>
         </div>
       `;
@@ -796,7 +861,7 @@
     return `
       <div class="wc-item" style="${hl ? "border-color:var(--wc-red);box-shadow:0 0 0 2px rgba(211,47,47,.18);" : ""}">
         <div class="row1">
-          <div class="loc">${esc(loc.name || "未命名")}${loc.zone ? `<span style="font-size:12px;color:var(--wc-muted);font-weight:800;margin-left:6px;">${esc(loc.zone)}</span>` : ""}</div>
+          <div class="loc">${esc(loc.name || "未命名")}${loc.zone ? `<span style="font-size:14px;color:var(--wc-muted);font-weight:800;margin-left:6px;">${esc(loc.zone)}</span>` : ""}</div>
           <span class="wc-tag ${done ? "done" : ""}">${done ? "已完成" : "待巡邏"}</span>
         </div>
         ${loc.note ? `<div class="note">${esc(loc.note)}</div>` : ""}
@@ -826,18 +891,18 @@
         <div style="height:10px;border-radius:999px;background:#eef0f3;overflow:hidden;">
           <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--wc-red),var(--wc-red-dark));transition:width .25s ease;"></div>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;color:var(--wc-muted);margin-top:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:800;color:var(--wc-muted);margin-top:8px;">
           <span>巡邏完成率</span><span>${pct}%</span>
         </div>
         <div style="display:flex;gap:8px;margin-top:12px;">
           <button class="wc-btn primary" type="button" id="btnScanPatrol" style="flex:1 1 0;min-width:0;">掃描 QR code</button>
           <button class="wc-btn" type="button" id="btnNfcPatrol" style="flex:1 1 0;min-width:0;">NFC 感應</button>
         </div>
-        <div style="font-size:12px;color:var(--wc-muted);font-weight:700;margin-top:8px;text-align:center;">QR code 與 NFC 標籤內容相同，擇一使用即可</div>
+        <div style="font-size:14px;color:var(--wc-muted);font-weight:700;margin-top:8px;text-align:center;">QR code 與 NFC 標籤內容相同，擇一使用即可</div>
         ${pendCount ? `
-        <div style="margin-top:10px;padding:10px 12px;border-radius:12px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:12px;font-weight:800;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <div style="margin-top:10px;padding:10px 12px;border-radius:12px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:14px;font-weight:800;display:flex;justify-content:space-between;align-items:center;gap:8px;">
           <span>待上傳 ${pendCount} 筆（連線恢復後自動同步）</span>
-          <button type="button" id="btnFlushPatrol" style="border:0;background:#ea580c;color:#fff;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:900;cursor:pointer;">立即同步</button>
+          <button type="button" id="btnFlushPatrol" style="border:0;background:#ea580c;color:#fff;border-radius:10px;padding:7px 12px;font-size:14px;font-weight:900;cursor:pointer;">立即同步</button>
         </div>` : ""}
       </section>
 
@@ -884,16 +949,171 @@
       </div>`;
   }
 
+  function shiftDateKey(key, delta) {
+    const p = String(key || "").split("-").map((x) => Number(x));
+    const d = new Date(p[0], (p[1] || 1) - 1, p[2] || 1);
+    d.setDate(d.getDate() + Number(delta || 0));
+    return todayKey(d);
+  }
+
   function renderRecord() {
-    const list = (state.records || []).slice().sort((a, b) => String((b && b.workDate) || "").localeCompare(String((a && a.workDate) || "")));
+    state.recSub = state.recSub === "schedule" ? "schedule" : "checkin";
     el.body.innerHTML = `
+      <div class="wc-subtabs" role="tablist" aria-label="紀錄子分頁">
+        <button class="wc-subtab" type="button" role="tab" data-wc-recsub="checkin"${state.recSub === "checkin" ? ' aria-current="page"' : ""}>打卡</button>
+        <button class="wc-subtab" type="button" role="tab" data-wc-recsub="schedule"${state.recSub === "schedule" ? ' aria-current="page"' : ""}>班表</button>
+      </div>
+      <div id="wcRecPane"></div>
+    `;
+    el.body.querySelectorAll("[data-wc-recsub]").forEach((b) => {
+      b.onclick = () => {
+        const k = b.getAttribute("data-wc-recsub");
+        if (k === state.recSub) return;
+        state.recSub = k;
+        renderRecord();
+      };
+    });
+    const pane = el.body.querySelector("#wcRecPane");
+    if (!pane) return;
+    if (state.recSub === "schedule") {
+      const mod = window.NwWorkerDuty;
+      const merged = mod && mod.utils && typeof mod.utils.mergedDuty === "function" ? mod.utils.mergedDuty(state.dutySettings) : state.dutySettings;
+      state.schedView = state.schedView === "cal" ? "cal" : "list";
+      if (!/^\d{4}-\d{2}$/.test(String(state.schedMonth || ""))) state.schedMonth = monthKeyOf(new Date());
+      pane.innerHTML = mod && typeof mod.scheduleCardHtml === "function"
+        ? mod.scheduleCardHtml({ schedule: state.schedule, duty: merged, schedMonth: state.schedMonth, schedView: state.schedView, schedCheckins: state.schedCheckins })
+        : `<section class="wc-card"><div class="wc-empty">勤務模組載入失敗，請重新整理。</div></section>`;
+      if (mod && typeof mod.bindScheduleCard === "function") {
+        mod.bindScheduleCard(pane, { schedule: state.schedule, duty: merged, schedMonth: state.schedMonth, schedView: state.schedView }, dutyCtx(), {
+          onMonth: (mk) => { state.schedMonth = mk; watchScheduleMonth(); renderRecord(); },
+          onView: (v) => { state.schedView = v; renderRecord(); },
+        });
+      }
+      return;
+    }
+    renderCheckinPane(pane);
+  }
+
+  function renderCheckinPane(root) {
+    const key = state.recordDate || todayKey();
+    const today = todayKey();
+    const day = state.recordDay || null;
+    const has = !!(day && (day.inAt || day.outAt));
+    root.innerHTML = `
       <section class="wc-card">
         <div class="hd">
-          <div><h2>打卡紀錄</h2><p>${esc(todayKey().slice(0, 7))}　本月出勤明細</p></div>
+          <div><h2>打卡紀錄</h2></div>
         </div>
-        ${list.length ? `<div class="wc-list">${list.map(recordRow).join("")}</div>` : `<div class="wc-empty">本月尚無打卡紀錄。</div>`}
+        <div class="wc-field">
+          <label>日期</label>
+          <div class="wc-datebar">
+            <button type="button" class="wc-date-arrow" id="wcRecPrev" aria-label="前一日">‹</button>
+            <button type="button" class="wc-date-view" id="wcRecDateBtn" aria-label="選擇日期">${esc(key)}</button>
+            <button type="button" class="wc-date-arrow" id="wcRecNext" aria-label="後一日"${key >= today ? " hidden" : ""}>›</button>
+          </div>
+        </div>
+        ${has ? `<div class="wc-list">${recordRow(day)}</div>` : `<div class="wc-empty">此日期尚無打卡紀錄。</div>`}
       </section>
     `;
+    const prev = root.querySelector("#wcRecPrev");
+    if (prev) prev.onclick = () => watchRecordDay(shiftDateKey(key, -1));
+    const next = root.querySelector("#wcRecNext");
+    if (next) next.onclick = () => { const k = shiftDateKey(key, 1); watchRecordDay(k > today ? today : k); };
+    const view = root.querySelector("#wcRecDateBtn");
+    if (view) view.onclick = () => openRecordDatePicker();
+  }
+
+  /* 打卡紀錄日期選擇：只列出有打卡紀錄的日期，且不顯示今日之後 */
+  function openRecordDatePicker() {
+    const today = todayKey();
+    const selected = state.recordDate || today;
+    const marks = state.calMarks || (state.calMarks = {});
+    let month = selected.slice(0, 7);
+
+    const wrap = document.createElement("div");
+    wrap.className = "wc-datewrap";
+    wrap.innerHTML = `<div class="wc-datecard"><div class="wc-dateloading">載入中…</div></div>`;
+    document.body.appendChild(wrap);
+    const close = () => { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); };
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    const card = wrap.querySelector(".wc-datecard");
+
+    const marksOf = (mk) => (marks[mk] instanceof Set
+      ? Promise.resolve(marks[mk])
+      : loadRecordMarks(mk).then((set) => { marks[mk] = set; return set; }));
+
+    const paint = (set) => {
+      const p = month.split("-").map((x) => Number(x));
+      const y = p[0], m = p[1];
+      const startDow = new Date(y, m - 1, 1).getDay();
+      const daysIn = new Date(y, m, 0).getDate();
+      let cells = "";
+      for (let i = 0; i < startDow; i++) cells += "<div></div>";
+      for (let d = 1; d <= daysIn; d++) {
+        const dayKey = `${y}-${pad2(m)}-${pad2(d)}`;
+        if (dayKey > today) { cells += "<div></div>"; continue; }
+        const hasRec = set.has(dayKey);
+        const isSel = dayKey === selected;
+        const isTod = dayKey === today;
+        const bg = isSel ? "#d32f2f" : (hasRec ? "#fee2e2" : "#f3f4f6");
+        const fg = isSel ? "#fff" : (hasRec ? "#b91c1c" : "#cbd5e1");
+        const ring = isTod && !isSel ? "box-shadow:inset 0 0 0 2px rgba(211,47,47,.5);" : "";
+        const dot = hasRec && !isSel ? `<span style="display:block;width:5px;height:5px;border-radius:50%;background:#d32f2f;margin:2px auto 0;"></span>` : "";
+        cells += `<button type="button" data-day="${dayKey}"${hasRec ? "" : " disabled"} style="height:40px;border:0;background:${bg};color:${fg};border-radius:10px;font-size:15px;font-weight:${hasRec || isSel ? 900 : 700};cursor:${hasRec ? "pointer" : "not-allowed"};${ring}">${d}${dot}</button>`;
+      }
+      const canNext = month < today.slice(0, 7);
+      card.innerHTML = `
+        <div class="wc-datehead">
+          <button type="button" class="wc-date-arrow" data-nv="-1" aria-label="上個月">‹</button>
+          <div class="wc-dateym">${y} 年 ${m} 月</div>
+          <button type="button" class="wc-date-arrow" data-nv="1" aria-label="下個月"${canNext ? "" : " disabled"}>›</button>
+        </div>
+        <div class="wc-dateweek">${["日", "一", "二", "三", "四", "五", "六"].map((w) => `<div>${w}</div>`).join("")}</div>
+        <div class="wc-dategrid">${cells}</div>
+        <div class="wc-datefoot">
+          <span>● 僅有打卡紀錄的日期可點選</span>
+          <div>
+            <button type="button" class="wc-date-today" data-today="1">今天</button>
+            <button type="button" class="wc-date-close" data-close="1">關閉</button>
+          </div>
+        </div>
+      `;
+      card.querySelectorAll("[data-nv]").forEach((b) => {
+        b.onclick = () => {
+          if (b.disabled) return;
+          const p2 = month.split("-").map((x) => Number(x));
+          const nd = new Date(p2[0], p2[1] - 1 + (Number(b.getAttribute("data-nv")) || 0), 1);
+          const nm = `${nd.getFullYear()}-${pad2(nd.getMonth() + 1)}`;
+          if (nm > today.slice(0, 7)) return;
+          month = nm;
+          marksOf(nm).then((s) => { if (wrap.parentNode) paint(s); });
+        };
+      });
+      card.querySelectorAll("[data-day]").forEach((b) => {
+        b.onclick = () => { if (b.disabled) return; close(); watchRecordDay(b.getAttribute("data-day")); };
+      });
+      const tb = card.querySelector("[data-today]");
+      if (tb) tb.onclick = () => { close(); watchRecordDay(today); };
+      const cb = card.querySelector("[data-close]");
+      if (cb) cb.onclick = close;
+    };
+
+    marksOf(month).then((set) => { if (wrap.parentNode) paint(set); });
+  }
+
+  function loadRecordMarks(mk) {
+    const uid = String(state.user && state.user.uid || "").trim();
+    if (!uid) return Promise.resolve(new Set());
+    return checkinsRef().where("workDate", ">=", `${mk}-01`).where("workDate", "<=", `${mk}-31`).get()
+      .then((snap) => {
+        const set = new Set();
+        snap.forEach((d) => {
+          const x = d.data() || {};
+          if (String(x.uid || "") === uid) set.add(String(x.workDate || ""));
+        });
+        return set;
+      })
+      .catch((err) => { console.warn("record marks failed", err); return new Set(); });
   }
 
   function renderTab() {
@@ -1183,7 +1403,7 @@
     const single = pointModeOf(loc) === "single";
     const inputType = single ? "radio" : "checkbox";
     const pointsHtml = points.map((p) => `
-      <label style="display:inline-flex;align-items:center;gap:6px;margin:0 8px 8px 0;padding:7px 12px;border:1px solid #e5e7eb;border-radius:999px;background:#fff;font-size:13px;font-weight:800;color:#374151;cursor:pointer;">
+      <label style="display:inline-flex;align-items:center;gap:6px;margin:0 8px 8px 0;padding:7px 12px;border:1px solid #e5e7eb;border-radius:999px;background:#fff;font-size:15px;font-weight:800;color:#374151;cursor:pointer;">
         <input type="${inputType}" name="wcPcPoint" value="${esc(p)}" style="width:16px;height:16px;accent-color:var(--wc-red,#e11d48);" />
         <span>${esc(p)}</span>
       </label>`).join("");
@@ -1196,21 +1416,21 @@
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
           <div>
             <div style="font-size:17px;font-weight:900;color:#111827;">完成清潔</div>
-            <div style="font-size:12px;font-weight:700;color:#6b7280;margin-top:2px;">${esc(loc.name || "巡邏點")}${loc.zone ? `　·　${esc(loc.zone)}` : ""}</div>
+            <div style="font-size:14px;font-weight:700;color:#6b7280;margin-top:2px;">${esc(loc.name || "巡邏點")}${loc.zone ? `　·　${esc(loc.zone)}` : ""}</div>
           </div>
           <button type="button" id="wcPcClose" style="border:0;background:#f3f4f6;color:#374151;border-radius:999px;width:32px;height:32px;font-size:16px;font-weight:900;cursor:pointer;">×</button>
         </div>
 
-        <div style="margin-top:16px;font-size:13px;font-weight:900;color:#374151;">清潔重點 <span style="font-weight:700;color:#9ca3af;font-size:12px;">（${single ? "單選" : "可複選"}）</span></div>
+        <div style="margin-top:16px;font-size:15px;font-weight:900;color:#374151;">清潔重點 <span style="font-weight:700;color:#9ca3af;font-size:14px;">（${single ? "單選" : "可複選"}）</span></div>
         <div id="wcPcPoints" style="margin-top:10px;display:flex;flex-wrap:wrap;">${pointsHtml}</div>
 
-        <div style="margin-top:16px;font-size:13px;font-weight:900;color:#374151;">清潔照片 <span style="font-weight:700;color:#9ca3af;font-size:12px;">（選填，最多一張）</span></div>
+        <div style="margin-top:16px;font-size:15px;font-weight:900;color:#374151;">清潔照片 <span style="font-weight:700;color:#9ca3af;font-size:14px;">（選填，最多一張）</span></div>
         <div style="margin-top:10px;">
           <input type="file" id="wcPcPhotoInput" accept="image/*" capture="environment" style="display:none;" />
-          <button type="button" id="wcPcPhotoBtn" style="width:100%;border:1.5px dashed #d1d5db;background:#f9fafb;border-radius:14px;padding:12px;font-size:13px;font-weight:900;color:#374151;cursor:pointer;">＋ 拍照 / 選擇照片</button>
+          <button type="button" id="wcPcPhotoBtn" style="width:100%;border:1.5px dashed #d1d5db;background:#f9fafb;border-radius:14px;padding:12px;font-size:15px;font-weight:900;color:#374151;cursor:pointer;">＋ 拍照 / 選擇照片</button>
           <div id="wcPcPhotoBox" style="display:none;margin-top:10px;position:relative;">
             <img id="wcPcPhotoImg" alt="清潔照片" style="width:100%;max-height:240px;object-fit:cover;border-radius:14px;display:block;" />
-            <button type="button" id="wcPcPhotoDel" style="position:absolute;top:8px;right:8px;border:0;background:rgba(17,24,39,.72);color:#fff;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900;cursor:pointer;">移除</button>
+            <button type="button" id="wcPcPhotoDel" style="position:absolute;top:8px;right:8px;border:0;background:rgba(17,24,39,.72);color:#fff;border-radius:999px;padding:6px 10px;font-size:14px;font-weight:900;cursor:pointer;">移除</button>
           </div>
         </div>
 
@@ -1332,8 +1552,8 @@
     wrap.innerHTML = `
       <div style="font-size:54px;line-height:1;">&#128246;</div>
       <div style="font-size:16px;font-weight:900;">將手機靠近巡邏點 NFC 標籤</div>
-      <div style="font-size:12px;color:#d1d5db;font-weight:700;">NFC 標籤內容須與 QR code 相同</div>
-      <button type="button" id="wcNfcClose" style="margin-top:12px;border:1px solid rgba(255,255,255,.4);background:transparent;color:#fff;border-radius:999px;padding:9px 22px;font-size:13px;font-weight:900;cursor:pointer;">取消</button>
+      <div style="font-size:14px;color:#d1d5db;font-weight:700;">NFC 標籤內容須與 QR code 相同</div>
+      <button type="button" id="wcNfcClose" style="margin-top:12px;border:1px solid rgba(255,255,255,.4);background:transparent;color:#fff;border-radius:999px;padding:9px 22px;font-size:15px;font-weight:900;cursor:pointer;">取消</button>
     `;
     document.body.appendChild(wrap);
     const c = document.getElementById("wcNfcClose");
@@ -1382,10 +1602,10 @@
     wrap.innerHTML = `
       <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px;background:#111827;color:#fff;">
         <div style="font-size:15px;font-weight:900;">掃描巡邏點 QR code</div>
-        <button type="button" id="wcScanClose" style="border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:999px;padding:7px 16px;font-size:13px;font-weight:900;cursor:pointer;">關閉</button>
+        <button type="button" id="wcScanClose" style="border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:999px;padding:7px 16px;font-size:15px;font-weight:900;cursor:pointer;">關閉</button>
       </div>
       <div id="wcReader" style="flex:1 1 auto;position:relative;background:#000;overflow:hidden;"></div>
-      <div id="wcScanTip" style="flex:0 0 auto;padding:12px 14px calc(14px + env(safe-area-inset-bottom,0px));background:#111827;color:#d1d5db;font-size:12px;font-weight:700;text-align:center;">將巡邏點 QR code 置於畫面中央</div>
+      <div id="wcScanTip" style="flex:0 0 auto;padding:12px 14px calc(14px + env(safe-area-inset-bottom,0px));background:#111827;color:#d1d5db;font-size:14px;font-weight:700;text-align:center;">將巡邏點 QR code 置於畫面中央</div>
     `;
     document.body.appendChild(wrap);
     const close = () => { stopPatrolScan(); };
@@ -1496,7 +1716,7 @@
 
   /* ---------- boot ---------- */
   function switchTab(t) {
-    if (t !== "punch" && t !== "clean" && t !== "patrol" && t !== "schedule" && t !== "leave" && t !== "record") return;
+    if (t !== "punch" && t !== "clean" && t !== "patrol" && t !== "leave" && t !== "record") return;
     if (state.tab !== t) stopDutyTabs();
     state.tab = t;
     renderTab();
@@ -1537,7 +1757,7 @@
   function resumeSubscriptions() {
     if (!state.ready || !state.communityId) return;
     startSubscriptions();
-    if (state.tab === "schedule" || state.tab === "leave") renderTab();
+    if (state.tab === "leave") renderTab();
     flushPatrolQueue().catch(() => {});
   }
   document.addEventListener("visibilitychange", () => {
