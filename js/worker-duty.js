@@ -497,15 +497,6 @@
         <button class="wc-punch ${onDuty ? "out" : ""}" type="button" data-wd-punch="${onDuty ? "out" : "in"}">${btnIcon}<span>${btnLabel}</span></button>
       </section>
 
-      <section class="wc-card wc-notice">
-        <div class="wc-notice-hd">
-          <div class="t">${ICO.bell}通知</div>
-        </div>
-        <div class="wc-notice-bd">
-          <div class="wc-notice-empty">尚無通知</div>
-        </div>
-      </section>
-
       <section class="wc-card wc-stat">
         <div class="wc-stat-hd">
           <div class="t">${ICO.chart}本月出勤統計</div>
@@ -516,6 +507,15 @@
             <div class="r"><span class="ico">${ICO.calDay}</span><span class="k">上班天數</span><span class="v red">${stats.days} 天</span></div>
             <div class="r"><span class="ico">${ICO.clockSmall}</span><span class="k">總時數</span><span class="v">${stats.hours} 小時</span></div>
           </div>
+        </div>
+      </section>
+
+      <section class="wc-card wc-notice">
+        <div class="wc-notice-hd">
+          <div class="t">${ICO.bell}通知</div>
+        </div>
+        <div class="wc-notice-bd">
+          <div class="wc-notice-empty">尚無通知</div>
         </div>
       </section>
     `;

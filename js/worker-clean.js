@@ -638,6 +638,18 @@
         <button class="wc-punch ${onDuty ? "out" : ""}" type="button" id="btnPunch">${btnIcon}<span>${btnLabel}</span></button>
       </section>
 
+      <section class="wc-card wc-stat">
+        <div class="wc-stat-hd">
+          <div class="t">${ICO.chart}本月出勤統計</div>
+          <div class="m">${ICO.cal}<span>${esc(monthKeyOf(new Date()))}</span>▾</div>
+        </div>
+        <div class="wc-stat-bd">
+          <div class="wc-info">
+            <div class="r"><span class="ico">${ICO.clockSmall}</span><span class="k">班別時間</span><span class="v">${esc(winTxt)}</span></div>
+          </div>
+        </div>
+      </section>
+
       <section class="wc-card wc-notice">
         <div class="wc-notice-hd">
           <div class="t">${ICO.bell}通知</div>
@@ -651,18 +663,6 @@
             </div>
             ${renderReportItems(pendingReports, true)}
           ` : `<div class="wc-notice-empty">尚無通知</div>`}
-        </div>
-      </section>
-
-      <section class="wc-card wc-stat">
-        <div class="wc-stat-hd">
-          <div class="t">${ICO.chart}本月出勤統計</div>
-          <div class="m">${ICO.cal}<span>${esc(monthKeyOf(new Date()))}</span>▾</div>
-        </div>
-        <div class="wc-stat-bd">
-          <div class="wc-info">
-            <div class="r"><span class="ico">${ICO.clockSmall}</span><span class="k">班別時間</span><span class="v">${esc(winTxt)}</span></div>
-          </div>
         </div>
       </section>
     `;
