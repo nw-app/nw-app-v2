@@ -577,6 +577,7 @@
     calDay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/><text x="12" y="17" font-size="9" font-weight="900" text-anchor="middle" fill="currentColor" stroke="none">日</text></svg>',
     clockSmall: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
     checkSq: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/></svg>',
+    bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
   };
 
   function renderPunch() {
@@ -606,6 +607,8 @@
       : null;
     const flags = ev ? ev.flags : [];
     const winTxt = ev && ev.win.start && ev.win.end ? `${ev.win.start} ~ ${ev.win.end}` : "—";
+    const pendingReports = state.reports.filter((r) => String(r.status || "pending") !== "done");
+    const pendingN = pendingReports.length;
 
     el.body.innerHTML = `
       <section class="wc-hero">
@@ -635,6 +638,22 @@
         <button class="wc-punch ${onDuty ? "out" : ""}" type="button" id="btnPunch">${btnIcon}<span>${btnLabel}</span></button>
       </section>
 
+      <section class="wc-card wc-notice">
+        <div class="wc-notice-hd">
+          <div class="t">${ICO.bell}通知</div>
+          ${pendingN ? `<span class="wc-tag" style="background:rgba(211,47,47,.15);color:var(--wc-red-dark);border:1px solid rgba(211,47,47,.25);font-size:12px;font-weight:900;padding:3px 10px;border-radius:999px;">${pendingN} 件</span>` : ""}
+        </div>
+        <div class="wc-notice-bd">
+          ${pendingN ? `
+            <div style="margin-bottom:6px;">
+              <div style="font-size:13px;font-weight:900;color:var(--wc-ink);">待處理通報</div>
+              <div style="font-size:11px;color:var(--wc-muted);font-weight:700;margin-top:1px;">住戶回報的清潔需求</div>
+            </div>
+            ${renderReportItems(pendingReports, true)}
+          ` : `<div class="wc-notice-empty">尚無通知</div>`}
+        </div>
+      </section>
+
       <section class="wc-card wc-stat">
         <div class="wc-stat-hd">
           <div class="t">${ICO.chart}本月出勤統計</div>
@@ -642,21 +661,9 @@
         </div>
         <div class="wc-stat-bd">
           <div class="wc-info">
-            <div class="r"><span class="ico">${ICO.calDay}</span><span class="k">今日班別</span><span class="v red">${esc(shift)}</span></div>
             <div class="r"><span class="ico">${ICO.clockSmall}</span><span class="k">班別時間</span><span class="v">${esc(winTxt)}</span></div>
           </div>
         </div>
-      </section>
-
-      <section class="wc-card">
-        <div class="hd">
-          <div>
-            <h2>待處理通報</h2>
-            <p>住戶回報的清潔需求</p>
-          </div>
-          <span class="wc-tag">${pendingCount()} 件</span>
-        </div>
-        ${renderReportItems(state.reports.filter((r) => String(r.status || "pending") !== "done"), true)}
       </section>
     `;
 
@@ -703,6 +710,31 @@
     return parts.join("　");
   }
 
+  // 指派人員顯示：查詢 Firebase 取得角色名稱，顯示「角色 + 姓名」
+  const assigneeRoleCache = Object.create(null);
+  function assigneeRoleOf(r) {
+    const uid = String((r && r.assigneeUid) || "").trim();
+    if (!uid) return "";
+    if (Object.prototype.hasOwnProperty.call(assigneeRoleCache, uid)) return assigneeRoleCache[uid];
+    assigneeRoleCache[uid] = "";
+    db.collection("users").doc(uid).get().then((snap) => {
+      const d = snap && snap.exists ? (snap.data() || {}) : {};
+      const role = String(d.category || d.role || "").trim();
+      assigneeRoleCache[uid] = role;
+      if (role) {
+        if (state.tab === "clean") renderClean();
+        else if (state.tab === "punch") renderPunch();
+      }
+    }).catch(() => {});
+    return "";
+  }
+  function assigneeDisplay(r) {
+    const name = String((r && r.assigneeName) || "").trim();
+    if (!name) return "未指派";
+    const role = String((r && r.assigneeRole) || "").trim() || assigneeRoleOf(r);
+    return role ? `${role} ${name}` : name;
+  }
+
   function renderReportItems(list, compact) {
     if (!list || !list.length) return `<div class="wc-empty">目前沒有通報</div>`;
     return `<div class="wc-list">${list.map((r) => {
@@ -715,7 +747,7 @@
           </div>
           ${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}
           <div class="who">通報人員：${esc(reporterDisplay(r))}</div>
-          <div class="who">指派人員：${r.assigneeName ? esc(r.assigneeName) : "未指派"}</div>
+          <div class="who">指派人員：${esc(assigneeDisplay(r))}</div>
           <div class="time">${esc(fmtDateTime(r.createdAt))}${r.handledByName ? `　· 由 ${esc(r.handledByName)} 完成` : ""}</div>
           ${compact ? "" : (String(r.status || "pending") === "done" ? "" : `<button class="wc-btn-sm" type="button" data-done="${esc(r.id)}">標記完成</button>`)}
         </div>`;

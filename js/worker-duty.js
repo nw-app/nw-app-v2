@@ -430,6 +430,7 @@
     win: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
     punchIn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5M15 12H3"/></svg>',
     punchOut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M14 17l5-5-5-5M19 12H9"/></svg>',
+    bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
   };
 
   function renderPunchTab(root, ctx, st) {
@@ -496,6 +497,15 @@
         <button class="wc-punch ${onDuty ? "out" : ""}" type="button" data-wd-punch="${onDuty ? "out" : "in"}">${btnIcon}<span>${btnLabel}</span></button>
       </section>
 
+      <section class="wc-card wc-notice">
+        <div class="wc-notice-hd">
+          <div class="t">${ICO.bell}通知</div>
+        </div>
+        <div class="wc-notice-bd">
+          <div class="wc-notice-empty">尚無通知</div>
+        </div>
+      </section>
+
       <section class="wc-card wc-stat">
         <div class="wc-stat-hd">
           <div class="t">${ICO.chart}本月出勤統計</div>
@@ -505,7 +515,6 @@
           <div class="wc-info">
             <div class="r"><span class="ico">${ICO.calDay}</span><span class="k">上班天數</span><span class="v red">${stats.days} 天</span></div>
             <div class="r"><span class="ico">${ICO.clockSmall}</span><span class="k">總時數</span><span class="v">${stats.hours} 小時</span></div>
-            <div class="r"><span class="ico">${ICO.checkSq}</span><span class="k">今日班別</span><span class="v">${esc(shift)}</span></div>
           </div>
         </div>
       </section>
@@ -2117,10 +2126,6 @@
       b.onclick = () => {
         const t = b.getAttribute("data-wd-tab");
         if (!currentCtx) return;
-        if (t === "request") {
-          openApplyModal(currentCtx, { dateKey: todayKey() });
-          return;
-        }
         showTab(t);
       };
     });
