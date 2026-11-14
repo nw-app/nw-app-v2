@@ -226,6 +226,13 @@
     leaveTypes: ["特休", "事假", "病假", "公假", "婚假", "喪假", "產假", "其他"],
     holidayTypes: ["例假", "休假"],
     note: "",
+    /* 出勤規則 */
+    breakMinutes: 60,
+    graceMinutes: 10,
+    otAfterMinutes: 30,
+    punchWindow: { inBefore: 60, inAfter: 120, outBefore: 60, outAfter: 180 },
+    guardPunchWindow: { inBefore: 30, inAfter: 60, outBefore: 60, outAfter: 120 },
+    needHandover: ["保全"],
   };
   const TABS = [
     { key: "overview", label: "總覽" },
@@ -289,6 +296,19 @@
     const union = unionShiftNames(roleShifts);
     const leaveTypes = Array.isArray(v && v.leaveTypes) && v.leaveTypes.length ? v.leaveTypes.map((x) => String(x)).filter(Boolean) : d.leaveTypes.slice();
     const holidayTypes = Array.isArray(v && v.holidayTypes) && v.holidayTypes.length ? v.holidayTypes.map((x) => String(x)).filter(Boolean) : d.holidayTypes.slice();
+    const num = (k) => {
+      const n = Number(v && v[k]);
+      return Number.isFinite(n) && n >= 0 ? n : d[k];
+    };
+    const win = (k) => {
+      const src = (v && v[k] && typeof v[k] === "object") ? v[k] : {};
+      const out = {};
+      Object.keys(d[k]).forEach((kk) => {
+        const n = Number(src[kk]);
+        out[kk] = Number.isFinite(n) && n >= 0 ? n : d[k][kk];
+      });
+      return out;
+    };
     return {
       workStart: String((v && v.workStart) || d.workStart),
       workEnd: String((v && v.workEnd) || d.workEnd),
@@ -297,6 +317,14 @@
       leaveTypes,
       holidayTypes,
       note: String((v && v.note) || ""),
+      breakMinutes: num("breakMinutes"),
+      graceMinutes: num("graceMinutes"),
+      otAfterMinutes: num("otAfterMinutes"),
+      punchWindow: win("punchWindow"),
+      guardPunchWindow: win("guardPunchWindow"),
+      needHandover: Array.isArray(v && v.needHandover) && v.needHandover.length
+        ? v.needHandover.map((x) => String(x).trim()).filter(Boolean)
+        : d.needHandover.slice(),
     };
   }
 
@@ -727,8 +755,26 @@
         function punchStatus(uid, dateKey) {
           if (leaveUidsFor(dateKey).has(String(uid))) return { key: "leave", label: "請假", tone: "leave" };
           const c = checkinMapFor(dateKey).get(String(uid));
-          if (c && c.inAt && c.outAt) return { key: "out", label: "已下班", tone: "ok" };
-          if (c && c.inAt) return { key: "in", label: "上班中", tone: "working" };
+          if (c && c.inAt && c.outAt) {
+            const s = String(c.status || "");
+            if (s === "noHandover") return { key: "out", label: "未交接", tone: "miss" };
+            if (s === "noIn") return { key: "out", label: "未打上班", tone: "miss" };
+            if (s === "lateEarly") return { key: "out", label: "遲到+早退", tone: "miss" };
+            if (s === "late") return { key: "out", label: `遲到 ${Number(c.lateMin) || 0} 分`, tone: "miss" };
+            if (s === "early") return { key: "out", label: `早退 ${Number(c.earlyMin) || 0} 分`, tone: "miss" };
+            return { key: "out", label: "已下班", tone: "ok" };
+          }
+          if (c && c.inAt) {
+            return { key: "in", label: Number(c.lateMin) > 0 ? `上班中（遲到 ${Number(c.lateMin)} 分）` : "上班中", tone: "working" };
+          }
+          /* 過去日期且有排班但未打卡 → 曠職 */
+          const shifts = schedulesByDate().get(String(dateKey)) || {};
+          const name = String(shifts[uid] || "").trim();
+          const leaveSet = new Set((state.settings.leaveTypes || []).map((x) => String(x)));
+          const holidaySet = new Set((state.settings.holidayTypes || []).map((x) => String(x)));
+          if (name && !leaveSet.has(name) && !holidaySet.has(name) && String(dateKey) < todayKey()) {
+            return { key: "none", label: "未打卡（曠職）", tone: "miss" };
+          }
           return { key: "none", label: "未打卡", tone: "miss" };
         }
         function schedulesByDate() {
@@ -936,6 +982,8 @@
                         </div>
                         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
                           <span class="duty-tag ${st.tone}">${esc(st.label)}</span>
+                          ${c && Number(c.otMin) > 0 ? `<span class="duty-tag working">加班 ${Number(c.otMin)} 分</span>` : ""}
+                          ${c && c.inAt && c.outAt && c.workMin != null ? `<span class="duty-tag">工時 ${(Number(c.workMin) / 60).toFixed(1)} 小時</span>` : ""}
                           <button class="btn btn-sm btn-ghost" type="button" data-duty-makeup="${esc(s.id)}">補登</button>
                         </div>
                       </div>
@@ -964,6 +1012,7 @@
               ${metric("已下班", state.staff.filter((s) => { const c = cmap.get(String(s.id)); return c && c.inAt && c.outAt; }).length, "人", "green")}
               ${metric("請假", leaves.length, "筆", "amber")}
               ${metric("補卡", makeups.length, "筆", "amber")}
+              ${metric("加班", state.staff.reduce((sum, s) => { const c = cmap.get(String(s.id)); return sum + (c ? Number(c.otMin) || 0 : 0); }, 0), "分", "amber")}
             </div>
 
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
@@ -1066,11 +1115,34 @@
         function settingsView() {
           const s = state.settings;
           const rs = s.roleShifts || {};
+          const numIn = (id, v, ph) => `<input id="${id}" type="number" min="0" value="${esc(String(v))}" placeholder="${esc(ph || "")}" style="padding:10px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.14);width:100%;font-weight:800;font-family:inherit;"/>`;
+          const numField = (id, label, v, ph) => `<div class="field" style="gap:4px;margin:0;"><label style="font-size:calc(12px * var(--fs,1));font-weight:800;">${esc(label)}</label>${numIn(id, v, ph)}</div>`;
+          const WIN_LABEL = { inBefore: "上班前", inAfter: "上班後", outBefore: "下班前", outAfter: "下班後" };
+          const winRow = (prefix, label, note, w) => `
+            <div class="duty-group">
+              <div class="duty-group-hd">${esc(label)}<span class="n">${esc(note)}</span></div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;">
+                ${["inBefore", "inAfter", "outBefore", "outAfter"].map((k) => numField(`duty_cfg_${prefix}_${k}`, WIN_LABEL[k], w[k], "分鐘")).join("")}
+              </div>
+            </div>`;
           return `
             <div class="muted">分別為「總幹事、秘書、清潔、機電、保全」設定各自的班別與上下班時間；排班時將依人員角色提供對應班別，並可選「假別」標記請假（請假當日即以該員當日班別時間計）。</div>
             <div style="display:grid;gap:12px;max-width:820px;">${CATEGORY_ORDER.map((cat) => roleShiftBlock(cat, rs[cat] || [])).join("")}</div>
             <div class="field" style="gap:4px;margin:0;max-width:640px;"><label style="font-size:calc(12px * var(--fs,1));font-weight:800;">假別（逗號分隔）</label><input id="duty_cfg_leaves" type="text" value="${esc(s.leaveTypes.join(","))}" placeholder="特休,事假,病假,公假,婚假,喪假,產假,其他" style="padding:11px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.14);width:100%;font-weight:800;font-family:inherit;"/></div>
             <div class="field" style="gap:4px;margin:0;max-width:640px;"><label style="font-size:calc(12px * var(--fs,1));font-weight:800;">假日別（逗號分隔）</label><input id="duty_cfg_holidays" type="text" value="${esc(s.holidayTypes.join(","))}" placeholder="例假,休假" style="padding:11px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.14);width:100%;font-weight:800;font-family:inherit;"/></div>
+
+            <div class="duty-group" style="max-width:820px;">
+              <div class="duty-group-hd">出勤規則<span class="n">適用於總幹事／秘書／清潔／機電（保全另有交接窗）</span></div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">
+                ${numField("duty_cfg_break", "休息扣除（分鐘）", s.breakMinutes, "0＝不扣")}
+                ${numField("duty_cfg_grace", "遲到／早退緩衝（分鐘）", s.graceMinutes, "10")}
+                ${numField("duty_cfg_ot", "加班起算（逾時分鐘）", s.otAfterMinutes, "30")}
+              </div>
+            </div>
+            ${winRow("pw", "一般打卡時間窗", "上班前／上班後／下班前／下班後 允許打卡的分鐘數", s.punchWindow)}
+            ${winRow("gw", "保全交接時間窗", "接班前／接班後／交班前／交班後 允許打卡的分鐘數", s.guardPunchWindow)}
+            <div class="field" style="gap:4px;margin:0;max-width:640px;"><label style="font-size:calc(12px * var(--fs,1));font-weight:800;">需交接的職別（逗號分隔）</label><input id="duty_cfg_handover" type="text" value="${esc((s.needHandover || []).join(","))}" placeholder="保全" style="padding:11px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.14);width:100%;font-weight:800;font-family:inherit;"/></div>
+
             <div class="field" style="gap:4px;margin:0;max-width:640px;"><label style="font-size:calc(12px * var(--fs,1));font-weight:800;">備註／注意事項</label><textarea id="duty_cfg_note" placeholder="例如：現場人員須於上班前 10 分鐘至管理室簽到" style="padding:11px 12px;border-radius:12px;border:1px solid rgba(17,24,39,.14);width:100%;min-height:90px;font-weight:800;font-family:inherit;">${esc(s.note)}</textarea></div>
             <div style="display:flex;gap:8px;">
               <button class="btn btn-primary" type="button" id="dutySetSave">儲存設定</button>
@@ -1608,6 +1680,16 @@
           const leaveTypes = splitList((container.querySelector("#duty_cfg_leaves") || {}).value);
           const holidayTypes = splitList((container.querySelector("#duty_cfg_holidays") || {}).value);
           const note = String((container.querySelector("#duty_cfg_note") || {}).value || "").trim();
+          const needHandover = splitList((container.querySelector("#duty_cfg_handover") || {}).value);
+          const numVal = (id, fallback) => {
+            const n = Number((container.querySelector(id) || {}).value);
+            return Number.isFinite(n) && n >= 0 ? n : fallback;
+          };
+          const winVal = (prefix, fb) => {
+            const out = {};
+            Object.keys(fb).forEach((k) => { out[k] = numVal(`#duty_cfg_${prefix}_${k}`, fb[k]); });
+            return out;
+          };
           const firstWithTime = CATEGORY_ORDER.reduce((acc, cat) => acc || (roleShifts[cat] || []).find((x) => x.start && x.end), null);
           const workStart = String((firstWithTime && firstWithTime.start) || state.settings.workStart || DEFAULT_SETTINGS.workStart);
           const workEnd = String((firstWithTime && firstWithTime.end) || state.settings.workEnd || DEFAULT_SETTINGS.workEnd);
@@ -1619,6 +1701,12 @@
             leaveTypes: leaveTypes.length ? leaveTypes : DEFAULT_SETTINGS.leaveTypes.slice(),
             holidayTypes: holidayTypes.length ? holidayTypes : DEFAULT_SETTINGS.holidayTypes.slice(),
             note,
+            breakMinutes: numVal("#duty_cfg_break", DEFAULT_SETTINGS.breakMinutes),
+            graceMinutes: numVal("#duty_cfg_grace", DEFAULT_SETTINGS.graceMinutes),
+            otAfterMinutes: numVal("#duty_cfg_ot", DEFAULT_SETTINGS.otAfterMinutes),
+            punchWindow: winVal("pw", DEFAULT_SETTINGS.punchWindow),
+            guardPunchWindow: winVal("gw", DEFAULT_SETTINGS.guardPunchWindow),
+            needHandover: needHandover.length ? needHandover : DEFAULT_SETTINGS.needHandover.slice(),
             updatedAt: serverTs(),
           };
           if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "儲存中…"; }

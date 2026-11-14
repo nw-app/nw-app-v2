@@ -564,43 +564,87 @@
     return { label: "待處理", cls: "" };
   }
 
+  /* SVG 圖示 */
+  const ICO = {
+    clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
+    sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+    moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+    punchIn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5M15 12H3"/></svg>',
+    punchOut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M14 17l5-5-5-5M19 12H9"/></svg>',
+    chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+    cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',
+    calDay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/><text x="12" y="17" font-size="9" font-weight="900" text-anchor="middle" fill="currentColor" stroke="none">日</text></svg>',
+    clockSmall: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+    checkSq: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/></svg>',
+  };
+
   function renderPunch() {
     const c = state.todayCheckin || {};
     const inAt = c.inAt || null;
     const outAt = c.outAt || null;
     const onDuty = !!inAt && !outAt;
-    const nextType = onDuty ? "out" : "in";
-    const statusCls = onDuty ? "on" : (outAt ? "out" : "");
+    const statusCls = onDuty ? "" : (outAt ? "out" : "idle");
+    const bigChar = onDuty ? "上" : (outAt ? "下" : "休");
     const statusText = onDuty ? "上班中" : (outAt ? "已下班" : "尚未打卡");
-    const dotText = onDuty ? "上" : (outAt ? "下" : "休");
-    const btnLabel = onDuty ? "下班打卡" : (outAt ? "重新上班打卡" : "上班打卡");
+    const nextType = onDuty ? "out" : "in";
+    const inLabel = "上班打卡";
+    const outLabel = "下班打卡";
+    const btnLabel = onDuty ? outLabel : (outAt ? "重新" + inLabel : inLabel);
+    const btnIcon = onDuty ? ICO.punchOut : ICO.punchIn;
 
     const shift = state.todayShift || "未排班";
     const cat = String((state.profile && (state.profile.category || state.profile.role)) || "清潔").trim();
-    const win = shiftWindow(cat, state.todayShift || "");
-    const inCls = punchBoxCls(inAt, hmToMin(win.start), true);
-    const outCls = punchBoxCls(outAt, hmToMin(win.end), false);
+    const mod = window.NwWorkerDuty;
+    const duty = mod && mod.utils && typeof mod.utils.mergedDuty === "function"
+      ? mod.utils.mergedDuty(state.dutySettings)
+      : (mod && mod.DEFAULT_DUTY) || {};
+    const ev = (mod && mod.utils && typeof mod.utils.evalAttendance === "function")
+      ? mod.utils.evalAttendance(duty, cat, state.todayShift || "", c, {
+        dateKey: todayKey(), hasShift: !!state.todayShift, handovered: false,
+      })
+      : null;
+    const flags = ev ? ev.flags : [];
+    const winTxt = ev && ev.win.start && ev.win.end ? `${ev.win.start} ~ ${ev.win.end}` : "—";
 
     el.body.innerHTML = `
-      <section class="wc-card">
-        <div class="hd today-hd">
-          <div>
-            <h2>今日出勤</h2>
-            <p>今日班表：${esc(shift)}</p>
+      <section class="wc-hero">
+        <div class="wc-hero-top">
+          <div class="wc-hero-title">
+            <div class="t">今日出勤</div>
+            <div class="s">今日班表：${esc(shift)}</div>
           </div>
-          <div id="wcClock" style="font-weight:900;letter-spacing:.5px;color:var(--wc-red);font-variant-numeric:tabular-nums;">--:--:--</div>
+          <div class="wc-hero-clock-badge">${ICO.clock}<span id="wcClock">--:--:--</span></div>
         </div>
-        <div class="wc-status ${statusCls}">
-          <div class="dot">${dotText}</div>
-          <div class="txt">
-            <div class="k">目前狀態</div>
-            <div class="v">${statusText}</div>
+        <div class="wc-hero-status">
+          <div class="wc-hero-bigcircle ${statusCls}">
+            <span class="ch">${bigChar}</span>
+            <span class="check">${ICO.check}</span>
+          </div>
+          <div class="wc-hero-status-text ${statusCls}">
+            <span class="k">目前狀態</span>
+            <span class="v">${statusText}</span>
+            <span class="u"></span>
           </div>
         </div>
-        <button class="wc-punch ${onDuty ? "out" : ""}" type="button" id="btnPunch">${btnLabel}</button>
-        <div class="wc-meta">
-          <div class="box${inCls ? " " + inCls : ""}"><div class="k">上班打卡</div><div class="v">${fmtTime(inAt)}</div></div>
-          <div class="box${outCls ? " " + outCls : ""}"><div class="k">下班打卡</div><div class="v">${fmtTime(outAt)}</div></div>
+        <div class="wc-hero-punch">
+          <div class="box in"><span class="ico">${ICO.sun}</span><span class="t"><span class="k">${esc(inLabel)}</span><span class="v">${fmtTime(inAt)}</span></span></div>
+          <div class="box"><span class="ico">${ICO.moon}</span><span class="t"><span class="k">${esc(outLabel)}</span><span class="v">${fmtTime(outAt)}</span></span></div>
+        </div>
+        ${flags.length ? `<div class="wc-hero-flags">${flags.map((f) => `<span class="wc-flag${f.indexOf("加班") === 0 ? " ot" : ""}">${esc(f)}</span>`).join("")}</div>` : ""}
+        <button class="wc-punch ${onDuty ? "out" : ""}" type="button" id="btnPunch">${btnIcon}<span>${btnLabel}</span></button>
+      </section>
+
+      <section class="wc-card wc-stat">
+        <div class="wc-stat-hd">
+          <div class="t">${ICO.chart}本月出勤統計</div>
+          <div class="m">${ICO.cal}<span>${esc(monthKeyOf(new Date()))}</span>▾</div>
+        </div>
+        <div class="wc-stat-bd">
+          <div class="wc-info">
+            <div class="r"><span class="ico">${ICO.calDay}</span><span class="k">今日班別</span><span class="v red">${esc(shift)}</span></div>
+            <div class="r"><span class="ico">${ICO.clockSmall}</span><span class="k">班別時間</span><span class="v">${esc(winTxt)}</span></div>
+          </div>
         </div>
       </section>
 
@@ -939,13 +983,25 @@
     const x = c || {};
     const done = !!(x.inAt && x.outAt);
     const tag = done ? "已完成" : (x.inAt ? "上班中" : "未完成");
+    const status = String(x.status || "");
+    const flags = [];
+    if (Number(x.lateMin) > 0) flags.push(`遲到 ${Number(x.lateMin)} 分`);
+    if (Number(x.earlyMin) > 0) flags.push(`早退 ${Number(x.earlyMin)} 分`);
+    if (status === "noHandover") flags.push("未交接");
+    if (status === "noIn") flags.push("未打上班");
+    if (status === "absent") flags.push("曠職");
+    const extras = [];
+    if (Number(x.otMin) > 0) extras.push(`加班 ${Number(x.otMin)} 分`);
+    if (done && x.workMin != null) extras.push(`工時 ${(Number(x.workMin) / 60).toFixed(1)} 小時`);
+    const all = flags.concat(extras);
     return `
       <div class="wc-item">
         <div class="row1">
           <div class="loc">${esc(fmtDateKey(x.workDate))}</div>
-          <span class="wc-tag ${done ? "done" : ""}">${tag}</span>
+          <span class="wc-tag ${done && !flags.length ? "done" : ""}">${tag}</span>
         </div>
         <div class="time">上班 ${esc(fmtTime(x.inAt))}　·　下班 ${esc(fmtTime(x.outAt))}</div>
+        ${all.length ? `<div class="wc-hero-flags">${all.map((f) => `<span class="wc-flag${f.indexOf("加班") === 0 ? " ot" : ""}">${esc(f)}</span>`).join("")}</div>` : ""}
       </div>`;
   }
 
@@ -1169,6 +1225,28 @@
   }
 
   /* ---------- actions ---------- */
+  /* 依目前畫面狀態算出本次打卡的出勤欄位（與 worker-duty.js 共用同一規則） */
+  function punchOutcome(type) {
+    const mod = window.NwWorkerDuty;
+    if (!mod || !mod.utils || typeof mod.utils.evalAttendance !== "function") return {};
+    const duty = typeof mod.utils.mergedDuty === "function" ? mod.utils.mergedDuty(state.dutySettings) : (mod.DEFAULT_DUTY || {});
+    const cat = String((state.profile && (state.profile.category || state.profile.role)) || "清潔").trim();
+    const shift = String(state.todayShift || "");
+    const next = Object.assign({}, state.todayCheckin || {});
+    if (type === "in") { next.inAt = new Date(); next.outAt = null; } else { next.outAt = new Date(); }
+    const ev = mod.utils.evalAttendance(duty, cat, shift, next, { dateKey: todayKey(), hasShift: !!shift, handovered: false });
+    return {
+      shift,
+      shiftStart: ev.win.start,
+      shiftEnd: ev.win.end,
+      status: ev.status,
+      lateMin: ev.lateMin,
+      earlyMin: ev.earlyMin,
+      otMin: ev.otMin,
+      workMin: ev.workMin,
+    };
+  }
+
   async function savePunch(type, photo, meta) {
     const ref = checkinsRef().doc(todayCheckinId());
     const now = serverTs();
@@ -1187,6 +1265,7 @@
     } else {
       Object.assign(payload, { outAt: now, outPhoto: photo || "", outGeo: geo });
     }
+    Object.assign(payload, punchOutcome(type));
     await ref.set(payload, { merge: true });
   }
 

@@ -32,6 +32,13 @@
     leaveTypes: ["特休", "事假", "病假", "公假", "婚假", "喪假", "產假", "其他"],
     holidayTypes: ["例假", "休假"],
     note: "",
+    /* 出勤規則（可由社區 settings/duty 覆寫） */
+    breakMinutes: 60,        // 工時扣除的休息分鐘數；0＝不扣（各社區自訂）
+    graceMinutes: 10,        // 遲到／早退緩衝分鐘
+    otAfterMinutes: 30,      // 超過班別結束幾分鐘才計加班
+    punchWindow: { inBefore: 60, inAfter: 120, outBefore: 60, outAfter: 180 },
+    guardPunchWindow: { inBefore: 30, inAfter: 60, outBefore: 60, outAfter: 120 },
+    needHandover: ["保全"],  // 需上下班交接的職別
   };
 
   /* ---------- helpers ---------- */
@@ -124,12 +131,126 @@
     const end = (def && def.end) || (duty && duty.workEnd) || "";
     return { start: String(start || ""), end: String(end || "") };
   }
-  function punchBoxCls(ts, limitMin, isIn) {
-    if (!ts) return "";
-    const cur = minOfDay(ts);
-    if (cur == null || limitMin == null) return "ok";
-    if (isIn) return cur > limitMin ? "bad" : "ok";
-    return cur < limitMin ? "bad" : "ok";
+  /* ---------- 出勤規則判定 ---------- */
+  const STATUS_LABEL = {
+    "": "", onDuty: "上班中", normal: "正常", late: "遲到", early: "早退",
+    lateEarly: "遲到+早退", noIn: "未打上班", noOut: "未打下班", absent: "曠職", noHandover: "未交接",
+  };
+  function nonNegNum(v, fallback) {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : fallback;
+  }
+  /* 該職別是否需上下班交接（保全） */
+  function isHandoverRole(duty, category) {
+    const d = duty || DEFAULT_DUTY;
+    const list = Array.isArray(d.needHandover) ? d.needHandover : DEFAULT_DUTY.needHandover;
+    return list.map((x) => String(x || "").trim()).indexOf(String(category || "").trim()) >= 0;
+  }
+  /* 該職別適用的打卡有效窗（保全較嚴格） */
+  function punchWindowOf(duty, category) {
+    const d = duty || DEFAULT_DUTY;
+    const key = isHandoverRole(d, category) ? "guardPunchWindow" : "punchWindow";
+    const w = Object.assign({}, DEFAULT_DUTY[key], d[key] || {});
+    return {
+      inBefore: nonNegNum(w.inBefore, 0), inAfter: nonNegNum(w.inAfter, 0),
+      outBefore: nonNegNum(w.outBefore, 0), outAfter: nonNegNum(w.outAfter, 0),
+    };
+  }
+  function dateKeyMs(key) {
+    const p = String(key || "").split("-").map((x) => Number(x));
+    if (p.length !== 3 || p.some((n) => !Number.isFinite(n))) return null;
+    return new Date(p[0], p[1] - 1, p[2], 0, 0, 0, 0).getTime();
+  }
+  /* 班別是否跨日（結束時間早於或等於開始時間） */
+  function isCrossDayShift(duty, category, shiftName) {
+    const win = shiftWindow(duty, category, shiftName);
+    const s = hmToMin(win.start);
+    const e = hmToMin(win.end);
+    return s != null && e != null && e <= s;
+  }
+  /* 判斷目前時間是否落在班別允許的打卡時間窗內
+     type: "in" 上班（含接班）／"out" 下班（含交班）；baseDateKey 為該班別的起始日 */
+  function punchWindowCheck(duty, category, shiftName, type, baseDateKey, when) {
+    const d = duty || DEFAULT_DUTY;
+    const win = shiftWindow(d, category, shiftName);
+    const s = hmToMin(win.start);
+    const e = hmToMin(win.end);
+    if (s == null || e == null) return { ok: true, start: win.start, end: win.end };
+    const base = dateKeyMs(baseDateKey || todayKey());
+    if (base == null) return { ok: true, start: win.start, end: win.end };
+    const startMs = base + s * 60000;
+    const endMs = base + (e + (e <= s ? 1440 : 0)) * 60000;
+    const w = punchWindowOf(d, category);
+    const t = (when instanceof Date ? when : new Date()).getTime();
+    const ok = type === "in"
+      ? (t >= startMs - w.inBefore * 60000 && t <= startMs + w.inAfter * 60000)
+      : (t >= endMs - w.outBefore * 60000 && t <= endMs + w.outAfter * 60000);
+    return { ok, start: win.start, end: win.end };
+  }
+  /* 依班別時間與打卡紀錄判定單日出勤結果
+     opts: { dateKey, hasShift, handovered, past } */
+  function evalAttendance(duty, category, shiftName, checkin, opts) {
+    const d = duty || DEFAULT_DUTY;
+    const o = opts || {};
+    const c = checkin || {};
+    const win = shiftWindow(d, category, shiftName);
+    const startMin = hmToMin(win.start);
+    const endRaw = hmToMin(win.end);
+    const crossDay = startMin != null && endRaw != null && endRaw <= startMin;
+    const baseMs = dateKeyMs(o.dateKey || c.workDate || todayKey());
+    const hasShift = !!o.hasShift;
+    const inAt = c.inAt || null;
+    const outAt = c.outAt || null;
+    const inMs = inAt ? msOf(inAt) : 0;
+    const outMs = outAt ? msOf(outAt) : 0;
+    const startMs = (baseMs != null && startMin != null) ? baseMs + startMin * 60000 : null;
+    const endMs = (baseMs != null && endRaw != null) ? baseMs + (endRaw + (crossDay ? 1440 : 0)) * 60000 : null;
+
+    const grace = nonNegNum(d.graceMinutes, DEFAULT_DUTY.graceMinutes);
+    const brk = nonNegNum(d.breakMinutes, DEFAULT_DUTY.breakMinutes);
+    const otAfter = nonNegNum(d.otAfterMinutes, DEFAULT_DUTY.otAfterMinutes);
+
+    const lateMin = (inMs && startMs) ? Math.max(0, Math.round((inMs - startMs) / 60000) - grace) : 0;
+    const earlyMin = (outMs && endMs) ? Math.max(0, Math.round((endMs - outMs) / 60000) - grace) : 0;
+    const otRaw = (outMs && endMs) ? Math.round((outMs - endMs) / 60000) : 0;
+    const otMin = otRaw > otAfter ? otRaw : 0;
+    const workMin = (inMs && outMs) ? Math.max(0, Math.round((outMs - inMs) / 60000) - brk) : 0;
+
+    const flags = [];
+    let status = "";
+    if (hasShift) {
+      if (!inAt && !outAt) {
+        status = o.past ? "absent" : "";
+        if (status) flags.push(STATUS_LABEL.absent);
+      } else if (inAt && !outAt) {
+        status = "onDuty";
+        if (lateMin > 0) flags.push(`遲到 ${lateMin} 分`);
+      } else if (!inAt && outAt) {
+        status = "noIn";
+        flags.push(STATUS_LABEL.noIn);
+        if (earlyMin > 0) flags.push(`早退 ${earlyMin} 分`);
+      } else {
+        const late = lateMin > 0, early = earlyMin > 0;
+        status = late && early ? "lateEarly" : (late ? "late" : (early ? "early" : "normal"));
+        if (late) flags.push(`遲到 ${lateMin} 分`);
+        if (early) flags.push(`早退 ${earlyMin} 分`);
+        if (otMin > 0) flags.push(`加班 ${otMin} 分`);
+      }
+      const noHandover = isHandoverRole(d, category) && outAt && !o.handovered;
+      if (noHandover) {
+        flags.push(STATUS_LABEL.noHandover);
+        if (!status || status === "normal") status = "noHandover";
+      }
+    }
+
+    const inCls = hasShift && inAt ? (lateMin > 0 ? "bad" : "ok") : "";
+    const outCls = hasShift && outAt ? ((earlyMin > 0 || (isHandoverRole(d, category) && !o.handovered)) ? "bad" : "ok") : "";
+
+    return {
+      win, hasShift, crossDay, startMin, endMin: endRaw,
+      lateMin, earlyMin, otMin, workMin,
+      status, statusLabel: STATUS_LABEL[status] || "", flags, inCls, outCls,
+    };
   }
   function msOf(ts) {
     const d = toDate(ts);
@@ -184,6 +305,15 @@
       if (Array.isArray(d.leaveTypes) && d.leaveTypes.length) out.leaveTypes = d.leaveTypes.slice();
       if (Array.isArray(d.holidayTypes) && d.holidayTypes.length) out.holidayTypes = d.holidayTypes.slice();
       if (typeof d.note === "string") out.note = d.note;
+      ["breakMinutes", "graceMinutes", "otAfterMinutes"].forEach((k) => {
+        const n = Number(d[k]);
+        if (Number.isFinite(n) && n >= 0) out[k] = n;
+      });
+      ["punchWindow", "guardPunchWindow"].forEach((k) => {
+        const w = d[k];
+        if (w && typeof w === "object") out[k] = Object.assign({}, DEFAULT_DUTY[k], w);
+      });
+      if (Array.isArray(d.needHandover)) out.needHandover = d.needHandover.map((x) => String(x || "").trim()).filter(Boolean);
     }
     return out;
   }
@@ -201,6 +331,7 @@
   function checkinsCol(cid) { return commRef(cid).collection("duty_checkins"); }
   function schedulesCol(cid) { return commRef(cid).collection("duty_schedules"); }
   function requestsCol(cid) { return commRef(cid).collection("duty_requests"); }
+  function handoversCol(cid) { return commRef(cid).collection("duty_handovers"); }
   function dutySettingRef(cid) { return commRef(cid).collection("settings").doc("duty"); }
 
   function subscribeDutySettings(cid, cb) {
@@ -269,94 +400,180 @@
   /* ==================================================================== */
   /* 打卡                                                                  */
   /* ==================================================================== */
-  function monthStats(list) {
-    let days = 0, ms = 0;
+  function monthStats(list, breakMinutes) {
+    const brk = nonNegNum(breakMinutes, DEFAULT_DUTY.breakMinutes);
+    let days = 0, ms = 0, otMinSum = 0;
     (list || []).forEach((c) => {
-      if (c && c.inAt) days += 1;
-      if (c && c.inAt && c.outAt) ms += Math.max(0, msOf(c.outAt) - msOf(c.inAt));
+      if (!c) return;
+      if (c.inAt) days += 1;
+      if (c.inAt && c.outAt) {
+        if (c.workMin != null) ms += nonNegNum(c.workMin, 0) * 60000;
+        else ms += Math.max(0, msOf(c.outAt) - msOf(c.inAt) - brk * 60000);
+      }
+      otMinSum += nonNegNum(c.otMin, 0);
     });
-    return { days, hours: (ms / 3600000).toFixed(1) };
+    return { days, hours: (ms / 3600000).toFixed(1), otHours: (otMinSum / 60).toFixed(1) };
   }
 
+  /* SVG 圖示 */
+  const ICO = {
+    clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
+    sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+    moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+    chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+    cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',
+    calDay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/><text x="12" y="17" font-size="9" font-weight="900" text-anchor="middle" fill="currentColor" stroke="none">日</text></svg>',
+    clockSmall: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+    checkSq: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/></svg>',
+    leave: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+    win: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+    punchIn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5M15 12H3"/></svg>',
+    punchOut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M14 17l5-5-5-5M19 12H9"/></svg>',
+  };
+
   function renderPunchTab(root, ctx, st) {
-    const c = st.checkin || {};
+    const act = st.active || { key: todayKey(), data: st.checkin || null, shift: String(st.todayShift || ""), rollover: false };
+    const c = act.data || {};
     const inAt = c.inAt || null;
     const outAt = c.outAt || null;
     const onDuty = !!inAt && !outAt;
-    const statusCls = onDuty ? "on" : (outAt ? "out" : "");
-    const statusText = onDuty ? "上班中" : (outAt ? "已下班" : "尚未打卡");
-    const dotText = onDuty ? "上" : (outAt ? "下" : "休");
-    const btnLabel = onDuty ? "下班打卡" : (outAt ? "重新上班打卡" : "上班打卡");
+    const statusCls = onDuty ? "" : (outAt ? "out" : "idle");
+    const bigChar = onDuty ? "上" : (outAt ? "下" : "休");
+    const statusText = onDuty ? (act.rollover ? "上班中（跨班）" : "上班中") : (outAt ? "已下班" : "尚未打卡");
     const duty = st.duty || DEFAULT_DUTY;
-    const stats = monthStats(st.monthCheckins);
+    const guard = isHandoverRole(duty, ctx.category);
+    const inLabel = guard ? "接班打卡" : "上班打卡";
+    const outLabel = guard ? "交班打卡" : "下班打卡";
+    const btnLabel = onDuty ? outLabel : (outAt ? "重新" + inLabel : inLabel);
+    const btnIcon = onDuty ? ICO.punchOut : ICO.punchIn;
+    const stats = monthStats(st.monthCheckins, duty.breakMinutes);
     const leave = st.todayLeave;
     const leaveTxt = leave
       ? `${leave.leaveType || "請假"}${leave.reason ? "（" + leave.reason + "）" : ""}`
       : "無";
-    const shift = st.todayShift || "未排班";
-    const win = shiftWindow(duty, ctx.category, st.todayShift || "");
-    const inCls = punchBoxCls(inAt, hmToMin(win.start), true);
-    const outCls = punchBoxCls(outAt, hmToMin(win.end), false);
+    const shift = act.shift || "未排班";
+    const ev = evalAttendance(duty, ctx.category, act.shift || "", c, {
+      dateKey: act.key || todayKey(), hasShift: !!act.shift, handovered: !!st.todayHandover,
+    });
+    const winTxt = ev.win.start && ev.win.end ? `${ev.win.start} ~ ${ev.win.end}` : "—";
+    const hd = st.lastHandover || null;
+    const hdTxt = hd
+      ? `${hd.fromName || "前班"}${hd.shift ? "（" + hd.shift + "）" : ""}`
+      : "";
+    const monthLabel = monthKeyOf(new Date());
 
     root.innerHTML = `
-      <section class="wc-card">
-        <div class="hd today-hd">
-          <div>
-            <h2>今日出勤</h2>
-            <p>今日班表：${esc(shift)}</p>
+      <section class="wc-hero">
+        <div class="wc-hero-top">
+          <div class="wc-hero-title">
+            <div class="t">今日出勤</div>
+            <div class="s">今日班表：${esc(shift)}</div>
           </div>
-          <div id="wdClock" style="font-weight:900;letter-spacing:.5px;color:var(--wc-red);font-variant-numeric:tabular-nums;">--:--:--</div>
+          <div class="wc-hero-clock-badge">${ICO.clock}<span id="wdClock">--:--:--</span></div>
         </div>
-        <div class="wc-status ${statusCls}">
-          <div class="dot">${dotText}</div>
-          <div class="txt">
-            <div class="k">目前狀態</div>
-            <div class="v">${statusText}</div>
+        <div class="wc-hero-status">
+          <div class="wc-hero-bigcircle ${statusCls}">
+            <span class="ch">${bigChar}</span>
+            <span class="check">${ICO.check}</span>
+          </div>
+          <div class="wc-hero-status-text ${statusCls}">
+            <span class="k">目前狀態</span>
+            <span class="v">${statusText}</span>
+            <span class="u"></span>
           </div>
         </div>
-        <div class="wc-meta" style="margin-top:12px;">
-          <div class="box${inCls ? " " + inCls : ""}"><div class="k">上班打卡</div><div class="v">${fmtTime(inAt)}</div></div>
-          <div class="box${outCls ? " " + outCls : ""}"><div class="k">下班打卡</div><div class="v">${fmtTime(outAt)}</div></div>
+        <div class="wc-hero-punch">
+          <div class="box in"><span class="ico">${ICO.sun}</span><span class="t"><span class="k">${esc(inLabel)}</span><span class="v">${fmtTime(inAt)}</span></span></div>
+          <div class="box"><span class="ico">${ICO.moon}</span><span class="t"><span class="k">${esc(outLabel)}</span><span class="v">${fmtTime(outAt)}</span></span></div>
         </div>
-        <button class="wc-punch ${onDuty ? "out" : ""}" type="button" data-wd-punch="${onDuty ? "out" : "in"}">${btnLabel}</button>
+        ${ev.flags.length ? `<div class="wc-hero-flags">${ev.flags.map((f) => `<span class="wc-flag${f.indexOf("加班") === 0 ? " ot" : ""}">${esc(f)}</span>`).join("")}</div>` : ""}
+        ${guard ? `<div class="wc-hero-hd">
+          <span class="k">交接</span>
+          <span class="v">${esc(hdTxt || "尚無交班紀錄")}</span>
+          ${hd ? `<button type="button" class="wc-mini" data-wd-hdview="1">查看</button>` : ""}
+        </div>` : ""}
+        <button class="wc-punch ${onDuty ? "out" : ""}" type="button" data-wd-punch="${onDuty ? "out" : "in"}">${btnIcon}<span>${btnLabel}</span></button>
       </section>
 
-      <section class="wc-card">
-        <div class="hd">
-          <div><h2>本月出勤統計</h2><p>${esc(monthKeyOf(new Date()))}</p></div>
+      <section class="wc-card wc-stat">
+        <div class="wc-stat-hd">
+          <div class="t">${ICO.chart}本月出勤統計</div>
+          <div class="m">${ICO.cal}<span>${esc(monthLabel)}</span>▾</div>
         </div>
-        <div class="wc-info">
-          <div class="r"><span class="k">上班天數</span><span class="v">${stats.days} 天</span></div>
-          <div class="r"><span class="k">總時數</span><span class="v">${stats.hours} 小時</span></div>
-          <div class="r"><span class="k">今日班別</span><span class="v">${esc(shift)}</span></div>
-          <div class="r"><span class="k">今日請假</span><span class="v">${esc(leaveTxt)}</span></div>
-          <div class="r"><span class="k">上班時間</span><span class="v">${esc(duty.workStart)} ~ ${esc(duty.workEnd)}</span></div>
+        <div class="wc-stat-bd">
+          <div class="wc-info">
+            <div class="r"><span class="ico">${ICO.calDay}</span><span class="k">上班天數</span><span class="v red">${stats.days} 天</span></div>
+            <div class="r"><span class="ico">${ICO.clockSmall}</span><span class="k">總時數</span><span class="v">${stats.hours} 小時</span></div>
+            <div class="r"><span class="ico">${ICO.checkSq}</span><span class="k">今日班別</span><span class="v">${esc(shift)}</span></div>
+          </div>
         </div>
       </section>
     `;
 
     const btn = root.querySelector("[data-wd-punch]");
-    if (btn) btn.onclick = () => doPunch(ctx, btn.getAttribute("data-wd-punch"), btn);
+    if (btn) btn.onclick = () => {
+      const t = btn.getAttribute("data-wd-punch");
+      if (t === "out" && guard) { openHandoverModal(ctx, st, () => doPunch(ctx, "out", btn)); return; }
+      doPunch(ctx, t, btn);
+    };
+    const hb = root.querySelector("[data-wd-hdview]");
+    if (hb) hb.onclick = () => openHandoverView(hd);
     startClock();
+  }
+
+  /* 決定目前要操作／顯示的打卡紀錄：今日未結案優先；否則若前一日為跨日班且未下班，沿用前一日 */
+  function syncActive(ctx, st) {
+    const duty = st.duty || DEFAULT_DUTY;
+    const tk = todayKey();
+    const prevKey = shiftDateKey(tk, -1);
+    const t = st.checkin || null;
+    if (t && t.inAt && !t.outAt) {
+      st.active = { key: tk, data: t, shift: String(st.todayShift || ""), rollover: false };
+      return;
+    }
+    const p = st.prevCheckin || null;
+    const pShift = String(st.prevShift || "");
+    if (p && p.inAt && !p.outAt && pShift && isCrossDayShift(duty, ctx.category, pShift)) {
+      st.active = { key: prevKey, data: p, shift: pShift, rollover: true };
+      return;
+    }
+    st.active = { key: tk, data: t, shift: String(st.todayShift || ""), rollover: false };
   }
 
   function subscribePunchTab(root, ctx, st, rerender) {
     ctx.__punchUi = { st, rerender };
-    subscribeDutySettings(ctx.communityId, (d) => { st.duty = mergedDuty(d); rerender(); });
+    const rerenderAll = () => { try { syncActive(ctx, st); } catch (e) { console.warn("sync active failed", e); } rerender(); };
+    ctx.__punchUi.rerender = rerenderAll;
+    subscribeDutySettings(ctx.communityId, (d) => { st.duty = mergedDuty(d); rerenderAll(); });
     if (!ctx.communityId) return;
     const tk = todayKey();
+    const prevKey = shiftDateKey(tk, -1);
 
     track(checkinsCol(ctx.communityId).doc(`${ctx.uid}_${tk}`).onSnapshot((doc) => {
       st.checkin = doc && doc.exists ? (doc.data() || {}) : null;
-      rerender();
-    }, (err) => { console.warn("duty checkin listen failed", err); st.checkin = null; rerender(); }));
+      rerenderAll();
+    }, (err) => { console.warn("duty checkin listen failed", err); st.checkin = null; rerenderAll(); }));
+
+    /* 前一日紀錄：供跨日班（保全夜班）下班打卡沿用 */
+    track(checkinsCol(ctx.communityId).doc(`${ctx.uid}_${prevKey}`).onSnapshot((doc) => {
+      st.prevCheckin = doc && doc.exists ? (doc.data() || {}) : null;
+      rerenderAll();
+    }, (err) => { console.warn("duty prev checkin listen failed", err); st.prevCheckin = null; rerenderAll(); }));
 
     track(schedulesCol(ctx.communityId).doc(tk).onSnapshot((doc) => {
       const d = doc && doc.exists ? (doc.data() || {}) : {};
       const shifts = d.shifts || {};
       st.todayShift = String(shifts[ctx.uid] || "");
-      rerender();
-    }, (err) => { console.warn("duty schedule listen failed", err); st.todayShift = ""; rerender(); }));
+      rerenderAll();
+    }, (err) => { console.warn("duty schedule listen failed", err); st.todayShift = ""; rerenderAll(); }));
+
+    track(schedulesCol(ctx.communityId).doc(prevKey).onSnapshot((doc) => {
+      const d = doc && doc.exists ? (doc.data() || {}) : {};
+      const shifts = d.shifts || {};
+      st.prevShift = String(shifts[ctx.uid] || "");
+      rerenderAll();
+    }, (err) => { console.warn("duty prev schedule listen failed", err); st.prevShift = ""; rerenderAll(); }));
 
     const r = monthRange(monthKeyOf(new Date()));
     track(checkinsCol(ctx.communityId).where("workDate", ">=", r.start).where("workDate", "<=", r.end).onSnapshot((snap) => {
@@ -378,6 +595,19 @@
       st.todayLeave = found;
       rerender();
     }, (err) => { console.warn("duty today leave listen failed", err); st.todayLeave = null; rerender(); }));
+
+    /* 交接紀錄：本人的交班單（今日／跨班前一日）與前班留下的交接單（保全） */
+    track(handoversCol(ctx.communityId).where("workDate", "in", [tk, prevKey]).onSnapshot((snap) => {
+      let mine = null, last = null;
+      snap.forEach((d) => {
+        const x = d.data() || {};
+        if (String(x.fromUid) === String(ctx.uid)) mine = x;
+        else if (!last || String(x.at || "") > String(last.at || "")) last = x;
+      });
+      st.todayHandover = mine;
+      st.lastHandover = last;
+      rerender();
+    }, (err) => { console.warn("duty handover listen failed", err); st.todayHandover = null; st.lastHandover = null; rerender(); }));
   }
 
   /* ==================================================================== */
@@ -387,13 +617,23 @@
     const x = c || {};
     const done = !!(x.inAt && x.outAt);
     const tag = done ? "已完成" : (x.inAt ? "上班中" : "未完成");
+    const flags = [];
+    if (nonNegNum(x.lateMin, 0) > 0) flags.push(`遲到 ${x.lateMin} 分`);
+    if (nonNegNum(x.earlyMin, 0) > 0) flags.push(`早退 ${x.earlyMin} 分`);
+    if (String(x.status || "") === "noHandover") flags.push("未交接");
+    if (String(x.status || "") === "noIn") flags.push("未打上班");
+    if (String(x.status || "") === "absent") flags.push("曠職");
+    const extras = [];
+    if (nonNegNum(x.otMin, 0) > 0) extras.push(`加班 ${x.otMin} 分`);
+    if (done && x.workMin != null) extras.push(`工時 ${(nonNegNum(x.workMin, 0) / 60).toFixed(1)} 小時`);
     return `
       <div class="wc-item">
         <div class="row1">
           <div class="loc">${esc(fmtDateKey(x.workDate))}</div>
-          <span class="wc-tag ${done ? "done" : ""}">${tag}</span>
+          <span class="wc-tag ${done && !flags.length ? "done" : ""}">${tag}</span>
         </div>
         <div class="time">上班 ${esc(fmtTime(x.inAt))}　·　下班 ${esc(fmtTime(x.outAt))}</div>
+        ${(flags.length || extras.length) ? `<div class="wc-hero-flags">${flags.concat(extras).map((f) => `<span class="wc-flag${f.indexOf("加班") === 0 ? " ot" : ""}">${esc(f)}</span>`).join("")}</div>` : ""}
       </div>`;
   }
 
@@ -591,8 +831,36 @@
     subscribeSchedule(ctx.communityId, ctx.uid, st, rerender);
   }
 
+  /* 依目前畫面狀態算出本次打卡的出勤欄位（班別、遲到／早退／加班、工時、狀態） */
+  function punchOutcome(ctx, type) {
+    const ui = ctx && ctx.__punchUi;
+    const st = (ui && ui.st) || {};
+    const act = st.active || null;
+    const duty = st.duty || DEFAULT_DUTY;
+    const shift = String((act && act.shift) || "");
+    const dateKey = (act && act.key) || todayKey();
+    const next = Object.assign({}, (act && act.data) || st.checkin || {});
+    if (type === "in") { next.inAt = new Date(); next.outAt = null; }
+    else { next.outAt = new Date(); }
+    const ev = evalAttendance(duty, ctx.category, shift, next, {
+      dateKey, hasShift: !!shift, handovered: !!(st.todayHandover || st.__handoverDone),
+    });
+    return {
+      shift,
+      shiftStart: ev.win.start,
+      shiftEnd: ev.win.end,
+      status: ev.status,
+      lateMin: ev.lateMin,
+      earlyMin: ev.earlyMin,
+      otMin: ev.otMin,
+      workMin: ev.workMin,
+    };
+  }
+
   async function savePunch(ctx, type, photo, meta) {
-    const tk = todayKey();
+    const ui = ctx && ctx.__punchUi;
+    const act = (ui && ui.st && ui.st.active) || null;
+    const tk = (act && act.key) || todayKey();
     const ref = checkinsCol(ctx.communityId).doc(`${ctx.uid}_${tk}`);
     const now = serverTs();
     const geo = {
@@ -610,10 +878,11 @@
     } else {
       Object.assign(payload, { outAt: now, outPhoto: photo || "", outGeo: geo });
     }
+    Object.assign(payload, punchOutcome(ctx, type));
     await ref.set(payload, { merge: true });
   }
 
-  function optimisticPunchRecord(base, ctx, type, photo, meta) {
+  function optimisticPunchRecord(base, ctx, type, photo, meta, workDate) {
     const now = new Date();
     const geo = {
       latitude: meta && meta.latitude != null ? meta.latitude : null,
@@ -625,7 +894,7 @@
       uid: ctx.uid,
       name: ctx.userName || "",
       category: ctx.category || "",
-      workDate: todayKey(),
+      workDate: workDate || todayKey(),
       communityId: ctx.communityId,
       updatedAt: now,
     });
@@ -645,13 +914,16 @@
   function applyOptimisticPunch(ctx, type, photo, meta) {
     const ui = ctx && ctx.__punchUi;
     if (!ui || !ui.st || typeof ui.rerender !== "function") return;
-    const next = optimisticPunchRecord(ui.st.checkin, ctx, type, photo, meta);
-    ui.st.checkin = next;
-    const monthList = Array.isArray(ui.st.monthCheckins) ? ui.st.monthCheckins.slice() : [];
+    const st = ui.st;
+    const act = st.active || null;
+    const key = (act && act.key) || todayKey();
+    const next = optimisticPunchRecord((act && act.data) || st.checkin, ctx, type, photo, meta, key);
+    if (key === todayKey()) st.checkin = next; else st.prevCheckin = next;
+    const monthList = Array.isArray(st.monthCheckins) ? st.monthCheckins.slice() : [];
     const idx = monthList.findIndex((x) => x && String(x.workDate || "") === String(next.workDate || ""));
     if (idx >= 0) monthList[idx] = Object.assign({}, monthList[idx], next);
     else monthList.push(next);
-    ui.st.monthCheckins = monthList;
+    st.monthCheckins = monthList;
     ui.rerender();
   }
 
@@ -662,6 +934,17 @@
     const isIn = type === "in";
     let lastPhoto = "";
     let lastMeta = null;
+    /* 打卡時間窗檢查（依社區 settings/duty 設定；超出窗仍可打卡，但需確認） */
+    const ui = ctx.__punchUi;
+    const act = ui && ui.st && ui.st.active;
+    if (act && act.shift) {
+      const chk = punchWindowCheck(ui.st.duty || DEFAULT_DUTY, ctx.category, act.shift, type, act.key, new Date());
+      if (!chk.ok) {
+        const label = isIn ? "上班" : "下班";
+        const msg = `目前不在允許的${label}打卡時間窗內（班別 ${chk.start}~${chk.end}）。\n仍要進行${label}打卡嗎？`;
+        if (!window.confirm(msg)) return;
+      }
+    }
     if (btn) btn.disabled = true;
     window.NwPunchFlow.open({
       db,
@@ -825,6 +1108,140 @@
     });
   }
 
+  /* ==================================================================== */
+  /* 交接（保全早晚班）                                                     */
+  /* ==================================================================== */
+  function handoverFieldRow(k, v) {
+    return `<div class="r"><span class="k">${esc(k)}</span><span class="v">${esc(v || "—")}</span></div>`;
+  }
+  function openHandoverView(hd) {
+    const h = hd || {};
+    const wrap = document.createElement("div");
+    wrap.className = "wc-applywrap";
+    wrap.innerHTML = `
+      <div class="wc-applycard" role="dialog" aria-modal="true" aria-label="交接紀錄">
+        <div class="wc-applyhd">
+          <div class="t">交接紀錄　${esc(fmtDateKey(h.workDate || todayKey()))}</div>
+          <button type="button" class="wc-applyclose" data-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="wc-applybd">
+          <section class="wc-card">
+            <div class="wc-info">
+              ${handoverFieldRow("交班人員", h.fromName || "")}
+              ${handoverFieldRow("班別", h.shift || "")}
+              ${handoverFieldRow("交接時間", h.at ? fmtTime(h.at) : "")}
+              ${handoverFieldRow("鑰匙數量", h.keys)}
+              ${handoverFieldRow("無線電數量", h.radio)}
+              ${handoverFieldRow("巡邏進度", h.patrol)}
+              ${handoverFieldRow("異常事件", h.issue)}
+              ${handoverFieldRow("待辦事項", h.todo)}
+              ${handoverFieldRow("備註", h.note)}
+            </div>
+            ${h.photo ? `<div class="wc-field"><label>交接照片</label><div class="wc-photo"><div class="wc-photo-box"><img src="${esc(h.photo)}" alt=""></div></div></div>` : ""}
+          </section>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+    const close = () => { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); };
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    const cb = wrap.querySelector("[data-close]");
+    if (cb) cb.onclick = close;
+  }
+
+  function openHandoverModal(ctx, st, onDone) {
+    const s = st || {};
+    let photo = "";
+    const wrap = document.createElement("div");
+    wrap.className = "wc-applywrap";
+    wrap.innerHTML = `
+      <div class="wc-applycard" role="dialog" aria-modal="true" aria-label="交班交接">
+        <div class="wc-applyhd">
+          <div class="t">交班交接　${esc(fmtDateKey(todayKey()))}</div>
+          <button type="button" class="wc-applyclose" data-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="wc-applybd">
+          <section class="wc-card">
+            <p class="wc-hint">交班前請完成交接內容，未交接將標記異常。</p>
+            <div class="wc-field"><label>鑰匙數量</label><input type="number" min="0" id="hdKeys" placeholder="例：3"></div>
+            <div class="wc-field"><label>無線電數量</label><input type="number" min="0" id="hdRadio" placeholder="例：2"></div>
+            <div class="wc-field"><label>巡邏進度</label><input type="text" id="hdPatrol" placeholder="例：已完成 A、B 棟"></div>
+            <div class="wc-field"><label>異常事件</label><textarea id="hdIssue" placeholder="有無異常狀況、處理情形"></textarea></div>
+            <div class="wc-field"><label>待辦事項</label><textarea id="hdTodo" placeholder="交接給下一班的待辦"></textarea></div>
+            <div class="wc-field"><label>備註</label><input type="text" id="hdNote" placeholder="其他說明"></div>
+            <div class="wc-field"><label>交接照片</label>
+              <div class="wc-photo">
+                <div class="wc-photo-box" id="hdPhotoBox" style="display:none;">
+                  <img id="hdPhotoImg" alt="" />
+                  <button type="button" class="wc-photo-del" id="hdPhotoDel" aria-label="移除照片">×</button>
+                </div>
+                <div class="wc-photo-acts" id="hdPhotoActs">
+                  <label class="wc-photo-btn">拍照<input type="file" accept="image/*" capture="environment" id="hdPhotoShot" hidden /></label>
+                  <label class="wc-photo-btn">上傳照片<input type="file" accept="image/*" id="hdPhotoFile" hidden /></label>
+                </div>
+              </div>
+            </div>
+            <button class="wc-btn primary" type="button" id="hdSubmit">完成交接並交班</button>
+          </section>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+
+    const q = (id) => wrap.querySelector(id);
+    const box = q("#hdPhotoBox");
+    const acts = q("#hdPhotoActs");
+    const img = q("#hdPhotoImg");
+    const applyPhoto = (url) => {
+      photo = url || "";
+      if (img) { if (url) img.src = url; else img.removeAttribute("src"); }
+      if (box) box.style.display = url ? "block" : "none";
+      if (acts) acts.style.display = url ? "none" : "flex";
+    };
+    wrap.querySelectorAll("#hdPhotoShot, #hdPhotoFile").forEach((i) => {
+      i.onchange = () => { const f = i.files && i.files[0]; if (f) readImageFile(f, applyPhoto); };
+    });
+    const del = q("#hdPhotoDel");
+    if (del) del.onclick = () => { applyPhoto(""); wrap.querySelectorAll("#hdPhotoShot, #hdPhotoFile").forEach((i) => { i.value = ""; }); };
+
+    const close = () => { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); };
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    const cb = wrap.querySelector("[data-close]");
+    if (cb) cb.onclick = close;
+
+    const submit = q("#hdSubmit");
+    if (submit) submit.onclick = async () => {
+      submit.disabled = true;
+      const tk = (s.active && s.active.key) || todayKey();
+      const payload = {
+        fromUid: ctx.uid,
+        fromName: ctx.userName || "",
+        category: ctx.category || "",
+        communityId: ctx.communityId,
+        workDate: tk,
+        shift: String(s.todayShift || ""),
+        at: serverTs(),
+        keys: Number(q("#hdKeys").value) || 0,
+        radio: Number(q("#hdRadio").value) || 0,
+        patrol: String(q("#hdPatrol").value || "").trim(),
+        issue: String(q("#hdIssue").value || "").trim(),
+        todo: String(q("#hdTodo").value || "").trim(),
+        note: String(q("#hdNote").value || "").trim(),
+        photo: photo || "",
+      };
+      try {
+        await handoversCol(ctx.communityId).doc(`${ctx.uid}_${tk}`).set(payload, { merge: true });
+        s.__handoverDone = true;
+        s.todayHandover = payload;
+        close();
+        toast("交接完成");
+        if (typeof onDone === "function") onDone();
+      } catch (e) {
+        console.error(e);
+        submit.disabled = false;
+        toast("交接儲存失敗，請稍後再試", true);
+      }
+    };
+  }
+
   /* 申請彈窗（瀏覽器 90% 大小，以分頁按鈕切換 上班補卡／下班補卡／請假申請） */
   function openApplyModal(ctx, opts) {
     const o = opts || {};
@@ -870,6 +1287,7 @@
       const leaveDate = d.wdLeaveDate || dateKey;
       const leaveType = d.wdLeaveType || leaveTypes[0] || "";
       const leaveTime = typeof d.wdLeaveTime === "string" ? d.wdLeaveTime : shiftTimeOf(leaveDate);
+      const leavePhoto = typeof d.wdLeavePhoto === "string" ? d.wdLeavePhoto : "";
       const leaveReason = d.wdLeaveReason || "";
       return `
         <section class="wc-card">
@@ -877,6 +1295,18 @@
           <div class="wc-field"><label>時間</label><input type="text" id="wdLeaveTime" value="${esc(leaveTime)}" placeholder="例：08:00 ~ 17:00"></div>
           <div class="wc-field"><label>假別</label><select id="wdLeaveType">${leaveTypes.map((t) => `<option value="${esc(t)}"${t === leaveType ? " selected" : ""}>${esc(t)}</option>`).join("")}</select></div>
           <div class="wc-field"><label>事由</label><textarea id="wdLeaveReason" placeholder="請輸入請假事由">${esc(leaveReason)}</textarea></div>
+          <div class="wc-field"><label>照片</label>
+            <div class="wc-photo">
+              <div class="wc-photo-box" id="wdLeavePhotoBox" style="display:${leavePhoto ? "block" : "none"};">
+                <img id="wdLeavePhotoImg"${leavePhoto ? ` src="${esc(leavePhoto)}"` : ""} alt="" />
+                <button type="button" class="wc-photo-del" id="wdLeavePhotoDel" aria-label="移除照片">×</button>
+              </div>
+              <div class="wc-photo-acts" id="wdLeavePhotoActs" style="display:${leavePhoto ? "none" : "flex"};">
+                <label class="wc-photo-btn">拍照<input type="file" accept="image/*" capture="environment" id="wdLeaveShot" hidden /></label>
+                <label class="wc-photo-btn">上傳照片<input type="file" accept="image/*" id="wdLeaveFile" hidden /></label>
+              </div>
+            </div>
+          </div>
           <button class="wc-btn primary" type="button" id="wdLeaveSubmit">送出請假</button>
         </section>`;
     };
@@ -922,6 +1352,26 @@
         lt.value = t;
         draftSt.draft.wdLeaveTime = t;
       };
+      /* 照片：拍照或上傳，僅保留一張 */
+      const box = bdEl.querySelector("#wdLeavePhotoBox");
+      const acts = bdEl.querySelector("#wdLeavePhotoActs");
+      const img = bdEl.querySelector("#wdLeavePhotoImg");
+      const del = bdEl.querySelector("#wdLeavePhotoDel");
+      const applyPhoto = (url) => {
+        draftSt.draft.wdLeavePhoto = url || "";
+        if (img) { if (url) img.src = url; else img.removeAttribute("src"); }
+        if (box) box.style.display = url ? "block" : "none";
+        if (acts) acts.style.display = url ? "none" : "flex";
+        if (del) del.onclick = () => applyPhoto("");
+        bdEl.querySelectorAll("#wdLeaveShot, #wdLeaveFile").forEach((i) => { i.value = ""; });
+      };
+      bdEl.querySelectorAll("#wdLeaveShot, #wdLeaveFile").forEach((input) => {
+        input.onchange = () => {
+          const f = input.files && input.files[0];
+          if (f) readImageFile(f, applyPhoto);
+        };
+      });
+      if (box) applyPhoto(String(draftSt.draft.wdLeavePhoto || ""));
     };
     paint();
 
@@ -1028,6 +1478,33 @@
   /* ==================================================================== */
   /* 請假／補卡                                                            */
   /* ==================================================================== */
+  /* 將選取的圖片壓縮成 JPEG data URL（長邊上限 720px） */
+  function readImageFile(file, cb) {
+    if (!file) return;
+    if (!/^image\//.test(String(file.type || ""))) { toast("請選擇圖片檔", true); return; }
+    const rd = new FileReader();
+    rd.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const maxSide = 720;
+        const scale = Math.min(1, maxSide / Math.max(img.width || 1, img.height || 1));
+        const w = Math.max(1, Math.round((img.width || 1) * scale));
+        const h = Math.max(1, Math.round((img.height || 1) * scale));
+        const cv = document.createElement("canvas");
+        cv.width = w; cv.height = h;
+        const g = cv.getContext("2d");
+        g.drawImage(img, 0, 0, w, h);
+        let url = "";
+        try { url = cv.toDataURL("image/jpeg", 0.65); } catch { url = String(rd.result || ""); }
+        cb(url);
+      };
+      img.onerror = () => cb("");
+      img.src = String(rd.result || "");
+    };
+    rd.onerror = () => cb("");
+    rd.readAsDataURL(file);
+  }
+
   function readForm(root, st) {
     st.draft = st.draft || {};
     const ids = ["wdLeaveDate", "wdLeaveTime", "wdLeaveType", "wdLeaveReason", "wdMakeupDate", "wdMakeupType", "wdMakeupTime", "wdMakeupReason"];
@@ -1142,13 +1619,14 @@
     const dateKey = String(draft.wdLeaveDate || "").trim() || todayKey();
     const leaveType = String(draft.wdLeaveType || "").trim();
     const timeRange = String(draft.wdLeaveTime || "").trim();
+    const photo = String(draft.wdLeavePhoto || "");
     const reason = String(draft.wdLeaveReason || "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) { toast("請選擇請假日期", true); return; }
     if (!leaveType) { toast("請選擇假別", true); return; }
     if (!ctx.communityId || !ctx.uid) { toast("缺少社區或登入資訊", true); return; }
     if (btn) { btn.disabled = true; btn.textContent = "送出中…"; }
     try {
-      await requestsCol(ctx.communityId).add({
+      const payload = {
         type: "leave",
         uid: ctx.uid,
         name: ctx.userName || "",
@@ -1160,7 +1638,9 @@
         createdAt: serverTs(),
         createdBy: ctx.uid,
         communityId: ctx.communityId,
-      });
+      };
+      if (photo) payload.photo = photo;
+      await requestsCol(ctx.communityId).add(payload);
       const ta = root.querySelector("#wdLeaveReason");
       if (ta) ta.value = "";
       draft.wdLeaveReason = "";
@@ -1238,7 +1718,7 @@
     scheduleCardHtml,
     bindScheduleCard,
     openApplyModal,
-    utils: { esc, pad2, dateKey: dateKeyOf, todayKey, monthKeyOf, monthRange, daysInMonth, weekdayZh, fmtDateKey, fmtTime, fmtDateTime, msOf, mergedDuty },
+    utils: { esc, pad2, dateKey: dateKeyOf, todayKey, monthKeyOf, monthRange, daysInMonth, weekdayZh, fmtDateKey, fmtTime, fmtDateTime, msOf, mergedDuty, shiftWindow, evalAttendance, isHandoverRole, STATUS_LABEL },
     DEFAULT_DUTY,
     ROLE_META,
   };
@@ -1613,6 +2093,7 @@
     }
 
     function showDenied() {
+      bodyEl.classList.remove("wc-split");
       bodyEl.innerHTML = `<section class="wc-card"><div class="wc-empty">此帳號無工作人員權限，請聯絡社區管理員。</div>
         <button class="wc-btn primary" type="button" id="wdDeniedOut">登出</button></section>`;
       const b = bodyEl.querySelector("#wdDeniedOut");
@@ -1636,6 +2117,10 @@
       b.onclick = () => {
         const t = b.getAttribute("data-wd-tab");
         if (!currentCtx) return;
+        if (t === "request") {
+          openApplyModal(currentCtx, { dateKey: todayKey() });
+          return;
+        }
         showTab(t);
       };
     });
