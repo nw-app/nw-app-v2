@@ -466,22 +466,24 @@
 
     root.innerHTML = `
       <section class="wc-hero">
-        <div class="wc-hero-top">
-          <div class="wc-hero-title">
-            <div class="t">今日出勤</div>
-            <div class="s">今日班表：${esc(shift)}</div>
+        <div class="wc-hero-r1">
+          <div class="wc-hero-status">
+            <div class="wc-hero-bigcircle ${statusCls}">
+              <span class="ch">${bigChar}</span>
+              <span class="check">${ICO.check}</span>
+            </div>
+            <div class="wc-hero-status-text ${statusCls}">
+              <span class="k">目前狀態</span>
+              <span class="v">${statusText}</span>
+              <span class="u"></span>
+            </div>
           </div>
-          <div class="wc-hero-clock-badge">${ICO.clock}<span id="wdClock">--:--:--</span></div>
-        </div>
-        <div class="wc-hero-status">
-          <div class="wc-hero-bigcircle ${statusCls}">
-            <span class="ch">${bigChar}</span>
-            <span class="check">${ICO.check}</span>
-          </div>
-          <div class="wc-hero-status-text ${statusCls}">
-            <span class="k">目前狀態</span>
-            <span class="v">${statusText}</span>
-            <span class="u"></span>
+          <div class="wc-hero-top">
+            <div class="wc-hero-title">
+              <div class="t">今日出勤</div>
+              <div class="s">今日班表：${esc(shift)}</div>
+            </div>
+            <div class="wc-hero-clock-badge">${ICO.clock}<span id="wdClock">--:--:--</span></div>
           </div>
         </div>
         <div class="wc-hero-punch">
