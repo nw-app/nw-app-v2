@@ -170,7 +170,7 @@
     if (document.getElementById("finStyles")) return;
     const st = document.createElement("style");
     st.id = "finStyles";
-    st.textContent = [
+    const css = [
       ".fin-page .card-bd{gap:14px;}",
       ".fin-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;}",
       ".fin-toolbar .field{margin:0;min-width:120px;}",
@@ -224,17 +224,58 @@
       ".fin-cards .fin-table td.fin-empty::before{content:none;}",
       ".fin-cards .fin-table td .ops{justify-content:flex-end;flex-wrap:wrap;}",
       "}",
-      ".fin-print{position:absolute;left:-99999px;top:0;width:900px;background:#fff;color:#111827;padding:24px;font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;}",
-      ".fin-print .hdr{display:flex;align-items:baseline;gap:12px;margin:0 0 6px;}",
-      ".fin-print .hdr .community{font-size:22px;font-weight:700;color:#111827;}",
-      ".fin-print h1{font-size:22px;margin:0;}",
-      ".fin-print .meta{font-size:12px;color:#4b5563;margin-bottom:14px;}",
-      ".fin-print table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12px;}",
-      ".fin-print th,.fin-print td{border:1px solid #d1d5db;padding:6px 8px;text-align:left;}",
-      ".fin-print th{background:#f3f4f6;}",
-      ".fin-print h2{font-size:15px;margin:16px 0 8px;}"
+      ".fin-print{position:absolute;left:-99999px;top:0;width:794px;background:#fff;color:#111827;padding:32px 38px;font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}",
+      ".fin-print .doc-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #d32f2f;padding-bottom:8px;}",
+      ".fin-print .brand{display:flex;gap:10px;align-items:center;}",
+      ".fin-print .brand .mark{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(180deg,#c62828 0%,#d32f2f 45%,#b71c1c 100%);color:#fff;font-weight:900;font-size:19px;}",
+      ".fin-print .brand .nm{font-size:15px;font-weight:900;letter-spacing:.5px;line-height:1.25;}",
+      ".fin-print .brand .nm small{display:block;font-size:10px;color:#6b7280;font-weight:700;}",
+      ".fin-print .doc-meta{text-align:right;font-size:10px;color:#6b7280;line-height:1.7;font-weight:700;}",
+      ".fin-print .doc-meta b{color:#b71c1c;font-weight:900;}",
+      ".fin-print .title{text-align:center;margin:11px 0 3px;}",
+      ".fin-print .title h1{margin:0;font-size:22px;letter-spacing:3px;font-weight:900;}",
+      ".fin-print .title .sub{font-size:11px;color:#6b7280;margin-top:5px;font-weight:700;}",
+      ".fin-print .kv{display:grid;grid-template-columns:repeat(2,1fr);border:1px solid #d1d5db;margin:10px 0 2px;}",
+      ".fin-print .kv .row{display:flex;border-bottom:1px solid #eef1f4;}",
+      ".fin-print .kv .row:nth-last-child(-n+2){border-bottom:0;}",
+      ".fin-print .kv .k{flex:0 0 84px;background:#f9fafb;padding:5px 9px;font-size:11px;font-weight:900;color:#374151;border-right:1px solid #eef1f4;white-space:nowrap;}",
+      ".fin-print .kv .v{flex:1;padding:5px 9px;font-size:11px;font-weight:700;color:#111827;min-width:0;}",
+      ".fin-print .sec{margin-top:11px;}",
+      ".fin-print .sec>h2{font-size:13px;font-weight:900;margin:0 0 6px;padding-left:10px;position:relative;display:flex;align-items:center;gap:8px;letter-spacing:.5px;}",
+      ".fin-print .sec>h2::before{content:'';position:absolute;left:0;top:1px;bottom:1px;width:4px;border-radius:2px;background:#d32f2f;}",
+      ".fin-print .sec>h2 .n{color:#6b7280;font-weight:700;font-size:10.5px;margin-left:auto;}",
+      ".fin-print .sub-h{font-size:11px;font-weight:900;color:#374151;margin:0 0 5px;padding-left:7px;border-left:3px solid #f0a6a6;}",
+      ".fin-print .cols2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}",
+      ".fin-print table{width:100%;border-collapse:collapse;font-size:11px;}",
+      ".fin-print th,.fin-print td{border:1px solid #d1d5db;padding:4px 7px;text-align:left;vertical-align:middle;}",
+      ".fin-print thead th{background:#f3f4f6;font-weight:900;color:#111827;white-space:nowrap;}",
+      ".fin-print tbody tr:nth-child(even){background:#fbfcfd;}",
+      ".fin-print tfoot td{background:#f9fafb;font-weight:900;}",
+      ".fin-print .num{text-align:right;font-variant-numeric:tabular-nums;}",
+      ".fin-print .ctr{text-align:center;}",
+      ".fin-print .pos{color:#15803d;}",
+      ".fin-print .neg{color:#b91c1c;}",
+      ".fin-print .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}",
+      ".fin-print .stat{border:1px solid #d1d5db;border-radius:9px;padding:7px 10px;background:linear-gradient(180deg,#fafafa,#fff);border-left:4px solid #d32f2f;}",
+      ".fin-print .stat .k{font-size:10px;color:#6b7280;font-weight:900;}",
+      ".fin-print .stat .v{font-size:19px;font-weight:900;color:#b71c1c;font-variant-numeric:tabular-nums;line-height:1.25;}",
+      ".fin-print .stat .v small{font-size:10px;color:#6b7280;font-weight:800;margin-left:2px;}",
+      ".fin-print .stat.income{border-left-color:#15803d;}.fin-print .stat.income .v{color:#15803d;}",
+      ".fin-print .stat.expense{border-left-color:#b91c1c;}.fin-print .stat.expense .v{color:#b91c1c;}",
+      ".fin-print .wm{position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden;pointer-events:none;display:flex;align-items:center;justify-content:center;}",
+      ".fin-print .wm span{font-size:70px;font-weight:900;letter-spacing:14px;color:#0f172a;opacity:.055;transform:rotate(-28deg);white-space:nowrap;}",
+      ".fin-print .doc-head,.fin-print .title,.fin-print .kv,.fin-print .sec,.fin-print .sign{position:relative;z-index:1;}",
+      ".fin-print .note{border:1px solid #d1d5db;border-left:4px solid #d32f2f;border-radius:8px;background:#fbfcfd;padding:8px 12px;font-size:11px;line-height:1.8;color:#374151;font-weight:700;min-height:44px;white-space:pre-wrap;}",
+      ".fin-print .sign{margin-top:14px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}",
+      ".fin-print .sign .item{border:1px solid #d1d5db;border-radius:8px;padding:7px 10px 8px;background:#fff;display:flex;flex-direction:column;}",
+      ".fin-print .sign .item .k{font-size:10.5px;font-weight:900;color:#6b7280;letter-spacing:.5px;}",
+      ".fin-print .sign .item .by{font-size:10px;font-weight:900;color:#b71c1c;min-height:13px;text-align:center;}",
+      ".fin-print .sign .item .line{height:26px;border-bottom:1px solid #9ca3af;margin:3px 0 4px;}",
+      ".fin-print .sign .item .dt{font-size:9.5px;font-weight:700;color:#9ca3af;text-align:right;}"
     ].join("");
+    st.textContent = css;
     document.head.appendChild(st);
+    window.__nwFinPrintCss = css;
   }
 
   /* ------------------------------------------------------------------ */
@@ -898,53 +939,305 @@
     buildPrintHtml: function (opts) {
       const cfg = opts || {};
       const agg = cfg.agg || {};
-      const rows = function (list, cols) {
-        if (!list || !list.length) return '<tr><td colspan="' + cols + '" style="text-align:center;color:#6b7280;">無資料</td></tr>';
-        return list.join("");
+      const txList = Array.isArray(cfg.txList) ? cfg.txList : [];
+      const bankList = Array.isArray(cfg.bankList) ? cfg.bankList : [];
+      const books = Array.isArray(cfg.books) ? cfg.books : [];
+      const from = String(agg.from || "");
+      const to = String(agg.to || "");
+      const inRange = function (d) {
+        d = String(d || "");
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        return true;
       };
-      const catRows = function (list, kindLabel) {
-        return (list || []).map(function (r) {
-          return "<tr><td>" + esc(kindLabel) + "</td><td>" + esc(r.category) + "</td><td>" +
-            fmtMoney(r.amount) + "</td><td>" + r.pct.toFixed(2) + "%</td></tr>";
+      const communityText = esc(cfg.communityName || "—");
+      const preset = cfg.preset || "custom";
+      const reportTitle = { day: "日報表", month: "月報表", year: "年報表", custom: "區間報表" }[preset] || "財報系統";
+      const fees = cfg.fees || null;
+      const stamp = nowStamp();
+      const formNo = "NW-FIN-" + ({ day: "D", month: "M", year: "Y", custom: "C" }[preset] || "C") +
+        "-" + (from || stamp.slice(0, 10)).replace(/-/g, "");
+      const pct = function (n, t) { return t > 0 ? (n / t * 100).toFixed(1) + "%" : "0.0%"; };
+      const num = function (v) { return '<td class="num">' + fmtMoney(v) + "</td>"; };
+      const ctr = function (v) { return '<td class="ctr">' + esc(v) + "</td>"; };
+      const moneyCell = function (n) { return num(n); };
+
+      /* 各帳本於指定期間的存入／提出，以及累計至迄日的餘額 */
+      const bookFlow = function () {
+        return books.map(function (bk) {
+          const id = String(bk.id || "");
+          let dep = 0, wd = 0, allDep = 0, allWd = 0;
+          bankList.forEach(function (b) {
+            if (id && String(b.bookId || b.bookName || "") !== id && String(b.bookName || "") !== String(bk.name || "")) return;
+            const d = String(b.date || "");
+            if (inRange(d)) { dep += toNum(b.deposit, 0); wd += toNum(b.withdraw, 0); }
+            if (!to || d <= to) { allDep += toNum(b.deposit, 0); allWd += toNum(b.withdraw, 0); }
+          });
+          const opening = toNum(bk.openingBalance, 0);
+          return {
+            name: bk.name || "未命名帳本",
+            opening: opening,
+            deposit: dep,
+            withdraw: wd,
+            balance: opening + allDep - allWd
+          };
         });
       };
-      const monthRows = (agg.monthly || []).map(function (m) {
-        return "<tr><td>" + esc(m.month) + "</td><td>" + fmtMoney(m.income) + "</td><td>" +
-          fmtMoney(m.expense) + "</td><td>" + fmtMoney(m.net) + "</td></tr>";
-      });
-      const bankRows = (agg.bankRows || []).map(function (b) {
-        return "<tr><td>" + esc(b.date) + "</td><td>" + esc(b.bookName || "") + "</td><td>" + esc(b.summary) + "</td><td>" +
-          fmtMoney(b.deposit) + "</td><td>" + fmtMoney(b.withdraw) + "</td><td>" + fmtMoney(b.balance) + "</td></tr>";
-      });
-      const communityText = esc(cfg.communityName || "—");
-      /* 抬頭依所選期間類型命名：本日／本月／本年／自訂 */
-      const reportTitle = { day: "日報表", month: "月報表", year: "年報表", custom: "區間報表" }[cfg.preset] || "財報系統";
-      const fees = cfg.fees || null;
-      const feeTable = !fees ? "" :
-        "<h2>管理費與應付</h2>" +
-        "<table><tr><th>應收收入（管理費收入）</th><th>管理費實收</th>" +
-        (fees.rate !== null && fees.rate !== undefined ? "<th>管理費達成率</th>" : "") +
-        "<th>應付支出</th></tr>" +
-        "<tr><td>" + fmtMoney(fees.due) + "</td><td>" + fmtMoney(fees.received) + "</td>" +
-        (fees.rate !== null && fees.rate !== undefined ? "<td>" + fees.rate.toFixed(1) + "%</td>" : "") +
-        "<td>" + fmtMoney(agg.totalExpense) + "</td></tr></table>";
-      return '<div class="hdr"><span class="community">' + communityText + '</span><h1>' + esc(reportTitle) + '</h1></div>' +
-        '<div class="meta">期間：' + esc(cfg.rangeLabel || "全部") +
-        "（" + esc(agg.from || "全部") + " ~ " + esc(agg.to || "全部") + "）" +
-        "｜匯出人：" + esc(cfg.exportedBy || "—") +
-        "｜產製時間：" + esc(nowStamp()) + "</div>" +
-        "<h2>總覽</h2>" +
-        "<table><tr><th>收入合計</th><th>支出合計</th><th>淨額</th><th>銀行期末餘額</th></tr>" +
-        "<tr><td>" + fmtMoney(agg.totalIncome) + "</td><td>" + fmtMoney(agg.totalExpense) + "</td><td>" +
-        fmtMoney(agg.net) + "</td><td>" + fmtMoney(agg.bankBalance) + "</td></tr></table>" +
-        feeTable +
-        "<h2>分類統計</h2>" +
-        "<table><tr><th>類型</th><th>類別</th><th>金額</th><th>佔比</th></tr>" +
-        rows(catRows(agg.incomeByCat, "收入").concat(catRows(agg.expenseByCat, "支出")), 4) + "</table>" +
-        "<h2>月報表</h2>" +
-        "<table><tr><th>月份</th><th>收入</th><th>支出</th><th>淨額</th></tr>" + rows(monthRows, 4) + "</table>" +
-        "<h2>銀行明細</h2>" +
-        "<table><tr><th>日期</th><th>帳本</th><th>摘要</th><th>存入</th><th>提出</th><th>餘額</th></tr>" + rows(bankRows, 6) + "</table>";
+
+      /* 表頭 */
+      const head = '<div class="doc-head">' +
+        '<div class="brand"><div class="mark">西</div>' +
+        '<div class="nm">' + communityText + '<small>財務管理報表　西北會議系統產出</small></div></div>' +
+        '<div class="doc-meta">表單編號：<b>' + esc(formNo) + '</b><br>' +
+        '匯出人：' + esc(cfg.exportedBy || "—") + '<br>列印時間：' + esc(stamp) + '</div></div>';
+      const titleBar = '<div class="title"><h1>' + communityText + '　財務' + esc(reportTitle) + '</h1>' +
+        '<div class="sub">報表期間：' + esc(from || "全部") + ' ～ ' + esc(to || "全部") + '　幣別：新台幣（元）</div></div>';
+      const kv = function (rows) {
+        return '<div class="kv">' + rows.map(function (r) {
+          return '<div class="row"><div class="k">' + esc(r[0]) + '</div><div class="v">' + esc(r[1]) + '</div></div>';
+        }).join("") + "</div>";
+      };
+      const sec = function (no, text, inner, note) {
+        return '<div class="sec"><h2>' + esc(no) + esc(text) +
+          (note ? '<span class="n">' + esc(note) + '</span>' : "") + '</h2>' + inner + '</div>';
+      };
+      const stats = function (items) {
+        return '<div class="stats">' + items.map(function (it) {
+          return '<div class="stat ' + esc(it.cls || "") + '"><div class="k">' + esc(it.k) +
+            '</div><div class="v">' + fmtMoney(it.v) + '<small>' + esc(it.u || "元") + '</small></div></div>';
+        }).join("") + "</div>";
+      };
+      const tableHtml = function (headers, rows, foot) {
+        const th = '<tr>' + headers.map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") + "</tr>";
+        const tr = rows.map(function (r) { return "<tr>" + r.map(function (c) { return String(c); }).join("") + "</tr>"; }).join("");
+        const tf = foot ? '<tfoot><tr>' + foot.map(function (c) { return String(c); }).join("") + "</tr></tfoot>" : "";
+        return '<table><thead>' + th + '</thead><tbody>' + (tr || '<tr><td colspan="' + headers.length + '" class="ctr" style="color:#6b7280;">無資料</td></tr>') + '</tbody>' + tf + '</table>';
+      };
+
+      /* 浮水印：以社區名稱為全文淡色斜印 */
+      const wm = '<div class="wm"><span>' + communityText + "</span></div>";
+
+      /* 備註／建議：優先使用使用者手動填入的內容，留空時依本期收支自動產生 */
+      const autoNote = function (kind) {
+        const scope = kind === "year" ? "本年度" : kind === "month" ? "本月" : "本日";
+        const topCat = function (list) {
+          if (!Array.isArray(list) || !list.length) return null;
+          return list.slice().sort(function (a, b) { return toNum(b.amount, 0) - toNum(a.amount, 0); })[0];
+        };
+        const money = function (v) { return fmtMoney(v) + " 元"; };
+        const hasData = toNum(agg.totalIncome, 0) || toNum(agg.totalExpense, 0) ||
+          (agg.incomeByCat || []).length || (agg.expenseByCat || []).length;
+        if (!hasData) return scope + "尚無收支紀錄，各項數據為 0，無異常事項。";
+        const incTotal = (agg.incomeByCat || []).reduce(function (a, r) { return a + r.amount; }, 0);
+        const parts = [];
+        parts.push(scope + "收入 " + money(agg.totalIncome) + "、支出 " + money(agg.totalExpense) +
+          "，收支淨額 " + money(agg.net) + "。");
+        const topExp = topCat(agg.expenseByCat);
+        if (topExp && toNum(topExp.amount, 0) > 0) {
+          parts.push("支出以「" + topExp.category + "」" + money(topExp.amount) + "為大宗（占比 " + pct(topExp.amount, agg.totalExpense) + "）。");
+        }
+        const topInc = topCat(agg.incomeByCat);
+        if (topInc && toNum(topInc.amount, 0) > 0) {
+          parts.push("收入主要來自「" + topInc.category + "」" + money(topInc.amount) + "（占比 " + pct(topInc.amount, incTotal) + "）。");
+        }
+        if (fees && fees.rate !== null && fees.rate !== undefined) {
+          parts.push("管理費收繳率 " + fees.rate.toFixed(1) + "％（實收 " + money(fees.received) + "／應收 " + money(fees.due) + "）。");
+        }
+        parts.push(toNum(agg.net, 0) >= 0 ? "本期收支為結餘，財務狀況正常。" : "本期收支為短絀，建議檢視並控管支出項目。");
+        return parts.join("");
+      };
+      const noteText = String(cfg.note == null ? "" : cfg.note).trim();
+      const noteSec = function (no, title, kind) {
+        return sec(no, title, '<div class="note">' + esc(noteText || autoNote(kind)) + "</div>");
+      };
+
+      /* 簽核欄位 */
+      const signBlock = function () {
+        const by = String(cfg.exportedBy || "").trim();
+        const items = [["主任委員", ""], ["財務委員", ""], ["物業公司", ""], ["製表人", by]];
+        return '<div class="sign">' + items.map(function (it) {
+          return '<div class="item"><div class="k">' + esc(it[0]) + '</div>' +
+            '<div class="line"></div>' +
+            '<div class="by">' + esc(it[1] || "") + "</div>" +
+            '<div class="dt">簽章日期：　　　</div></div>';
+        }).join("") + "</div>";
+      };
+
+      /* ==================== 日報表 ==================== */
+      if (preset === "day") {
+        const incomeTx = (agg.transactions || []).filter(function (t) { return t.kind !== "expense"; });
+        const expenseTx = (agg.transactions || []).filter(function (t) { return t.kind === "expense"; });
+        const incRows = incomeTx.map(function (t) {
+          return ["<td>" + esc(t.receiptNo || "") + "</td>", "<td>" + esc(t.category || "") + "</td>",
+            "<td>" + esc(t.target || "") + "</td>", moneyCell(t.amount), "<td>" + esc(t.method || "") + "</td>"];
+        });
+        const expRows = expenseTx.map(function (t) {
+          return ["<td>" + esc(t.receiptNo || "") + "</td>", "<td>" + esc(t.category || "") + "</td>",
+            "<td>" + esc(t.target || "") + "</td>", moneyCell(t.amount), "<td>" + esc(t.method || "") + "</td>"];
+        });
+        const flows = bookFlow();
+        const bankRows = flows.map(function (f) {
+          return ["<td>" + esc(f.name) + "</td>", moneyCell(f.deposit), moneyCell(f.withdraw), moneyCell(f.balance)];
+        });
+        const body =
+          sec("一、", "本日收支彙總", stats([
+            { k: "本日收入合計", v: agg.totalIncome, cls: "income" },
+            { k: "本日支出合計", v: agg.totalExpense, cls: "expense" },
+            { k: "本日收支淨額", v: agg.net },
+            { k: "銀行帳戶餘額", v: agg.bankBalance }
+          ]), from) +
+          sec("二、", "收入明細（本日）", tableHtml(
+            ["單據編號", "類別", "對象", "金額(元)", "收款方式"],
+            incRows,
+            ["<td>合計</td>", "<td></td>", "<td></td>", moneyCell(agg.totalIncome), "<td></td>"]
+          ), incomeTx.length + " 筆") +
+          sec("三、", "支出明細（本日）", tableHtml(
+            ["單據編號", "類別", "對象", "金額(元)", "付款方式"],
+            expRows,
+            ["<td>合計</td>", "<td></td>", "<td></td>", moneyCell(agg.totalExpense), "<td></td>"]
+          ), expenseTx.length + " 筆") +
+          (fees ? sec("四、", "管理費收繳狀況（本月累計）", tableHtml(
+            ["應收總額(元)", "實收總額(元)", "未收金額(元)", "收繳率"],
+            [[moneyCell(fees.due), moneyCell(fees.received), moneyCell((fees.due || 0) - (fees.received || 0)),
+              ctr(fees.rate !== null && fees.rate !== undefined ? fees.rate.toFixed(1) + "%" : "—")]]
+          )) : "") +
+          sec("五、", "銀行帳戶餘額（本日）", tableHtml(
+            ["帳本／帳戶", "本日存入(元)", "本日提出(元)", "帳戶餘額(元)"],
+            bankRows,
+            ["<td>合計</td>", moneyCell(agg.bankIn), moneyCell(agg.bankOut), moneyCell(agg.bankBalance)]
+          ));
+        return wm + head + titleBar + kv([
+          ["社區名稱", cfg.communityName || "—"],
+          ["統計範圍", (from || "全部") + " ～ " + (to || "全部")],
+          ["製表人", cfg.exportedBy || "—"],
+          ["複核", "—"]
+        ]) + body +
+          noteSec("六、", "備註事項", "day") +
+          signBlock();
+      }
+
+      /* ==================== 月報表 ==================== */
+      if (preset === "month") {
+        const incCats = agg.incomeByCat || [];
+        const expCats = agg.expenseByCat || [];
+        const incPts = incCats.reduce(function (a, r) { return a + r.amount; }, 0);
+        const catDual = '<div class="cols2">' +
+          '<div><div class="sub-h">收入類別</div>' + tableHtml(
+            ["類別", "金額(元)", "占比"],
+            incCats.map(function (r) { return ["<td>" + esc(r.category) + "</td>", moneyCell(r.amount), ctr(pct(r.amount, incPts))]; }),
+            ["<td>收入合計</td>", moneyCell(incPts), ctr("100%")]
+          ) + "</div>" +
+          '<div><div class="sub-h">支出類別</div>' + tableHtml(
+            ["類別", "金額(元)", "占比"],
+            expCats.map(function (r) { return ["<td>" + esc(r.category) + "</td>", moneyCell(r.amount), ctr(pct(r.amount, agg.totalExpense))]; }),
+            ["<td>支出合計</td>", moneyCell(agg.totalExpense), ctr("100%")]
+          ) + "</div></div>";
+        const flows = bookFlow();
+        const bankRows = flows.map(function (f) {
+          return ["<td>" + esc(f.name) + "</td>", moneyCell(f.opening), moneyCell(f.deposit), moneyCell(f.withdraw), moneyCell(f.balance)];
+        });
+        const body =
+          sec("一、", "本月收支彙總", stats([
+            { k: "本月收入合計", v: agg.totalIncome, cls: "income" },
+            { k: "本月支出合計", v: agg.totalExpense, cls: "expense" },
+            { k: "本月收支淨額", v: agg.net },
+            { k: "銀行期末餘額", v: agg.bankBalance }
+          ]), from) +
+          sec("二、", "收支類別統計", catDual) +
+          (fees ? sec("三、", "管理費收繳統計", tableHtml(
+            ["應收總額(元)", "實收總額(元)", "未收金額(元)", "收繳率"],
+            [[moneyCell(fees.due), moneyCell(fees.received), moneyCell((fees.due || 0) - (fees.received || 0)),
+              ctr(fees.rate !== null && fees.rate !== undefined ? fees.rate.toFixed(1) + "%" : "—")]]
+          )) : "") +
+          sec("四、", "銀行帳戶月結", tableHtml(
+            ["帳本／帳戶", "期初餘額(元)", "本月存入(元)", "本月提出(元)", "期末餘額(元)"],
+            bankRows,
+            ["<td>合計</td>", moneyCell(agg.bankOpening), moneyCell(agg.bankIn), moneyCell(agg.bankOut), moneyCell(agg.bankBalance)]
+          ));
+        return wm + head + titleBar + kv([
+          ["社區名稱", cfg.communityName || "—"],
+          ["統計期間", (from || "全部") + " ～ " + (to || "全部")],
+          ["製表人", cfg.exportedBy || "—"],
+          ["複核", "—"]
+        ]) + body +
+          noteSec("五、", "重要事項與建議", "month") +
+          signBlock();
+      }
+
+      /* ==================== 年報表 ==================== */
+      if (preset === "year") {
+        let bal = toNum(agg.bankOpening, 0);
+        const monthRows = (agg.monthly || []).map(function (m) {
+          const net = m.income - m.expense;
+          bal += net;
+          return ["<td>" + esc(m.month) + "</td>", moneyCell(m.income), moneyCell(m.expense),
+            '<td class="num ' + (net >= 0 ? "pos" : "neg") + '">' + fmtMoney(net) + "</td>", moneyCell(bal)];
+        });
+        const incCats = agg.incomeByCat || [];
+        const expCats = agg.expenseByCat || [];
+        const incPts = incCats.reduce(function (a, r) { return a + r.amount; }, 0);
+        const catDual = '<div class="cols2">' +
+          '<div><div class="sub-h">年度收入類別</div>' + tableHtml(
+            ["類別", "金額(元)", "占比"],
+            incCats.map(function (r) { return ["<td>" + esc(r.category) + "</td>", moneyCell(r.amount), ctr(pct(r.amount, incPts))]; }),
+            ["<td>合計</td>", moneyCell(incPts), ctr("100%")]
+          ) + "</div>" +
+          '<div><div class="sub-h">年度支出類別</div>' + tableHtml(
+            ["類別", "金額(元)", "占比"],
+            expCats.map(function (r) { return ["<td>" + esc(r.category) + "</td>", moneyCell(r.amount), ctr(pct(r.amount, agg.totalExpense))]; }),
+            ["<td>合計</td>", moneyCell(agg.totalExpense), ctr("100%")]
+          ) + "</div></div>";
+        const body =
+          sec("一、", "年度收支彙總", stats([
+            { k: "年度收入合計", v: agg.totalIncome, cls: "income" },
+            { k: "年度支出合計", v: agg.totalExpense, cls: "expense" },
+            { k: "年度收支淨額", v: agg.net },
+            { k: "銀行期末餘額", v: agg.bankBalance }
+          ]), from) +
+          sec("二、", "各月收支統計", tableHtml(
+            ["月份", "收入(元)", "支出(元)", "淨額(元)", "累計餘額(元)"],
+            monthRows,
+            ["<td>全年合計</td>", moneyCell(agg.totalIncome), moneyCell(agg.totalExpense),
+              '<td class="num ' + (agg.net >= 0 ? "pos" : "neg") + '">' + fmtMoney(agg.net) + "</td>", moneyCell(bal)]
+          )) +
+          sec("三、", "年度收支類別統計", catDual);
+        return wm + head + titleBar + kv([
+          ["社區名稱", cfg.communityName || "—"],
+          ["統計期間", (from || "全部") + " ～ " + (to || "全部")],
+          ["製表人", cfg.exportedBy || "—"],
+          ["複核", "—"]
+        ]) + body +
+          noteSec("四、", "年度重點與建議", "year") +
+          signBlock();
+      }
+
+      /* ==================== 自訂區間 ==================== */
+      const incCats = agg.incomeByCat || [];
+      const expCats = agg.expenseByCat || [];
+      const incPts = incCats.reduce(function (a, r) { return a + r.amount; }, 0);
+      const body =
+        sec("一、", "區間收支彙總", stats([
+          { k: "收入合計", v: agg.totalIncome, cls: "income" },
+          { k: "支出合計", v: agg.totalExpense, cls: "expense" },
+          { k: "收支淨額", v: agg.net },
+          { k: "銀行期末餘額", v: agg.bankBalance }
+        ]), from + " ～ " + to) +
+        sec("二、", "收入類別統計", tableHtml(
+          ["類別", "金額(元)", "占比"],
+          incCats.map(function (r) { return ["<td>" + esc(r.category) + "</td>", moneyCell(r.amount), ctr(pct(r.amount, incPts))]; }),
+          ["<td>收入合計</td>", moneyCell(incPts), ctr("100%")]
+        )) +
+        sec("三、", "支出類別統計", tableHtml(
+          ["類別", "金額(元)", "占比"],
+          expCats.map(function (r) { return ["<td>" + esc(r.category) + "</td>", moneyCell(r.amount), ctr(pct(r.amount, agg.totalExpense))]; }),
+          ["<td>支出合計</td>", moneyCell(agg.totalExpense), ctr("100%")]
+        ));
+      return wm + head + titleBar + kv([
+        ["社區名稱", cfg.communityName || "—"],
+        ["統計期間", (from || "全部") + " ～ " + (to || "全部")],
+        ["製表人", cfg.exportedBy || "—"],
+        ["複核", "—"]
+      ]) + body + signBlock();
     },
 
     /** 將指定 HTML 內容繪製成 A4 PDF 並開啟預覽（自動加註頁碼、匯出人／時間與浮水印） */
@@ -966,13 +1259,22 @@
         const pageW = pdf.internal.pageSize.getWidth();
         const pageH = pdf.internal.pageSize.getHeight();
         const imgW = pageW;
-        const imgH = (canvas.height * imgW) / canvas.width;
-        let offset = 0;
-        pdf.addImage(imgData, "JPEG", 0, 0, imgW, imgH);
-        while (imgH - (offset + pageH) > 0) {
-          offset += pageH;
-          pdf.addPage();
-          pdf.addImage(imgData, "JPEG", 0, -offset, imgW, imgH);
+        const rawH = (canvas.height * imgW) / canvas.width;
+        const ratio = canvas.height / canvas.width;
+        /* 分頁：內容僅略微超出時等比縮小至整頁，避免最後一頁只印出一小條 */
+        let pages = Math.max(1, Math.ceil(rawH / pageH - 0.001));
+        let drawW = imgW;
+        let drawH = rawH;
+        if (pages > 1 && rawH - (pages - 1) * pageH < pageH * 0.5) {
+          pages -= 1;
+          drawH = pages * pageH - 2;
+          drawW = drawH / ratio;
+          if (drawW > pageW) { drawW = pageW; drawH = drawW * ratio; }
+        }
+        const offsetX = (pageW - drawW) / 2;
+        for (let p = 0; p < pages; p++) {
+          if (p > 0) pdf.addPage();
+          pdf.addImage(imgData, "JPEG", offsetX, -p * pageH, drawW, drawH);
         }
         /* 逐頁加註頁碼、匯出人／匯出時間與浮水印 */
         const total = pdf.internal.getNumberOfPages();
@@ -1015,9 +1317,10 @@
       const cfg = opts || {};
       const filename = sanitizeFilename(cfg.communityName) + "_財報系統_" +
         sanitize(cfg.rangeLabel || "全部") + "_" + (cfg.agg && cfg.agg.from ? cfg.agg.from : "全部") + ".pdf";
+      /* 浮水印（社區名稱）已隨報表 HTML 一併繪入，避免重複加註 */
       return Export.exportPdfFromHtml(Export.buildPrintHtml(cfg), filename, {
         exportedBy: cfg.exportedBy || "",
-        watermark: cfg.watermark || cfg.communityName || ""
+        watermark: ""
       });
     },
 
@@ -1282,7 +1585,9 @@
           toast("無法開啟列印視窗，請確認瀏覽器允許彈出視窗", true);
           return;
         }
-        w.document.write('<html><head><title>財報系統</title></head><body>' +
+        w.document.write('<html><head><title>財報系統</title><style>' +
+          (window.__nwFinPrintCss || "") +
+          "@media print{.fin-print{position:relative!important;left:auto!important;width:auto!important;padding:0!important;}button{display:none;}}</style></head><body>" +
           '<button onclick="window.print()" style="padding:8px 16px;margin-bottom:12px;">列印 / 另存 PDF</button>' +
           (node ? node.outerHTML : "") + "</body></html>");
         w.document.close();
@@ -1482,7 +1787,7 @@
           expense: { month: "", category: "", q: "", target: "", from: "", to: "", noBook: false },
           bank: { month: todayStr().slice(0, 7), q: "" }
         },
-        report: { preset: "day", from: dayRange().from, to: dayRange().to },
+        report: { preset: "day", from: dayRange().from, to: dayRange().to, notes: {} },
         budgetYear: String(new Date().getFullYear() + 1),
         communityCreatedAt: "",
         config: {
@@ -3678,6 +3983,20 @@
             '<div class="field"><label>迄日</label><input type="date" data-fin-range="to" max="' + maxDate + '"' +
             (minDate ? ' min="' + minDate + '"' : "") + ' value="' + esc(r.to) + '"/></div>'
           : "";
+        /* 報表備註／建議（留空時由報表自動產生內容） */
+        const noteLabels = {
+          day: "備註事項（列為報表第六項）",
+          month: "重要事項與建議（列為報表第五項）",
+          year: "年度重點與建議（列為報表第四項）"
+        };
+        const noteField = noteLabels[r.preset]
+          ? '<div class="field" style="margin-top:10px;">' +
+            "<label>" + noteLabels[r.preset] +
+            '<span style="color:#9ca3af;font-weight:700;">　（留空則依本期收支自動產生）</span></label>' +
+            '<textarea rows="3" data-fin-report-note="1" placeholder="可手動輸入內容，將列印於報表"' +
+            ' style="' + inputStyle + 'resize:vertical;line-height:1.6;">' +
+            esc(((state.report.notes || {})[r.preset]) || "") + "</textarea></div>"
+          : "";
         return "" +
           '<div class="fin-toolbar">' +
           presets.map(function (p) {
@@ -3693,6 +4012,7 @@
           '<button class="btn" type="button" data-fin-backup="1">資料備份</button>' +
           '<button class="btn btn-ghost" type="button" data-fin-audit="1">稽核紀錄</button>' +
           "</div>" +
+          noteField +
           '<div class="fin-stat-grid">' +
           statCard("收入合計", fmtMoney(agg.totalIncome), "#15803d") +
           (fees ? statCard("應收收入（管理費收入）", fmtMoney(feeDue), "#0f766e") : "") +
@@ -4343,6 +4663,13 @@
             }
             state.report.preset = "custom";
             render();
+          });
+        });
+
+        container.querySelectorAll("[data-fin-report-note]").forEach(function (el) {
+          el.addEventListener("input", function () {
+            if (!state.report.notes) state.report.notes = {};
+            state.report.notes[state.report.preset] = String(el.value || "");
           });
         });
 
@@ -5582,7 +5909,11 @@
           preset: r.preset,
           rangeLabel: presetLabel,
           exportedBy: String(context.name || "").trim(),
+          note: String(((r.notes || {})[r.preset]) || ""),
           fees: reportFees(),
+          txList: state.tx,
+          bankList: state.bank,
+          books: state.books,
           agg: Model.aggregate(state.tx, state.bank, { from: r.from, to: r.to }, state.books)
         }).then(function (ok) {
           if (ok) toast("已產生 PDF");

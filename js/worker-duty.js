@@ -431,6 +431,8 @@
     punchIn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5M15 12H3"/></svg>',
     punchOut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M14 17l5-5-5-5M19 12H9"/></svg>',
     bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+    pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>',
+    camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.2a2 2 0 0 0 1.7-.95l.55-.9A1.6 1.6 0 0 1 10.3 3h3.4a1.6 1.6 0 0 1 1.35.75l.55.9A2 2 0 0 0 17.3 6h1.2A2.5 2.5 0 0 1 21 8.5v9A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5z"/><circle cx="12" cy="13" r="3.4"/></svg>',
   };
 
   function renderPunchTab(root, ctx, st) {
@@ -490,7 +492,9 @@
           <div class="box in"><span class="ico">${ICO.sun}</span><span class="t"><span class="k">${esc(inLabel)}</span><span class="v">${fmtTime(inAt)}</span></span></div>
           <div class="box"><span class="ico">${ICO.moon}</span><span class="t"><span class="k">${esc(outLabel)}</span><span class="v">${fmtTime(outAt)}</span></span></div>
         </div>
-        ${ev.flags.length ? `<div class="wc-hero-flags">${ev.flags.map((f) => `<span class="wc-flag${f.indexOf("加班") === 0 ? " ot" : ""}">${esc(f)}</span>`).join("")}</div>` : ""}
+        <div class="wc-hero-flags">
+          ${ev.flags.map((f) => `<span class="wc-flag${f.indexOf("加班") === 0 ? " ot" : ""}">${esc(f)}</span>`).join("")}
+        </div>
         ${guard ? `<div class="wc-hero-hd">
           <span class="k">交接</span>
           <span class="v">${esc(hdTxt || "尚無交班紀錄")}</span>
@@ -531,6 +535,100 @@
     const hb = root.querySelector("[data-wd-hdview]");
     if (hb) hb.onclick = () => openHandoverView(hd);
     startClock();
+  }
+
+  /* 打卡定位的地圖縮圖（OSM 圖磚拼貼，中央標記打卡點） */
+  function mapThumbHtml(geo) {
+    const lat = Number(geo && geo.latitude), lng = Number(geo && geo.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "";
+    const Z = 17, TILE = 256, DISP = TILE * 2, SIZE = 36, N = Math.pow(2, Z);
+    const xf = (lng + 180) / 360 * N;
+    const latRad = lat * Math.PI / 180;
+    const yf = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * N;
+    const left = xf * DISP - SIZE / 2, top = yf * DISP - SIZE / 2;
+    let imgs = "";
+    for (let ty = Math.floor(top / DISP); ty <= Math.floor((top + SIZE - 1) / DISP); ty++) {
+      if (ty < 0 || ty >= N) continue;
+      for (let tx = Math.floor(left / DISP); tx <= Math.floor((left + SIZE - 1) / DISP); tx++) {
+        const wx = ((tx % N) + N) % N;
+        imgs += `<img src="https://tile.openstreetmap.org/${Z}/${wx}/${ty}.png" alt="" style="left:${tx * DISP - left}px;top:${ty * DISP - top}px;width:${DISP}px;height:${DISP}px;">`;
+      }
+    }
+    return `<span class="wc-mthumb">${imgs}<i class="wc-mthumb-pin"></i></span>`;
+  }
+
+  /* 在彈窗中直接顯示打卡位置地圖 */
+  function buildPunchMap(host) {
+    const lat = Number(host.dataset.lat), lng = Number(host.dataset.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    if (typeof L === "undefined" || !L.map) {
+      host.classList.add("nomap");
+      host.textContent = "地圖元件未載入";
+      return;
+    }
+    const m = L.map(host, { zoomControl: true, scrollWheelZoom: false, attributionControl: false });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(m);
+    L.marker([lat, lng], {
+      icon: L.divIcon({ className: "", html: '<div class="wc-mmap-pin"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }),
+    }).addTo(m);
+    m.setView([lat, lng], 17);
+    setTimeout(() => { try { m.invalidateSize(); } catch {} }, 120);
+  }
+
+  /* 放大檢視打卡的定位／自拍照 */
+  function openPunchMedia(st, kind, src, dateVal) {
+    const c = src || {};
+    const geos = [];
+    if (c.inGeo && (c.inGeo.latitude != null || c.inGeo.longitude != null || c.inGeo.distance != null)) geos.push(["上班", c.inGeo, c.inAt]);
+    if (c.outGeo && (c.outGeo.latitude != null || c.outGeo.longitude != null || c.outGeo.distance != null)) geos.push(["下班", c.outGeo, c.outAt]);
+    const photos = [];
+    if (c.inPhoto) photos.push(["上班", String(c.inPhoto), c.inAt]);
+    if (c.outPhoto) photos.push(["下班", String(c.outPhoto), c.outAt]);
+
+    const distTxt = (g) => (g.distance != null && Number.isFinite(Number(g.distance)) ? `距離 ${Math.round(Number(g.distance))} 公尺` : "");
+    const coordTxt = (g) => (g.latitude != null && g.longitude != null ? `${Number(g.latitude).toFixed(6)}, ${Number(g.longitude).toFixed(6)}` : "");
+    const geoRow = ([label, g, ts]) => {
+      const lat = Number(g.latitude), lng = Number(g.longitude);
+      const hasCoord = Number.isFinite(lat) && Number.isFinite(lng);
+      return `
+      <div class="wc-mrow">
+        <div class="hd"><span class="lb">${label}</span><span class="tm">${esc(fmtTime(ts))}</span></div>
+        ${distTxt(g) ? `<div class="kv">${distTxt(g)}</div>` : ""}
+        ${coordTxt(g) ? `<div class="kv">${coordTxt(g)}</div>` : '<div class="kv">無座標資料</div>'}
+        ${hasCoord ? `<div class="wc-mmap" data-lat="${lat}" data-lng="${lng}"></div>` : ""}
+      </div>`;
+    };
+    const photoRow = ([label, url, ts]) => `
+      <div class="wc-mrow">
+        <div class="hd"><span class="lb">${label}</span><span class="tm">${esc(fmtTime(ts))}</span></div>
+        <img class="wc-mimg" src="${esc(url)}" alt="${label}打卡照片">
+      </div>`;
+
+    const title = kind === "loc" ? "打卡定位" : "打卡照片";
+    const body = kind === "loc"
+      ? (geos.length ? geos.map(geoRow).join("") : '<div class="wc-empty">尚無定位紀錄。</div>')
+      : (photos.length ? photos.map(photoRow).join("") : '<div class="wc-empty">尚無打卡照片。</div>');
+
+    const wrap = document.createElement("div");
+    wrap.className = "wc-applywrap";
+    wrap.innerHTML = `
+      <div class="wc-applycard" role="dialog" aria-modal="true" aria-label="${title}">
+        <div class="wc-applyhd">
+          <div class="t">${title}　${esc(fmtDateKey(dateVal || todayKey()))}</div>
+          <button type="button" class="wc-applyclose" data-close="1" aria-label="關閉">×</button>
+        </div>
+        <div class="wc-applybd">${body}</div>
+      </div>`;
+    document.body.appendChild(wrap);
+    wrap.querySelectorAll(".wc-mmap").forEach(buildPunchMap);
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    const close = () => {
+      document.removeEventListener("keydown", onKey);
+      if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+    };
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    wrap.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
+    document.addEventListener("keydown", onKey);
   }
 
   /* 決定目前要操作／顯示的打卡紀錄：今日未結案優先；否則若前一日為跨日班且未下班，沿用前一日 */
@@ -637,6 +735,9 @@
     const extras = [];
     if (nonNegNum(x.otMin, 0) > 0) extras.push(`加班 ${x.otMin} 分`);
     if (done && x.workMin != null) extras.push(`工時 ${(nonNegNum(x.workMin, 0) / 60).toFixed(1)} 小時`);
+    const selfie = String(x.outPhoto || x.inPhoto || "");
+    const geoInfo = x.outGeo || x.inGeo || null;
+    const hasGeo = !!(geoInfo && (geoInfo.latitude != null || geoInfo.longitude != null || geoInfo.distance != null));
     return `
       <div class="wc-item">
         <div class="row1">
@@ -644,7 +745,13 @@
           <span class="wc-tag ${done && !flags.length ? "done" : ""}">${tag}</span>
         </div>
         <div class="time">上班 ${esc(fmtTime(x.inAt))}　·　下班 ${esc(fmtTime(x.outAt))}</div>
-        ${(flags.length || extras.length) ? `<div class="wc-hero-flags">${flags.concat(extras).map((f) => `<span class="wc-flag${f.indexOf("加班") === 0 ? " ot" : ""}">${esc(f)}</span>`).join("")}</div>` : ""}
+        <div class="wc-hero-flags">
+          ${flags.concat(extras).map((f) => `<span class="wc-flag${f.indexOf("加班") === 0 ? " ot" : ""}">${esc(f)}</span>`).join("")}
+          <div class="wc-hero-quick">
+            <button type="button" class="wc-quick${hasGeo ? " on" : ""}" data-wd-loc="1" aria-label="查看打卡定位" title="打卡定位">${hasGeo ? mapThumbHtml(geoInfo) : ICO.pin}</button>
+            <button type="button" class="wc-quick" data-wd-selfie="1" aria-label="查看打卡照片" title="打卡照片">${selfie ? `<img src="${esc(selfie)}" alt="">` : ICO.camera}</button>
+          </div>
+        </div>
       </div>`;
   }
 
@@ -727,6 +834,10 @@
     if (next) next.onclick = () => { const k = shiftDateKey(key, 1); go(k > today ? today : k); };
     const view = root.querySelector("#wdRecDateBtn");
     if (view) view.onclick = () => openRecordDatePicker(ctx, st, go);
+    const lb = root.querySelector("[data-wd-loc]");
+    if (lb) lb.onclick = () => openPunchMedia(st, "loc", day, key);
+    const sb = root.querySelector("[data-wd-selfie]");
+    if (sb) sb.onclick = () => openPunchMedia(st, "selfie", day, key);
   }
 
   /* 打卡紀錄日期選擇：只列出有打卡紀錄的日期，且不顯示今日之後 */

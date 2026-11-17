@@ -286,13 +286,41 @@ body{
 .wc-punch:disabled{opacity:.6;cursor:not-allowed;}
 
 /* 異常標籤 */
-.wc-hero-flags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;padding-left:10px;}
+.wc-hero-flags{display:flex;flex-wrap:wrap;align-items:center;gap:6px;}
+.wc-hero > .wc-hero-flags{margin-top:12px;padding-left:10px;}
+.wc-item .wc-hero-flags{margin-top:8px;}
 .wc-flag{
   font-size:12.5px;font-weight:900;border-radius:999px;padding:4px 10px;
   background:rgba(211,47,47,.10);color:var(--wc-red-dark);
   border:1px solid rgba(211,47,47,.18);
 }
 .wc-flag.ot{background:rgba(37,99,235,.10);color:#1d4ed8;border-color:rgba(37,99,235,.18);}
+/* 打卡快速檢視：定位／自拍縮圖（1:1） */
+.wc-hero-quick{margin-left:auto;display:flex;align-items:center;gap:6px;flex:0 0 auto;}
+.wc-quick{
+  width:38px;height:38px;flex:0 0 auto;padding:0;border-radius:11px;overflow:hidden;
+  border:1px solid var(--wc-line);background:#f3f4f6;color:#9ca3af;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.wc-quick svg{width:20px;height:20px;}
+.wc-quick img{width:100%;height:100%;object-fit:cover;display:block;}
+.wc-quick.on{background:rgba(211,47,47,.08);border-color:rgba(211,47,47,.28);color:var(--wc-red-dark);}
+/* 定位按鈕：地圖縮圖 */
+.wc-mthumb{position:relative;display:block;width:100%;height:100%;overflow:hidden;background:#e8eef1;}
+.wc-mthumb img{position:absolute;display:block;object-fit:fill;max-width:none;}
+.wc-mthumb-pin{position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:var(--wc-red);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45);}
+/* 打卡媒體檢視彈窗 */
+.wc-mrow{margin-bottom:14px;}
+.wc-mrow .hd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;}
+.wc-mrow .lb{font-size:14px;font-weight:900;color:var(--wc-ink);}
+.wc-mrow .tm{font-size:13px;font-weight:800;color:var(--wc-muted);font-variant-numeric:tabular-nums;}
+.wc-mrow .kv{font-size:14px;font-weight:700;color:#374151;}
+.wc-mimg{width:100%;border-radius:12px;border:1px solid var(--wc-line);display:block;}
+/* 打卡位置地圖 */
+.wc-mmap{height:180px;margin-top:8px;border-radius:12px;border:1px solid var(--wc-line);overflow:hidden;background:#eef2f5;}
+.wc-mmap.nomap{display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--wc-muted);}
+.wc-mmap .leaflet-container{border-radius:12px;}
+.wc-mmap-pin{width:18px;height:18px;border-radius:50%;background:var(--wc-red);border:3px solid #fff;box-sizing:border-box;box-shadow:0 1px 5px rgba(0,0,0,.45);}
 
 /* 交接列 */
 .wc-hero-hd{
