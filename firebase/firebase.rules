@@ -94,6 +94,15 @@ service cloud.firestore {
         && (
           key == primary
           || key in ids
+          // 舊版以「社區代號」作為資料路徑，需允許本人所屬社區的代號／文件 ID 別名存取
+          || (
+            primary != ""
+            && exists(/databases/$(database)/documents/communities/$(primary))
+            && (
+              get(/databases/$(database)/documents/communities/$(primary)).data.get('username', '') == key
+              || get(/databases/$(database)/documents/communities/$(primary)).data.get('id', '') == key
+            )
+          )
           || (
             exists(/databases/$(database)/documents/communities/$(slug))
             && (
@@ -487,6 +496,32 @@ service cloud.firestore {
           && request.resource.data.count >= 0;
       }
 
+      // 住戶端推播通知：全社區共用（audience == "all"）或指定住戶（toUid）
+      match /notifications/{notificationId} {
+        allow read: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || (
+            userCanAccessCommunitySlug(slug)
+            && (
+              resource.data.get('audience', '') == 'all'
+              || resource.data.get('toUid', '') == request.auth.uid
+            )
+          )
+        );
+        allow write: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      // 推播通知已讀清單：每位使用者只能寫自己的文件
+      match /notificationReads/{uid} {
+        allow read: if request.auth != null
+          && (request.auth.uid == uid || isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+        allow write: if request.auth != null
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(["ids", "updatedAt"])
+          && request.resource.data.ids is list;
+      }
+
       // 公告稽核軌跡（刪除等操作）
       match /bulletinAudit/{auditId} {
         allow read: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
@@ -528,26 +563,42 @@ service cloud.firestore {
         allow update, delete: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
       }
 
-      // 清潔人員上下班打卡：本人可讀寫自己的打卡紀錄；管理員／社區人員可讀取
+      // 清潔人員上下班打卡：本人可讀寫自己的打卡紀錄；管理員／社區人員可讀寫全部
       match /clean_checkins/{recordId} {
         allow read: if request.auth != null && (
           isAdmin()
           || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
           || resource.data.uid == request.auth.uid
         );
-        allow create, update: if request.auth != null
-          && request.resource.data.uid == request.auth.uid;
+        allow create, update: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || request.resource.data.uid == request.auth.uid
+        );
+        allow delete: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || resource.data.uid == request.auth.uid
+        );
       }
 
-      // 勤務管理：出勤打卡（本人可讀寫自己的紀錄；管理員／社區人員可讀取全部）
+      // 勤務管理：出勤打卡（本人可讀寫自己的紀錄；管理員／社區人員可讀寫全部）
       match /duty_checkins/{recordId} {
         allow read: if request.auth != null && (
           isAdmin()
           || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
           || resource.data.uid == request.auth.uid
         );
-        allow create, update: if request.auth != null
-          && request.resource.data.uid == request.auth.uid;
+        allow create, update: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || request.resource.data.uid == request.auth.uid
+        );
+        allow delete: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || resource.data.uid == request.auth.uid
+        );
       }
 
       // 勤務管理：班表（管理員／社區人員可讀寫）
@@ -565,6 +616,26 @@ service cloud.firestore {
         allow create: if request.auth != null
           && request.resource.data.uid == request.auth.uid;
         allow update, delete: if request.auth != null && (isAdmin() || (isCommunityStaff() && userCanAccessCommunitySlug(slug)));
+      }
+
+      // 勤務管理：交接紀錄（保全早晚班交接）
+      // 讀取放行同社區勤務人員（接班者需讀前班交接單）；寫入限本人或管理員／社區人員
+      match /duty_handovers/{recordId} {
+        allow read: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || resource.data.fromUid == request.auth.uid
+        );
+        allow create, update: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || request.resource.data.fromUid == request.auth.uid
+        );
+        allow delete: if request.auth != null && (
+          isAdmin()
+          || (isCommunityStaff() && userCanAccessCommunitySlug(slug))
+          || resource.data.fromUid == request.auth.uid
+        );
       }
 
       match /careCheckins/{recordId} {
