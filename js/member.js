@@ -253,7 +253,15 @@
       messaging.onMessage((payload) => {
         const data = payload && payload.data ? payload.data : {};
         const callId = String(data.callId || "").trim();
-        if (callId) handleIntercomPushCallId(callId).catch(() => {});
+        if (callId) {
+          handleIntercomPushCallId(callId).catch(() => {});
+          return;
+        }
+        try {
+          if (window.NWNotifyCenter && typeof window.NWNotifyCenter.handleForeground === "function") {
+            window.NWNotifyCenter.handleForeground(data);
+          }
+        } catch {}
       });
     } catch {}
   }
@@ -402,6 +410,21 @@
       }
       if (data.type === "INTERCOM_PUSH" && data.callId) {
         handleIntercomPushCallId(String(data.callId)).catch(() => {});
+      }
+      if (data.type === "NOTIFY_PUSH") {
+        try {
+          if (window.NWNotifyCenter && typeof window.NWNotifyCenter.handleForeground === "function") {
+            window.NWNotifyCenter.handleForeground(data);
+          }
+        } catch {}
+      }
+      if (data.type === "NOTIFY_OPEN" && data.url) {
+        const url = String(data.url || "").trim();
+        const name = String(data.module || "通知").trim() || "通知";
+        try {
+          if (typeof window.__nwOpenMemberPage === "function") window.__nwOpenMemberPage(url, name);
+          else if (url) location.href = url;
+        } catch {}
       }
     });
   } catch {}
@@ -1226,6 +1249,12 @@
 
     modal.hidden = false;
   }
+
+  // 供外部模組（如通知中心）開啟住戶端子頁與取得目前社區
+  try {
+    window.__nwOpenMemberPage = openPageModal;
+    window.__nwResolveCommunityId = resolveActiveCommunityId;
+  } catch {}
 
   function resolveSosMemberMode() {
     const currentUser = (typeof auth !== "undefined" && auth && auth.currentUser) ? auth.currentUser : null;

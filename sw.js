@@ -1,11 +1,11 @@
-const CACHE_VERSION = "nwapp-v777";
+const CACHE_VERSION = "nwapp-v782";
 const IS_LOCALHOST = ["localhost", "127.0.0.1"].includes(String(self.location && self.location.hostname || "").trim().toLowerCase());
 const PRECACHE = Array.from(new Set([
   "./",
   "./index.html",
   "./system.html",
   "./admin.html",
-  "./member.html?v=14",
+  "./member.html?v=15",
   "./parking.html?v=8",
   "./parking-view.html?v=11",
   "./facility.html?v=8",
@@ -39,8 +39,8 @@ const PRECACHE = Array.from(new Set([
   "./css/ads-footer.css?v=16",
   "./css/system.css?v=9",
   "./css/admin.css?v=87",
-  "./css/member.css?v=9",
-  "./css/worker-clean.css?v=62",
+  "./css/member.css?v=10",
+  "./css/worker-clean.css?v=65",
   "./js/index.js?v=10",
   "./js/system.js?v=43",
   "./js/admin.js?v=421",
@@ -48,7 +48,8 @@ const PRECACHE = Array.from(new Set([
   "./js/admin-duty.js?v=24",
   "./js/finance.js?v=35",
   "./js/fee-notice.js?v=3",
-  "./js/member.js?v=70",
+  "./js/member.js?v=71",
+  "./js/notify.js?v=1",
   "./js/parking.js?v=32",
   "./js/parking-view.js?v=11",
   "./js/facility.js?v=9",
@@ -64,7 +65,7 @@ const PRECACHE = Array.from(new Set([
   "./js/bulletin-repair.js?v=6",
   "./js/clean-report.js?v=5",
   "./js/worker-clean.js?v=48",
-  "./js/worker-duty.js?v=41",
+  "./js/worker-duty.js?v=45",
   "./js/punch-flow.js?v=4",
   "./js/live-shared.js?v=2",
   "./js/activity-shared.js?v=2",
@@ -111,46 +112,82 @@ try {
     __nwMessaging.onBackgroundMessage(async (payload) => {
       const data = (payload && payload.data) ? payload.data : {};
       const callId = String(data.callId || "").trim();
-      const community = String(data.community || "").trim();
-      const toRole = String(data.toRole || "").trim();
-      const url = resolveAppUrl(String(data.url || "").trim() || "./");
-      const title = String(data.title || "QAi生活網｜來電").trim() || "QAi生活網｜來電";
-      const body = String(data.body || "點此開啟QAi生活網接聽/拒接").trim();
-      const autoOpen = String(data.autoOpen || "").trim() === "1";
 
-      const tag = callId ? `intercom_${callId}` : "intercom_call";
+      // 對講機來電（維持既有行為）
+      if (callId) {
+        const community = String(data.community || "").trim();
+        const toRole = String(data.toRole || "").trim();
+        const url = resolveAppUrl(String(data.url || "").trim() || "./");
+        const title = String(data.title || "QAi生活網｜來電").trim() || "QAi生活網｜來電";
+        const body = String(data.body || "點此開啟QAi生活網接聽/拒接").trim();
+        const autoOpen = String(data.autoOpen || "").trim() === "1";
+
+        const tag = `intercom_${callId}`;
+        const options = {
+          body,
+          icon: "./icon-192.png?v=2",
+          badge: "./icon-192.png?v=2",
+          tag,
+          renotify: true,
+          requireInteraction: true,
+          actions: [
+            { action: "answer", title: "接通" },
+            { action: "reject", title: "拒接" },
+          ],
+          vibrate: [120, 80, 120, 80, 220],
+          data: {
+            type: "intercom",
+            callId,
+            community,
+            toRole,
+            url,
+          },
+        };
+
+        try {
+          const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+          list.forEach((client) => {
+            try { client.postMessage({ type: "INTERCOM_PUSH", callId, community, toRole, url }); } catch {}
+          });
+          const first = list && list[0] ? list[0] : null;
+          if (first) {
+            try { await first.focus(); } catch {}
+          } else if (autoOpen && url) {
+            try { await self.clients.openWindow(url); } catch {}
+          }
+        } catch {}
+
+        try { await self.registration.showNotification(title, options); } catch {}
+        return;
+      }
+
+      // 住戶端模組推播（包裹郵件、訪客登記、社區園地、公設預約、會議紀錄等）
+      const moduleType = String(data.type || "").trim();
+      const title = String(data.title || "").trim();
+      if (!title) return;
+      const body = String(data.body || "").trim();
+      const url = resolveAppUrl(String(data.url || "").trim() || "./");
+      const refId = String(data.refId || "").trim();
+      const community = String(data.community || "").trim();
+
       const options = {
         body,
         icon: "./icon-192.png?v=2",
         badge: "./icon-192.png?v=2",
-        tag,
+        tag: `notify_${moduleType || "system"}_${refId || Date.now()}`,
         renotify: true,
-        requireInteraction: true,
-        actions: [
-          { action: "answer", title: "接通" },
-          { action: "reject", title: "拒接" },
-        ],
-        vibrate: [120, 80, 120, 80, 220],
-        data: {
-          type: "intercom",
-          callId,
-          community,
-          toRole,
-          url,
-        },
+        requireInteraction: false,
+        vibrate: [100, 60, 100],
+        data: { type: "notify", module: moduleType, refId, url, community },
       };
 
       try {
         const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
         list.forEach((client) => {
-          try { client.postMessage({ type: "INTERCOM_PUSH", callId, community, toRole, url }); } catch {}
+          try {
+            client.postMessage({ type: "NOTIFY_PUSH", module: moduleType, type: moduleType, title, body, url, refId, community });
+          } catch {}
         });
-        const first = list && list[0] ? list[0] : null;
-        if (first) {
-          try { await first.focus(); } catch {}
-        } else if (autoOpen && url) {
-          try { await self.clients.openWindow(url); } catch {}
-        }
       } catch {}
 
       try { await self.registration.showNotification(title, options); } catch {}
@@ -165,6 +202,7 @@ self.addEventListener("notificationclick", (event) => {
     const baseUrl = resolveAppUrl(String(d.url || "./").trim() || "./");
     const callId = String(d.callId || "").trim();
     const action = String(event.action || "").trim();
+    const isModuleNotify = String(d.type || "").trim() === "notify";
     let url = baseUrl;
     try {
       const u = new URL(baseUrl, self.registration.scope);
@@ -177,7 +215,13 @@ self.addEventListener("notificationclick", (event) => {
       self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
         const same = list.find((c) => c && typeof c.url === "string" && c.url.includes(self.location.origin));
         if (same) {
-          try { same.postMessage({ type: "INTERCOM_OPEN", url, callId }); } catch {}
+          try {
+            if (isModuleNotify) {
+              same.postMessage({ type: "NOTIFY_OPEN", url, module: String(d.module || "").trim() });
+            } else {
+              same.postMessage({ type: "INTERCOM_OPEN", url, callId });
+            }
+          } catch {}
           return same.focus();
         }
         return self.clients.openWindow(url);
