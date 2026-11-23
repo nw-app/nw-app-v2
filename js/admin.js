@@ -424,6 +424,54 @@
     return uniq;
   }
 
+  /* 取得社區戶號清單（供表單 datalist 使用）：以住戶帳號戶號為主，社區 units 文件為輔 */
+  async function loadFormUnitOptions(cid) {
+    const key = String(cid || "").trim();
+    if (!key) return [];
+    const map = new Map();
+    const addUnit = (id, name) => {
+      const uid = String(id || "").trim();
+      if (!uid) return;
+      const k = uid.toLowerCase();
+      const nm = String(name || "").trim();
+      const cur = map.get(k);
+      if (cur) {
+        if (!cur.name && nm) cur.name = nm;
+        return;
+      }
+      map.set(k, { id: uid, name: nm });
+    };
+
+    // 來源一：社區文件的 units 清單
+    try {
+      const doc = await db.collection("communities").doc(key).get();
+      if (doc && doc.exists) {
+        const v = doc.data() || {};
+        normalizeCommunityUnitRows(v.units).forEach((u) => addUnit(u.id, u.ownerName || u.owner || u.name || ""));
+      }
+    } catch {}
+
+    // 來源二：住戶帳號（users）的戶號／子戶號，補齊未登記於 units 的戶號
+    try {
+      const [snapA, snapB] = await Promise.all([
+        db.collection("users").where("community", "==", key).get(),
+        db.collection("users").where("communityIds", "array-contains", key).get(),
+      ]);
+      const merged = new Map();
+      [...(snapA && snapA.docs ? snapA.docs : []), ...(snapB && snapB.docs ? snapB.docs : [])].forEach((d) => {
+        if (d && d.id) merged.set(String(d.id), d);
+      });
+      merged.forEach((d) => {
+        const v = (d && typeof d.data === "function") ? (d.data() || {}) : {};
+        if (!isResidentRole(String(v.role || "")) || String(v.status || "") === "pending") return;
+        const unit = [String(v.houseNo || v.unit || "").trim(), String(v.subUnit || "").trim()].filter(Boolean).join("-");
+        addUnit(unit, v.displayName || v.name || "");
+      });
+    } catch {}
+
+    return Array.from(map.values()).sort((a, b) => a.id.localeCompare(b.id, "zh-Hant"));
+  }
+
   function loadAccounts() {
     return { communities: state.communities, residents: [] };
   }
@@ -5389,6 +5437,13 @@
               <select id="modal_r_enabled" required>
                 <option value="true" selected>啟用</option>
                 <option value="false">停用</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="modal_r_special">使用介面</label>
+              <select id="modal_r_special">
+                <option value="false" selected>標準版（完整功能）</option>
+                <option value="true">簡易版（長者／操作不便者）</option>
               </select>
             </div>
             <div class="status" id="residentModalStatus" hidden></div>
@@ -13302,13 +13357,15 @@
     }
     form.reset();
 
-    const unsubUnits = db.collection("communities").doc(cid).onSnapshot((doc) => {
-      const data = doc.data() || {};
-      const units = Array.isArray(data.units)
-        ? data.units.map((u) => (typeof u === "object" && u !== null) ? (u.id || "") : (u || "")).filter(Boolean)
-        : [];
-      if (unitList) unitList.innerHTML = units.map((u) => `<option value="${escapeHtml(u)}"></option>`).join("");
-    });
+    // 載入戶號清單（該社區所有戶號）
+    const unsubUnits = () => {};
+    (async () => {
+      const rows = await loadFormUnitOptions(cid);
+      if (!unitList) return;
+      unitList.innerHTML = rows
+        .map((r) => `<option value="${escapeHtml(r.id)}"${r.name ? ` label="${escapeHtml(r.name)}"` : ""}></option>`)
+        .join("");
+    })();
 
     const oldDetach = detach;
     detach = () => { unsubUnits(); oldDetach(); };
@@ -13543,13 +13600,15 @@
         if (listShelf) listShelf.innerHTML = shelves.map(s => `<option value="${escapeHtml(String(s))}"></option>`).join("");
       });
 
-    // 載入戶號清單
-    const unsubUnits = db.collection("communities").doc(cid)
-      .onSnapshot(doc => {
-        const data = doc.data() || {};
-        const units = Array.isArray(data.units) ? data.units.map(u => (typeof u === "object" && u !== null) ? u.id || "" : u || "").filter(Boolean) : [];
-        listUnit.innerHTML = units.map(u => `<option value="${escapeHtml(u)}"></option>`).join("");
-      });
+    // 載入戶號清單（該社區所有戶號）
+    const unsubUnits = () => {};
+    (async () => {
+      const rows = await loadFormUnitOptions(cid);
+      if (!listUnit) return;
+      listUnit.innerHTML = rows
+        .map((r) => `<option value="${escapeHtml(r.id)}"${r.name ? ` label="${escapeHtml(r.name)}"` : ""}></option>`)
+        .join("");
+    })();
 
     // 建立姓名與戶號的對應關係
     let residentMap = {};
@@ -14633,7 +14692,7 @@
               <div class="resident-left">
                 <div class="avatar-sm">${avatarHtml(r)}</div>
                 <div class="resident-text">
-                  <div class="resident-name">${String(r.displayName || "—")}</div>
+                  <div class="resident-name">${String(r.displayName || "—")}${r.specialMode ? ' <span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#d32f2f;color:#fff;font-size:11px;font-weight:900;vertical-align:middle;">簡易版</span>' : ""}</div>
                   <div class="resident-sub">${subParts.join("｜")}</div>
                 </div>
               </div>
@@ -14706,6 +14765,7 @@
                   email: String(v.email || v.username || ""),
                   phone: String(v.phone || ""),
                   enabled: v.enabled !== false,
+                  specialMode: v.specialMode === true,
                   address: String(v.address || ""),
                   building: String(v.building || v.block || ""),
                   avatarDataUrl: String(v.avatarDataUrl || ""),
@@ -16162,6 +16222,7 @@
       const inputAddr = modal.querySelector("#modal_r_address");
       const inputBuilding = modal.querySelector("#modal_r_building");
       const inputEnabled = modal.querySelector("#modal_r_enabled");
+      const inputSpecial = modal.querySelector("#modal_r_special");
       const unitMatchBadge = modal.querySelector("#unitMatchBadge");
       const avatarUploader = modal.querySelector("#residentAvatarUploader");
       const avatarInput = modal.querySelector("#residentAvatarInput");
@@ -16262,6 +16323,7 @@
       if (inputAddr) inputAddr.value = isEdit ? String(data.address || "") : "";
       if (inputBuilding) inputBuilding.value = isEdit ? String(data.building || data.block || "") : "";
       if (inputEnabled) inputEnabled.value = String((isEdit ? data.enabled !== false : true) ? "true" : "false");
+      if (inputSpecial) inputSpecial.value = isEdit && data.specialMode === true ? "true" : "false";
       await ensureCommunityUnitsLoaded();
       syncResidentUnitMeta();
       if (inputPassword) inputPassword.value = "";
@@ -16535,6 +16597,7 @@
         const address = normalizeText(inputAddr ? inputAddr.value : "");
         const building = normalizeText(inputBuilding ? inputBuilding.value : "");
         const enabled = String(inputEnabled ? inputEnabled.value : "true") === "true";
+        const specialMode = String(inputSpecial ? inputSpecial.value : "false") === "true";
 
         if (!name) {
           setModalStatus("請填寫姓名。", true);
@@ -16624,6 +16687,7 @@
             address,
             building,
             enabled: Boolean(enabled),
+            specialMode: Boolean(specialMode),
             category,
             residentRoles: roles,
             residentRoleOther: extra,
@@ -20482,7 +20546,7 @@
         if (reg && typeof reg.showNotification === "function") {
           await reg.showNotification(title, {
             body,
-            icon: "./icon-192.png?v=2",
+            icon: "./logo.svg?v=5",
             badge: "./icon-192.png?v=2",
             tag,
             renotify: true,
@@ -20497,7 +20561,7 @@
           return;
         }
       }
-      try { new Notification(title, { body, tag, icon: "./icon-192.png?v=2" }); } catch {}
+      try { new Notification(title, { body, tag, icon: "./logo.svg?v=5" }); } catch {}
     } catch {}
   }
 

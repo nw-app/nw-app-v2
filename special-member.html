@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>簡易版｜社區前台</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg?v=4" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#d32f2f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="icon-192.png?v=2" />
+    <link rel="stylesheet" href="css/special-member.css?v=8" />
+  </head>
+  <body>
+    <div class="sp-shell">
+      <header class="sp-hero">
+        <div class="sp-brand">
+          <span class="sp-brand-icon" aria-hidden="true">
+            <img src="photo/logo.png" alt="" />
+          </span>
+          <div class="sp-brand-name">QAi生活網</div>
+        </div>
+
+        <section class="sp-greet">
+          <div class="sp-greet-tip" id="spGreetingLine">早安，今天過得還好嗎？</div>
+          <div class="sp-greet-info-row">
+            <div class="sp-greet-unit" id="spGreetUnit">
+              <span aria-hidden="true">⌂</span>
+              <span id="spCommunityName">社區服務系統</span>
+              <span class="sp-unit-divider" aria-hidden="true"></span>
+              <span class="sp-unit-text" id="spGreetUnitText">住戶</span>
+            </div>
+            <div class="sp-greet-name" id="spGreetName">您好</div>
+          </div>
+          <div class="sp-avatar" id="spAvatar" aria-hidden="true" hidden>
+            <img class="sp-avatar-img" id="spAvatarImg" alt="" hidden />
+            <span class="sp-avatar-initial" id="spAvatarInitial">U</span>
+          </div>
+          <div class="sp-user-name" id="spUserName" hidden>您好</div>
+        </section>
+
+        <div class="sp-info-cards">
+          <section class="sp-info-card" aria-label="今日日期">
+            <span class="sp-info-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5.5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M7.5 3.5v4M16.5 3.5v4M4 10h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </span>
+            <span class="sp-info-copy"><span class="sp-info-label">今天日期</span><strong id="spTodayDate">—月—日</strong><strong id="spTodayWeekday">星期—</strong></span>
+          </section>
+          <section class="sp-info-card" aria-label="天氣資訊">
+            <span class="sp-info-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v2M12 19.5v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2.5 12h2m15 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </span>
+            <span class="sp-info-copy"><span class="sp-info-label">社區天氣</span><strong>今日天氣</strong><strong class="sp-weather-note">留意天氣變化</strong></span>
+          </section>
+        </div>
+      </header>
+
+      <main class="sp-home">
+        <section class="sp-tools" aria-label="輔助功能">
+          <button class="sp-tool-card sp-mic" type="button" id="spMic" hidden aria-pressed="false">
+            <span class="sp-tool-icon sp-mic-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-4 0h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </span>
+            <span class="sp-tool-copy"><strong>語音說話</strong><span id="spMicText">點一下開始</span></span>
+          </button>
+          <button class="sp-tool-card sp-font-card" type="button" id="spFontUp" aria-label="字體放大">
+            <span class="sp-tool-icon sp-font-icon" aria-hidden="true">A</span>
+            <span class="sp-tool-copy"><strong>字體放大</strong><span id="spFontStatus">目前標準</span></span>
+          </button>
+          <button class="sp-hidden-control" type="button" id="spFontDown" hidden aria-label="字體縮小">字體縮小</button>
+        </section>
+
+        <button class="sp-sos-card" type="button" data-action="sos">
+          <span class="sp-sos-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 3 22 20.5H2L12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9v5m0 3v.1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+          </span>
+          <span class="sp-sos-copy"><strong>緊急求助</strong><span>一鍵呼叫管理室・全天待命</span></span>
+        </button>
+
+        <button class="sp-notice-card" id="spNoticeCard" type="button" data-action="parcel">
+          <span class="sp-notice-heading">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5v5m0 3v.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <strong>重要通知（請慢看）</strong>
+          </span>
+          <span class="sp-notice-body">
+            <span class="sp-notice-icon" aria-hidden="true">▱</span>
+            <span class="sp-notice-copy"><strong id="spNoticeTitle">正在查看您的包裹</strong><span id="spNoticeText">點這裡查看包裹與社區公告。</span></span>
+            <span class="sp-notice-count" id="spNoticeCount" hidden>0</span>
+          </span>
+        </button>
+
+        <section class="sp-services">
+          <h2>常用服務</h2>
+          <div class="sp-grid" id="spGrid" aria-label="常用服務">
+        <button class="sp-tile" type="button" data-action="parcel">
+          <span class="sp-tile-badge" id="spParcelBadge" hidden>0</span>
+          <span class="sp-tile-icon"><img src="photo/a01.png" alt="" /></span>
+          <span class="sp-tile-label">我的包裹</span>
+          <span class="sp-tile-sub">看有沒有我的包裹</span>
+        </button>
+
+        <button class="sp-tile" type="button" data-action="visitor">
+          <span class="sp-tile-icon"><img src="photo/a02.png" alt="" /></span>
+          <span class="sp-tile-label">訪客登記</span>
+          <span class="sp-tile-sub">有客人來先登記</span>
+        </button>
+
+        <button class="sp-tile" type="button" data-action="bulletin">
+          <span class="sp-tile-icon"><img src="photo/a03.png" alt="" /></span>
+          <span class="sp-tile-label">社區公告</span>
+          <span class="sp-tile-sub">看社區最新消息</span>
+        </button>
+
+        <button class="sp-tile" type="button" data-action="facility">
+          <span class="sp-tile-icon"><img src="photo/a04.png" alt="" /></span>
+          <span class="sp-tile-label">公設預約</span>
+          <span class="sp-tile-sub">借教室、健身房</span>
+        </button>
+
+        <button class="sp-tile" type="button" data-action="meter">
+          <span class="sp-tile-icon"><img src="photo/a06.png" alt="" /></span>
+          <span class="sp-tile-label">水電繳費</span>
+          <span class="sp-tile-sub">看錶數與費用</span>
+        </button>
+
+          </div>
+        </section>
+      </main>
+
+      <button class="sp-hidden-control" type="button" id="spSignOut" hidden>登出</button>
+      <nav class="sp-bar" aria-label="主要導覽">
+        <button class="sp-nav-btn is-active" type="button" id="spHomeNav" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10Z" fill="currentColor"/></svg><span>首頁</span>
+        </button>
+        <button class="sp-nav-btn" type="button" id="spNoticeNav" data-action="bulletin">
+          <span class="sp-nav-icon-wrap"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8 12h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sp-nav-badge" id="spNavBadge" hidden>0</span></span><span>通知</span>
+        </button>
+        <button class="sp-nav-btn" type="button" id="spSupportNav">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 13v-2a8 8 0 0 1 16 0v2m-16 0H3v5h4v-5H4Zm16 0h1v5h-4v-5h3ZM17 18a5 5 0 0 1-5 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>客服</span>
+        </button>
+        <button class="sp-nav-btn" type="button" id="spProfileNav">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="3.5" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c.7-4.1 3.4-6.2 8-6.2s7.3 2.1 8 6.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>我的</span>
+        </button>
+      </nav>
+    </div>
+
+    <section class="sp-sheet" id="spSheet" hidden aria-modal="true" role="dialog" aria-labelledby="spSheetTitle">
+      <div class="sp-sheet-hd">
+        <h2 class="sp-sheet-title" id="spSheetTitle">標題</h2>
+        <button class="sp-sheet-speak" type="button" id="spSheetSpeak" aria-label="朗讀內容">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 9.5h3l4-3.5v12l-4-3.5H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M16 8.5a5 5 0 0 1 0 7M18.8 5.8a9 9 0 0 1 0 12.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="sp-sheet-bd" id="spSheetBody"></div>
+      <div class="sp-sheet-ft">
+        <button class="sp-btn sp-btn-primary" type="button" id="spSheetBack">回上一頁</button>
+      </div>
+    </section>
+
+    <div class="sp-dialog" id="spDialog" hidden role="dialog" aria-modal="true" aria-labelledby="spDialogTitle">
+      <div class="sp-dialog-box">
+        <div class="sp-dialog-icon" id="spDialogIcon" aria-hidden="true">❓</div>
+        <h3 class="sp-dialog-title" id="spDialogTitle">確定嗎？</h3>
+        <p class="sp-dialog-text" id="spDialogText"></p>
+        <div class="sp-btn-row sp-btn-row-2">
+          <button class="sp-btn sp-btn-ghost" type="button" id="spDialogCancel">不要</button>
+          <button class="sp-btn sp-btn-primary" type="button" id="spDialogOk">要</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sp-toast" id="spToast" hidden></div>
+
+    <div class="sp-rotate" id="spRotate" role="alertdialog" aria-label="請將手機轉回直向">
+      <div class="sp-rotate-icon" aria-hidden="true">📱</div>
+      <div class="sp-rotate-title">請把手機轉回直的</div>
+      <div class="sp-rotate-sub">這個畫面要用直向看喔</div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/special-member.js?v=7"></script>
+  </body>
+</html>

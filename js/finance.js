@@ -29,6 +29,15 @@
     return String(n).padStart(2, "0");
   }
 
+  /** 將名稱拆成兩行（約略對半），用於預設 LOGO 佔位符 */
+  function splitTwoLines(name) {
+    const s = String(name || "").trim();
+    if (!s) return ["", ""];
+    if (s.length <= 1) return [s, ""];
+    const mid = Math.ceil(s.length / 2);
+    return [s.slice(0, mid), s.slice(mid)];
+  }
+
   function todayStr() {
     const d = new Date();
     return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
@@ -227,7 +236,7 @@
       ".fin-print{position:absolute;left:-99999px;top:0;width:794px;background:#fff;color:#111827;padding:32px 38px;font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}",
       ".fin-print .doc-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #d32f2f;padding-bottom:8px;}",
       ".fin-print .brand{display:flex;gap:10px;align-items:center;}",
-      ".fin-print .brand .mark{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(180deg,#c62828 0%,#d32f2f 45%,#b71c1c 100%);color:#fff;font-weight:900;font-size:19px;}",
+      ".fin-print .brand .mark{width:40px;height:40px;border-radius:10px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;line-height:1.1;background:linear-gradient(180deg,#c62828 0%,#d32f2f 45%,#b71c1c 100%);color:#fff;font-weight:900;font-size:11px;}",
       ".fin-print .brand .nm{font-size:15px;font-weight:900;letter-spacing:.5px;line-height:1.25;}",
       ".fin-print .brand .nm small{display:block;font-size:10px;color:#6b7280;font-weight:700;}",
       ".fin-print .doc-meta{text-align:right;font-size:10px;color:#6b7280;line-height:1.7;font-weight:700;}",
@@ -262,16 +271,13 @@
       ".fin-print .stat .v small{font-size:10px;color:#6b7280;font-weight:800;margin-left:2px;}",
       ".fin-print .stat.income{border-left-color:#15803d;}.fin-print .stat.income .v{color:#15803d;}",
       ".fin-print .stat.expense{border-left-color:#b91c1c;}.fin-print .stat.expense .v{color:#b91c1c;}",
-      ".fin-print .wm{position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden;pointer-events:none;display:flex;align-items:center;justify-content:center;}",
-      ".fin-print .wm span{font-size:70px;font-weight:900;letter-spacing:14px;color:#0f172a;opacity:.055;transform:rotate(-28deg);white-space:nowrap;}",
       ".fin-print .doc-head,.fin-print .title,.fin-print .kv,.fin-print .sec,.fin-print .sign{position:relative;z-index:1;}",
       ".fin-print .note{border:1px solid #d1d5db;border-left:4px solid #d32f2f;border-radius:8px;background:#fbfcfd;padding:8px 12px;font-size:11px;line-height:1.8;color:#374151;font-weight:700;min-height:44px;white-space:pre-wrap;}",
-      ".fin-print .sign{margin-top:14px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}",
-      ".fin-print .sign .item{border:1px solid #d1d5db;border-radius:8px;padding:7px 10px 8px;background:#fff;display:flex;flex-direction:column;}",
-      ".fin-print .sign .item .k{font-size:10.5px;font-weight:900;color:#6b7280;letter-spacing:.5px;}",
-      ".fin-print .sign .item .by{font-size:10px;font-weight:900;color:#b71c1c;min-height:13px;text-align:center;}",
-      ".fin-print .sign .item .line{height:26px;border-bottom:1px solid #9ca3af;margin:3px 0 4px;}",
-      ".fin-print .sign .item .dt{font-size:9.5px;font-weight:700;color:#9ca3af;text-align:right;}"
+      ".fin-print .sign{margin-top:14px;display:grid;grid-template-columns:repeat(6,1fr);gap:8px;}",
+      ".fin-print .sign .item{border:1px solid #d1d5db;border-radius:8px;padding:6px 8px 7px;background:#fff;display:flex;flex-direction:column;}",
+      ".fin-print .sign .item .k{font-size:10px;font-weight:900;color:#6b7280;letter-spacing:.3px;}",
+      ".fin-print .sign .item .by{font-size:9px;font-weight:900;color:#b71c1c;min-height:22px;text-align:center;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px;}",
+      ".fin-print .sign .item .dt{font-size:8.5px;font-weight:700;color:#9ca3af;text-align:right;}"
     ].join("");
     st.textContent = css;
     document.head.appendChild(st);
@@ -362,7 +368,7 @@
 
   const DEFAULT_CONFIG = {
     incomeCategories: ["管理費", "清潔費", "停車費", "水電代收", "廣告收入", "活動收入", "利息收入", "政府補助", "其他收入"],
-    expenseCategories: ["人事薪資", "水電費", "清潔維護", "修繕工程", "保險費", "交際費", "稅捐規費", "設備採購", "公共基金", "其他支出"],
+    expenseCategories: ["人事薪資", "水電費", "清潔維護", "修繕工程", "保險費", "交際費", "稅捐規費", "設備採購", "公共基金", "超商手續費", "其他支出"],
     bookTypes: ["活存", "定存", "現金", "其他"],
     incomeTargets: [],
     expenseTargets: [],
@@ -375,6 +381,15 @@
       subject: "",
       closing: "",
       note: ""
+    },
+    /* PDF 匯出抬頭設定：LOGO、表單編號格式與副標語（社區代號留空時採用社區帳號的 username） */
+    pdfHeader: {
+      logo: "",
+      companyCode: "NW",
+      communityCode: "",
+      formCodes: { day: "D", month: "M", year: "Y", custom: "C" },
+      detailFormCodes: { income: "IN", expense: "EX" },
+      subtitle: "QAi生活網　財報系統產出"
     }
   };
 
@@ -383,6 +398,9 @@
     income: "incomeCategories",
     expense: "expenseCategories"
   };
+
+  /** 收入折扣預設對應的支出類別（超商繳費手續費） */
+  const DEFAULT_DISCOUNT_CATEGORY = "超商手續費";
 
   /** 財報類型 → 對象名單設定的 key */
   const TARGET_KEYS = {
@@ -486,7 +504,35 @@
       if (payload && payload.notice && typeof payload.notice === "object") {
         data.notice = Model.normalizeNotice(payload.notice);
       }
+      // PDF 抬頭設定（LOGO、表單編號格式、副標語）
+      if (payload && payload.pdfHeader && typeof payload.pdfHeader === "object") {
+        data.pdfHeader = Model.normalizePdfHeader(payload.pdfHeader);
+      }
       return Model.configDoc(db, cid).set(data, { merge: true });
+    },
+
+    /** PDF 抬頭設定：正規化欄位 */
+    normalizePdfHeader: function (h) {
+      const src = h || {};
+      const def = DEFAULT_CONFIG.pdfHeader;
+      const codes = src.formCodes || {};
+      const dCodes = src.detailFormCodes || {};
+      return {
+        logo: String(src.logo || "").trim(),
+        companyCode: String(src.companyCode || def.companyCode || "").trim(),
+        communityCode: String(src.communityCode || def.communityCode || "").trim(),
+        formCodes: {
+          day: String(codes.day || def.formCodes.day || "").trim(),
+          month: String(codes.month || def.formCodes.month || "").trim(),
+          year: String(codes.year || def.formCodes.year || "").trim(),
+          custom: String(codes.custom || def.formCodes.custom || "").trim()
+        },
+        detailFormCodes: {
+          income: String(dCodes.income || def.detailFormCodes.income || "").trim(),
+          expense: String(dCodes.expense || def.detailFormCodes.expense || "").trim()
+        },
+        subtitle: String(src.subtitle != null ? src.subtitle : def.subtitle)
+      };
     },
 
     /** 催收通知函內容設定：正規化欄位 */
@@ -540,17 +586,27 @@
         updatedAt: serverTs(),
         updatedBy: actor
       };
+      /* 折扣金額（收入用）：若有填入，系統會自動產生一筆對應的支出明細 */
+      if (payload.kind !== "expense") {
+        data.discount = toNum(payload.discount, 0);
+        data.discountCategory = String(payload.discountCategory || "").trim();
+      }
+      /* 關聯明細 id（支出用）：由收入折扣自動產生的支出會記錄對應的收入 id */
+      if (payload.linkedTxId) {
+        data.linkedTxId = String(payload.linkedTxId).trim();
+      }
       /* 異動歷程：由呼叫端帶入（含本次動作），最多保留 30 筆 */
       if (Array.isArray(payload.history) && payload.history.length) {
         data.history = payload.history.slice(-30);
       }
       if (payload.id) {
-        return col.doc(String(payload.id)).set(data, { merge: true });
+        return col.doc(String(payload.id)).set(data, { merge: true }).then(function () { return String(payload.id); });
       }
+      const newId = genId("ftx");
       data.createdAt = serverTs();
       data.createdBy = actor;
       if (!data.history) data.history = [{ at: nowStamp(), by: actor.name, action: "create" }];
-      return col.doc(genId("ftx")).set(data, { merge: true });
+      return col.doc(newId).set(data, { merge: true }).then(function () { return newId; });
     },
 
     removeTx: function (db, cid, id) {
@@ -936,6 +992,62 @@
       }
     },
 
+    /** PDF 抬頭設定：合併使用者設定與預設值，確保所有欄位皆有值 */
+    resolvePdfHeader: function (cfg) {
+      const def = DEFAULT_CONFIG.pdfHeader;
+      const src = cfg && typeof cfg === "object" ? cfg : {};
+      const codes = src.formCodes || {};
+      const dCodes = src.detailFormCodes || {};
+      return {
+        logo: String(src.logo || "").trim(),
+        companyCode: String(src.companyCode || def.companyCode || "").trim(),
+        communityCode: String(src.communityCode || def.communityCode || "").trim(),
+        formCodes: {
+          day: String(codes.day != null ? codes.day : def.formCodes.day).trim(),
+          month: String(codes.month != null ? codes.month : def.formCodes.month).trim(),
+          year: String(codes.year != null ? codes.year : def.formCodes.year).trim(),
+          custom: String(codes.custom != null ? codes.custom : def.formCodes.custom).trim()
+        },
+        detailFormCodes: {
+          income: String(dCodes.income != null ? dCodes.income : def.detailFormCodes.income).trim(),
+          expense: String(dCodes.expense != null ? dCodes.expense : def.detailFormCodes.expense).trim()
+        },
+        subtitle: String(src.subtitle != null ? src.subtitle : def.subtitle)
+      };
+    },
+
+    /** 依本期收支自動產生備註／建議文字 */
+    autoNote: function (kind, agg, fees) {
+      const a = agg || {};
+      const scope = kind === "year" ? "本年度" : kind === "month" ? "本月" : "本日";
+      const topCat = function (list) {
+        if (!Array.isArray(list) || !list.length) return null;
+        return list.slice().sort(function (x, y) { return toNum(y.amount, 0) - toNum(x.amount, 0); })[0];
+      };
+      const money = function (v) { return fmtMoney(v) + " 元"; };
+      const pct = function (n, t) { return t > 0 ? (n / t * 100).toFixed(1) + "%" : "0.0%"; };
+      const hasData = toNum(a.totalIncome, 0) || toNum(a.totalExpense, 0) ||
+        (a.incomeByCat || []).length || (a.expenseByCat || []).length;
+      if (!hasData) return scope + "尚無收支紀錄，各項數據為 0，無異常事項。";
+      const incTotal = (a.incomeByCat || []).reduce(function (s, r) { return s + r.amount; }, 0);
+      const parts = [];
+      parts.push(scope + "收入 " + money(a.totalIncome) + "、支出 " + money(a.totalExpense) +
+        "，收支淨額 " + money(a.net) + "。");
+      const topExp = topCat(a.expenseByCat);
+      if (topExp && toNum(topExp.amount, 0) > 0) {
+        parts.push("支出以「" + topExp.category + "」" + money(topExp.amount) + "為大宗（占比 " + pct(topExp.amount, a.totalExpense) + "）。");
+      }
+      const topInc = topCat(a.incomeByCat);
+      if (topInc && toNum(topInc.amount, 0) > 0) {
+        parts.push("收入主要來自「" + topInc.category + "」" + money(topInc.amount) + "（占比 " + pct(topInc.amount, incTotal) + "）。");
+      }
+      if (fees && fees.rate !== null && fees.rate !== undefined) {
+        parts.push("管理費收繳率 " + fees.rate.toFixed(1) + "％（實收 " + money(fees.received) + "／應收 " + money(fees.due) + "）。");
+      }
+      parts.push(toNum(a.net, 0) >= 0 ? "本期收支為結餘，財務狀況正常。" : "本期收支為短絀，建議檢視並控管支出項目。");
+      return parts.join("");
+    },
+
     buildPrintHtml: function (opts) {
       const cfg = opts || {};
       const agg = cfg.agg || {};
@@ -955,8 +1067,9 @@
       const reportTitle = { day: "日報表", month: "月報表", year: "年報表", custom: "區間報表" }[preset] || "財報系統";
       const fees = cfg.fees || null;
       const stamp = nowStamp();
-      const formNo = "NW-FIN-" + ({ day: "D", month: "M", year: "Y", custom: "C" }[preset] || "C") +
-        "-" + (from || stamp.slice(0, 10)).replace(/-/g, "");
+      const hdr = Export.resolvePdfHeader(cfg.pdfHeader);
+      const formNo = [hdr.companyCode, hdr.communityCode, hdr.formCodes[preset] || "C",
+        (from || stamp.slice(0, 10)).replace(/-/g, "")].filter(Boolean).join("-");
       const pct = function (n, t) { return t > 0 ? (n / t * 100).toFixed(1) + "%" : "0.0%"; };
       const num = function (v) { return '<td class="num">' + fmtMoney(v) + "</td>"; };
       const ctr = function (v) { return '<td class="ctr">' + esc(v) + "</td>"; };
@@ -985,9 +1098,13 @@
       };
 
       /* 表頭 */
+      const markLines = splitTwoLines(cfg.communityName);
+      const logoHtml = hdr.logo
+        ? '<img src="' + esc(hdr.logo) + '" style="width:40px;height:40px;object-fit:contain;border-radius:8px;" alt="LOGO"/>'
+        : '<div class="mark">' + esc(markLines[0]) + '<br>' + esc(markLines[1]) + '</div>';
       const head = '<div class="doc-head">' +
-        '<div class="brand"><div class="mark">西</div>' +
-        '<div class="nm">' + communityText + '<small>財務管理報表　西北會議系統產出</small></div></div>' +
+        '<div class="brand">' + logoHtml +
+        '<div class="nm">' + communityText + '<small>' + esc(hdr.subtitle) + '</small></div></div>' +
         '<div class="doc-meta">表單編號：<b>' + esc(formNo) + '</b><br>' +
         '匯出人：' + esc(cfg.exportedBy || "—") + '<br>列印時間：' + esc(stamp) + '</div></div>';
       const titleBar = '<div class="title"><h1>' + communityText + '　財務' + esc(reportTitle) + '</h1>' +
@@ -1014,50 +1131,28 @@
         return '<table><thead>' + th + '</thead><tbody>' + (tr || '<tr><td colspan="' + headers.length + '" class="ctr" style="color:#6b7280;">無資料</td></tr>') + '</tbody>' + tf + '</table>';
       };
 
-      /* 浮水印：以社區名稱為全文淡色斜印 */
-      const wm = '<div class="wm"><span>' + communityText + "</span></div>";
-
       /* 備註／建議：優先使用使用者手動填入的內容，留空時依本期收支自動產生 */
-      const autoNote = function (kind) {
-        const scope = kind === "year" ? "本年度" : kind === "month" ? "本月" : "本日";
-        const topCat = function (list) {
-          if (!Array.isArray(list) || !list.length) return null;
-          return list.slice().sort(function (a, b) { return toNum(b.amount, 0) - toNum(a.amount, 0); })[0];
-        };
-        const money = function (v) { return fmtMoney(v) + " 元"; };
-        const hasData = toNum(agg.totalIncome, 0) || toNum(agg.totalExpense, 0) ||
-          (agg.incomeByCat || []).length || (agg.expenseByCat || []).length;
-        if (!hasData) return scope + "尚無收支紀錄，各項數據為 0，無異常事項。";
-        const incTotal = (agg.incomeByCat || []).reduce(function (a, r) { return a + r.amount; }, 0);
-        const parts = [];
-        parts.push(scope + "收入 " + money(agg.totalIncome) + "、支出 " + money(agg.totalExpense) +
-          "，收支淨額 " + money(agg.net) + "。");
-        const topExp = topCat(agg.expenseByCat);
-        if (topExp && toNum(topExp.amount, 0) > 0) {
-          parts.push("支出以「" + topExp.category + "」" + money(topExp.amount) + "為大宗（占比 " + pct(topExp.amount, agg.totalExpense) + "）。");
-        }
-        const topInc = topCat(agg.incomeByCat);
-        if (topInc && toNum(topInc.amount, 0) > 0) {
-          parts.push("收入主要來自「" + topInc.category + "」" + money(topInc.amount) + "（占比 " + pct(topInc.amount, incTotal) + "）。");
-        }
-        if (fees && fees.rate !== null && fees.rate !== undefined) {
-          parts.push("管理費收繳率 " + fees.rate.toFixed(1) + "％（實收 " + money(fees.received) + "／應收 " + money(fees.due) + "）。");
-        }
-        parts.push(toNum(agg.net, 0) >= 0 ? "本期收支為結餘，財務狀況正常。" : "本期收支為短絀，建議檢視並控管支出項目。");
-        return parts.join("");
-      };
       const noteText = String(cfg.note == null ? "" : cfg.note).trim();
       const noteSec = function (no, title, kind) {
-        return sec(no, title, '<div class="note">' + esc(noteText || autoNote(kind)) + "</div>");
+        return sec(no, title, '<div class="note">' + esc(noteText || Export.autoNote(kind, agg, fees)) + "</div>");
       };
 
       /* 簽核欄位 */
+      const SIGN_ALL = ["主任委員", "副主任委員", "財務委員", "監察委員", "物業公司", "製表人"];
       const signBlock = function () {
         const by = String(cfg.exportedBy || "").trim();
-        const items = [["主任委員", ""], ["財務委員", ""], ["物業公司", ""], ["製表人", by]];
-        return '<div class="sign">' + items.map(function (it) {
+        let selected;
+        if (Array.isArray(cfg.signatures)) {
+          selected = cfg.signatures;
+        } else {
+          selected = SIGN_ALL;
+        }
+        const items = SIGN_ALL.filter(function (n) { return selected.indexOf(n) !== -1; })
+          .map(function (n) { return [n, n === "製表人" ? by : ""]; });
+        if (!items.length) return "";
+        const cols = items.length;
+        return '<div class="sign" style="grid-template-columns:repeat(' + cols + ',1fr);">' + items.map(function (it) {
           return '<div class="item"><div class="k">' + esc(it[0]) + '</div>' +
-            '<div class="line"></div>' +
             '<div class="by">' + esc(it[1] || "") + "</div>" +
             '<div class="dt">簽章日期：　　　</div></div>';
         }).join("") + "</div>";
@@ -1106,7 +1201,7 @@
             bankRows,
             ["<td>合計</td>", moneyCell(agg.bankIn), moneyCell(agg.bankOut), moneyCell(agg.bankBalance)]
           ));
-        return wm + head + titleBar + kv([
+        return head + titleBar + kv([
           ["社區名稱", cfg.communityName || "—"],
           ["統計範圍", (from || "全部") + " ～ " + (to || "全部")],
           ["製表人", cfg.exportedBy || "—"],
@@ -1154,7 +1249,7 @@
             bankRows,
             ["<td>合計</td>", moneyCell(agg.bankOpening), moneyCell(agg.bankIn), moneyCell(agg.bankOut), moneyCell(agg.bankBalance)]
           ));
-        return wm + head + titleBar + kv([
+        return head + titleBar + kv([
           ["社區名稱", cfg.communityName || "—"],
           ["統計期間", (from || "全部") + " ～ " + (to || "全部")],
           ["製表人", cfg.exportedBy || "—"],
@@ -1201,7 +1296,7 @@
               '<td class="num ' + (agg.net >= 0 ? "pos" : "neg") + '">' + fmtMoney(agg.net) + "</td>", moneyCell(bal)]
           )) +
           sec("三、", "年度收支類別統計", catDual);
-        return wm + head + titleBar + kv([
+        return head + titleBar + kv([
           ["社區名稱", cfg.communityName || "—"],
           ["統計期間", (from || "全部") + " ～ " + (to || "全部")],
           ["製表人", cfg.exportedBy || "—"],
@@ -1232,12 +1327,87 @@
           expCats.map(function (r) { return ["<td>" + esc(r.category) + "</td>", moneyCell(r.amount), ctr(pct(r.amount, agg.totalExpense))]; }),
           ["<td>支出合計</td>", moneyCell(agg.totalExpense), ctr("100%")]
         ));
-      return wm + head + titleBar + kv([
+      return head + titleBar + kv([
         ["社區名稱", cfg.communityName || "—"],
         ["統計期間", (from || "全部") + " ～ " + (to || "全部")],
         ["製表人", cfg.exportedBy || "—"],
         ["複核", "—"]
       ]) + body + signBlock();
+    },
+
+    /** 收入／支出明細清單：單純明細項目（列印／PDF 用 HTML） */
+    buildDetailPrintHtml: function (opts) {
+      const cfg = opts || {};
+      const isExpense = cfg.kind === "expense";
+      const title = isExpense ? "支出明細" : "收入明細";
+      const moneyColor = isExpense ? "#b91c1c" : "#15803d";
+      const rows = Array.isArray(cfg.rows) ? cfg.rows : [];
+      const communityText = esc(cfg.communityName || "—");
+      const stamp = nowStamp();
+      const from = String(cfg.from || "");
+      const to = String(cfg.to || "");
+      const rangeLabel = (from || to) ? ((from || "全部") + " ～ " + (to || "全部")) : "全部期間";
+      const total = rows.reduce(function (a, r) { return a + toNum(r.amount, 0); }, 0);
+      const hdr = Export.resolvePdfHeader(cfg.pdfHeader);
+      const formNo = [hdr.companyCode, hdr.communityCode,
+        hdr.detailFormCodes[isExpense ? "expense" : "income"] || (isExpense ? "EX" : "IN"),
+        stamp.slice(0, 10).replace(/-/g, "")].filter(Boolean).join("-");
+      const headers = ["日期", "單號", "戶號", "對象", "收款方式", "金額(元)", "操作員姓名"];
+      const bodyRows = rows.map(function (r) {
+        return "<tr>" +
+          "<td>" + esc(r.date || "") + "</td>" +
+          "<td>" + esc(r.receiptNo || "") + "</td>" +
+          "<td>" + esc(r.unit || "") + "</td>" +
+          "<td>" + esc(r.target || "") + "</td>" +
+          "<td>" + esc(r.method || "") + "</td>" +
+          '<td class="num" style="color:' + moneyColor + ';">' + fmtMoney(r.amount) + "</td>" +
+          "<td>" + esc(r.operator || "") + "</td>" +
+          "</tr>";
+      }).join("");
+      const emptyRow = '<tr><td colspan="' + headers.length + '" class="ctr" style="color:#6b7280;">無資料</td></tr>';
+      const table = '<table><thead><tr>' +
+        headers.map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") +
+        '</tr></thead><tbody>' + (bodyRows || emptyRow) + "</tbody>" +
+        "<tfoot><tr><td colspan=\"5\">合計</td>" +
+        '<td class="num">' + fmtMoney(total) + "</td><td></td></tr></tfoot></table>";
+      const kv = function (items) {
+        return '<div class="kv">' + items.map(function (r) {
+          return '<div class="row"><div class="k">' + esc(r[0]) + '</div><div class="v">' + esc(r[1]) + '</div></div>';
+        }).join("") + "</div>";
+      };
+      const markLines = splitTwoLines(cfg.communityName);
+      const logoHtml = hdr.logo
+        ? '<img src="' + esc(hdr.logo) + '" style="width:40px;height:40px;object-fit:contain;border-radius:8px;" alt="LOGO"/>'
+        : '<div class="mark">' + esc(markLines[0]) + '<br>' + esc(markLines[1]) + '</div>';
+      return '<div class="doc-head">' +
+        '<div class="brand">' + logoHtml +
+        '<div class="nm">' + communityText + '<small>' + esc(hdr.subtitle) + '</small></div></div>' +
+        '<div class="doc-meta">表單編號：<b>' + esc(formNo) + '</b><br>' +
+        '匯出人：' + esc(cfg.exportedBy || "—") + '<br>列印時間：' + esc(stamp) + '</div></div>' +
+        '<div class="title"><h1>' + communityText + '　' + esc(title) + '</h1>' +
+        '<div class="sub">查詢期間：' + esc(rangeLabel) + '　幣別：新台幣（元）</div></div>' +
+        kv([
+          ["社區名稱", cfg.communityName || "—"],
+          ["查詢期間", rangeLabel],
+          ["類別", cfg.categoryLabel || "全部類別"],
+          ["對象", cfg.targetLabel || "全部對象"],
+          ["筆數", rows.length + " 筆"],
+          ["合計金額", fmtMoney(total) + " 元"]
+        ]) +
+        '<div class="sec"><h2>明細清單<span class="n">' + rows.length + " 筆</span></h2>" + table + "</div>";
+    },
+
+    /** 收入／支出明細清單：下載 PDF */
+    detailToPdf: function (opts) {
+      const cfg = opts || {};
+      const isExpense = cfg.kind === "expense";
+      const rng = [String(cfg.from || ""), String(cfg.to || "")].filter(Boolean).join("_") || "全部";
+      const filename = sanitizeFilename(cfg.communityName) + "_財報系統_" +
+        (isExpense ? "支出明細" : "收入明細") + "_" + rng + ".pdf";
+      return Export.exportPdfFromHtml(Export.buildDetailPrintHtml(cfg), filename, {
+        exportedBy: cfg.exportedBy || "",
+        watermark: cfg.watermark || cfg.communityName || ""
+      });
     },
 
     /** 將指定 HTML 內容繪製成 A4 PDF 並開啟預覽（自動加註頁碼、匯出人／時間與浮水印） */
@@ -1272,30 +1442,29 @@
           if (drawW > pageW) { drawW = pageW; drawH = drawW * ratio; }
         }
         const offsetX = (pageW - drawW) / 2;
+        /* 浮水印（社區名稱）：繪成與頁面等比的透明圖片，置中蓋印於每一頁 A4 正中央 */
+        let wmImg = "";
+        const mark = String(cfg.watermark || "").trim();
+        if (mark) {
+          const SCALE = 3;
+          const cv = document.createElement("canvas");
+          cv.width = Math.round(pageW * SCALE);
+          cv.height = Math.round(pageH * SCALE);
+          const g = cv.getContext("2d");
+          g.translate(cv.width / 2, cv.height / 2);
+          g.rotate((-28 * Math.PI) / 180);
+          g.font = "900 " + Math.round(cv.width * 0.09) + "px 'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif";
+          if ("letterSpacing" in g) g.letterSpacing = Math.round(cv.width * 0.017) + "px";
+          g.fillStyle = "rgba(15,23,42,0.06)";
+          g.textAlign = "center";
+          g.textBaseline = "middle";
+          g.fillText(mark, 0, 0);
+          wmImg = cv.toDataURL("image/png");
+        }
         for (let p = 0; p < pages; p++) {
           if (p > 0) pdf.addPage();
           pdf.addImage(imgData, "JPEG", offsetX, -p * pageH, drawW, drawH);
-        }
-        /* 逐頁加註頁碼、匯出人／匯出時間與浮水印 */
-        const total = pdf.internal.getNumberOfPages();
-        const stamp = nowStamp();
-        const by = String(cfg.exportedBy || "").trim();
-        const mark = String(cfg.watermark || "").trim();
-        for (let i = 1; i <= total; i++) {
-          pdf.setPage(i);
-          if (mark) {
-            try {
-              pdf.setGState(new pdf.GState({ opacity: 0.08 }));
-              pdf.setFontSize(48);
-              pdf.setTextColor(120, 120, 120);
-              pdf.text(mark, pageW / 2, pageH / 2, { align: "center", angle: 35 });
-              pdf.setGState(new pdf.GState({ opacity: 1 }));
-            } catch (_) { /* 不支援 opacity 時略過浮水印 */ }
-          }
-          pdf.setFontSize(8);
-          pdf.setTextColor(120, 120, 120);
-          pdf.text("第 " + i + " 頁／共 " + total + " 頁", pageW - 10, pageH - 6, { align: "right" });
-          pdf.text((by ? "匯出人：" + by + "｜" : "") + "匯出時間：" + stamp, 10, pageH - 6);
+          if (wmImg) pdf.addImage(wmImg, "PNG", 0, 0, pageW, pageH);
         }
         const dataUri = pdf.output("datauristring");
         if (typeof window.openPdfViewer === "function") {
@@ -1317,10 +1486,9 @@
       const cfg = opts || {};
       const filename = sanitizeFilename(cfg.communityName) + "_財報系統_" +
         sanitize(cfg.rangeLabel || "全部") + "_" + (cfg.agg && cfg.agg.from ? cfg.agg.from : "全部") + ".pdf";
-      /* 浮水印（社區名稱）已隨報表 HTML 一併繪入，避免重複加註 */
       return Export.exportPdfFromHtml(Export.buildPrintHtml(cfg), filename, {
         exportedBy: cfg.exportedBy || "",
-        watermark: ""
+        watermark: cfg.watermark || cfg.communityName || ""
       });
     },
 
@@ -1387,7 +1555,7 @@
       try {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows, { header: ["類型", "科目", "預算金額"] }), year + "年度預算");
-        XLSX.writeFile(wb, sanitizeFilename(cfg.communityName) + "_年度預算_" + sanitize(year) + ".xlsx");
+        XLSX.writeFile(wb, sanitizeFilename(cfg.communityName) + "_年度預算_" + sanitize(year) + "_" + todayStr() + ".xlsx");
         return true;
       } catch (e) {
         console.warn("[finance] budget excel export failed", e);
@@ -1399,7 +1567,7 @@
     /** 年度預算表：下載 PDF */
     budgetToPdf: function (opts) {
       const cfg = opts || {};
-      const filename = sanitizeFilename(cfg.communityName) + "_年度預算_" + sanitize(String(cfg.year || "")) + ".pdf";
+      const filename = sanitizeFilename(cfg.communityName) + "_年度預算_" + sanitize(String(cfg.year || "")) + "_" + todayStr() + ".pdf";
       return Export.exportPdfFromHtml(Export.buildBudgetPrintHtml(cfg), filename, {
         exportedBy: cfg.exportedBy || "",
         watermark: cfg.watermark || cfg.communityName || ""
@@ -1515,7 +1683,7 @@
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(budgetRows, { header: ["年度", "類型", "科目", "預算金額"] }), "年度預算");
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(noticeRows, { header: ["戶號", "姓名", "發文日", "繳納期限", "欠繳月數", "尚欠合計", "已發送管道", "最近通知"] }), "催收通知");
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(auditRows, { header: ["動作", "內容", "原因", "人員", "時間"] }), "稽核紀錄");
-        XLSX.writeFile(wb, sanitizeFilename(bk.meta.communityName) + "_財報備份_" + sanitize(bk.meta.year) + ".xlsx");
+        XLSX.writeFile(wb, sanitizeFilename(bk.meta.communityName) + "_財報備份_" + sanitize(bk.meta.year) + "_" + todayStr() + ".xlsx");
         return true;
       } catch (e) {
         console.warn("[finance] backup excel failed", e);
@@ -1531,7 +1699,7 @@
         const json = JSON.stringify(bk, null, 2);
         const dataUrl = "data:application/json;charset=utf-8;base64," +
           window.btoa(unescape(encodeURIComponent(json)));
-        Export.downloadDataUrl(dataUrl, sanitizeFilename(bk.meta.communityName) + "_財報備份_" + sanitize(bk.meta.year) + ".json");
+        Export.downloadDataUrl(dataUrl, sanitizeFilename(bk.meta.communityName) + "_財報備份_" + sanitize(bk.meta.year) + "_" + todayStr() + ".json");
         return true;
       } catch (e) {
         console.warn("[finance] backup json failed", e);
@@ -1790,12 +1958,14 @@
         report: { preset: "day", from: dayRange().from, to: dayRange().to, notes: {} },
         budgetYear: String(new Date().getFullYear() + 1),
         communityCreatedAt: "",
+        communityCode: "",
         config: {
           incomeCategories: DEFAULT_CONFIG.incomeCategories.slice(),
           expenseCategories: DEFAULT_CONFIG.expenseCategories.slice(),
           bookTypes: DEFAULT_CONFIG.bookTypes.slice(),
           recurring: [],
           notice: Object.assign({}, DEFAULT_CONFIG.notice),
+          pdfHeader: Model.normalizePdfHeader(DEFAULT_CONFIG.pdfHeader),
           enableDate: ""
         },
         configUpdatedAt: "",
@@ -1858,6 +2028,7 @@
           expenseTargets: cfgList("expenseTargets").slice(),
           recurring: cfgList("recurring").map(function (it) { return Object.assign({}, it); }),
           notice: Object.assign({}, DEFAULT_CONFIG.notice, (state.config && state.config.notice) || {}),
+          pdfHeader: Model.normalizePdfHeader(Object.assign({}, DEFAULT_CONFIG.pdfHeader, (state.config && state.config.pdfHeader) || {})),
           enableDate: String((state.config && state.config.enableDate) || "")
         };
       };
@@ -2096,7 +2267,8 @@
               };
             }) : [],
             enableDate: v && typeof v.enableDate === "string" ? v.enableDate : "",
-            notice: Object.assign({}, DEFAULT_CONFIG.notice, (v && v.notice) || {})
+            notice: Object.assign({}, DEFAULT_CONFIG.notice, (v && v.notice) || {}),
+            pdfHeader: Model.normalizePdfHeader(Object.assign({}, DEFAULT_CONFIG.pdfHeader, (v && v.pdfHeader) || {}))
           };
           state.configUpdatedAt = v ? tsToStr(v.updatedAt) : "";
           render();
@@ -2105,11 +2277,12 @@
         });
       };
 
-      /** 讀取社區文件以取得帳號創建日期（作為報表啟用日期預設值） */
+      /** 讀取社區文件以取得帳號創建日期（作為報表啟用日期預設值）與社區代號（username） */
       const subscribeCommunity = function () {
         state.unsubCommunity = db.collection("communities").doc(cid).onSnapshot(function (snap) {
           const v = (snap && snap.exists && snap.data()) || {};
           state.communityCreatedAt = toDateStr(v.createdAt);
+          state.communityCode = String(v.username || "").trim();
           render();
         }, function (err) {
           console.warn("[finance] community subscribe failed", err);
@@ -2198,6 +2371,51 @@
           if (v && out.indexOf(v) === -1) out.push(v);
         });
         return out;
+      };
+
+      /** 依收入對象（住戶標籤）比對住戶名單，取出對應戶號（比對不到時回傳空字串） */
+      const residentUnitOf = function (target) {
+        const t = String(target || "").trim();
+        if (!t) return "";
+        const exact = state.residents.find(function (r) { return String(r.label || "") === t; });
+        if (exact) return String(exact.unit || "");
+        const byUnit = state.residents.find(function (r) {
+          const u = String(r.unit || "");
+          return u && (t === u || t.indexOf(u + " ") === 0);
+        });
+        return byUnit ? String(byUnit.unit || "") : "";
+      };
+
+      /** 依戶號比對住戶名單，取出對應姓名（比對不到時回傳空字串） */
+      const residentNameOf = function (unit) {
+        const u = String(unit || "").trim();
+        if (!u) return "";
+        const r = state.residents.find(function (x) { return String(x.unit || "") === u; });
+        return r ? String(r.name || "") : "";
+      };
+
+      /**
+       * 批次匯入的對象欄位正規化：
+       * - 若只輸入戶號，自動補上姓名 → "戶號 姓名"
+       * - 若已含姓名（或非住戶對象），則原樣回傳
+       */
+      const normalizeTarget = function (raw) {
+        const t = String(raw || "").trim();
+        if (!t) return "";
+        /* 已經是住戶標籤格式（戶號 + 空格 + 姓名）則不重複處理 */
+        const already = state.residents.find(function (r) { return String(r.label || "") === t; });
+        if (already) return t;
+        /* 若輸入值剛好是某住戶的戶號，則補上姓名 */
+        const byUnit = state.residents.find(function (r) {
+          const u = String(r.unit || "");
+          return u && (t === u || t.indexOf(u + " ") === 0);
+        });
+        if (byUnit) {
+          const u = String(byUnit.unit || "");
+          const name = String(byUnit.name || "");
+          return name ? (u + " " + name) : u;
+        }
+        return t;
       };
 
       /* ---------------- 管理費 ---------------- */
@@ -2391,6 +2609,16 @@
         return Object.assign({}, DEFAULT_CONFIG.notice, (state.config && state.config.notice) || {}, over || {});
       };
 
+      /** 取得 PDF 抬頭設定（合併預設值與使用者設定；社區代號留空時採用社區帳號的 username） */
+      const pdfHeaderCfg = function (over) {
+        const h = Model.normalizePdfHeader(Object.assign({},
+          DEFAULT_CONFIG.pdfHeader,
+          (state.config && state.config.pdfHeader) || {},
+          over || {}));
+        if (!h.communityCode) h.communityCode = String(state.communityCode || "");
+        return h;
+      };
+
       /** 組出通知函內容（含自訂用語與繳納期限天數） */
       const buildNoticePayload = function (resident, months, override) {
         const cfg = noticeCfg(override);
@@ -2445,6 +2673,35 @@
           subject: read("subject"),
           closing: read("closing"),
           note: read("note")
+        });
+      };
+
+      /** 讀取「PDF 抬頭設定」表單 */
+      const readPdfHeaderForm = function () {
+        const read = function (sel) {
+          const el = container.querySelector(sel);
+          return el ? String(el.value || "") : "";
+        };
+        const readCode = function (k) {
+          const el = container.querySelector('[data-fin-hdr-code="' + k + '"]');
+          return el ? String(el.value || "") : "";
+        };
+        const logoEl = container.querySelector('[data-fin-hdr-logo]');
+        return Model.normalizePdfHeader({
+          logo: logoEl ? String(logoEl.getAttribute("data-logo") || "") : "",
+          companyCode: read('[data-fin-hdr-company]'),
+          communityCode: read('[data-fin-hdr-community]'),
+          formCodes: {
+            day: readCode("day"),
+            month: readCode("month"),
+            year: readCode("year"),
+            custom: readCode("custom")
+          },
+          detailFormCodes: {
+            income: readCode("income"),
+            expense: readCode("expense")
+          },
+          subtitle: read('[data-fin-hdr-subtitle]')
         });
       };
 
@@ -2717,7 +2974,9 @@
           '<button class="btn btn-ghost" type="button" data-fin-clear="' + kind + '">清除</button>' +
           (canWrite ? '<button class="btn btn-primary" type="button" data-fin-add="' + kind + '">＋ 新增' + esc(meta.label) + "</button>" : "") +
           '<button class="btn" type="button" data-fin-recurring="1">定期收支</button>' +
+          (canWrite ? '<button class="btn" type="button" data-fin-import-tx="' + kind + '">批次匯入</button>' : "") +
           '<button class="btn" type="button" data-fin-export="' + kind + '">匯出 Excel</button>' +
+          '<button class="btn" type="button" data-fin-tx-pdf="' + kind + '">匯出 PDF</button>' +
           "</div>" +
           '<div class="fin-stat-grid">' +
           statCard("期間合計", fmtMoney(total), meta.color) +
@@ -2743,7 +3002,10 @@
               '<td data-label="沖銷月份">' + esc((t.months && t.months.length) ? t.months.join("、") : "—") + "</td>" +
               '<td data-label="類別"><span class="fin-tag" style="background:' + meta.bg + ";color:" + meta.color + ';">' + esc(t.category || "未分類") + "</span></td>" +
               '<td data-label="對象">' + esc(t.target || "—") + "</td>" +
-              '<td class="num" data-label="金額" style="color:' + meta.color + ';">' + (kind === "expense" ? "-" : "+") + fmtMoney(t.amount) + "</td>" +
+              '<td class="num" data-label="金額" style="color:' + meta.color + ';">' + (kind === "expense" ? "-" : "+") + fmtMoney(t.amount) +
+              (kind === "income" && toNum(t.discount, 0) > 0
+                ? '<div style="font-size:calc(11px * var(--fs, 1));font-weight:800;color:#b91c1c;margin-top:2px;">折扣 ' + fmtMoney(t.discount) + '</div>'
+                : "") + "</td>" +
               '<td data-label="收款方式">' + esc(t.method || "—") + "</td>" +
               '<td data-label="單據編號">' + (t.receiptNo ? esc(t.receiptNo) : "—") +
               (t.receiptImg ? ' <button class="btn btn-sm" type="button" data-fin-shot="' + esc(t.id) + '">看單據</button>' : "") +
@@ -3285,7 +3547,10 @@
           const todo = previewOf(mm).todo;
           if (!todo.length) { showErr("此月份沒有可產生的住戶（皆已存在紀錄或未設定金額）。"); return; }
 
+          const receiptReserved = [];
           const payloads = todo.map(function (x) {
+            const receiptNo = nextReceiptNo("income", date, "", receiptReserved);
+            receiptReserved.push(receiptNo);
             return {
               kind: "income",
               date: date,
@@ -3295,7 +3560,7 @@
               method: method,
               bookId: bookId,
               months: [mm],
-              receiptNo: "",
+              receiptNo: receiptNo,
               note: mm + " 管理費"
             };
           });
@@ -3538,19 +3803,24 @@
             });
           });
           if (!todo.length) { showErr(mm + " 的定期紀錄皆已存在，無需重複產生。"); return; }
+          const recReserved = { income: [], expense: [] };
           const payloads = todo.map(function (it) {
             const day = Math.min(Math.max(1, Math.round(toNum(it.day, 1)) || 1), lastDay);
             const bk = it.bookId ? state.books.find(function (x) { return x.id === it.bookId; }) : null;
+            const txKind = it.kind === "income" ? "income" : "expense";
+            const txDate = ymd(new Date(y, mo - 1, day));
+            const receiptNo = nextReceiptNo(txKind, txDate, "", recReserved[txKind]);
+            recReserved[txKind].push(receiptNo);
             return {
-              kind: it.kind === "income" ? "income" : "expense",
-              date: ymd(new Date(y, mo - 1, day)),
+              kind: txKind,
+              date: txDate,
               category: it.category,
               amount: toNum(it.amount, 0),
               target: it.target || "",
               method: bk ? String(bk.name || "") : "",
               bookId: bk ? String(bk.id) : "",
               months: [],
-              receiptNo: "",
+              receiptNo: receiptNo,
               note: it.note || "定期項目"
             };
           });
@@ -3983,20 +4253,27 @@
             '<div class="field"><label>迄日</label><input type="date" data-fin-range="to" max="' + maxDate + '"' +
             (minDate ? ' min="' + minDate + '"' : "") + ' value="' + esc(r.to) + '"/></div>'
           : "";
-        /* 報表備註／建議（留空時由報表自動產生內容） */
+        /* 報表備註／建議：自動依本期收支產生，使用者可手動修改 */
         const noteLabels = {
           day: "備註事項（列為報表第六項）",
           month: "重要事項與建議（列為報表第五項）",
           year: "年度重點與建議（列為報表第四項）"
         };
-        const noteField = noteLabels[r.preset]
-          ? '<div class="field" style="margin-top:10px;">' +
-            "<label>" + noteLabels[r.preset] +
-            '<span style="color:#9ca3af;font-weight:700;">　（留空則依本期收支自動產生）</span></label>' +
+        const noteField = (function () {
+          if (!noteLabels[r.preset]) return "";
+          const stored = String(((state.report.notes || {})[r.preset]) || "").trim();
+          const autoText = Export.autoNote(r.preset, agg, fees);
+          const display = stored || autoText;
+          return '<div class="field" style="margin-top:10px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+            "<label style=\"margin:0;\">" + noteLabels[r.preset] +
+            '<span style="color:#9ca3af;font-weight:700;">　（自動產生，可手動修改）</span></label>' +
+            '<button class="btn btn-ghost btn-sm" type="button" data-fin-note-regen="1" style="margin:0;">重新產生</button>' +
+            '</div>' +
             '<textarea rows="3" data-fin-report-note="1" placeholder="可手動輸入內容，將列印於報表"' +
             ' style="' + inputStyle + 'resize:vertical;line-height:1.6;">' +
-            esc(((state.report.notes || {})[r.preset]) || "") + "</textarea></div>"
-          : "";
+            esc(display) + "</textarea></div>";
+        })();
         return "" +
           '<div class="fin-toolbar">' +
           presets.map(function (p) {
@@ -4518,6 +4795,77 @@
           "</section>";
       };
 
+      /** PDF 匯出抬頭設定：LOGO、表單編號格式、副標語 */
+      const renderPdfHeaderSettings = function () {
+        const h = pdfHeaderCfg();
+        const dis = canWrite ? "" : " disabled";
+        const codeFields = [
+          ["day", "日報表", h.formCodes.day],
+          ["month", "月報表", h.formCodes.month],
+          ["year", "年報表", h.formCodes.year],
+          ["custom", "區間報表", h.formCodes.custom]
+        ];
+        const detailFields = [
+          ["income", "收入明細", h.detailFormCodes.income],
+          ["expense", "支出明細", h.detailFormCodes.expense]
+        ];
+        const markLines = splitTwoLines(cName);
+        const logoPreview = h.logo
+          ? '<img src="' + esc(h.logo) + '" data-fin-hdr-logo data-logo="' + esc(h.logo) +
+            '" style="width:40px;height:40px;object-fit:contain;border-radius:8px;border:1px solid #e5e7eb;"/>'
+          : '<div data-fin-hdr-logo data-logo="" style="width:40px;height:40px;border-radius:8px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;line-height:1.1;' +
+            'background:linear-gradient(180deg,#c62828 0%,#d32f2f 45%,#b71c1c 100%);color:#fff;font-weight:900;font-size:11px;">' +
+            esc(markLines[0]) + '<br>' + esc(markLines[1]) + '</div>';
+        return "" +
+          '<section style="border:1px solid rgba(17,24,39,.1);border-radius:14px;padding:12px;">' +
+          '<div style="font-weight:800;">PDF 匯出抬頭設定</div>' +
+          '<div class="fin-hint">套用於「報表匯出」與「收入／支出明細」的 PDF；表單編號格式為「公司代號-社區代號-表單代號-日期」，例如 NW-' +
+            esc(String(state.communityCode || "A105")) + '-D-20261119。社區代號留空時自動採用社區帳號代號。</div>' +
+          '<div style="display:flex;gap:14px;align-items:center;margin-top:10px;">' +
+          logoPreview +
+          '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:4px;">LOGO</div>' +
+          '<div style="display:flex;gap:8px;align-items:center;">' +
+          '<label class="btn btn-ghost" style="margin:0;">' +
+          '<input type="file" accept="image/*" data-fin-hdr-logo-upload' + dis +
+          ' style="display:none;"/><span data-fin-hdr-upload-label>' + (h.logo ? "更換 LOGO" : "上傳 LOGO") + "</span>" +
+          "</label>" +
+          (h.logo && canWrite ? '<button class="btn btn-ghost" type="button" data-fin-hdr-logo-clear>移除</button>' : "") +
+          '<span class="fin-hint" style="margin:0;">建議尺寸 120×120 以上，PNG 透明背景</span>' +
+          "</div></div></div>" +
+          '<div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:12px;">' +
+          field("公司代號", '<input type="text" data-fin-hdr-company value="' + esc(h.companyCode) +
+            '" placeholder="NW" maxlength="20"' + dis + ' style="' + inputStyle + '"/>') +
+          field("社區代號", '<input type="text" data-fin-hdr-community value="' + esc(h.communityCode) +
+            '" placeholder="' + esc(String(state.communityCode || "留空採用社區帳號")) + '" maxlength="20"' + dis + ' style="' + inputStyle + '"/>') +
+          "</div>" +
+          '<div style="font-size:12px;font-weight:800;color:#374151;margin-top:12px;">報表表單代號</div>' +
+          '<div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-top:6px;">' +
+          codeFields.map(function (c) {
+            return field(c[1], '<input type="text" data-fin-hdr-code="' + c[0] + '" value="' + esc(c[2]) +
+              '" maxlength="10"' + dis + ' style="' + inputStyle + '"/>');
+          }).join("") +
+          "</div>" +
+          '<div style="font-size:12px;font-weight:800;color:#374151;margin-top:12px;">明細表單代號</div>' +
+          '<div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-top:6px;">' +
+          detailFields.map(function (c) {
+            return field(c[1], '<input type="text" data-fin-hdr-code="' + c[0] + '" value="' + esc(c[2]) +
+              '" maxlength="10"' + dis + ' style="' + inputStyle + '"/>');
+          }).join("") +
+          "</div>" +
+          '<div style="margin-top:12px;">' +
+          field("副標語", '<input type="text" data-fin-hdr-subtitle value="' + esc(h.subtitle) +
+            '" placeholder="QAi生活網　財報系統產出" maxlength="60"' + dis + ' style="' + inputStyle + '"/>') +
+          "</div>" +
+          (canWrite
+            ? '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;">' +
+              '<button class="btn btn-ghost" type="button" data-fin-hdr-reset>恢復預設</button>' +
+              '<button class="btn btn-primary" type="button" data-fin-hdr-save>儲存抬頭設定</button>' +
+              "</div>"
+            : '<div class="fin-hint">您的角色為唯讀，無法修改抬頭設定。</div>') +
+          "</section>";
+      };
+
       const renderSettingsPanel = function () {
         const updated = state.configUpdatedAt
           ? "最後更新：" + esc(state.configUpdatedAt)
@@ -4539,6 +4887,7 @@
           '<div class="fin-hint" style="margin-top:4px;">' + enableHint + "</div>" +
           "</section>" +
           renderNoticeSettings() +
+          renderPdfHeaderSettings() +
           renderChipEditor("收入類別", "incomeCategories", "例如：管理費", "#15803d", "套用於收入明細的類別選項。") +
           renderChipEditor("支出類別", "expenseCategories", "例如：水電費", "#b91c1c", "套用於支出明細的類別選項。") +
           renderChipEditor("帳本類型", "bookTypes", "例如：活存", "#7c3aed", "套用於「銀行明細」新增／編輯帳本的「類型」選項。移除既有類型不會改動已建立的帳本。") +
@@ -4673,6 +5022,14 @@
           });
         });
 
+        /* 重新產生備註：清除已儲存的備註，由系統依本期收支重新產生 */
+        const regenBtn = container.querySelector("[data-fin-note-regen]");
+        if (regenBtn) regenBtn.onclick = function () {
+          if (state.report.notes) delete state.report.notes[state.report.preset];
+          toast("已重新產生備註內容");
+          render();
+        };
+
         container.querySelectorAll("[data-fin-enable-date]").forEach(function (el) {
           el.addEventListener("change", function () {
             const v = String(el.value || "").trim();
@@ -4760,6 +5117,9 @@
         container.querySelectorAll("[data-fin-export]").forEach(function (btn) {
           btn.onclick = function () { doExportExcel(btn.getAttribute("data-fin-export")); };
         });
+        container.querySelectorAll("[data-fin-tx-pdf]").forEach(function (btn) {
+          btn.onclick = function () { openTxPdfModal(btn.getAttribute("data-fin-tx-pdf")); };
+        });
         const pdfBtn = container.querySelector("[data-fin-pdf]");
         if (pdfBtn) pdfBtn.onclick = function () { doExportPdf(); };
 
@@ -4789,11 +5149,64 @@
           openNoticePreview(readNoticeForm());
         };
 
+        /* PDF 抬頭設定 */
+        const hdrSaveBtn = container.querySelector("[data-fin-hdr-save]");
+        if (hdrSaveBtn) hdrSaveBtn.onclick = function () {
+          const next = currentConfig();
+          next.pdfHeader = readPdfHeaderForm();
+          saveConfig(next, "已儲存 PDF 抬頭設定");
+        };
+        const hdrResetBtn = container.querySelector("[data-fin-hdr-reset]");
+        if (hdrResetBtn) hdrResetBtn.onclick = function () {
+          const next = currentConfig();
+          next.pdfHeader = Model.normalizePdfHeader(DEFAULT_CONFIG.pdfHeader);
+          saveConfig(next, "已恢復 PDF 抬頭預設值");
+        };
+        const hdrLogoUpload = container.querySelector("[data-fin-hdr-logo-upload]");
+        if (hdrLogoUpload) hdrLogoUpload.onchange = function () {
+          const file = hdrLogoUpload.files && hdrLogoUpload.files[0];
+          if (!file) return;
+          if (file.size > 500 * 1024) { toast("LOGO 圖片請小於 500KB", true); hdrLogoUpload.value = ""; return; }
+          const reader = new FileReader();
+          reader.onload = function () {
+            const dataUrl = String(reader.result || "");
+            const logoEl = container.querySelector("[data-fin-hdr-logo]");
+            if (logoEl) {
+              logoEl.outerHTML = '<img src="' + esc(dataUrl) + '" data-fin-hdr-logo data-logo="' + esc(dataUrl) +
+                '" style="width:40px;height:40px;object-fit:contain;border-radius:8px;border:1px solid #e5e7eb;"/>';
+            }
+            const clearBtn = container.querySelector("[data-fin-hdr-logo-clear]");
+            if (clearBtn) clearBtn.style.display = "";
+            const uploadLabel = container.querySelector("[data-fin-hdr-upload-label]");
+            if (uploadLabel) uploadLabel.textContent = "更換 LOGO";
+          };
+          reader.onerror = function () { toast("LOGO 讀取失敗", true); };
+          reader.readAsDataURL(file);
+        };
+        const hdrLogoClear = container.querySelector("[data-fin-hdr-logo-clear]");
+        if (hdrLogoClear) hdrLogoClear.onclick = function () {
+          const logoEl = container.querySelector("[data-fin-hdr-logo]");
+          if (logoEl) {
+            const cl = splitTwoLines(cName);
+            logoEl.outerHTML = '<div data-fin-hdr-logo data-logo="" style="width:40px;height:40px;border-radius:8px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;line-height:1.1;' +
+              'background:linear-gradient(180deg,#c62828 0%,#d32f2f 45%,#b71c1c 100%);color:#fff;font-weight:900;font-size:11px;">' +
+              esc(cl[0]) + '<br>' + esc(cl[1]) + '</div>';
+          }
+          hdrLogoClear.style.display = "none";
+          const uploadLabel = container.querySelector("[data-fin-hdr-upload-label]");
+          if (uploadLabel) uploadLabel.textContent = "上傳 LOGO";
+          if (hdrLogoUpload) hdrLogoUpload.value = "";
+        };
+
         const recurringBtn = container.querySelector("[data-fin-recurring]");
         if (recurringBtn) recurringBtn.onclick = function () { openRecurringModal(); };
 
         const importBtn = container.querySelector("[data-fin-import]");
         if (importBtn) importBtn.onclick = function () { openImportModal(); };
+
+        container.querySelectorAll("[data-fin-import-tx]").forEach(function (btn) {
+          btn.onclick = function () { openImportModal(btn.getAttribute("data-fin-import-tx")); };
+        });
 
         container.querySelectorAll("[data-fin-reconcile]").forEach(function (btn) {
           btn.onclick = function () {
@@ -4862,6 +5275,7 @@
           expenseTargets: (next.expenseTargets || []).slice(),
           recurring: (Array.isArray(next.recurring) ? next.recurring : cfgList("recurring")).map(function (it) { return Object.assign({}, it); }),
           notice: Model.normalizeNotice(Object.assign({}, (state.config && state.config.notice) || {}, next.notice || {})),
+          pdfHeader: Model.normalizePdfHeader(Object.assign({}, (state.config && state.config.pdfHeader) || {}, next.pdfHeader || {})),
           enableDate: String(next.enableDate != null ? next.enableDate : ((state.config && state.config.enableDate) || ""))
         };
         render();
@@ -4971,6 +5385,41 @@
         target.innerHTML = renderTxTable(kind, filterTx(kind));
       };
 
+      /* ---------------- 單號自動生成 ---------------- */
+
+      const KIND_CODE = { income: "IN", expense: "EX" };
+
+      /**
+       * 產生單號：{類型代號}{YYYYMMDD}-{3碼流水}，例如 IN20261120-001。
+       * excludeId：編輯既有明細時排除自身；reserved：批次匯入時已配發的號碼（避免重複）。
+       */
+      const nextReceiptNo = function (kind, dateStr, excludeId, reserved) {
+        const code = KIND_CODE[kind] || "TX";
+        const ds = (String(dateStr || "").replace(/[^0-9]/g, "") || todayStr().replace(/-/g, "")) || "00000000";
+        const prefix = code + ds + "-";
+        const seqOf = function (rn) {
+          const s = String(rn || "");
+          if (s.indexOf(prefix) !== 0) return 0;
+          const n = parseInt(s.slice(prefix.length), 10);
+          return Number.isFinite(n) ? n : 0;
+        };
+        let max = 0;
+        state.tx.forEach(function (t) {
+          if (excludeId && String(t.id) === String(excludeId)) return;
+          const k = t.kind === "expense" ? "expense" : "income";
+          if (k !== kind) return;
+          const n = seqOf(t.receiptNo);
+          if (n > max) max = n;
+        });
+        if (reserved) {
+          reserved.forEach(function (rn) {
+            const n = seqOf(rn);
+            if (n > max) max = n;
+          });
+        }
+        return prefix + String(max + 1).padStart(3, "0");
+      };
+
       /* ---------------- 新增 / 編輯 ---------------- */
 
       const openTxModal = function (kind, row) {
@@ -4980,7 +5429,8 @@
         const cats = cfgList(CATEGORY_KEYS[kind] || "incomeCategories");
         const targets = kind === "income" ? incomeTargetOptions() : cfgList(TARGET_KEYS[kind] || "expenseTargets");
         const cur = row || {
-          date: todayStr(), category: cats[0] || "", amount: "", target: "", method: "", months: [], receiptNo: "", note: ""
+          date: todayStr(), category: cats[0] || "", amount: "", target: "", method: "", months: [], receiptNo: "", note: "",
+          discount: 0, discountCategory: DEFAULT_DISCOUNT_CATEGORY
         };
         const bookOpts = state.books.filter(function (bk) { return String(bk.name || "").trim(); });
         const curBookId = row ? txBookId(row) : "";
@@ -5010,6 +5460,18 @@
               methodSelect +
               "</select>") +
             "</div>" +
+            (kind === "income" ? (function () {
+              const expCats = cfgList("expenseCategories");
+              const curDiscCat = String(cur.discountCategory || DEFAULT_DISCOUNT_CATEGORY).trim() || DEFAULT_DISCOUNT_CATEGORY;
+              const catOpts = expCats.map(function (c) {
+                return '<option value="' + esc(c) + '"' + (curDiscCat === c ? " selected" : "") + ">" + esc(c) + "</option>";
+              }).join("");
+              return '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">' +
+                field("折扣金額", '<input type="number" min="0" step="1" id="fin_tx_discount" value="' + esc(isEdit ? (cur.discount || 0) : "") + '" placeholder="例如：超商手續費 15" style="' + inputStyle + '"/>') +
+                field("折扣類別", '<select id="fin_tx_disc_cat" style="' + inputStyle + '">' + catOpts + "</select>") +
+                "</div>" +
+                '<div class="fin-hint">若填入折扣金額，系統將自動新增一筆對應類別的支出明細（例如「超商手續費」）。</div>';
+            })() : "") +
             field("對象（" + (kind === "income" ? "住戶戶號 / 繳費人" : "受款廠商 / 個人") + "）",
               '<input id="fin_tx_target" list="fin_target_list" value="' + esc(cur.target) + '" style="' + inputStyle + '" placeholder="' +
               (kind === "income" ? "例如：A-12-3 王先生" : "例如：大大清潔公司") + '"/>' +
@@ -5022,7 +5484,7 @@
             "</div>" +
             '<div class="fin-chips" id="fin_tx_month_chips"></div>' +
             "</div>" +
-            field("單據編號", '<input id="fin_tx_receipt" value="' + esc(cur.receiptNo) + '" style="' + inputStyle + '"/>') +
+            field("單據編號（系統自動產生）", '<input id="fin_tx_receipt" value="' + esc(isEdit && cur.receiptNo ? cur.receiptNo : nextReceiptNo(kind, cur.date, isEdit ? row.id : "")) + '" readonly style="' + inputStyle + 'background:#f3f4f6;color:#6b7280;"/>') +
             '<div class="field" style="gap:6px;margin:0;">' +
             '<label style="font-size:calc(11px * var(--fs, 1));font-weight:800;color:#6b7280;">單據附件（照片，自動壓縮後存入資料庫）</label>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
@@ -5051,6 +5513,15 @@
         };
         const cancelBtn = m.modal.querySelector("#fin_tx_cancel");
         if (cancelBtn) cancelBtn.onclick = function () { m.close(); };
+
+        /* 新增時：單號隨日期自動更新 */
+        const dateInput = m.modal.querySelector("#fin_tx_date");
+        const receiptInput = m.modal.querySelector("#fin_tx_receipt");
+        if (!isEdit && dateInput && receiptInput) {
+          dateInput.onchange = function () {
+            receiptInput.value = nextReceiptNo(kind, String(dateInput.value || "").trim(), "");
+          };
+        }
 
         /* 沖銷月份：可單選或複選 */
         const months = Array.isArray(cur.months) ? cur.months.slice() : [];
@@ -5165,16 +5636,54 @@
             method: method,
             bookId: bookId,
             months: months.slice(),
-            receiptNo: String((m.modal.querySelector("#fin_tx_receipt") || {}).value || "").trim(),
+            receiptNo: String((m.modal.querySelector("#fin_tx_receipt") || {}).value || "").trim() || nextReceiptNo(kind, date, isEdit ? row.id : ""),
             receiptImg: receiptImg,
             note: String((m.modal.querySelector("#fin_tx_note") || {}).value || "").trim(),
             history: history
           };
+          /* 收入折扣：取得折扣金額與對應的支出類別 */
+          let discount = 0;
+          let discountCategory = DEFAULT_DISCOUNT_CATEGORY;
+          if (kind === "income") {
+            const discRaw = String((m.modal.querySelector("#fin_tx_discount") || {}).value || "").trim();
+            discount = toNum(discRaw, 0);
+            discountCategory = String((m.modal.querySelector("#fin_tx_disc_cat") || {}).value || "").trim() || DEFAULT_DISCOUNT_CATEGORY;
+            payload.discount = discount;
+            payload.discountCategory = discountCategory;
+          }
           saveBtn.disabled = true;
           saveBtn.textContent = "儲存中…";
-          Model.saveTx(db, cid, payload, { uid: context.uid, name: context.name }).then(function () {
+          Model.saveTx(db, cid, payload, { uid: context.uid, name: context.name }).then(function (incomeId) {
+            /* 若為收入且有折扣金額，自動新增／更新對應的支出明細 */
+            if (kind === "income") {
+              const linked = state.tx.find(function (t) {
+                return t.kind === "expense" && String(t.linkedTxId || "") === String(incomeId || "");
+              });
+              if (discount > 0) {
+                const expPayload = {
+                  id: linked ? linked.id : "",
+                  kind: "expense",
+                  date: date,
+                  category: discountCategory,
+                  amount: discount,
+                  target: String(payload.target || ""),
+                  method: method,
+                  bookId: bookId,
+                  months: months.slice(),
+                  receiptNo: linked && linked.receiptNo ? linked.receiptNo : nextReceiptNo("expense", date),
+                  receiptImg: "",
+                  note: "自動產生：對應收入單號 " + (payload.receiptNo || incomeId) + " 之折扣",
+                  linkedTxId: String(incomeId || ""),
+                  history: [{ at: nowStamp(), by: String(context.name || ""), action: linked ? "update" : "create" }]
+                };
+                return Model.saveTx(db, cid, expPayload, { uid: context.uid, name: context.name });
+              } else if (linked) {
+                return Model.removeTx(db, cid, linked.id);
+              }
+            }
+          }).then(function () {
             m.close();
-            toast(isEdit ? "已更新" : "已新增");
+            toast(isEdit ? "已更新" : "已新增" + (kind === "income" && discount > 0 ? "（含自動產生的折扣支出）" : ""));
           }).catch(function (e) {
             saveBtn.disabled = false;
             saveBtn.textContent = isEdit ? "儲存" : "建立";
@@ -5341,7 +5850,7 @@
         if (closeBtn) closeBtn.onclick = function () { m.close(); };
         const dlBtn = m.modal && m.modal.querySelector("#fin_shot_dl");
         if (dlBtn) dlBtn.onclick = function () {
-          Export.downloadDataUrl(row.receiptImg, "單據_" + sanitize(row.date + "_" + (row.category || "未分類")) + ".jpg");
+          Export.downloadDataUrl(row.receiptImg, sanitizeFilename(cName) + "_單據_" + sanitize(row.date + "_" + (row.category || "未分類")) + ".jpg");
         };
       };
 
@@ -5523,6 +6032,14 @@
             note: row.note
           };
           Model.removeTx(db, cid, id).then(function () {
+            /* 若刪除的是收入，一併刪除由折扣自動產生的對應支出 */
+            if (row.kind === "income") {
+              const linked = state.tx.find(function (t) {
+                return t.kind === "expense" && String(t.linkedTxId || "") === String(id);
+              });
+              if (linked) return Model.removeTx(db, cid, linked.id);
+            }
+          }).then(function () {
             toast("已刪除，並留下稽核紀錄");
             return Model.saveAudit(db, cid, {
               action: "delete",
@@ -5657,8 +6174,9 @@
       /* ---------------- 批次匯入 ---------------- */
 
       /** 批次匯入財報明細：提供 Excel 範本、解析檔案並一次性寫入 */
-      const openImportModal = function () {
+      const openImportModal = function (defaultKind) {
         if (!canWrite) { toast("您沒有修改權限", true); return; }
+        const onlyKind = defaultKind === "income" || defaultKind === "expense" ? defaultKind : "";
         let parsed = [];
 
         const pick = function (obj, keys) {
@@ -5688,16 +6206,29 @@
 
         const normalize = function (raw, i) {
           const kindText = String(pick(raw, ["類型", "类型", "收支", "kind"])).trim();
-          const kind = /支|expense/i.test(kindText) ? "expense" : "income";
+          /* 若從收入／支出明細頁開啟，且檔案未填類型欄，則自動帶入該頁的類型 */
+          let kind = onlyKind;
+          if (!kind) {
+            kind = /支|expense/i.test(kindText) ? "expense" : "income";
+          }
           const date = toYmd(pick(raw, ["日期", "date"]));
           const category = String(pick(raw, ["類別", "类别", "科目", "category"])).trim();
-          const target = String(pick(raw, ["對象", "对象", "繳費人", "target"])).trim();
+          const target = normalizeTarget(pick(raw, ["對象", "对象", "繳費人", "target"]));
           const amountText = String(pick(raw, ["金額", "金额", "amount"])).replace(/[,\s$]/g, "");
           const amount = Number(amountText);
           const bookName = String(pick(raw, ["帳本", "帐本", "帳戶", "book"])).trim();
           const months = parseMonths(pick(raw, ["沖銷月份", "冲销月份", "月份", "months"]));
           const receiptNo = String(pick(raw, ["單據編號", "单据编号", "receipt"])).trim();
           const note = String(pick(raw, ["備註", "备注", "note"])).trim();
+          /* 收入折扣：折扣金額與折扣類別（僅收入適用） */
+          let discount = 0;
+          let discountCategory = "";
+          if (kind === "income") {
+            const discText = String(pick(raw, ["折扣金額", "折扣", "discount"])).replace(/[,\s$]/g, "");
+            discount = discText ? Number(discText) : 0;
+            if (!Number.isFinite(discount) || discount < 0) discount = 0;
+            discountCategory = String(pick(raw, ["折扣類別", "折扣类别", "discountCategory"])).trim() || DEFAULT_DISCOUNT_CATEGORY;
+          }
           const errs = [];
           if (!date) errs.push("日期格式錯誤");
           if (!category) errs.push("缺少類別");
@@ -5711,16 +6242,23 @@
             no: i + 1, kind: kind, date: date, category: category, target: target,
             amount: Number.isFinite(amount) ? amount : 0,
             bookId: bk ? String(bk.id) : "", bookName: bk ? String(bk.name || "") : "",
-            months: months, receiptNo: receiptNo, note: note, errs: errs
+            months: months, receiptNo: receiptNo, note: note, errs: errs,
+            discount: discount, discountCategory: discountCategory
           };
         };
 
         const m = openModal({
-          title: "批次匯入財報明細",
+          title: "批次匯入" + (onlyKind ? (onlyKind === "expense" ? "支出" : "收入") : "財報") + "明細",
           width: "min(96vw, 900px)",
           bodyHtml:
             '<div style="display:grid;gap:12px;">' +
-            '<div class="fin-hint">支援 Excel（.xlsx／.xls）與 CSV。欄位：類型（收入／支出）、日期、類別、對象、金額、帳本、沖銷月份（選填）、單據編號（選填）、備註（選填）。「帳本」請填帳本名稱，找不到對應帳本者該列不匯入。</div>' +
+            '<div class="fin-hint">支援 Excel（.xlsx／.xls）與 CSV。欄位：' +
+            (onlyKind ? "" : "類型（收入／支出）、") +
+            '日期、類別、對象（可只填戶號，系統自動補上姓名）、金額、帳本、沖銷月份（選填）、備註（選填）' +
+            (onlyKind === "income" || !onlyKind ? "、折扣金額（選填，收入適用）、折扣類別（選填，收入適用）" : "") +
+            '。「帳本」請填帳本名稱，找不到對應帳本者該列不匯入。單號由系統自動產生。' +
+            (onlyKind ? " 本次匯入將全部視為「" + (onlyKind === "expense" ? "支出" : "收入") + "」。" : "") +
+            '</div>' +
             '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
             '<button class="btn btn-ghost" type="button" id="fin_imp_tpl">下載匯入範本</button>' +
             '<input type="file" id="fin_imp_file" accept=".xlsx,.xls,.csv" style="' + inputStyle + 'flex:1 1 260px;"/>' +
@@ -5757,18 +6295,25 @@
           }
           if (listEl) {
             const show = parsed.slice(0, 200);
+            const typeHeader = onlyKind ? "" : "<th>類型</th>";
+            const showDiscount = onlyKind === "income" || !onlyKind;
+            const discHeader = showDiscount ? "<th>折扣</th>" : "";
             listEl.innerHTML = parsed.length
               ? '<div class="fin-table-wrap"><table class="fin-table"><thead><tr>' +
-                "<th>列</th><th>類型</th><th>日期</th><th>類別</th><th>對象</th><th>金額</th><th>帳本</th><th>狀態</th>" +
+                "<th>列</th>" + typeHeader + "<th>日期</th><th>類別</th><th>對象</th><th>金額</th>" + discHeader + "<th>帳本</th><th>狀態</th>" +
                 "</tr></thead><tbody>" +
                 show.map(function (r) {
+                  const discCell = showDiscount
+                    ? '<td class="num">' + (r.kind === "income" && r.discount > 0 ? fmtMoney(r.discount) : "—") + "</td>"
+                    : "";
                   return "<tr>" +
                     "<td>" + esc(String(r.no)) + "</td>" +
-                    "<td>" + (r.kind === "expense" ? "支出" : "收入") + "</td>" +
+                    (onlyKind ? "" : "<td>" + (r.kind === "expense" ? "支出" : "收入") + "</td>") +
                     "<td>" + esc(r.date || "—") + "</td>" +
                     "<td>" + esc(r.category || "—") + "</td>" +
                     "<td>" + esc(r.target || "—") + "</td>" +
                     '<td class="num">' + fmtMoney(r.amount) + "</td>" +
+                    discCell +
                     "<td>" + esc(r.bookName || "—") + "</td>" +
                     "<td>" + (r.errs.length
                       ? '<span class="fin-tag" style="background:rgba(185,28,28,.10);color:#b91c1c;">' + esc(r.errs.join("；")) + "</span>"
@@ -5790,15 +6335,26 @@
           const XLSX = window.XLSX;
           if (!XLSX) { showErr("Excel 元件尚未載入，請稍後再試"); return; }
           const bkName = state.books.length ? String(state.books[0].name || "") : "";
-          const rows = [
-            ["類型", "日期", "類別", "對象", "金額", "帳本", "沖銷月份", "單據編號", "備註"],
-            ["收入", todayStr(), "管理費", "A-1-1 王大明", 1500, bkName, todayStr().slice(0, 7), "R0001", "當月管理費"],
-            ["支出", todayStr(), "清潔維護", "大大清潔公司", 8000, bkName, "", "P0001", "每月清潔"]
-          ];
+          const typeLabel = onlyKind === "expense" ? "支出" : onlyKind === "income" ? "收入" : "收入";
+          const sampleCat = onlyKind === "expense" ? "清潔維護" : onlyKind === "income" ? "管理費" : "管理費";
+          const sampleTarget = onlyKind === "expense" ? "大大清潔公司" : onlyKind === "income" ? "A-1-1 王大明" : "A-1-1 王大明";
+          const sampleAmt = onlyKind === "expense" ? 8000 : onlyKind === "income" ? 1500 : 1500;
+          const sampleNote = onlyKind === "expense" ? "每月清潔" : onlyKind === "income" ? "當月管理費" : "當月管理費";
+          const showDiscount = onlyKind === "income" || !onlyKind;
+          const headers = onlyKind
+            ? ["日期", "類別", "對象", "金額", "帳本", "沖銷月份", "備註"]
+                .concat(showDiscount ? ["折扣金額", "折扣類別"] : [])
+            : ["類型", "日期", "類別", "對象", "金額", "帳本", "沖銷月份", "備註"]
+                .concat(showDiscount ? ["折扣金額", "折扣類別"] : []);
+          const sample = onlyKind
+            ? [todayStr(), sampleCat, sampleTarget, sampleAmt, bkName, todayStr().slice(0, 7), sampleNote]
+                .concat(showDiscount ? [15, DEFAULT_DISCOUNT_CATEGORY] : [])
+            : [typeLabel, todayStr(), sampleCat, sampleTarget, sampleAmt, bkName, todayStr().slice(0, 7), sampleNote]
+                .concat(showDiscount ? [15, DEFAULT_DISCOUNT_CATEGORY] : []);
           try {
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "匯入範本");
-            XLSX.writeFile(wb, "財報系統_批次匯入範本.xlsx");
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, sample]), "匯入範本");
+            XLSX.writeFile(wb, sanitizeFilename(cName) + "_財報系統_批次匯入範本_" + todayStr() + ".xlsx");
           } catch (e) {
             showErr("範本產生失敗：" + (e && e.message ? e.message : "請稍後再試"));
           }
@@ -5834,28 +6390,57 @@
         if (okBtn) okBtn.onclick = function () {
           if (okBtn.disabled) return;
           const good = parsed.filter(function (r) { return !r.errs.length; });
-          const payloads = good.map(function (r) {
+          /* 單號由系統自動產生（同類型、同日期依序遞增，確保不重複） */
+          const reservedList = [];
+          good.forEach(function (r) {
+            r.receiptNo = nextReceiptNo(r.kind, r.date, "", reservedList);
+            reservedList.push(r.receiptNo);
+          });
+          const incomeWithDisc = good.filter(function (r) { return r.kind === "income" && r.discount > 0; });
+          const others = good.filter(function (r) { return !(r.kind === "income" && r.discount > 0); });
+          const otherPayloads = others.map(function (r) {
             return {
-              kind: r.kind,
-              date: r.date,
-              category: r.category,
-              amount: r.amount,
-              target: r.target,
-              method: r.bookName,
-              bookId: r.bookId,
-              months: r.months,
-              receiptNo: r.receiptNo,
-              note: r.note
+              kind: r.kind, date: r.date, category: r.category, amount: r.amount,
+              target: r.target, method: r.bookName, bookId: r.bookId, months: r.months,
+              receiptNo: r.receiptNo, note: r.note
             };
           });
           okBtn.disabled = true;
           okBtn.textContent = "匯入中…";
-          Model.saveTxBatch(db, cid, payloads, { uid: context.uid, name: context.name }).then(function (n) {
+          let totalCount = 0;
+          /* 先儲存一般明細 */
+          Model.saveTxBatch(db, cid, otherPayloads, { uid: context.uid, name: context.name }).then(function (n) {
+            totalCount += n;
+            /* 再逐一儲存有折扣的收入，並自動產生對應支出 */
+            return Promise.all(incomeWithDisc.map(function (r) {
+              const incomePayload = {
+                kind: "income", date: r.date, category: r.category, amount: r.amount,
+                target: r.target, method: r.bookName, bookId: r.bookId, months: r.months,
+                receiptNo: r.receiptNo, note: r.note,
+                discount: r.discount, discountCategory: r.discountCategory || DEFAULT_DISCOUNT_CATEGORY
+              };
+              return Model.saveTx(db, cid, incomePayload, { uid: context.uid, name: context.name }).then(function (incomeId) {
+                const expReceiptNo = nextReceiptNo("expense", r.date, "", reservedList);
+                reservedList.push(expReceiptNo);
+                const expPayload = {
+                  kind: "expense", date: r.date, category: r.discountCategory || DEFAULT_DISCOUNT_CATEGORY,
+                  amount: r.discount, target: r.target, method: r.bookName, bookId: r.bookId,
+                  months: r.months, receiptNo: expReceiptNo, note: "自動產生：對應收入單號 " + (r.receiptNo || incomeId) + " 之折扣",
+                  linkedTxId: String(incomeId || "")
+                };
+                return Model.saveTx(db, cid, expPayload, { uid: context.uid, name: context.name }).then(function () {
+                  return 2; /* 收入 + 自動支出 */
+                });
+              });
+            }));
+          }).then(function (discCounts) {
+            const discTotal = (discCounts || []).reduce(function (a, b) { return a + b; }, 0);
+            totalCount += discTotal;
             m.close();
-            toast("已匯入 " + n + " 筆財報明細");
+            toast("已匯入 " + totalCount + " 筆財報明細" + (incomeWithDisc.length ? "（含 " + incomeWithDisc.length + " 筆自動產生的折扣支出）" : ""));
           }).catch(function (e) {
             okBtn.disabled = false;
-            okBtn.textContent = "匯入 " + payloads.length + " 筆";
+            okBtn.textContent = "匯入 " + good.length + " 筆";
             showErr("匯入失敗：" + (e && e.message ? e.message : "請稍後再試"));
           });
         };
@@ -5902,22 +6487,167 @@
       };
 
       const doExportPdf = function () {
-        const r = state.report;
-        const presetLabel = { day: "本日", month: "本月", year: "本年", custom: "自訂" }[r.preset] || "自訂";
-        Export.toPdf({
-          communityName: cName,
-          preset: r.preset,
-          rangeLabel: presetLabel,
-          exportedBy: String(context.name || "").trim(),
-          note: String(((r.notes || {})[r.preset]) || ""),
-          fees: reportFees(),
-          txList: state.tx,
-          bankList: state.bank,
-          books: state.books,
-          agg: Model.aggregate(state.tx, state.bank, { from: r.from, to: r.to }, state.books)
-        }).then(function (ok) {
-          if (ok) toast("已產生 PDF");
+        const SIGN_ITEMS = ["主任委員", "副主任委員", "財務委員", "監察委員", "物業公司", "製表人"];
+        const m = openModal({
+          title: "匯出報表 PDF",
+          width: "min(92vw, 520px)",
+          bodyHtml:
+            '<div style="display:grid;gap:10px;">' +
+            '<div style="font-weight:800;font-size:13px;">簽核欄位顯示</div>' +
+            '<div class="fin-hint">勾選要顯示的簽核欄位（預設全選），將以一行顯示於報表末端。</div>' +
+            '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 12px;">' +
+            SIGN_ITEMS.map(function (n) {
+              return '<label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer;">' +
+                '<input type="checkbox" data-fin-pdf-sign="' + esc(n) + '" checked style="width:16px;height:16px;accent-color:#d32f2f;"/>' +
+                esc(n) + '</label>';
+            }).join("") +
+            "</div></div>",
+          footerHtml:
+            '<button class="btn btn-ghost" type="button" id="fin_pdf_cancel">取消</button>' +
+            '<button class="btn btn-primary" type="button" id="fin_pdf_go">匯出 PDF</button>'
         });
+        if (!m.modal) return;
+        const q = function (sel) { return m.modal.querySelector(sel); };
+        const cancelBtn = q("#fin_pdf_cancel");
+        if (cancelBtn) cancelBtn.onclick = function () { m.close(); };
+        const goBtn = q("#fin_pdf_go");
+        if (goBtn) goBtn.onclick = function () {
+          const selected = SIGN_ITEMS.filter(function (n) {
+            const cb = m.modal.querySelector('[data-fin-pdf-sign="' + n + '"]');
+            return cb && cb.checked;
+          });
+          const r = state.report;
+          const presetLabel = { day: "本日", month: "本月", year: "本年", custom: "自訂" }[r.preset] || "自訂";
+          goBtn.disabled = true;
+          goBtn.textContent = "產生中…";
+          Export.toPdf({
+            communityName: cName,
+            preset: r.preset,
+            rangeLabel: presetLabel,
+            exportedBy: String(context.name || "").trim(),
+            note: String(((r.notes || {})[r.preset]) || ""),
+            fees: reportFees(),
+            txList: state.tx,
+            bankList: state.bank,
+            books: state.books,
+            pdfHeader: pdfHeaderCfg(),
+            signatures: selected,
+            agg: Model.aggregate(state.tx, state.bank, { from: r.from, to: r.to }, state.books)
+          }).then(function (ok) {
+            goBtn.disabled = false;
+            goBtn.textContent = "匯出 PDF";
+            if (ok) { m.close(); toast("已產生 PDF"); }
+          });
+        };
+      };
+
+      /** 收入／支出明細：匯出 PDF（可設定類別、對象、日期區間） */
+      const openTxPdfModal = function (kind) {
+        const meta = KIND[kind];
+        const f = state.filters[kind] || {};
+        const cats = cfgList(CATEGORY_KEYS[kind] || "incomeCategories");
+        const targets = [];
+        state.tx.forEach(function (t) {
+          if (kind === "expense" ? t.kind !== "expense" : t.kind === "expense") return;
+          const v = String(t.target || "").trim();
+          if (v && targets.indexOf(v) === -1) targets.push(v);
+        });
+        targets.sort(function (a, b) { return a.localeCompare(b, "zh-Hant"); });
+        const curCat = cats.indexOf(f.category) !== -1 ? f.category : "";
+        const curTarget = targets.indexOf(f.target) !== -1 ? f.target : "";
+        const m = openModal({
+          title: "匯出" + meta.label + "明細 PDF",
+          width: "min(92vw, 520px)",
+          bodyHtml:
+            '<div style="display:grid;gap:12px;">' +
+            field("類別", '<select id="fin_txpdf_cat" style="' + inputStyle + '"><option value="">全部類別</option>' +
+              cats.map(function (c) {
+                return '<option value="' + esc(c) + '"' + (curCat === c ? " selected" : "") + ">" + esc(c) + "</option>";
+              }).join("") + "</select>") +
+            field("對象", '<select id="fin_txpdf_target" style="' + inputStyle + '"><option value="">全部對象</option>' +
+              targets.map(function (c) {
+                return '<option value="' + esc(c) + '"' + (curTarget === c ? " selected" : "") + ">" + esc(c) + "</option>";
+              }).join("") + "</select>") +
+            '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">' +
+            field("起始日期", '<input type="date" id="fin_txpdf_from" value="' + esc(String(f.from || "")) + '" style="' + inputStyle + '"/>') +
+            field("結束日期", '<input type="date" id="fin_txpdf_to" value="' + esc(String(f.to || "")) + '" style="' + inputStyle + '"/>') +
+            "</div>" +
+            '<div class="fin-hint" id="fin_txpdf_hint"></div>' +
+            "</div>",
+          footerHtml:
+            '<button class="btn btn-ghost" type="button" id="fin_txpdf_cancel">取消</button>' +
+            '<button class="btn btn-primary" type="button" id="fin_txpdf_go">匯出 PDF</button>'
+        });
+        if (!m.modal) return;
+        const q = function (sel) { return m.modal.querySelector(sel); };
+        const hintEl = q("#fin_txpdf_hint");
+        const collect = function () {
+          return {
+            cat: String((q("#fin_txpdf_cat") || {}).value || ""),
+            target: String((q("#fin_txpdf_target") || {}).value || ""),
+            from: String((q("#fin_txpdf_from") || {}).value || ""),
+            to: String((q("#fin_txpdf_to") || {}).value || "")
+          };
+        };
+        const filtered = function (o) {
+          return state.tx.filter(function (t) {
+            if (kind === "expense" ? t.kind !== "expense" : t.kind === "expense") return false;
+            if (o.cat && t.category !== o.cat) return false;
+            if (o.target && String(t.target || "") !== o.target) return false;
+            const d = String(t.date || "");
+            if (o.from && d < o.from) return false;
+            if (o.to && d > o.to) return false;
+            return true;
+          });
+        };
+        const setHint = function (msg) { if (hintEl) hintEl.textContent = msg || ""; };
+        const refreshHint = function () {
+          const o = collect();
+          if (o.from && o.to && o.from > o.to) { setHint("起始日期不可晚於結束日期。"); return; }
+          setHint("符合條件共 " + filtered(o).length + " 筆，將匯出為 PDF 明細清單。");
+        };
+        ["#fin_txpdf_cat", "#fin_txpdf_target", "#fin_txpdf_from", "#fin_txpdf_to"].forEach(function (sel) {
+          const el = q(sel);
+          if (el) el.addEventListener("change", refreshHint);
+        });
+        refreshHint();
+        const cancelBtn = q("#fin_txpdf_cancel");
+        if (cancelBtn) cancelBtn.onclick = function () { m.close(); };
+        const goBtn = q("#fin_txpdf_go");
+        if (goBtn) goBtn.onclick = function () {
+          const o = collect();
+          if (o.from && o.to && o.from > o.to) { setHint("起始日期不可晚於結束日期。"); return; }
+          const list = filtered(o);
+          if (!list.length) { setHint("此條件沒有資料，請調整後再匯出。"); return; }
+          const rows = list.map(function (t) {
+            return {
+              date: String(t.date || ""),
+              receiptNo: String(t.receiptNo || ""),
+              unit: residentUnitOf(t.target),
+              target: String(t.target || ""),
+              method: String(t.method || ""),
+              amount: toNum(t.amount, 0),
+              operator: String(t.createdBy || "")
+            };
+          });
+          goBtn.disabled = true;
+          goBtn.textContent = "產生中…";
+          Export.detailToPdf({
+            communityName: cName,
+            kind: kind,
+            rows: rows,
+            from: o.from,
+            to: o.to,
+            categoryLabel: o.cat,
+            targetLabel: o.target,
+            pdfHeader: pdfHeaderCfg(),
+            exportedBy: String(context.name || "").trim()
+          }).then(function (ok) {
+            goBtn.disabled = false;
+            goBtn.textContent = "匯出 PDF";
+            if (ok) { m.close(); toast("已產生 PDF"); }
+          });
+        };
       };
 
       /* ---------------- 啟動 ---------------- */

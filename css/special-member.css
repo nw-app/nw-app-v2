@@ -1,0 +1,1487 @@
+/* 社區前台｜長者簡易版（special-member.html）
+   設計原則：
+   1. 大字級（基準 17px × 倍率）、高對比（深字淺底）
+   2. 超大觸控區（最小 8rem 高），一次只做一件事
+   3. 顏色只用來提示狀態，不用來裝飾
+   4. 全程「單一出口」：任何畫面都有一顆超大返回鍵
+*/
+
+:root {
+  --brand: #d32f2f;
+  --brand-dark: #a81f1f;
+  --brand-soft: #fdeaea;
+  --ink: #111827;
+  --ink-2: #374151;
+  --line: #cbd5e1;
+  --paper: #ffffff;
+  --soft: #fafafa;
+  --ok: #15803d;
+  --warn: #b45309;
+  --radius: 1.25rem;
+  --fs: 1;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  font-size: calc(17px * var(--fs));
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--soft);
+  font-family: "Microsoft JhengHei", "Noto Sans TC", "PingFang TC", ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+button {
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+  border: 0;
+  background: none;
+  color: inherit;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ---------------- 版面骨架（固定一頁，不捲動） ---------------- */
+.sp-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* ---------------- 頂部品牌列 ---------------- */
+.sp-top {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.4vh;
+  padding: 1.2vh 14px;
+  background: var(--paper);
+  border-bottom: 3px solid var(--brand);
+}
+
+.sp-brand {
+  display: flex;
+  align-items: center;
+  gap: 1.2vh;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sp-brand img {
+  width: 5.4vh;
+  height: 5.4vh;
+  object-fit: contain;
+}
+
+.sp-brand-text {
+  min-width: 0;
+}
+
+.sp-brand-name {
+  font-size: 2.4vh;
+  line-height: 1.1;
+  font-weight: 900;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.sp-brand-sub {
+  font-size: 1.8vh;
+  font-weight: 900;
+  color: var(--brand);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-top-right {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1.4vh;
+  min-width: 0;
+}
+
+.sp-user-name {
+  max-width: 38vw;
+  font-size: 3vh;
+  font-weight: 900;
+  color: var(--ink);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 登入者大頭照（固定貼齊最右側） */
+.sp-avatar {
+  flex: 0 0 auto;
+  width: 7vh;
+  height: 7vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  border: 3px solid var(--brand);
+  color: var(--brand-dark);
+  font-size: 3vh;
+  font-weight: 900;
+}
+
+.sp-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sp-avatar-initial {
+  line-height: 1;
+}
+
+/* ---------------- 問候列 ---------------- */
+.sp-greet {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.2vh;
+  padding: 1.5vh 14px;
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
+  color: #fff;
+}
+
+.sp-greet > div:first-child {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.sp-greet-name {
+  font-size: 3vh;
+  font-weight: 900;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-greet-tip {
+  font-size: 1.8vh;
+  opacity: 0.92;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-greet-unit {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5vh;
+  padding: 1vh 12px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--brand-dark);
+  font-size: 2.6vh;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+/* 語音輸入狀態（開頁自動聽；被擋住時變成一顆可點的麥克風） */
+.sp-mic {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5vh;
+  padding: 0.9vh 1.4vh;
+  border-radius: 999px;
+  border: 3px solid rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 2vh;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.sp-mic-icon {
+  font-size: 2.4vh;
+  line-height: 1;
+}
+
+.sp-mic.is-listening {
+  background: #fff;
+  color: var(--brand-dark);
+}
+
+.sp-mic.is-listening .sp-mic-icon {
+  animation: sp-mic-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes sp-mic-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+}
+
+/* ---------------- 六大功能（自動填滿剩餘高度） ---------------- */
+.sp-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  gap: 1.3vh;
+  padding: 1.5vh 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+}
+
+@media (min-width: 820px) {
+  .sp-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.sp-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1vh;
+  min-height: 0;
+  overflow: hidden;
+  padding: 1.2vh 6px;
+  background: var(--paper);
+  border: 3px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 0 rgba(17, 24, 39, 0.08);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.sp-tile:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 rgba(17, 24, 39, 0.12);
+}
+
+.sp-tile:focus-visible {
+  outline: 5px solid #1d4ed8;
+  outline-offset: 3px;
+}
+
+.sp-tile-icon {
+  flex: 0 0 auto;
+  width: 8vh;
+  height: 8vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sp-tile-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.sp-tile-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.sp-tile-label {
+  font-size: 3.6vh;
+  font-weight: 900;
+  line-height: 1.1;
+  text-align: center;
+  color: var(--ink);
+}
+
+.sp-tile-sub {
+  font-size: 1.8vh;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--ink-2);
+  text-align: center;
+}
+
+.sp-tile-badge {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  min-width: 4.4vh;
+  height: 4.4vh;
+  padding: 0 1vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 2.6vh;
+  font-weight: 900;
+  border: 3px solid var(--paper);
+}
+
+/* 求助鍵：紅底白字，一眼可辨 */
+.sp-tile-sos {
+  background: var(--brand);
+  border-color: var(--brand-dark);
+  box-shadow: 0 6px 0 var(--brand-dark);
+}
+
+.sp-tile-sos .sp-tile-icon {
+  color: #fff;
+}
+
+.sp-tile-sos .sp-tile-label {
+  color: #fff;
+  font-size: 4vh;
+}
+
+.sp-tile-sos .sp-tile-sub {
+  color: #ffe4e4;
+}
+
+/* ---------------- 底部工具列 ---------------- */
+.sp-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: min(0.6rem, 1.2vh) 0.9rem calc(min(0.6rem, 1.2vh) + env(safe-area-inset-bottom));
+  background: var(--paper);
+  border-top: 2px solid var(--line);
+}
+
+.sp-bar-group {
+  display: flex;
+  align-items: center;
+  gap: min(0.6rem, 1.2vh);
+}
+
+.sp-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: min(3.6rem, 6.4vh);
+  padding: 0 min(1.1rem, 2.2vh);
+  border: 3px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--paper);
+  font-size: min(1.1rem, 2.2vh);
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.sp-bar-btn[aria-pressed="true"] {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+}
+
+.sp-bar-btn:active {
+  transform: translateY(2px);
+}
+
+/* ---------------- 全螢幕面板 ---------------- */
+.sp-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+}
+
+.sp-sheet-hd {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
+  background: var(--brand);
+  color: #fff;
+}
+
+.sp-sheet-title {
+  flex: 1 1 auto;
+  font-size: 1.7rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.sp-sheet-speak {
+  width: 3.6rem;
+  height: 3.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  border: 3px solid rgba(255, 255, 255, 0.7);
+  color: #fff;
+}
+
+.sp-sheet-speak svg {
+  width: 2rem;
+  height: 2rem;
+}
+
+.sp-sheet-bd {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 1rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sp-sheet-ft {
+  padding: 0.8rem 1rem calc(0.8rem + env(safe-area-inset-bottom));
+  border-top: 3px solid var(--line);
+  background: var(--soft);
+}
+
+.sp-sheet.has-frame .sp-sheet-bd {
+  padding: 0;
+  overflow: hidden;
+}
+
+.sp-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+/* ---------------- 清單項目 ---------------- */
+.sp-item {
+  padding: 1rem 1.1rem;
+  border: 3px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  margin-bottom: 0.9rem;
+}
+
+.sp-item-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.sp-item-title {
+  font-size: 1.5rem;
+  font-weight: 900;
+  line-height: 1.3;
+  color: var(--ink);
+}
+
+.sp-item-time {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.sp-item-body {
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.65;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sp-item-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.4rem;
+  margin-top: 0.45rem;
+}
+
+.sp-item-field {
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: var(--ink-2);
+}
+
+.sp-item-field b {
+  color: var(--ink);
+}
+
+.sp-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: var(--ink-2);
+}
+
+.sp-empty-icon {
+  font-size: 3.6rem;
+  margin-bottom: 0.6rem;
+}
+
+/* ---------------- 大字按鈕 ---------------- */
+.sp-btn {
+  display: block;
+  width: 100%;
+  min-height: 4.6rem;
+  padding: 0 1.2rem;
+  border-radius: 1rem;
+  font-size: 1.5rem;
+  font-weight: 900;
+  border: 3px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.sp-btn-primary {
+  background: var(--brand);
+  border-color: var(--brand-dark);
+  color: #fff;
+}
+
+.sp-btn-ghost {
+  background: var(--soft);
+}
+
+.sp-btn:active {
+  transform: translateY(2px);
+}
+
+.sp-btn-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.7rem;
+}
+
+@media (min-width: 620px) {
+  .sp-btn-row-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ---------------- 確認彈窗 ---------------- */
+.sp-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(17, 24, 39, 0.62);
+}
+
+.sp-dialog-box {
+  width: min(34rem, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--paper);
+  border-radius: 1.6rem;
+  border: 4px solid var(--brand);
+  padding: 1.6rem 1.4rem;
+  text-align: center;
+}
+
+.sp-dialog-icon {
+  font-size: 4rem;
+  line-height: 1;
+  margin-bottom: 0.6rem;
+}
+
+.sp-dialog-title {
+  font-size: 2rem;
+  font-weight: 900;
+  line-height: 1.3;
+  margin: 0 0 0.6rem;
+}
+
+.sp-dialog-text {
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1.6;
+  color: var(--ink-2);
+  margin: 0 0 1.4rem;
+}
+
+/* ---------------- 提示訊息 ---------------- */
+.sp-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(1.5rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 90;
+  max-width: 92vw;
+  padding: 1rem 1.6rem;
+  border-radius: 1rem;
+  background: var(--ink);
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+/* ---------------- 載入中 ---------------- */
+.sp-loading {
+  padding: 2rem 1rem;
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: var(--ink-2);
+}
+
+.sp-loading::after {
+  content: "";
+  display: block;
+  width: 2.6rem;
+  height: 2.6rem;
+  margin: 1rem auto 0;
+  border: 5px solid var(--line);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: sp-spin 0.9s linear infinite;
+}
+
+@keyframes sp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------- 直向限定：手機橫向時請使用者轉回直向 ---------------- */
+.sp-rotate {
+  display: none;
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .sp-rotate {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.2rem;
+    padding: 2rem;
+    background: linear-gradient(160deg, var(--brand) 0%, var(--brand-dark) 100%);
+    color: #fff;
+    text-align: center;
+  }
+
+  .sp-rotate-icon {
+    font-size: 5rem;
+    line-height: 1;
+    animation: sp-rotate-hint 1.6s ease-in-out infinite;
+  }
+
+  .sp-rotate-title {
+    font-size: 2rem;
+    font-weight: 900;
+  }
+
+  .sp-rotate-sub {
+    font-size: 1.2rem;
+    font-weight: 700;
+    opacity: 0.92;
+  }
+}
+
+@keyframes sp-rotate-hint {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-90deg);
+  }
+}
+
+/* 減少動畫（系統設定） */
+@media (prefers-reduced-motion: reduce) {
+  .sp-tile,
+  .sp-btn,
+  .sp-bar-btn {
+    transition: none;
+  }
+
+  .sp-rotate-icon {
+    animation: none;
+  }
+
+  .sp-mic.is-listening .sp-mic-icon {
+    animation: none;
+  }
+}
+
+/* ---------------- 長者首頁新版 ---------------- */
+:root {
+  --brand: #b8471c;
+  --brand-dark: #963313;
+  --brand-soft: #f8e8dc;
+  --ink: #21170f;
+  --ink-2: #684f3e;
+  --line: #ead8c5;
+  --paper: #fffdfa;
+  --soft: #f4eadb;
+  --warn: #8d4b00;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--soft);
+}
+
+.sp-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--soft);
+}
+
+.sp-hero {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  overflow: hidden;
+  padding: calc(14px + env(safe-area-inset-top)) 20px 20px;
+  border-radius: 0 0 3rem 3rem;
+  color: #fff;
+  background:
+    radial-gradient(circle at 91% 13%, rgba(255, 214, 174, 0.12) 0 7.5rem, transparent 7.55rem),
+    radial-gradient(circle at 2% 100%, rgba(255, 214, 174, 0.1) 0 4.5rem, transparent 4.55rem),
+    linear-gradient(145deg, #a93816 0%, #d36432 100%);
+}
+
+.sp-brand {
+  gap: 0.85rem;
+  margin: 0 0 1.1rem;
+}
+
+.sp-brand-icon {
+  width: 3rem;
+  height: 3rem;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 1.1rem;
+  background: #fff;
+}
+
+.sp-brand-icon img {
+  width: 160%;
+  height: 160%;
+  max-width: none;
+  object-fit: contain;
+  transform: translateY(-6%);
+}
+
+.sp-brand-name {
+  color: #fff;
+  font-size: 1.5rem;
+  line-height: 1.15;
+  font-weight: 900;
+}
+
+.sp-greet {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0;
+  color: #fff;
+  background: none;
+}
+
+.sp-greet-info-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.sp-greet-tip {
+  max-width: 100%;
+  overflow: visible;
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 1.12rem;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.sp-greet-name {
+  max-width: 40%;
+  flex: 0 0 auto;
+  margin-left: auto;
+  overflow: hidden;
+  color: #fff;
+  font-size: clamp(2rem, 8vw, 3rem);
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-greet-unit {
+  max-width: calc(100% - 6rem);
+  min-width: 0;
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0;
+  padding: 0.45rem 0.8rem;
+  border: 2px solid rgba(255, 255, 255, 0.38);
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: clamp(0.95rem, 4vw, 1.35rem);
+  line-height: 1.25;
+}
+
+.sp-greet-unit > span:first-child {
+  flex: 0 0 auto;
+  font-size: 1.45em;
+  line-height: 1;
+}
+
+.sp-greet-unit #spCommunityName,
+.sp-unit-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-unit-divider {
+  width: 1px;
+  height: 1.35rem;
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.sp-info-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1.05rem;
+}
+
+.sp-info-card {
+  min-width: 0;
+  min-height: 5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 1.9rem;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.sp-info-icon {
+  width: 2.7rem;
+  height: 2.7rem;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 1.2rem;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.sp-info-icon svg {
+  width: 1.6rem;
+  height: 1.6rem;
+}
+
+.sp-info-copy {
+  min-width: 0;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.17;
+}
+
+.sp-info-label {
+  margin-bottom: 0.15rem;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.sp-info-copy strong {
+  overflow: hidden;
+  font-size: clamp(0.92rem, 3.8vw, 1.15rem);
+  font-weight: 900;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+}
+
+.sp-info-copy .sp-weather-note {
+  font-size: clamp(0.65rem, 2.6vw, 0.75rem);
+  font-weight: 700;
+}
+
+.sp-home {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.15rem 1rem calc(1rem + env(safe-area-inset-bottom));
+  -webkit-overflow-scrolling: touch;
+}
+
+.sp-tools {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.sp-tool-card {
+  min-width: 0;
+  min-height: 4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem;
+  border: 0;
+  border-radius: 1.5rem;
+  color: var(--ink);
+  background: #fffdfa;
+  box-shadow: 0 0.5rem 1.4rem rgba(77, 48, 24, 0.08);
+  text-align: left;
+}
+
+.sp-tool-copy {
+  flex: 1 1 0;
+}
+
+.sp-tool-icon {
+  width: 2.3rem;
+  height: 2.3rem;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #153a70;
+  background: #dce8f8;
+}
+
+.sp-tool-icon svg {
+  width: 1.7rem;
+  height: 1.7rem;
+}
+
+.sp-tool-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.sp-tool-copy strong {
+  overflow: visible;
+  font-size: clamp(0.88rem, 3.7vw, 1rem);
+  font-weight: 900;
+  line-height: 1.15;
+  white-space: normal;
+}
+
+.sp-tool-copy > span {
+  overflow: visible;
+  color: var(--ink-2);
+  font-size: clamp(0.68rem, 2.8vw, 0.8rem);
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.sp-mic {
+  border: 0;
+  gap: 0.5rem;
+  padding: 0.65rem;
+  color: var(--ink);
+  background: #fffdfa;
+  font-size: inherit;
+  white-space: normal;
+}
+
+.sp-mic .sp-tool-icon {
+  width: 2.7rem;
+  height: 2.7rem;
+}
+
+.sp-mic.is-listening {
+  color: var(--ink);
+  background: #fffdfa;
+  outline: 3px solid #5c8dc9;
+  outline-offset: 2px;
+}
+
+.sp-mic.is-listening .sp-tool-icon {
+  color: #fff;
+  background: #1e4c87;
+}
+
+.sp-mic.is-listening .sp-mic-icon {
+  animation: sp-mic-pulse 1.1s ease-in-out infinite;
+}
+
+.sp-font-icon {
+  width: 2rem;
+  height: 2rem;
+  color: #8e4b00;
+  background: #fff0c8;
+  font-size: 1.55rem;
+  font-weight: 500;
+}
+
+.sp-font-buttons {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-left: 0;
+}
+
+.sp-font-step {
+  width: 1.3rem;
+  height: 1.35rem;
+  display: grid;
+  place-items: center;
+  border-radius: 0.5rem;
+  color: #754000;
+  background: #fff0c8;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.sp-sos-card {
+  width: 100%;
+  min-height: 5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0 0 1rem;
+  padding: 0.7rem 1rem;
+  border: 0;
+  border-radius: 2.6rem;
+  color: #fff;
+  background: linear-gradient(115deg, #e34336, #c81910);
+  box-shadow: 0 0.85rem 1.7rem rgba(174, 37, 23, 0.22);
+  text-align: left;
+}
+
+.sp-sos-icon {
+  width: 3rem;
+  height: 3rem;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(255, 255, 255, 0.36);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.19);
+}
+
+.sp-sos-icon svg {
+  width: 1.9rem;
+  height: 1.9rem;
+}
+
+.sp-sos-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sp-sos-copy strong {
+  font-size: clamp(1.7rem, 6.5vw, 2rem);
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.sp-sos-copy span {
+  font-size: clamp(0.8rem, 3.3vw, 1rem);
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.sp-notice-card {
+  width: 100%;
+  overflow: hidden;
+  display: block;
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 2px solid #efd49a;
+  border-radius: 2rem;
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: 0 0.65rem 1.6rem rgba(77, 48, 24, 0.1);
+  text-align: left;
+}
+
+.sp-notice-heading {
+  min-height: 3.55rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  color: #8d4b00;
+  background: #fff0c8;
+  font-size: clamp(1.15rem, 4.7vw, 1.55rem);
+  font-weight: 900;
+}
+
+.sp-notice-heading svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: 0 0 auto;
+}
+
+.sp-notice-body {
+  min-height: 7.6rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+
+.sp-notice-icon {
+  width: 3.8rem;
+  height: 3.8rem;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 1.25rem;
+  color: #8d4b00;
+  background: #f4e2c5;
+  font-size: 2.6rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.sp-notice-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.sp-notice-copy strong {
+  font-size: clamp(1.25rem, 5vw, 1.7rem);
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.sp-notice-copy > span {
+  color: var(--ink-2);
+  font-size: clamp(1rem, 4.1vw, 1.35rem);
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.sp-notice-count {
+  min-width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  border-radius: 50%;
+  color: #fff;
+  background: #c42318;
+  font-size: 1.1rem;
+}
+
+.sp-services {
+  padding: 0.4rem 0 0.5rem;
+}
+
+.sp-services h2 {
+  margin: 0 0 0.6rem;
+  color: var(--ink);
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+
+.sp-grid {
+  flex: none;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto;
+  gap: 0.65rem;
+  padding: 0;
+}
+
+.sp-tile {
+  min-height: 6.2rem;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 0;
+  border-radius: 1.35rem;
+  background: var(--paper);
+  box-shadow: 0 0.35rem 1rem rgba(77, 48, 24, 0.08);
+  text-align: left;
+}
+
+.sp-tile-icon {
+  width: 2.6rem;
+  height: 2.6rem;
+}
+
+.sp-tile-label {
+  font-size: clamp(0.95rem, 4vw, 1.2rem);
+  text-align: left;
+}
+
+.sp-tile-sub {
+  display: none;
+}
+
+.sp-tile-badge {
+  top: 0.25rem;
+  right: 0.25rem;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.sp-tile-sos {
+  display: none;
+}
+
+.sp-bar {
+  z-index: 5;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.25rem;
+  padding: 0.45rem 0.45rem calc(0.45rem + env(safe-area-inset-bottom));
+  border: 0;
+  border-top: 1px solid #eee2d4;
+  background: rgba(255, 253, 250, 0.98);
+  box-shadow: 0 -0.4rem 1.2rem rgba(77, 48, 24, 0.06);
+}
+
+.sp-nav-btn {
+  position: relative;
+  min-width: 0;
+  min-height: 4.4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  border-radius: 1.3rem;
+  color: #796654;
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.sp-nav-btn svg {
+  width: 1.8rem;
+  height: 1.8rem;
+}
+
+.sp-nav-btn.is-active {
+  color: #a63b18;
+  background: #f8e8dc;
+}
+
+.sp-nav-icon-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.sp-nav-icon-wrap svg {
+  width: 1.8rem;
+  height: 1.8rem;
+}
+
+.sp-nav-badge {
+  position: absolute;
+  top: -0.4rem;
+  right: -0.55rem;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  display: grid;
+  place-items: center;
+  padding: 0 0.25rem;
+  border: 2px solid var(--paper);
+  border-radius: 999px;
+  color: #fff;
+  background: #bf2418;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.sp-nav-btn:focus-visible,
+.sp-tool-card:focus-visible,
+.sp-sos-card:focus-visible,
+.sp-notice-card:focus-visible,
+.sp-font-step:focus-visible {
+  outline: 3px solid #1e4c87;
+  outline-offset: 2px;
+}
+
+@media (min-width: 700px) {
+  .sp-hero,
+  .sp-home {
+    padding-left: max(24px, calc((100vw - 680px) / 2));
+    padding-right: max(24px, calc((100vw - 680px) / 2));
+  }
+
+  .sp-hero {
+    border-radius: 0 0 4rem 4rem;
+  }
+
+  .sp-home {
+    width: 100%;
+    align-self: center;
+  }
+
+  .sp-tools,
+  .sp-sos-card,
+  .sp-notice-card,
+  .sp-services {
+    max-width: 680px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .sp-bar {
+    padding-left: max(1rem, calc((100vw - 680px) / 2));
+    padding-right: max(1rem, calc((100vw - 680px) / 2));
+  }
+}
+
+@media (max-width: 360px) {
+  .sp-hero {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .sp-info-card {
+    gap: 0.35rem;
+    padding: 0.4rem;
+  }
+
+  .sp-info-icon {
+    width: 2.4rem;
+    height: 2.4rem;
+  }
+
+  .sp-info-icon svg {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+
+  .sp-info-label {
+    font-size: 0.75rem;
+  }
+
+  .sp-info-copy strong {
+    font-size: 0.8rem;
+  }
+
+  .sp-info-copy .sp-weather-note {
+    font-size: 0.58rem;
+  }
+
+  .sp-tool-card {
+    gap: 0.45rem;
+    padding: 0.5rem;
+  }
+
+  .sp-tool-icon {
+    width: 2.3rem;
+    height: 2.3rem;
+  }
+
+  .sp-mic .sp-tool-icon {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .sp-tool-copy strong {
+    font-size: 0.8rem;
+  }
+
+  .sp-tool-copy > span {
+    font-size: 0.62rem;
+  }
+}
+
+.sp-support-intro,
+.sp-profile-card {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 2px solid var(--line);
+  border-radius: 1.25rem;
+  color: var(--ink-2);
+  background: #fffdfa;
+  font-size: 1.1rem;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
+.sp-profile-name {
+  margin-bottom: 0.5rem;
+  color: var(--ink);
+  font-size: 1.6rem;
+  font-weight: 900;
+}
+
+.sp-profile-field {
+  font-size: 1.1rem;
+}
+
+.sp-sheet-action-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.sp-sheet-action-list .sp-btn {
+  margin: 0;
+}
+
+.sp-font-step:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

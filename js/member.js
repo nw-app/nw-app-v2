@@ -1933,7 +1933,7 @@
         if (reg && typeof reg.showNotification === "function") {
           await reg.showNotification(title, {
             body,
-            icon: "./icon-192.png?v=2",
+            icon: "./logo.svg?v=5",
             badge: "./icon-192.png?v=2",
             tag,
             renotify: true,
@@ -1948,7 +1948,7 @@
           return;
         }
       }
-      try { new Notification(title, { body, tag, icon: "./icon-192.png?v=2" }); } catch {}
+      try { new Notification(title, { body, tag, icon: "./logo.svg?v=5" }); } catch {}
     } catch {}
   }
 

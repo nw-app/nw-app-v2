@@ -797,6 +797,23 @@
     return raw;
   }
 
+  // 住戶若在後台被標記為「簡易模式（長者版）」，登入後改導向 special-member.html
+  async function isSpecialResident(user) {
+    if (!user || !db) return false;
+    try {
+      const doc = await db.collection("users").doc(String(user.uid)).get();
+      const data = doc && doc.exists ? (doc.data() || {}) : {};
+      return data.specialMode === true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function residentHomeUrl(user, cKey) {
+    const page = (await isSpecialResident(user)) ? "special-member.html" : "member.html";
+    return cKey ? `${page}?c=${cKey}` : page;
+  }
+
   async function resolveCommunityAndUrl(user, role, defaultUrl) {
     if (!user || !db || role === "admin") return defaultUrl;
     const buildCommunityRoleUrl = async (cKey) => {
@@ -806,7 +823,7 @@
       if (role === "table") return `tad.html?c=${cKey}`;
       if (role === "shop") return `shop.html?c=${cKey}`;
       if (role === "worker") return `${await resolveWorkerPage(user.uid)}?c=${cKey}`;
-      return `member.html?c=${cKey}`;
+      return await residentHomeUrl(user, cKey);
     };
     try {
       const doc = await db.collection("users").doc(user.uid).get();
@@ -877,7 +894,7 @@
         else if (role === "table") url = `tad.html?c=${cKey}`;
         else if (role === "shop") url = `shop.html?c=${cKey}`;
         else if (role === "worker") url = `${await resolveWorkerPage(user.uid)}?c=${cKey}`;
-        else if (role === "resident") url = `member.html?c=${cKey}`;
+        else if (role === "resident") url = await residentHomeUrl(user, cKey);
       } else {
         url = await resolveCommunityAndUrl(user, role, url);
       }
@@ -929,7 +946,7 @@
           else if (role === "table") url = `tad.html?c=${lastCid}`;
           else if (role === "shop") url = `shop.html?c=${lastCid}`;
           else if (role === "worker") url = `${await resolveWorkerPage(user.uid)}?c=${lastCid}`;
-          else if (role === "resident") url = `member.html?c=${lastCid}`;
+          else if (role === "resident") url = await residentHomeUrl(user, lastCid);
         } else {
           url = await resolveCommunityAndUrl(user, role, url);
         }
