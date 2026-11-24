@@ -181,7 +181,57 @@
     { action: "sos", words: ["求救", "救命", "求助", "救護車"] },
     { action: "bigger", words: ["字大", "字變大"] },
     { action: "smaller", words: ["字小", "字變小"] },
+    { action: "time", words: ["現在幾點", "幾點", "現在時間", "現在時刻"] },
+    { action: "date", words: ["今天幾號", "幾月幾號", "今天日期", "星期幾", "今天星期"] },
+    { action: "weather", words: ["天氣", "會不會下雨", "溫度", "氣溫", "天氣如何"] },
   ];
+
+  var VOICE_WEEKDAYS = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+  var VOICE_WEATHER_CODE = {
+    0: "晴", 1: "晴時多雲", 2: "多雲", 3: "陰", 45: "霧", 48: "霧",
+    51: "小雨", 53: "雨", 55: "大雨", 56: "凍雨", 57: "凍雨",
+    61: "小雨", 63: "雨", 65: "大雨", 66: "凍雨", 67: "凍雨",
+    71: "小雪", 73: "雪", 75: "大雪", 77: "雪粒", 80: "陣雨", 81: "陣雨",
+    82: "暴雨", 85: "陣雪", 86: "陣雪", 95: "雷陣雨", 96: "雷陣雨伴冰雹", 99: "雷陣雨伴冰雹",
+  };
+
+  function voiceTimeText() {
+    var now = new Date();
+    return "現在是" + now.getHours() + "點" + now.getMinutes() + "分。";
+  }
+
+  function voiceDateText() {
+    var now = new Date();
+    return "今天是" + (now.getMonth() + 1) + "月" + now.getDate() + "日，" + VOICE_WEEKDAYS[now.getDay()] + "。";
+  }
+
+  // 查天氣：先取定位，失敗則用台北；查完用 cb 回傳可直接播報的文字
+  function fetchVoiceWeather(cb) {
+    var done = function (text) { if (cb) cb(text); };
+    var load = function (lat, lon) {
+      fetch("https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon +
+        "&current=temperature_2m,apparent_temperature,weather_code&timezone=auto&forecast_days=1")
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          var cur = data && data.current;
+          if (!cur) { done("天氣資訊暫時無法取得。"); return; }
+          var desc = VOICE_WEATHER_CODE[cur.weather_code] || "多雲";
+          var temp = Math.round(cur.temperature_2m);
+          var feel = Math.round(cur.apparent_temperature);
+          done("今天天氣" + desc + "，現在氣溫大約" + temp + "度，體感" + feel + "度。");
+        })
+        .catch(function () { done("天氣資訊暫時無法取得。"); });
+    };
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        function (pos) { load(pos.coords.latitude, pos.coords.longitude); },
+        function () { load(25.033, 121.5654); },
+        { timeout: 4000, maximumAge: 600000 }
+      );
+    } else {
+      load(25.033, 121.5654);
+    }
+  }
 
   function matchVoiceCommand(text) {
     var t = String(text || "").replace(/[\s,，。、！!？?；;：:]/g, "");
@@ -208,6 +258,9 @@
     }
     if (action === "bigger") { stepScale(1); return; }
     if (action === "smaller") { stepScale(-1); return; }
+    if (action === "time") { speak(voiceTimeText()); return; }
+    if (action === "date") { speak(voiceDateText()); return; }
+    if (action === "weather") { fetchVoiceWeather(function (text) { speak(text); }); return; }
     handleAction(action);
   }
 
@@ -438,6 +491,25 @@
     voicePanel.asks.push(text);
     renderVoiceAsk("");
     var action = matchVoiceCommand(text);
+
+    // 時間／日期／天氣：直接播報答案，不開啟任何功能
+    if (action === "time" || action === "date" || action === "weather") {
+      var sayDynamic = function (reply) {
+        if (!voicePanel.open) return;
+        setVoiceReply(reply);
+        speakThen(reply, function () {
+          if (!voicePanel.open) return;
+          voicePanel.busy = false;
+          voicePanelRestart();
+        });
+      };
+      if (action === "time") { sayDynamic(voiceTimeText()); return; }
+      if (action === "date") { sayDynamic(voiceDateText()); return; }
+      setVoiceReply("正在為您查詢天氣…");
+      fetchVoiceWeather(sayDynamic);
+      return;
+    }
+
     var reply = VOICE_REPLY_TEXT[action] || VOICE_REPLY_FALLBACK;
     setVoiceReply(reply);
     speakThen(reply, function () {

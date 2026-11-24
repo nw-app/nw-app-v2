@@ -4,7 +4,9 @@
 >
 > **技術堆疊**：`Firebase Auth / Firestore / Storage` + `原生 HTML / CSS / JavaScript` + `Service Worker（PWA 離線快取）` + `WebRTC 對講`
 >
-> **目前版本**：CACHE_VERSION `nwapp-v820`（每次升級需同步三項版本，詳見後方部署 SOP）
+> **目前版本**：CACHE_VERSION `nwapp-v821`（每次升級需同步三項版本，詳見後方部署 SOP）
+
+> **2026-11-24**：長者簡易版「語音說話」新增生活問答：說「現在幾點」「今天幾號」會直接播報時間／日期；說「今天天氣如何」「會不會下雨」會查詢 Open-Meteo 天氣（先取定位、失敗改用台北），並在彈窗下區塊顯示與播報「天氣狀況＋氣溫＋體感溫度」。此類問答不會開啟任何功能。
 
 > **2026-11-24**：長者簡易版新增「語音說話」彈窗：按下首頁「語音說話」按鈕會開啟 90% 版面彈窗並同步開始錄音；彈窗分上下兩區塊，上區塊即時記錄使用者說的話，下區塊顯示回覆內容並同步語音播出。回覆採關鍵字比對，比對到功能（包裹／公告／訪客／公設／水電／SOS／字級／登出等）會在播報後自動開啟該功能（先關閉彈窗再執行，避免瀏覽器歷史堆疊錯亂）。
 
@@ -506,7 +508,7 @@
 
 | 項目 | 檔案路徑 / 版本 | 用途說明 |
 |---|---|---|
-| **Service Worker（PWA 快取核心）** | `sw.js`（`CACHE_VERSION = nwapp-v820`） | 離線可用、所有靜態資源版本控管、PWA 安裝到手機桌面 |
+| **Service Worker（PWA 快取核心）** | `sw.js`（`CACHE_VERSION = nwapp-v821`） | 離線可用、所有靜態資源版本控管、PWA 安裝到手機桌面 |
 | **PWA 安裝引導** | `js/pwa.js?v=16` + `css/pwa.css` | 彈窗引導使用者「加到主畫面」安裝 QAi生活網到手機桌面像 App 一樣 |
 | **Firebase 設定 + 權限 Rules** | `js/firebase-config.js`<br>`firebase/firebase.rules` | Auth 登入驗證 / Firestore 資料庫初始化；**權限規則只維護這一份**（`firebase.json` 的 `firestore.rules` 指向此檔），勿再另存副本以免不同步 |
 | **PDF 檢視器** | `pdf-viewer.html` + `js/pdf-viewer.js` + `js/pdf-viewer-launcher.js?v=3` | 所有公告附件 PDF（財報/會議手冊/合約）線上直接檢視，不需強制下載 |
