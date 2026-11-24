@@ -40,8 +40,12 @@
 
   var el = {
     grid: document.getElementById("spGrid"),
+    services: document.getElementById("spServices"),
     home: document.querySelector(".sp-home"),
+    brand: document.querySelector(".sp-brand"),
+    infoCard: document.querySelector(".sp-info-card"),
     sosCard: document.querySelector(".sp-sos-card"),
+    homeNotice: document.getElementById("spHomeNotice"),
     noticeCard: document.getElementById("spNoticeCard"),
     noticeTitle: document.getElementById("spNoticeTitle"),
     noticeText: document.getElementById("spNoticeText"),
@@ -49,6 +53,7 @@
     navBadge: document.getElementById("spNavBadge"),
     todayDate: document.getElementById("spTodayDate"),
     todayWeekday: document.getElementById("spTodayWeekday"),
+    todayClock: document.getElementById("spTodayClock"),
     communityName: document.getElementById("spCommunityName"),
     greetingLine: document.getElementById("spGreetingLine"),
     avatarImg: document.getElementById("spAvatarImg"),
@@ -56,6 +61,8 @@
     avatar: document.getElementById("spAvatar"),
     userName: document.getElementById("spUserName"),
     greetName: document.getElementById("spGreetName"),
+    greetQr: document.getElementById("spGreetQr"),
+    greetQrImg: document.getElementById("spGreetQrImg"),
     greetUnit: document.getElementById("spGreetUnit"),
     greetUnitText: document.getElementById("spGreetUnitText"),
     parcelBadge: document.getElementById("spParcelBadge"),
@@ -65,6 +72,8 @@
     voiceToggle: document.getElementById("spVoiceToggle"),
     voiceText: document.getElementById("spVoiceText"),
     signOut: document.getElementById("spSignOut"),
+    shell: document.querySelector(".sp-shell"),
+    bar: document.querySelector(".sp-bar"),
     homeNav: document.getElementById("spHomeNav"),
     noticeNav: document.getElementById("spNoticeNav"),
     supportNav: document.getElementById("spSupportNav"),
@@ -74,8 +83,12 @@
     sheet: document.getElementById("spSheet"),
     sheetTitle: document.getElementById("spSheetTitle"),
     sheetBody: document.getElementById("spSheetBody"),
-    sheetBack: document.getElementById("spSheetBack"),
+    sheetFt: document.getElementById("spSheetFt"),
     sheetSpeak: document.getElementById("spSheetSpeak"),
+    voice: document.getElementById("spVoice"),
+    voiceAskText: document.getElementById("spVoiceAskText"),
+    voiceReplyText: document.getElementById("spVoiceReplyText"),
+    voiceClose: document.getElementById("spVoiceClose"),
     dialog: document.getElementById("spDialog"),
     dialogIcon: document.getElementById("spDialogIcon"),
     dialogTitle: document.getElementById("spDialogTitle"),
@@ -314,6 +327,178 @@
     try { window.speechSynthesis.cancel(); } catch (e) {}
   }
 
+  // 播報一段話，播完（或被中斷）後執行 onDone
+  function speakThen(text, onDone) {
+    var done = function () { if (onDone) onDone(); };
+    var msg = String(text || "").trim();
+    if (!state.voice || !msg || !("speechSynthesis" in window)) { done(); return; }
+    try {
+      window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(msg);
+      u.lang = "zh-TW";
+      u.rate = 0.88;
+      var guard = setTimeout(done, 12000);
+      var finish = function () { clearTimeout(guard); done(); };
+      u.onend = finish;
+      u.onerror = finish;
+      window.speechSynthesis.speak(u);
+    } catch (e) { done(); }
+  }
+
+  /* ---------------- 語音說話彈窗（上：您的話／下：回覆＋播報） ---------------- */
+
+  var VOICE_REPLY_TEXT = {
+    parcel: "好的，我幫您看看有沒有您的包裹。",
+    bulletin: "好的，我幫您看社區公告。",
+    visitor: "好的，我幫您開啟訪客登記。",
+    facility: "好的，我幫您開啟公設預約。",
+    meter: "好的，我幫您看水電繳費。",
+    sos: "好的，我馬上幫您求救。",
+    bigger: "好的，字會變大喔。",
+    smaller: "好的，字會變小喔。",
+    signout: "好的，我幫您登出。",
+    back: "好的，回到上一頁。",
+  };
+  var VOICE_REPLY_FALLBACK = "抱歉，我沒聽清楚，請您再說一次。";
+
+  var voicePanel = {
+    open: false,
+    busy: false,
+    rec: null,
+    listening: false,
+    timer: null,
+    wasGlobal: false,
+    asks: [],
+  };
+  var voicePanelBackPending = false;
+  var voicePanelAfterBack = null;
+
+  function renderVoiceAsk(draft) {
+    if (!el.voiceAskText) return;
+    var html = voicePanel.asks.map(function (t) {
+      return '<span class="sp-voice-line">' + escapeHtml(t) + "</span>";
+    }).join("");
+    if (draft) html += '<span class="sp-voice-line">' + escapeHtml(draft) + "</span>";
+    el.voiceAskText.innerHTML = html || "請開始說話…";
+    el.voiceAskText.scrollTop = el.voiceAskText.scrollHeight;
+  }
+
+  function setVoiceReply(text) {
+    if (el.voiceReplyText) el.voiceReplyText.textContent = String(text || "…");
+  }
+
+  function voicePanelRestart(delay) {
+    clearTimeout(voicePanel.timer);
+    voicePanel.timer = setTimeout(function () {
+      if (!voicePanel.open || voicePanel.busy) return;
+      try { voicePanel.rec.start(); } catch (e) {}
+    }, typeof delay === "number" ? delay : 700);
+  }
+
+  function voicePanelRec() {
+    if (voicePanel.rec) return voicePanel.rec;
+    var rec = new SpeechRec();
+    rec.lang = "zh-TW";
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    rec.onstart = function () { voicePanel.listening = true; };
+    rec.onresult = function (ev) {
+      var draft = "";
+      var finalText = "";
+      for (var i = ev.resultIndex; i < ev.results.length; i++) {
+        var r = ev.results[i];
+        var t = String((r[0] && r[0].transcript) || "");
+        if (r.isFinal) finalText += t;
+        else draft += t;
+      }
+      if (draft) renderVoiceAsk(draft);
+      if (finalText.trim()) respondToVoice(finalText.trim());
+    };
+    rec.onerror = function (ev) {
+      var err = String((ev && ev.error) || "");
+      if (err === "not-allowed" || err === "service-not-allowed") {
+        setVoiceReply("沒有麥克風權限，請允許使用麥克風後再試一次。");
+      } else if (err === "network") {
+        voicePanelRestart(2500);
+      }
+    };
+    rec.onend = function () {
+      voicePanel.listening = false;
+      if (voicePanel.open && !voicePanel.busy) voicePanelRestart();
+    };
+    voicePanel.rec = rec;
+    return rec;
+  }
+
+  // 依關鍵字產生回覆；比對到功能時，播完回覆後自動開啟該功能
+  function respondToVoice(text) {
+    voicePanel.busy = true;
+    try { voicePanel.rec.stop(); } catch (e) {}
+    voicePanel.asks.push(text);
+    renderVoiceAsk("");
+    var action = matchVoiceCommand(text);
+    var reply = VOICE_REPLY_TEXT[action] || VOICE_REPLY_FALLBACK;
+    setVoiceReply(reply);
+    speakThen(reply, function () {
+      if (!voicePanel.open) return;
+      if (!action) { voicePanel.busy = false; voicePanelRestart(); return; }
+      // 關閉彈窗（會退回一筆歷史）後才開啟功能，避免歷史堆疊錯亂
+      var didBack = closeVoicePanel(false);
+      if (didBack) voicePanelAfterBack = function () { runVoiceAction(action); };
+      else runVoiceAction(action);
+    });
+  }
+
+  function runVoiceAction(action) {
+    if (action === "back") { if (sheetOpen) hideSheet(false); return; }
+    if (action === "signout") { if (el.signOut) el.signOut.click(); return; }
+    if (action === "bigger") { stepScale(1); return; }
+    if (action === "smaller") { stepScale(-1); return; }
+    handleAction(action, true);
+  }
+
+  function openVoicePanel() {
+    if (!el.voice) return;
+    if (!voiceCtl.supported) { toast("這個瀏覽器不支援語音輸入"); return; }
+    voicePanel.open = true;
+    voicePanel.busy = false;
+    voicePanel.asks = [];
+    renderVoiceAsk("");
+    setVoiceReply("請說出您的需求，例如「看公告」…");
+    el.voice.hidden = false;
+    try { history.pushState({ __spVoice: true }, ""); } catch (e) {}
+    // 暫停主頁的背景語音，改用彈窗專屬的收音
+    voicePanel.wasGlobal = Boolean(voiceCtl.want || voiceCtl.listening);
+    voiceStop();
+    clearTimeout(voicePanel.timer);
+    voicePanelRec();
+    speakThen("語音說話，請說出您的需求", function () { if (voicePanel.open) voicePanelRestart(200); });
+  }
+
+  // 回傳 true 表示有呼叫 history.back()（歷史會在稍後由 popstate 收尾）
+  function closeVoicePanel(fromPop) {
+    if (!voicePanel.open) return false;
+    voicePanel.open = false;
+    voicePanel.busy = false;
+    clearTimeout(voicePanel.timer);
+    if (voicePanel.rec) { try { voicePanel.rec.stop(); } catch (e) {} }
+    stopSpeak();
+    if (el.voice) el.voice.hidden = true;
+    var didBack = false;
+    if (!fromPop) {
+      try {
+        if (history.state && history.state.__spVoice) {
+          voicePanelBackPending = true;
+          history.back();
+          didBack = true;
+        }
+      } catch (e) {}
+    }
+    if (voicePanel.wasGlobal && !voiceCtl.blocked) voiceStart();
+    return didBack;
+  }
+
   /* ---------------- 字級 ---------------- */
 
   function applyScale(scale) {
@@ -378,11 +563,30 @@
   var sheetOpen = false;
   var sheetBackPending = false;
 
+  // 常用服務區塊平常收在文件尾端（hidden），只有「功能」面板開啟時搬進面板
+  function parkServices() {
+    if (!el.services) return;
+    el.services.hidden = true;
+    if (el.services.parentNode !== document.body) document.body.appendChild(el.services);
+  }
+
+  // 重要通知卡平常收在文件尾端（hidden），只有「通知」面板開啟時搬進面板
+  function parkNotice() {
+    if (!el.noticeCard) return;
+    el.noticeCard.hidden = true;
+    if (el.noticeCard.parentNode !== document.body) document.body.appendChild(el.noticeCard);
+  }
+
   function openSheet(options) {
     var opt = options || {};
     if (!el.sheet) return;
     var replacing = sheetOpen;
     sheetOpen = true;
+    // 面板底部改為顯示同一條底部導覽（把主導覽移進面板頁尾）
+    if (el.bar && el.sheetFt && el.bar.parentNode !== el.sheetFt) el.sheetFt.appendChild(el.bar);
+    // 換到別的面板時，先把「常用服務」與「重要通知卡」收起來
+    if (el.services && el.services.parentNode === el.sheetBody && opt.node !== el.services) parkServices();
+    if (el.noticeCard && el.noticeCard.parentNode === el.sheetBody && opt.node !== el.noticeCard) parkNotice();
     el.sheet.classList.toggle("has-frame", Boolean(opt.frameUrl));
     if (el.sheetTitle) el.sheetTitle.textContent = String(opt.title || "");
     el.sheetBody.innerHTML = "";
@@ -392,6 +596,16 @@
       frame.setAttribute("allow", "camera; microphone; clipboard-write; autoplay");
       frame.src = String(opt.frameUrl);
       el.sheetBody.appendChild(frame);
+    } else if (opt.node) {
+      opt.node.hidden = false;
+      el.sheetBody.appendChild(opt.node);
+      if (opt.html) {
+        var extra = document.createElement("div");
+        extra.className = "sp-sheet-extra";
+        extra.innerHTML = String(opt.html);
+        el.sheetBody.appendChild(extra);
+      }
+      if (typeof opt.afterRender === "function") opt.afterRender(el.sheetBody);
     } else {
       el.sheetBody.innerHTML = String(opt.html || "");
       if (typeof opt.afterRender === "function") opt.afterRender(el.sheetBody);
@@ -402,16 +616,20 @@
     if (!replacing) {
       try { history.pushState({ __spSheet: true }, ""); } catch (e) {}
     }
-    speak(opt.speakText || opt.title || "");
+    if (!opt.silent) speak(opt.speakText || opt.title || "");
   }
 
   function hideSheet(fromPop) {
     if (!sheetOpen) return;
     sheetOpen = false;
     stopSpeak();
+    // 底部導覽移回主頁面
+    if (el.bar && el.shell && el.bar.parentNode !== el.shell) el.shell.appendChild(el.bar);
     if (el.sheet) {
       el.sheet.hidden = true;
       el.sheet.classList.remove("has-frame");
+      if (el.services && el.services.parentNode === el.sheetBody) parkServices();
+      if (el.noticeCard && el.noticeCard.parentNode === el.sheetBody) parkNotice();
       el.sheetBody.innerHTML = "";
       delete el.sheet.dataset.speak;
     }
@@ -428,10 +646,18 @@
   window.addEventListener("popstate", function () {
     // 忽略自己呼叫 history.back() 造成的那一次 popstate，避免把剛開啟的面板關掉
     if (sheetBackPending) { sheetBackPending = false; return; }
+    if (voicePanelBackPending) {
+      voicePanelBackPending = false;
+      // 彈窗關閉後要接續執行的功能（例如「看公告」）
+      var afterBack = voicePanelAfterBack;
+      voicePanelAfterBack = null;
+      if (afterBack) afterBack();
+      return;
+    }
+    if (voicePanel.open) { closeVoicePanel(true); return; }
     if (sheetOpen) hideSheet(true);
   });
 
-  el.sheetBack.addEventListener("click", function () { hideSheet(false); });
   el.sheetSpeak.addEventListener("click", function () {
     var text = el.sheet.dataset.speak || (el.sheetTitle ? el.sheetTitle.textContent : "");
     if (state.voice) speak(text);
@@ -503,6 +729,13 @@
     });
   }
 
+  function renderClock() {
+    if (!el.todayClock) return;
+    var t = new Date();
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    el.todayClock.textContent = pad(t.getHours()) + "：" + pad(t.getMinutes()) + "：" + pad(t.getSeconds());
+  }
+
   function renderGreeting() {
     var d = state.profile || {};
     var name = String(d.displayName || d.name || "").trim();
@@ -521,6 +754,7 @@
     var weekdays = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
     if (el.todayDate) el.todayDate.textContent = (today.getMonth() + 1) + "月" + today.getDate() + "日";
     if (el.todayWeekday) el.todayWeekday.textContent = weekdays[today.getDay()];
+    renderClock();
 
     // 登入者大頭照：優先用住戶資料，其次用登入帳號的頭像，都沒有則顯示姓名首字
     var avatarUrl = String(d.avatarDataUrl || d.avatar || "").trim();
@@ -545,6 +779,60 @@
 
     if (el.communityName) el.communityName.textContent = state.communityName || "社區服務系統";
     document.title = (state.communityName ? state.communityName + "｜" : "") + "簡易版";
+  }
+
+  /* 問候區上方顯示本人 QR code（未自訂時採動態預設碼：社區編號-A戶號編號ADDT-子戶號） */
+  function renderGreetQr() {
+    if (!el.greetQr || !el.greetQrImg) return;
+    var d = state.profile || {};
+    var sub = String(d.subUnit || d.subHouseNo || d.sub || "").trim();
+
+    function applyToken(t) {
+      t = String(t || "").trim();
+      if (!t) {
+        el.greetQr.hidden = true;
+        el.greetQrImg.removeAttribute("src");
+        return;
+      }
+      el.greetQrImg.src = "https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=" + encodeURIComponent(t);
+      el.greetQr.hidden = false;
+    }
+
+    var custom = String(d.qrToken || "").trim();
+    if (custom && custom !== "A000ADDT") {
+      applyToken(custom);
+      return;
+    }
+
+    var cid = String(state.cid || "").trim();
+    var houseNo = String(d.houseNo || d.unit || "").trim();
+    if (!cid || cid === "default" || !houseNo) {
+      applyToken("");
+      return;
+    }
+
+    db.collection("communities").doc(cid).get()
+      .then(function (doc) {
+        var v = doc && doc.exists ? (doc.data() || {}) : {};
+        var code = String(v.username || state.code || "").trim();
+        var key = houseNo.toLowerCase();
+        var unitNo = "";
+        var units = Array.isArray(v.units) ? v.units : [];
+        for (var i = 0; i < units.length; i++) {
+          var u = units[i];
+          if (u && String(u.id || "").trim().toLowerCase() === key) {
+            unitNo = String(u.unitNo || "").trim();
+            break;
+          }
+        }
+        if (!code || !unitNo) {
+          applyToken("");
+          return;
+        }
+        var base = code + "-A" + unitNo + "ADDT";
+        applyToken(sub ? base + "-" + sub : base);
+      })
+      .catch(function () { applyToken(""); });
   }
 
   /* ---------------- 我的包裹 ---------------- */
@@ -750,15 +1038,17 @@
     );
   }
 
-  function openBulletinSheet() {
+  function openBulletinSheet(opt) {
     var list = state.bulletins;
     var body = list.length
       ? list.map(bulletinItemHtml).join("")
       : '<div class="sp-empty"><div class="sp-empty-icon">📢</div>目前沒有新公告</div>';
     openSheet({
-      title: "社區公告",
-      html: body,
+      title: (opt && opt.title) || "社區公告",
+      node: el.noticeCard,
+      html: '<h3 class="sp-sheet-subhd">社區公告</h3>' + body,
       speakText: list.length ? "社區公告，共 " + list.length + " 則" : "目前沒有新公告",
+      silent: !!(opt && opt.silent),
     });
   }
 
@@ -820,7 +1110,7 @@
 
   function triggerSos() {
     return confirmDialog({
-      icon: "🆘",
+      icon: "SOS",
       title: "要通知管理中心嗎？",
       text: "按「要」就會立刻通知管理中心，請在原地等我們。",
       okText: "要，通知",
@@ -872,56 +1162,50 @@
     return page + (q.length ? "?" + q.join("&") : "");
   }
 
-  function handleAction(action) {
-    if (action === "support") { openSupportSheet(); return; }
-    if (action === "profile") { openProfileSheet(); return; }
+  function handleAction(action, silent) {
+    if (action === "support") { openSupportSheet({ silent: !!silent }); return; }
+    if (action === "profile") { openProfileSheet({ silent: !!silent }); return; }
     if (action === "parcel") {
-      speak("我的包裹");
+      if (!silent) speak("我的包裹");
       loadParcels().then(openParcelSheet);
       return;
     }
     if (action === "bulletin") {
-      speak("社區公告");
-      loadBulletins().then(openBulletinSheet);
+      if (!silent) speak("社區公告");
+      loadBulletins().then(function () { openBulletinSheet({ silent: !!silent }); });
       return;
     }
     if (action === "visitor") {
-      speak("訪客登記");
+      if (!silent) speak("訪客登記");
       openFrame("訪客登記", moduleUrl("visitor-resident.html", "embed=1"));
       return;
     }
     if (action === "facility") {
-      speak("公設預約");
+      if (!silent) speak("公設預約");
       openFrame("公設預約", moduleUrl("facility.html"));
       return;
     }
     if (action === "meter") {
-      speak("水電繳費");
+      if (!silent) speak("水電繳費");
       openFrame("水電繳費", moduleUrl("number-list.html"));
       return;
     }
     if (action === "sos") {
-      speak("一鍵求助");
+      if (!silent) speak("SOS");
       triggerSos();
     }
   }
 
-  function openSupportSheet() {
+  function openSupportSheet(opt) {
     openSheet({
-      title: "客服與住戶服務",
-      html:
-        '<div class="sp-support-intro">請選擇您需要的協助。若有緊急狀況，請使用「緊急求助」通知管理室。</div>' +
-        '<div class="sp-sheet-action-list">' +
-          '<button class="sp-btn sp-btn-ghost" type="button" data-action="visitor">訪客登記</button>' +
-          '<button class="sp-btn sp-btn-ghost" type="button" data-action="facility">公設預約</button>' +
-          '<button class="sp-btn sp-btn-ghost" type="button" data-action="meter">水電繳費</button>' +
-          '<button class="sp-btn sp-btn-primary" type="button" data-action="sos">緊急求助</button>' +
-        "</div>",
-      speakText: "客服與住戶服務，請選擇您需要的協助",
+      title: "功能",
+      node: el.services,
+      speakText: "常用服務，請選擇您需要的功能",
+      silent: !!(opt && opt.silent),
     });
   }
 
-  function openProfileSheet() {
+  function openProfileSheet(opt) {
     var profile = state.profile || {};
     var name = String(profile.displayName || profile.name || "住戶").trim();
     var houseNo = String(profile.houseNo || profile.unit || "").trim();
@@ -942,6 +1226,7 @@
           '<button class="sp-btn sp-btn-ghost" type="button" id="spProfileSignOut">登出</button>' +
         "</div>",
       speakText: "我的資料，" + name + "，戶號 " + unit,
+      silent: !!(opt && opt.silent),
     });
   }
 
@@ -959,35 +1244,57 @@
   /* ---------------- 事件綁定 ---------------- */
 
   function bindEvents() {
-    if (el.grid) {
-      el.grid.addEventListener("click", function (ev) {
-        var tile = ev.target && ev.target.closest ? ev.target.closest("[data-action]") : null;
-        if (!tile) return;
-        handleAction(String(tile.getAttribute("data-action") || ""));
-      });
-    }
-
     if (el.sosCard) el.sosCard.addEventListener("click", function () { handleAction("sos"); });
-    if (el.noticeCard) el.noticeCard.addEventListener("click", function () {
-      handleAction(String(el.noticeCard.dataset.action || "bulletin"));
+    if (el.homeNotice) el.homeNotice.addEventListener("click", function () {
+      speak("通知");
+      setActiveNav(el.noticeNav);
+      loadBulletins().then(function () { openBulletinSheet({ title: "通知", silent: true }); });
+    });
+
+    // 品牌列（Logo 與「QAi生活網」文字）：按下報讀品牌名稱
+    if (el.brand) el.brand.addEventListener("click", function () { speak("QAi生活網"); });
+
+    // 住戶 QR code 圖：按下報讀「QR code」
+    if (el.greetQrImg) el.greetQrImg.addEventListener("click", function () { speak("QR code"); });
+
+    // 社區／戶號標籤：按下報讀「社區名稱＋戶號之＋子戶號」
+    if (el.greetUnit) el.greetUnit.addEventListener("click", function () {
+      var d = state.profile || {};
+      var houseNo = String(d.houseNo || d.unit || "").trim();
+      var sub = String(d.subUnit || d.subHouseNo || "").trim();
+      var community = String(state.communityName || (el.communityName ? el.communityName.textContent : "") || "").trim();
+      speak(community + houseNo + (sub ? "之" + sub : ""));
+    });
+
+    // 今日日期／時間卡：按下報讀「現在時間＋現在日期」
+    if (el.infoCard) el.infoCard.addEventListener("click", function () {
+      var now = new Date();
+      var weekdays = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+      var timeText = now.getHours() + "點" + now.getMinutes() + "分";
+      var dateText = (now.getMonth() + 1) + "月" + now.getDate() + "日" + weekdays[now.getDay()];
+      speak(timeText + dateText);
     });
 
     if (el.homeNav) el.homeNav.addEventListener("click", function () {
       if (sheetOpen) hideSheet(false);
       if (el.home) el.home.scrollTo({ top: 0, behavior: "smooth" });
       setActiveNav(el.homeNav);
-    });
-    if (el.noticeNav) el.noticeNav.addEventListener("click", function () {
-      setActiveNav(el.noticeNav);
-      handleAction("bulletin");
+      speak("首頁");
     });
     if (el.supportNav) el.supportNav.addEventListener("click", function () {
+      speak("功能");
       setActiveNav(el.supportNav);
-      openSupportSheet();
+      openSupportSheet({ silent: true });
+    });
+    if (el.noticeNav) el.noticeNav.addEventListener("click", function () {
+      speak("通知");
+      setActiveNav(el.noticeNav);
+      loadBulletins().then(function () { openBulletinSheet({ silent: true, title: "通知" }); });
     });
     if (el.profileNav) el.profileNav.addEventListener("click", function () {
+      speak("個人");
       setActiveNav(el.profileNav);
-      openProfileSheet();
+      openProfileSheet({ silent: true });
     });
 
     if (el.sheetBody) el.sheetBody.addEventListener("click", function (ev) {
@@ -1028,13 +1335,15 @@
     if (el.mic) {
       el.mic.addEventListener("click", function () {
         voiceCtl.tapped = true;
-        if (voiceCtl.listening || voiceCtl.want) voiceStop();
-        else voiceStart();
+        openVoicePanel();
       });
     }
 
+    if (el.voiceClose) el.voiceClose.addEventListener("click", function () { closeVoicePanel(false); });
+
     document.addEventListener("keydown", function (ev) {
       if (ev.key !== "Escape") return;
+      if (voicePanel.open) { closeVoicePanel(false); return; }
       if (!el.dialog.hidden) return;
       if (sheetOpen) hideSheet(false);
     });
@@ -1067,6 +1376,8 @@
     restorePreferences();
     bindEvents();
     initVoice();
+    renderClock();
+    setInterval(renderClock, 1000);
   });
 
   auth.onAuthStateChanged(function (user) {
@@ -1099,6 +1410,7 @@
           if (state.cid && state.cid !== "default") localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, state.cid);
         } catch (e) {}
         renderGreeting();
+        renderGreetQr();
         return Promise.all([loadParcels(), loadBulletins()]);
       })
       .catch(function (err) {

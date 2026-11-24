@@ -234,6 +234,26 @@
     const greetingEl = document.getElementById("userGreeting");
     const defaultProfileQrToken = "A000ADDT";
 
+    // 住戶 QR code 預設碼：<社區編號>-A<戶號編號>ADDT-<子戶號>
+    const buildProfileResidentQrToken = (communityData, houseNo, subUnit) => {
+      const code = String((communityData && communityData.username) || "").trim();
+      const hn = String(houseNo || "").trim().toLowerCase();
+      const sub = String(subUnit || "").trim();
+      if (!code || !hn) return "";
+      const units = communityData && Array.isArray(communityData.units) ? communityData.units : [];
+      let unitNo = "";
+      for (const u of units) {
+        if (!u || typeof u !== "object") continue;
+        if (String(u.id || "").trim().toLowerCase() === hn) {
+          unitNo = String(u.unitNo || "").trim();
+          break;
+        }
+      }
+      if (!unitNo) return "";
+      const base = `${code}-A${unitNo}ADDT`;
+      return sub ? `${base}-${sub}` : base;
+    };
+
     let backdrop = modal.querySelector("[data-modal-close]");
     let closeBtn = document.getElementById("btnCloseProfileModal");
     let closeBtnFt = document.getElementById("btnCloseProfileModalFt");
@@ -327,7 +347,30 @@
       const wrap = ensureProfileHouseNoQr();
       if (!wrap) return;
       const img = wrap.querySelector("#profileHouseNoQrImg");
-      const t = String(token || "").trim() || defaultProfileQrToken;
+
+      const info = userData && typeof userData === "object" ? userData : {};
+      let cid = String(info.community || "").trim();
+      if (!cid) cid = String(localStorage.getItem("csp_active_community_v1") || "").trim();
+      const houseNo = String(info.houseNo || info.unit || "").trim();
+      const subUnit = String(info.subHouseNo || info.subUnit || info.sub || "").trim();
+
+      // 讀取社區設定（同時用於預設 QR 碼與共用點數）
+      let communityData = null;
+      try {
+        const db = ensureDb();
+        if (db && cid) {
+          const doc = await db.collection("communities").doc(cid).get();
+          if (doc.exists) communityData = doc.data() || {};
+        }
+      } catch (e) {
+        console.error("renderProfileHouseNoQr - 讀取社區設定失敗:", e);
+      }
+
+      let t = String(token || "").trim();
+      // 空值或舊版預設碼視為未設定，套用動態預設碼
+      if (!t || t === defaultProfileQrToken) {
+        t = buildProfileResidentQrToken(communityData, houseNo, subUnit) || defaultProfileQrToken;
+      }
       if (!t) {
         wrap.hidden = true;
         wrap.style.display = "none";
@@ -352,61 +395,20 @@
       const pointsEl = wrap.querySelector("#profilePointsValue");
       if (pointsEl && userData) {
         let points = Number(userData.points || userData.point || userData.credit || userData.score || userData.balance || 0);
-        console.log("renderProfileHouseNoQr - 初始點數:", points);
-        console.log("renderProfileHouseNoQr - userData 完整對象:", userData);
-        
-        // 檢查是否需要使用共用點數
         try {
-          const db = ensureDb();
-          console.log("renderProfileHouseNoQr - db 是否存在:", !!db);
-          
-          let cid = String(userData.community || "").trim();
-          if (!cid) {
-            cid = String(localStorage.getItem("csp_active_community_v1") || "").trim();
-          }
-          const houseNo = String(userData.houseNo || userData.unit || "").trim();
-          console.log("renderProfileHouseNoQr - cid:", cid, "houseNo:", houseNo);
-          
-          if (db && cid && houseNo) {
-            // 讀取社區點數設定和 housePoints
+          if (communityData) {
             let sharePoints = true; // 預設為共用
-            let housePoints = null;
-            
-            try {
-              const doc = await db.collection("communities").doc(cid).get();
-              console.log("renderProfileHouseNoQr - 社區文件 doc.exists:", doc.exists);
-              if (doc.exists) {
-                const cData = doc.data() || {};
-                console.log("renderProfileHouseNoQr - 社區設定:", cData);
-                
-                // 讀取點數共用設定
-                if (cData.pointsSettings && cData.pointsSettings.sharePoints === false) {
-                  sharePoints = false;
-                }
-                
-                // 讀取 housePoints
-                housePoints = cData.housePoints || {};
-                console.log("renderProfileHouseNoQr - housePoints:", housePoints);
-              }
-            } catch (e) {
-              console.error("renderProfileHouseNoQr - 讀取社區設定失敗:", e);
+            if (communityData.pointsSettings && communityData.pointsSettings.sharePoints === false) {
+              sharePoints = false;
             }
-            console.log("renderProfileHouseNoQr - 共用點數模式:", sharePoints);
-            
-            // 如果是共用點數，從 housePoints 中讀取
+            const housePoints = communityData.housePoints || {};
             if (sharePoints && housePoints && housePoints[houseNo] !== undefined) {
               points = Number(housePoints[houseNo]) || 0;
-              console.log("renderProfileHouseNoQr - 從 housePoints 讀取到的點數:", points);
             }
-          } else {
-            console.log("renderProfileHouseNoQr - 缺少必要信息，跳過共用計算");
-            console.log("renderProfileHouseNoQr - db:", !!db, "cid:", cid, "houseNo:", houseNo);
           }
         } catch (e) {
           console.error("renderProfileHouseNoQr - 共用點數計算失敗:", e);
         }
-        
-        console.log("renderProfileHouseNoQr - 最終顯示的點數:", points);
         pointsEl.textContent = String(points);
       } else if (pointsEl) {
         pointsEl.textContent = "—";

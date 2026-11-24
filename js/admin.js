@@ -424,6 +424,48 @@
     return uniq;
   }
 
+  /* 戶號編號：以「戶號」為主，同戶號的所有子戶號共用同一編號 */
+  function padUnitNo(n) {
+    return String(n).padStart(3, "0");
+  }
+
+  /* 建立「戶號(小寫) → 戶號編號」對照表 */
+  function buildUnitNoMap(list) {
+    const map = new Map();
+    (Array.isArray(list) ? list : []).forEach((u) => {
+      if (!u || typeof u !== "object") return;
+      const key = String(u.id || "").trim().toLowerCase();
+      const no = String(u.unitNo || "").trim();
+      if (key && no) map.set(key, no);
+    });
+    return map;
+  }
+
+  function getUnitNoFor(houseNo, list) {
+    const key = String(houseNo || "").trim().toLowerCase();
+    if (!key) return "";
+    const source = Array.isArray(list) ? list : state.currentCommunityUnits;
+    return buildUnitNoMap(source).get(key) || "";
+  }
+
+  /* 住戶 QR code 預設碼：<社區編號>-A<戶號編號>ADDT-<子戶號> */
+  function buildResidentQrToken80(communityCode, unitNo, subUnit) {
+    const code = String(communityCode || "").trim();
+    const no = String(unitNo || "").trim();
+    const sub = String(subUnit || "").trim();
+    if (!code || !no) return "";
+    const base = `${code}-A${no}ADDT`;
+    return sub ? `${base}-${sub}` : base;
+  }
+
+  /* 取得社區編號（communities/{cid}.username） */
+  function getCommunityCode80(cid) {
+    const id = String(cid || "").trim();
+    if (!id) return "";
+    const c = (state.communities || []).find((x) => x && String(x.id || "") === id);
+    return c ? String(c.username || "").trim() : "";
+  }
+
   /* 取得社區戶號清單（供表單 datalist 使用）：以住戶帳號戶號為主，社區 units 文件為輔 */
   async function loadFormUnitOptions(cid) {
     const key = String(cid || "").trim();
@@ -1187,7 +1229,9 @@
   /* ── 住戶造冊：名冊匯出／批次匯入 ── */
 
   function residentsToExportRows80(list) {
+    const unitNoMap = buildUnitNoMap(state.currentCommunityUnits);
     return (Array.isArray(list) ? list : []).map((r) => ({
+      "戶號編號": unitNoMap.get(String(r.houseNo || "").trim().toLowerCase()) || "",
       "戶號": String(r.houseNo || ""),
       "子戶號": String(r.subUnit || ""),
       "姓名": String(r.displayName || ""),
@@ -3091,7 +3135,7 @@
     return modal;
   }
 
-  function openResidentTokenModal80({ communityId, uid, displayName, qrToken, onSaved }) {
+  function openResidentTokenModal80({ communityId, uid, displayName, qrToken, houseNo, subUnit, onSaved }) {
     const modal = ensureResidentTokenModal80();
     let detach = () => {};
     detach = bindModalClose(modal, () => detach());
@@ -3113,8 +3157,18 @@
 
     if (titleEl) titleEl.textContent = `編輯 QR Code｜${String(displayName || "").trim() || "—"}`;
     const id = String(uid || "").trim();
-    const defaultToken = "A000ADDT";
-    const originalToken = String(qrToken || "").trim();
+    const LEGACY_DEFAULT_QR = "A000ADDT";
+    const cidForQr = String(communityId || resolveActiveCommunityId() || "").trim();
+    const computeDefaultToken = () => buildResidentQrToken80(
+      getCommunityCode80(cidForQr),
+      getUnitNoFor(houseNo),
+      subUnit
+    );
+    let defaultToken = computeDefaultToken() || LEGACY_DEFAULT_QR;
+    const storedToken = String(qrToken || "").trim();
+    // 已自訂者沿用；空值或舊版預設碼則套用動態預設
+    const isDefaultLike = !storedToken || storedToken === LEGACY_DEFAULT_QR;
+    const originalToken = isDefaultLike ? "" : storedToken;
     if (inputEl) inputEl.value = originalToken || defaultToken;
 
     const renderQr = () => {
@@ -3146,6 +3200,31 @@
         renderQr();
         setStatus("", false);
       });
+    }
+
+    // 記憶體資料不足（缺社區編號或戶號編號）時，改讀社區文件補算預設碼
+    if (isDefaultLike && !computeDefaultToken() && cidForQr) {
+      db.collection("communities").doc(cidForQr).get().then((doc) => {
+        if (!doc.exists) return;
+        const v = doc.data() || {};
+        const code = String(v.username || "").trim();
+        const key = String(houseNo || "").trim().toLowerCase();
+        let unitNo = "";
+        for (const u of (Array.isArray(v.units) ? v.units : [])) {
+          if (u && String(u.id || "").trim().toLowerCase() === key) {
+            unitNo = String(u.unitNo || "").trim();
+            break;
+          }
+        }
+        const t = buildResidentQrToken80(code, unitNo, subUnit);
+        if (!t) return;
+        defaultToken = t;
+        const cur = String(inputEl ? inputEl.value : "").trim();
+        if (inputEl && (!cur || cur === LEGACY_DEFAULT_QR)) {
+          inputEl.value = t;
+          renderQr();
+        }
+      }).catch(() => {});
     }
 
     const copyText = async (t) => {
@@ -3181,7 +3260,7 @@
               .get();
             const dup = dupSnap && Array.isArray(dupSnap.docs) ? dupSnap.docs.find((d) => d && String(d.id || "") !== id) : null;
             if (dup) {
-              setStatus("此社區 QR code 碼不可重複（A000ADDT 除外）。", true);
+              setStatus("此社區 QR code 碼不可重複（預設碼除外）。", true);
               return;
             }
           } catch (err) {
@@ -3200,7 +3279,7 @@
                   })
                 : null;
               if (dup) {
-                setStatus("此社區 QR code 碼不可重複（A000ADDT 除外）。", true);
+                setStatus("此社區 QR code 碼不可重複（預設碼除外）。", true);
                 return;
               }
             } catch (err2) {
@@ -3210,9 +3289,11 @@
             }
           }
         }
+        const isDefaultToken = token === defaultToken;
+        const storedValue = isDefaultToken ? "" : token;
         await db.collection("users").doc(String(id)).set(
           {
-            qrToken: token,
+            qrToken: storedValue,
             qrUpdatedAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
           },
@@ -3220,7 +3301,7 @@
         );
         setStatus("已儲存。", false);
         toast("已儲存");
-        if (typeof onSaved === "function") onSaved(token);
+        if (typeof onSaved === "function") onSaved(storedValue);
       } catch (err) {
         const code = String(err && err.code ? err.code : "");
         setStatus(code.includes("permission-denied") ? "沒有權限儲存。" : "儲存失敗，請稍後再試。", true);
@@ -5487,12 +5568,13 @@
                 </div>
               </div>
               
-              <div class="units-table-container" style="max-height: 450px; overflow-y: auto;">
+              <div class="units-table-container" style="max-height: 450px; overflow: auto;">
                 <table class="units-table">
                   <thead>
                     <tr>
                       <th style="width: 180px;">QR code碼</th>
                       <th style="width: 100px;">戶號</th>
+                      <th style="width: 110px;">戶號編號</th>
                       <th style="width: 180px;">區分所有權人</th>
                       <th>地址</th>
                       <th style="width: 100px;">棟別</th>
@@ -14684,9 +14766,11 @@
           const houseNo = String(r.houseNo || "").trim();
           const subUnit = String(r.subUnit || "").trim();
           const fullUnit = subUnit ? `${houseNo}-${subUnit}` : houseNo;
+          const unitNo = getUnitNoFor(houseNo);
+          const houseLabel = unitNo ? `編號 ${unitNo}｜${fullUnit}` : fullUnit;
           const phone = String(r.phone || "").trim();
           const email = String(r.email || "").trim();
-          const subParts = [fullUnit, phone, email].filter(Boolean);
+          const subParts = [houseLabel, phone, email].filter(Boolean);
           return `
             <div class="resident-item" data-id="${String(r.id || "")}">
               <div class="resident-left">
@@ -14892,6 +14976,8 @@
             uid: id,
             displayName: String(r.displayName || r.email || id),
             qrToken: String(r.qrToken || "").trim(),
+            houseNo: String(r.houseNo || "").trim(),
+            subUnit: String(r.subUnit || "").trim(),
             onSaved: (token) => {
               r.qrToken = token;
               renderList();
@@ -16773,10 +16859,12 @@
       const createRow = (u = {}) => {
         const tr = document.createElement("tr");
         const qrToken = String(u.qrToken || u.qr || u.qrCode || "").trim();
+        const unitNo = String(u.unitNo || u.no || "").trim();
         const ownerName = String(u.ownerName || u.owner || u.ownerText || "").trim();
         tr.innerHTML = `
           <td><input type="text" class="u-qr" value="${qrToken}" placeholder="QR code碼" /></td>
           <td><input type="text" class="u-id" value="${u.id || ""}" placeholder="戶號" /></td>
+          <td><input type="text" class="u-no" value="${unitNo}" placeholder="戶號編號" /></td>
           <td><input type="text" class="u-owner" value="${ownerName}" placeholder="區分所有權人" /></td>
           <td><input type="text" class="u-address" value="${u.address || ""}" placeholder="地址" /></td>
           <td><input type="text" class="u-building" value="${u.building || u.block || ""}" placeholder="棟別" /></td>
@@ -16871,6 +16959,7 @@
         for (const tr of rows) {
           const qrToken = tr.querySelector(".u-qr").value.trim();
           const id = tr.querySelector(".u-id").value.trim();
+          const unitNo = tr.querySelector(".u-no").value.trim();
           const ownerName = tr.querySelector(".u-owner").value.trim();
           const address = tr.querySelector(".u-address").value.trim();
           const building = tr.querySelector(".u-building").value.trim();
@@ -16881,12 +16970,33 @@
           if (seen.has(id)) continue;
           seen.add(id);
 
-          uniq.push({ qrToken, id, ownerName, address, building, area, ownership });
+          uniq.push({ qrToken, id, unitNo, ownerName, address, building, area, ownership });
         }
 
         if (uniq.length === 0) {
           setModalStatus("請至少輸入 1 個戶號。", true);
           return;
+        }
+
+        // 戶號編號：未填者依序自動補號（第一戶預設 001）；同一社區內不重複。
+        const usedNo = new Set(uniq.map((u) => u.unitNo).filter(Boolean));
+        let autoSeq = 1;
+        const nextAutoNo = () => {
+          let cand = padUnitNo(autoSeq++);
+          while (usedNo.has(cand)) cand = padUnitNo(autoSeq++);
+          usedNo.add(cand);
+          return cand;
+        };
+        for (const u of uniq) {
+          if (!u.unitNo) u.unitNo = nextAutoNo();
+        }
+        const noSet = new Set();
+        for (const u of uniq) {
+          if (noSet.has(u.unitNo)) {
+            setModalStatus(`戶號編號「${u.unitNo}」重複，請修改後再儲存。`, true);
+            return;
+          }
+          noSet.add(u.unitNo);
         }
 
         setModalStatus("儲存中...", false);
@@ -16952,6 +17062,7 @@
         const data = rows.map(tr => ({
           "QR code碼": tr.querySelector(".u-qr").value.trim(),
           "戶號": tr.querySelector(".u-id").value.trim(),
+          "戶號編號": tr.querySelector(".u-no").value.trim(),
           "區分所有權人": tr.querySelector(".u-owner").value.trim(),
           "地址": tr.querySelector(".u-address").value.trim(),
           "棟別": tr.querySelector(".u-building").value.trim(),
@@ -16993,6 +17104,7 @@
                 const values = Object.values(row || {});
                 const qrToken = String(row["QR code碼"] || row["qrToken"] || row["qr"] || row["qrcode"] || row["QRCode"] || "").trim();
                 const id = String(row["戶號"] || row["id"] || row["戶"] || Object.values(row)[0] || "").trim();
+                const unitNo = String(row["戶號編號"] || row["unitNo"] || row["編號"] || "").trim();
                 let ownerName = String(row["區分所有權人"] || row["所有權人"] || row["ownerName"] || row["owner"] || "").trim();
                 let addr = String(row["地址"] || row["address"] || "").trim();
                 let building = String(row["棟別"] || row["building"] || row["block"] || "").trim();
@@ -17007,7 +17119,7 @@
                 if (!area && values.length >= 6) area = String(values[4] || "").trim();
                 if (!own && values.length >= 6) own = String(values[5] || "").trim();
 
-                if (id) tbody.appendChild(createRow({ qrToken, id, ownerName, address: addr, building, area, ownership: own }));
+                if (id) tbody.appendChild(createRow({ qrToken, id, unitNo, ownerName, address: addr, building, area, ownership: own }));
               });
               updateCount();
             }
