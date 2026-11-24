@@ -1,4 +1,4 @@
-const CACHE_VERSION = "nwapp-v782";
+const CACHE_VERSION = "nwapp-v820";
 const IS_LOCALHOST = ["localhost", "127.0.0.1"].includes(String(self.location && self.location.hostname || "").trim().toLowerCase());
 const PRECACHE = Array.from(new Set([
   "./",
@@ -6,6 +6,9 @@ const PRECACHE = Array.from(new Set([
   "./system.html",
   "./admin.html",
   "./member.html?v=15",
+  "./special-member.html?v=31",
+  "./css/special-member.css?v=27",
+  "./photo/logo.png",
   "./parking.html?v=8",
   "./parking-view.html?v=11",
   "./facility.html?v=8",
@@ -41,9 +44,10 @@ const PRECACHE = Array.from(new Set([
   "./css/admin.css?v=87",
   "./css/member.css?v=10",
   "./css/worker-clean.css?v=65",
-  "./js/index.js?v=10",
+  "./js/index.js?v=11",
+  "./js/special-member.js?v=17",
   "./js/system.js?v=43",
-  "./js/admin.js?v=421",
+  "./js/admin.js?v=455",
   "./js/admin-clean.js?v=9",
   "./js/admin-duty.js?v=24",
   "./js/finance.js?v=35",
@@ -70,7 +74,7 @@ const PRECACHE = Array.from(new Set([
   "./js/live-shared.js?v=2",
   "./js/activity-shared.js?v=2",
   "./js/live-meeting.js?v=27",
-  "./js/pwa.js?v=14",
+  "./js/pwa.js?v=16",
   "./css/pwa.css?v=3",
   "./css/pwa.css",
   "./js/firebase-config.js",
@@ -125,7 +129,7 @@ try {
         const tag = `intercom_${callId}`;
         const options = {
           body,
-          icon: "./icon-192.png?v=2",
+          icon: "./logo.svg?v=5",
           badge: "./icon-192.png?v=2",
           tag,
           renotify: true,
@@ -172,7 +176,7 @@ try {
 
       const options = {
         body,
-        icon: "./icon-192.png?v=2",
+        icon: "./logo.svg?v=5",
         badge: "./icon-192.png?v=2",
         tag: `notify_${moduleType || "system"}_${refId || Date.now()}`,
         renotify: true,

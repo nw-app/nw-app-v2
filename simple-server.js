@@ -62,6 +62,8 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(8081, () => {
-  console.log('Server running at http://localhost:8081/');
+const PORT = Number(process.env.PORT) || 8081;
+
+server.listen(PORT, () => {
+  console.log(`Server running at http://localhost:${PORT}/`);
 });
