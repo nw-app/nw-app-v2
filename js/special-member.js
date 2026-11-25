@@ -53,10 +53,6 @@
     infoCard: document.querySelector(".sp-info-card"),
     sosCard: document.querySelector(".sp-sos-card"),
     homeNotice: document.getElementById("spHomeNotice"),
-    noticeCard: document.getElementById("spNoticeCard"),
-    noticeTitle: document.getElementById("spNoticeTitle"),
-    noticeText: document.getElementById("spNoticeText"),
-    noticeCount: document.getElementById("spNoticeCount"),
     navBadge: document.getElementById("spNavBadge"),
     todayDate: document.getElementById("spTodayDate"),
     todayWeekday: document.getElementById("spTodayWeekday"),
@@ -82,7 +78,7 @@
     shell: document.querySelector(".sp-shell"),
     bar: document.querySelector(".sp-bar"),
     homeNav: document.getElementById("spHomeNav"),
-    noticeNav: document.getElementById("spNoticeNav"),
+    intercomNav: document.getElementById("spIntercomNav"),
     supportNav: document.getElementById("spSupportNav"),
     profileNav: document.getElementById("spProfileNav"),
     mic: document.getElementById("spMic"),
@@ -215,6 +211,7 @@
     { action: "home", words: ["回首頁", "回到首頁", "回主頁", "首頁", "主頁"] },
     { action: "support", words: ["功能", "常用服務", "有什麼服務", "有哪些服務"] },
     { action: "notice", words: ["通知", "最新通知", "最新消息"] },
+    { action: "intercom", words: ["對講", "對講機", "呼叫", "室內對講", "門口對講"] },
     { action: "profile", words: ["個人", "我的資料", "個人資料"] },
     { action: "call", words: ["打電話", "撥電話", "撥打", "打給管理中心", "管理室電話", "管理中心電話", "電話"] },
     { action: "greet", words: ["你好", "您好", "早安", "午安", "晚安", "哈囉"] },
@@ -642,13 +639,14 @@
     home: "好的，回到首頁。",
     support: "好的，我幫您打開功能。",
     notice: "好的，我幫您看通知。",
+    intercom: "好的，我幫您打開對講。",
     profile: "好的，我幫您看個人資料。",
     call: "好的，我幫您撥打電話。",
     greet: "您好，我是小Q，有什麼能幫您的?",
     thanks: "不客氣，能幫上忙我很開心。",
     bye: "再見，祝您有美好的一天。",
-    who: "我是小Q，社區的語音小幫手。可以幫您看包裹、看公告、訪客登記、公設預約、水電繳費，也可以報時間、日期和天氣。",
-    help: "我可以幫您做這些事：看包裹、看公告、訪客登記、公設預約、水電繳費、現在幾點、今天天氣、打電話。您只要說出需求就可以了。",
+    who: "我是小Q，社區的語音小幫手。可以幫您看包裹、看公告、訪客登記、公設預約、水電繳費、對講，也可以報時間、日期和天氣。",
+    help: "我可以幫您做這些事：看包裹、看公告、訪客登記、公設預約、水電繳費、對講、現在幾點、今天天氣、打電話。您只要說出需求就可以了。",
   };
   var VOICE_REPLY_FALLBACK = "抱歉，我沒聽清楚，請您再說一次。";
 
@@ -860,12 +858,16 @@
     }
 
     // 打電話：先看是不是「請打電話給<姓名/暱稱>」，問號碼就報號碼，否則直接撥管理中心
+    // 撥號動作在語音辨識到指令的同步脈絡中立即執行，避免瀏覽器彈出確認（不需再按按鍵）
     if (action === "call") {
       var contact = matchPhoneContact(text);
       if (contact) {
-        finishReply("好的，正在為您撥打" + String(contact.name || "對方") + "的電話。", (function (c) {
-          return function () { dialContact(c); };
-        })(contact));
+        var cname = String(contact.name || "對方");
+        pushVoiceReply("好的，正在為您撥打" + cname + "的電話。");
+        speak("好的，正在為您撥打" + cname + "的電話。");
+        dialContact(contact);
+        voicePanel.busy = false;
+        if (voicePanel.open) closeVoicePanel(false);
         return;
       }
       setVoiceReply("正在為您查詢電話…");
@@ -873,7 +875,12 @@
       resolveDialPhone(function (phone) {
         if (!phone) { finishReply("目前沒有設定管理中心的電話，請洽管理中心。", ""); return; }
         if (askNumber) { finishReply("管理中心的電話是" + voicePhoneText(phone) + "。", ""); return; }
-        finishReply("好的，正在為您撥打" + voicePhoneText(phone) + "。", "call");
+        // 管理中心電話也直接撥，不等待語音播完
+        pushVoiceReply("好的，正在為您撥打" + voicePhoneText(phone) + "。");
+        speak("好的，正在為您撥打" + voicePhoneText(phone) + "。");
+        dialPhone();
+        voicePanel.busy = false;
+        if (voicePanel.open) closeVoicePanel(false);
       });
       return;
     }
@@ -1056,6 +1063,10 @@
 
   var sheetOpen = false;
   var sheetBackPending = false;
+  // 面板堆疊：從「功能」頁進入「我的包裹」等子頁時，把上一頁存起來，
+  // 按「回上一頁」可回到功能頁，而不是直接關閉回首頁。
+  var sheetStack = [];
+  var currentSheetOpt = null;
 
   // 常用服務區塊平常收在文件尾端（hidden），只有「功能」面板開啟時搬進面板
   function parkServices() {
@@ -1064,25 +1075,28 @@
     if (el.services.parentNode !== document.body) document.body.appendChild(el.services);
   }
 
-  // 重要通知卡平常收在文件尾端（hidden），只有「通知」面板開啟時搬進面板
-  function parkNotice() {
-    if (!el.noticeCard) return;
-    el.noticeCard.hidden = true;
-    if (el.noticeCard.parentNode !== document.body) document.body.appendChild(el.noticeCard);
-  }
-
   function openSheet(options) {
     var opt = options || {};
     if (!el.sheet) return;
     var replacing = sheetOpen;
+    var fromBack = !!opt.__fromBack;
+    // 若已有面板開著（例如從「功能」頁點進「我的包裹」），把目前面板存進堆疊，
+    // 之後按「回上一頁」可回到此面板。
+    if (replacing && currentSheetOpt && !fromBack) {
+      sheetStack.push(currentSheetOpt);
+    }
+    currentSheetOpt = opt;
     sheetOpen = true;
     // 面板底部改為顯示同一條底部導覽（把主導覽移進面板頁尾）
     if (el.bar && el.sheetFt && el.bar.parentNode !== el.sheetFt) el.sheetFt.appendChild(el.bar);
-    // 換到別的面板時，先把「常用服務」與「重要通知卡」收起來
+    // 換到別的面板時，先把「常用服務」收起來
     if (el.services && el.services.parentNode === el.sheetBody && opt.node !== el.services) parkServices();
-    if (el.noticeCard && el.noticeCard.parentNode === el.sheetBody && opt.node !== el.noticeCard) parkNotice();
     el.sheet.classList.toggle("has-frame", Boolean(opt.frameUrl));
     if (el.sheetTitle) el.sheetTitle.textContent = String(opt.title || "");
+    // 若目前面板內容是對講，切換面板前先清理通話連線
+    if (el.sheetBody && el.sheetBody.querySelector("#intercomCallModal90")) {
+      cleanupIntercomActive({ updateStatus: "ended" });
+    }
     el.sheetBody.innerHTML = "";
     if (opt.frameUrl) {
       var frame = document.createElement("iframe");
@@ -1106,24 +1120,44 @@
     }
     el.sheet.hidden = false;
     el.sheet.dataset.speak = String(opt.speakText || opt.title || "");
-    // 若原本已開著面板（例如用語音直接換功能），沿用同一筆歷史紀錄，避免返回鍵要多按一次
-    if (!replacing) {
+    // 首次開面板 pushState；從堆疊回上一頁時不 push（歷史紀錄已在正確位置）
+    if (!fromBack) {
       try { history.pushState({ __spSheet: true }, ""); } catch (e) {}
     }
     if (!opt.silent) speak(opt.speakText || opt.title || "");
   }
 
   function hideSheet(fromPop) {
-    if (!sheetOpen) return;
+    if (!sheetOpen) return false;
+    // 若堆疊裡有上一頁，回到上一頁而不是直接關閉
+    if (sheetStack.length > 0) {
+      var prev = sheetStack.pop();
+      var restoreOpt = {};
+      for (var k in prev) {
+        if (Object.prototype.hasOwnProperty.call(prev, k)) restoreOpt[k] = prev[k];
+      }
+      restoreOpt.__fromBack = true;
+      openSheet(restoreOpt);
+      if (!fromPop) {
+        // 按鈕觸發：同步把歷史紀錄退一格（popstate 會被 sheetBackPending 擋下）
+        try { sheetBackPending = true; history.back(); } catch (e) {}
+      }
+      return false;
+    }
     sheetOpen = false;
+    currentSheetOpt = null;
+    sheetStack = [];
     stopSpeak();
     // 底部導覽移回主頁面
     if (el.bar && el.shell && el.bar.parentNode !== el.shell) el.shell.appendChild(el.bar);
     if (el.sheet) {
+      // 若目前面板內容是對講，關閉面板前先清理通話連線
+      if (el.sheetBody && el.sheetBody.querySelector("#intercomCallModal90")) {
+        cleanupIntercomActive({ updateStatus: "ended" });
+      }
       el.sheet.hidden = true;
       el.sheet.classList.remove("has-frame");
       if (el.services && el.services.parentNode === el.sheetBody) parkServices();
-      if (el.noticeCard && el.noticeCard.parentNode === el.sheetBody) parkNotice();
       el.sheetBody.innerHTML = "";
       delete el.sheet.dataset.speak;
     }
@@ -1135,6 +1169,7 @@
         }
       } catch (e) {}
     }
+    return true;
   }
 
   window.addEventListener("popstate", function () {
@@ -1162,8 +1197,10 @@
 
   if (el.sheetBack) {
     el.sheetBack.addEventListener("click", function () {
-      hideSheet(false);
-      if (state.voice) speak("回上一頁");
+      var closed = hideSheet(false);
+      // 只有真的關閉面板（回到首頁）時才語音說「回上一頁」；
+      // 若只是回到上一層子頁面，openSheet 會自己報讀該頁標題。
+      if (state.voice && closed) speak("回上一頁");
     });
   }
 
@@ -1237,14 +1274,31 @@
     var t = new Date();
     var pad = function (n) { return (n < 10 ? "0" : "") + n; };
     el.todayClock.textContent = pad(t.getHours()) + "：" + pad(t.getMinutes()) + "：" + pad(t.getSeconds());
+    // 時段變動時（跨整點）自動更新問候語
+    if (el.greetingLine) {
+      var text = greetingByHour(t.getHours());
+      if (el.greetingLine.textContent !== text) el.greetingLine.textContent = text;
+    }
+  }
+
+  // 依時段回傳問候語（每三小時一段，跨午夜 21:00~00:00 歸到「晚安」）
+  function greetingByHour(hour) {
+    var h = hour;
+    if (h >= 0 && h < 3) return "很晚囉！該睡覺了。";
+    if (h >= 3 && h < 6) return "還沒天亮！再睡一下。";
+    if (h >= 6 && h < 9) return "早安！來做運動身體好。";
+    if (h >= 9 && h < 12) return "上午好！今天該做什麼事呢？";
+    if (h >= 12 && h < 15) return "午安！吃飽沒？";
+    if (h >= 15 && h < 18) return "下午囉！來點下午茶。";
+    if (h >= 18 && h < 21) return "晚上好！今天過的好嗎？";
+    return "晚安！祝您有個好夢。";
   }
 
   function renderGreeting() {
     var d = state.profile || {};
     var name = String(d.displayName || d.name || "").trim();
     var hour = new Date().getHours();
-    var greet = hour < 5 ? "夜深了" : hour < 11 ? "早安" : hour < 18 ? "午安" : "晚安";
-    if (el.greetingLine) el.greetingLine.textContent = greet + "，今天過得還好嗎？";
+    if (el.greetingLine) el.greetingLine.textContent = greetingByHour(hour);
     if (el.greetName) el.greetName.textContent = name || "您好";
 
     var houseNo = String(d.houseNo || d.unit || "").trim();
@@ -1308,7 +1362,8 @@
           for (var i = 0; i < units.length; i++) {
             var u = units[i];
             if (u && String(u.id || "").trim().toLowerCase() === key) {
-              unitNo = String(u.unitNo || "").trim();
+              // 優先使用 unitNo（戶號編號），若未設定則回退使用 id（戶號）
+              unitNo = String(u.unitNo || u.id || "").trim();
               break;
             }
           }
@@ -1320,8 +1375,28 @@
     });
   }
 
+  // 以 qrcode-generator 產生 QR code 圖片（GIF base64 data URL）
+  function generateQrDataUrl(token) {
+    if (!token) return "";
+    if (typeof qrcode !== "function") return "";
+    try {
+      var qr = qrcode(0, "M");
+      qr.addData(String(token));
+      qr.make();
+      // cellSize=4, margin=2：產出解析度足夠、邊界適中的 QR 圖
+      return qr.createDataURL(4, 2);
+    } catch (e) {
+      return "";
+    }
+  }
+
   function qrImageUrl(token) {
-    return token ? "https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=" + encodeURIComponent(token) : "";
+    if (!token) return "";
+    // 優先使用本機函式庫產生的 data URL（離線可用、不需外部 API）
+    var dataUrl = generateQrDataUrl(token);
+    if (dataUrl) return dataUrl;
+    // 後援：外部 QR 服務（僅在本機函式庫未載入時使用）
+    return "https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=" + encodeURIComponent(token);
   }
 
   function renderGreetQr() {
@@ -1392,32 +1467,9 @@
       el.parcelBadge.textContent = String(n);
       el.parcelBadge.hidden = n <= 0;
     }
-    [el.noticeCount, el.navBadge].forEach(function (badge) {
-      if (!badge) return;
-      badge.textContent = String(n);
-      badge.hidden = n <= 0;
-    });
-    if (el.noticeCard) el.noticeCard.dataset.action = n > 0 ? "parcel" : "bulletin";
-    if (el.noticeTitle) {
-      el.noticeTitle.textContent = state.parcelError
-        ? "您的戶號尚未設定"
-        : n > 0
-          ? "您有 " + n + " 件包裹待領取"
-          : "您目前沒有待領包裹";
-    }
-    if (el.noticeText) {
-      if (state.parcelError) {
-        el.noticeText.textContent = "請洽管理中心設定戶號，或點這裡查看社區公告。";
-      } else if (n > 0) {
-        var first = state.parcels.filter(isPendingParcel)[0];
-        var arrived = first && (tsToDate(first.createdAt) || tsToDate(first.arrivedAt));
-        var days = arrived ? Math.max(0, Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(arrived).setHours(0, 0, 0, 0)) / 86400000)) : 0;
-        el.noticeText.textContent = days > 0
-          ? "已在大廳包裹櫃等待領取 " + days + " 天。點這裡看取件說明。"
-          : "已放在大廳包裹櫃，點這裡看取件說明。";
-      } else {
-        el.noticeText.textContent = "點這裡查看社區最新公告。";
-      }
+    if (el.navBadge) {
+      el.navBadge.textContent = String(n);
+      el.navBadge.hidden = n <= 0;
     }
   }
 
@@ -1547,7 +1599,6 @@
       : '<div class="sp-empty"><div class="sp-empty-icon">📢</div>目前沒有新公告</div>';
     openSheet({
       title: (opt && opt.title) || "社區公告",
-      node: el.noticeCard,
       html: '<h3 class="sp-sheet-subhd">社區公告</h3>' + body,
       speakText: list.length ? "社區公告，共 " + list.length + " 則" : "目前沒有新公告",
       silent: !!(opt && opt.silent),
@@ -1680,7 +1731,12 @@
   }
 
   function goHome() {
-    if (sheetOpen) hideSheet(false);
+    // 首頁按鈕：直接關閉所有面板、清空堆疊，回到首頁（不是只退一層）
+    if (sheetOpen) {
+      sheetStack = [];
+      currentSheetOpt = null;
+      hideSheet(false);
+    }
     if (el.home) el.home.scrollTo({ top: 0, behavior: "smooth" });
     setActiveNav(el.homeNav);
   }
@@ -1694,6 +1750,12 @@
       return;
     }
     if (action === "profile") { if (!silent) speak("個人"); openProfileSheet({ silent: !!silent }); return; }
+    if (action === "intercom") {
+      if (!silent) speak("對講");
+      setActiveNav(el.intercomNav);
+      openIntercomCallModal();
+      return;
+    }
     if (action === "parcel") {
       if (!silent) speak("我的包裹");
       loadParcels().then(openParcelSheet);
@@ -2012,7 +2074,6 @@
     if (el.sosCard) el.sosCard.addEventListener("click", function () { handleAction("sos"); });
     if (el.homeNotice) el.homeNotice.addEventListener("click", function () {
       speak("通知");
-      setActiveNav(el.noticeNav);
       loadBulletins().then(function () { openBulletinSheet({ title: "通知", silent: true }); });
     });
 
@@ -2049,10 +2110,10 @@
       setActiveNav(el.supportNav);
       openSupportSheet({ silent: true });
     });
-    if (el.noticeNav) el.noticeNav.addEventListener("click", function () {
-      speak("通知");
-      setActiveNav(el.noticeNav);
-      loadBulletins().then(function () { openBulletinSheet({ silent: true, title: "通知" }); });
+    if (el.intercomNav) el.intercomNav.addEventListener("click", function () {
+      speak("對講");
+      setActiveNav(el.intercomNav);
+      openIntercomCallModal();
     });
     if (el.profileNav) el.profileNav.addEventListener("click", function () {
       speak("個人");
@@ -2136,7 +2197,7 @@
   }
 
   function setActiveNav(active) {
-    [el.homeNav, el.noticeNav, el.supportNav, el.profileNav].forEach(function (button) {
+    [el.homeNav, el.supportNav, el.intercomNav, el.profileNav].forEach(function (button) {
       if (!button) return;
       var selected = button === active;
       button.classList.toggle("is-active", selected);
@@ -2165,6 +2226,1030 @@
     renderClock();
     setInterval(renderClock, 1000);
   });
+
+  // ==================== 對講（div modal，移植自 member.js） ====================
+
+  var intercomIncomingUnsub = null;
+  var intercomActive = null;
+  var intercomRingCtx = null;
+  var intercomRingOsc = null;
+  var intercomRingGain = null;
+  var intercomRingCompressor = null;
+  var intercomRingTimer = null;
+  var intercomRingAudio = null;
+  var intercomLastIncomingMs = 0;
+  var intercomLastIncomingId = "";
+  var intercomLastIncomingNotifyId = "";
+  var intercomIncomingPromptEl = null;
+  var intercomIncomingPromptCallId = "";
+  var intercomIncomingPromptUnsubDoc = null;
+
+  function intercomResolveCommunityId() {
+    return String(state.cid || "default").trim() || "default";
+  }
+
+  function ensureModal(id) {
+    var modal = document.getElementById(id);
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = id;
+    modal.hidden = true;
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function bindModalClose(modal, onClose) {
+    if (!modal) return function () {};
+    var close = function () {
+      modal.hidden = true;
+      if (typeof onClose === "function") onClose();
+    };
+    var onClick = function (e) {
+      var el = e.target && e.target.closest ? e.target.closest("[data-modal-close]") : null;
+      if (!el) return;
+      e.preventDefault();
+      close();
+    };
+    modal.addEventListener("click", onClick);
+    var onKey = function (e) {
+      if (e.key !== "Escape") return;
+      close();
+    };
+    document.addEventListener("keydown", onKey);
+    return function () {
+      modal.removeEventListener("click", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }
+
+  function startIntercomOscillatorRingtone(mode) {
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      intercomRingCtx = intercomRingCtx || new Ctx();
+      if (intercomRingCtx && intercomRingCtx.state === "suspended") {
+        intercomRingCtx.resume().catch(function () {});
+      }
+      intercomRingGain = intercomRingCtx.createGain();
+      intercomRingGain.gain.value = 0.0001;
+      intercomRingCompressor = intercomRingCtx.createDynamicsCompressor();
+      try {
+        intercomRingCompressor.threshold.setValueAtTime(-24, intercomRingCtx.currentTime);
+        intercomRingCompressor.knee.setValueAtTime(30, intercomRingCtx.currentTime);
+        intercomRingCompressor.ratio.setValueAtTime(12, intercomRingCtx.currentTime);
+        intercomRingCompressor.attack.setValueAtTime(0.003, intercomRingCtx.currentTime);
+        intercomRingCompressor.release.setValueAtTime(0.25, intercomRingCtx.currentTime);
+      } catch (e) {}
+      intercomRingGain.connect(intercomRingCompressor);
+      intercomRingCompressor.connect(intercomRingCtx.destination);
+      intercomRingOsc = [];
+
+      var m = String(mode || "incoming").trim() || "incoming";
+      var incomingNotes = [523.25, 659.25, 783.99, 659.25];
+      var waitingNotes = [440.0, 554.37];
+      var i = 0;
+
+      var playNote = function (freq, durationMs) {
+        if (!intercomRingCtx || !intercomRingGain) return;
+        var ctx = intercomRingCtx;
+        var now = ctx.currentTime;
+        var dur = Math.max(0.08, Number(durationMs || 220) / 1000);
+        var osc = ctx.createOscillator();
+        var g = ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(Number(freq || 440), now);
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.linearRampToValueAtTime(1.0, now + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+        osc.connect(g);
+        g.connect(intercomRingGain);
+        osc.start(now);
+        osc.stop(now + dur + 0.02);
+        intercomRingOsc.push(osc);
+      };
+
+      var tick = function () {
+        if (!intercomRingCtx || !intercomRingGain) return;
+        var volume = m === "waiting" ? 0.36 : 0.52;
+        try { intercomRingGain.gain.setTargetAtTime(volume, intercomRingCtx.currentTime, 0.05); } catch (e) {}
+        if (m === "waiting") {
+          playNote(waitingNotes[i % waitingNotes.length], 140);
+          i += 1;
+          return;
+        }
+        playNote(incomingNotes[i % incomingNotes.length], 220);
+        i += 1;
+      };
+
+      tick();
+      intercomRingTimer = window.setInterval(tick, m === "waiting" ? 900 : 520);
+    } catch (e) {}
+  }
+
+  function startIntercomRingtone(mode) {
+    stopIntercomRingtone();
+    var m = String(mode || "incoming").trim() || "incoming";
+    try {
+      intercomRingAudio = new Audio("./mp3/ring.mp3");
+      intercomRingAudio.loop = true;
+      intercomRingAudio.preload = "auto";
+      intercomRingAudio.volume = m === "waiting" ? 0.65 : 0.85;
+      var p = intercomRingAudio.play();
+      if (p && typeof p.then === "function") {
+        var ok = false;
+        p.then(function () { ok = true; }).catch(function () { ok = false; });
+        window.setTimeout(function () {
+          if (!ok && !intercomRingTimer) startIntercomOscillatorRingtone(m);
+        }, 220);
+        return;
+      }
+      if (intercomRingAudio.paused) startIntercomOscillatorRingtone(m);
+      return;
+    } catch (e) {}
+    startIntercomOscillatorRingtone(m);
+  }
+
+  function stopIntercomRingtone() {
+    if (intercomRingTimer) {
+      window.clearInterval(intercomRingTimer);
+      intercomRingTimer = null;
+    }
+    try {
+      if (intercomRingAudio) {
+        intercomRingAudio.pause();
+        intercomRingAudio.currentTime = 0;
+      }
+    } catch (e) {}
+    intercomRingAudio = null;
+    try {
+      if (intercomRingGain) intercomRingGain.gain.value = 0;
+    } catch (e) {}
+    try {
+      var list = Array.isArray(intercomRingOsc) ? intercomRingOsc : (intercomRingOsc ? [intercomRingOsc] : []);
+      list.forEach(function (osc) {
+        try { osc.stop(); } catch (e) {}
+      });
+    } catch (e) {}
+    intercomRingOsc = null;
+    intercomRingGain = null;
+    intercomRingCompressor = null;
+  }
+
+  function createIntercomPeerConnection() {
+    var cfg = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+    return new RTCPeerConnection(cfg);
+  }
+
+  function readUserProfileForCall(uid) {
+    var id = String(uid || "").trim();
+    if (!id) return Promise.resolve({});
+    return db.collection("users").doc(id).get().then(function (snap) {
+      var data = snap && snap.exists ? (snap.data() || {}) : {};
+      return {
+        uid: id,
+        name: String(data.displayName || data.name || data.email || "").trim(),
+        houseNo: String(data.houseNo || data.unit || "").trim(),
+        subUnit: String(data.subUnit || data.subHouseNo || "").trim(),
+        community: String(data.community || "").trim(),
+        avatarDataUrl: String(data.avatarDataUrl || "").trim(),
+      };
+    }).catch(function () {
+      return { uid: id };
+    });
+  }
+
+  function setIntercomPeerVisual(modal, opts) {
+    if (!modal) return;
+    var avatarEl = modal.querySelector(opts.avatarSelector);
+    var imageEl = modal.querySelector(opts.imageSelector);
+    var textEl = avatarEl ? avatarEl.querySelector(".intercom-avatar-text") : null;
+    var nameEl = modal.querySelector(opts.nameSelector);
+    var subEl = modal.querySelector(opts.subSelector);
+    var displayName = String(opts.name || "").trim() || "使用者";
+    var displaySub = String(opts.sub || "").trim() || "語音通話";
+    var avatar = String(opts.avatarDataUrl || "").trim();
+    var defaultAvatar = String(opts.defaultAvatar || "").trim();
+    var initial = String(opts.fallbackInitial || displayName.slice(0, 1) || "U").trim().slice(0, 1).toUpperCase() || "U";
+
+    if (nameEl) nameEl.textContent = displayName;
+    if (subEl) subEl.textContent = displaySub;
+    if (textEl) textEl.textContent = initial;
+    else if (avatarEl) avatarEl.textContent = initial;
+    var imgSrc = avatar || defaultAvatar;
+    if (avatarEl) avatarEl.classList.toggle("has-image", Boolean(imgSrc));
+    if (imageEl) {
+      if (imgSrc) {
+        imageEl.src = imgSrc;
+        imageEl.alt = displayName;
+        imageEl.hidden = false;
+      } else {
+        imageEl.removeAttribute("src");
+        imageEl.alt = "";
+        imageEl.hidden = true;
+      }
+    }
+  }
+
+  function scheduleIntercomModalHide(modal, delayMs) {
+    if (!modal) return;
+    var token = Date.now() + "_" + Math.random();
+    modal.dataset.intercomHideToken = token;
+    window.setTimeout(function () {
+      if (modal.dataset.intercomHideToken === token) modal.hidden = true;
+    }, Math.max(0, Number(delayMs || 0)));
+  }
+
+  function closeIntercomIncomingPrompt(opts) {
+    opts = opts || {};
+    var prompt = intercomIncomingPromptEl;
+    intercomIncomingPromptEl = null;
+    intercomIncomingPromptCallId = "";
+    if (intercomIncomingPromptUnsubDoc) {
+      try { intercomIncomingPromptUnsubDoc(); } catch (e) {}
+      intercomIncomingPromptUnsubDoc = null;
+    }
+    stopIntercomRingtone();
+    if (!prompt) return;
+    if (Number(opts.delayMs || 0) > 0) scheduleIntercomModalHide(prompt, opts.delayMs);
+    else prompt.hidden = true;
+  }
+
+  function prepareIntercomModal(modal) {
+    if (!modal) return;
+    modal.hidden = false;
+    modal.dataset.intercomHideToken = "";
+  }
+
+  // 將對講面板重置為「待命」狀態（掛斷後呼叫，讓使用者可重新撥打）
+  function resetIntercomStandby(modal) {
+    if (!modal) return;
+    modal.hidden = false;
+    modal.dataset.intercomHideToken = "";
+    setIntercomCallStatus("待命", false);
+    setIntercomPermissionHelp("", false);
+    var t = modal.querySelector("#intercomTimer");
+    if (t) t.textContent = "00:00";
+    var callBtn = modal.querySelector("#btnIntercomCallAdmin");
+    if (callBtn) {
+      callBtn.hidden = false;
+      callBtn.disabled = false;
+      // ensureIntercomCallModal 會重建 innerHTML，呼叫按鈕的 onclick 會遺失，需重新綁定
+      callBtn.onclick = function () {
+        intercomStartOutgoingToAdmin({ communityId: intercomResolveCommunityId() });
+      };
+    }
+    // 未撥號時「掛斷」無作用
+    var hangupBtn = modal.querySelector("#btnIntercomHangup");
+    if (hangupBtn) hangupBtn.disabled = true;
+    setIntercomSpeakerButtonEnabled(modal, false);
+    setIntercomPeerVisual(modal, {
+      avatarSelector: "#intercomPeerInitialMember",
+      imageSelector: "#intercomPeerAvatarMember",
+      nameSelector: "#intercomPeerName",
+      subSelector: "#intercomPeerSub",
+      name: "管理中心",
+      sub: "點擊下方開始撥號",
+      avatarDataUrl: "",
+      defaultAvatar: "logo.svg",
+      fallbackInitial: "管",
+    });
+  }
+
+  function attachIntercomRemoteAudio(audioId, remoteStream) {
+    var audio = document.getElementById(String(audioId || ""));
+    if (!audio) return null;
+    audio.autoplay = true;
+    audio.playsInline = true;
+    audio.muted = false;
+    audio.volume = 1;
+    audio.srcObject = remoteStream || null;
+    var tryPlay = function () {
+      try { return audio.play(); } catch (e) { return null; }
+    };
+    audio.onloadedmetadata = function () {
+      var p = tryPlay();
+      if (p && typeof p.catch === "function") p.catch(function () {});
+    };
+    var p = tryPlay();
+    if (p && typeof p.catch === "function") p.catch(function () {});
+    return audio;
+  }
+
+  function setIntercomPermissionHelp(message, isError) {
+    var modal = document.getElementById("intercomCallModal90");
+    if (!modal) return;
+    var el = modal.querySelector("#intercomPermissionHelp");
+    if (!el) return;
+    var text = String(message || "").trim();
+    el.textContent = text;
+    el.hidden = !text;
+    el.classList.toggle("error", Boolean(isError));
+  }
+
+  function buildMicrophonePermissionMessage(err) {
+    var code = String((err && (err.name || err.code || err.message)) || "").toLowerCase();
+    if (code.indexOf("denied") >= 0 || code.indexOf("notallowed") >= 0) {
+      return "請點網址列權限圖示，將麥克風改成允許後，再重新撥打。";
+    }
+    return "請確認裝置已有可用麥克風，並已開啟網站麥克風權限。";
+  }
+
+  function setIntercomCallStatus(text, isError) {
+    var modal = document.getElementById("intercomCallModal90");
+    if (!modal) return;
+    var el = modal.querySelector("#intercomCallState");
+    if (!el) return;
+    var t = String(text || "").trim();
+    el.textContent = t;
+    el.classList.toggle("error", Boolean(isError));
+  }
+
+  function formatIntercomTimer(ms) {
+    var sec = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+    var mm = String(Math.floor(sec / 60)).padStart(2, "0");
+    var ss = String(sec % 60).padStart(2, "0");
+    return mm + ":" + ss;
+  }
+
+  function startIntercomTimer(startAtMs) {
+    if (!intercomActive) return;
+    var active = intercomActive;
+    active.startedAtMs = Number(startAtMs || Date.now());
+    if (active.timerId) {
+      window.clearInterval(active.timerId);
+      active.timerId = null;
+    }
+    var tick = function () {
+      var modal = document.getElementById("intercomCallModal90");
+      if (!modal || !active.startedAtMs) return;
+      var el = modal.querySelector("#intercomTimer");
+      if (!el) return;
+      el.textContent = formatIntercomTimer(Date.now() - active.startedAtMs);
+    };
+    tick();
+    active.timerId = window.setInterval(tick, 500);
+  }
+
+  function setIntercomSpeakerButtonEnabled(modal, enabled) {
+    if (!modal) return;
+    var btn = modal.querySelector("#btnIntercomSpeaker");
+    if (!btn) return;
+    var on = Boolean(enabled);
+    btn.hidden = !on;
+    btn.disabled = !on;
+  }
+
+  async function setIntercomAudioOutputMode(mode) {
+    var modal = document.getElementById("intercomCallModal90");
+    if (!modal) return false;
+    var audio = document.getElementById("intercomRemoteAudioMember");
+    if (!audio) return false;
+    if (typeof audio.setSinkId !== "function") {
+      setIntercomPermissionHelp("此裝置/瀏覽器不支援切換「聽筒/擴音」。", false);
+      return false;
+    }
+    var m = String(mode || "earpiece").trim() || "earpiece";
+    var wantSpeaker = m === "speaker";
+    try {
+      var devices = await navigator.mediaDevices.enumerateDevices();
+      var outputs = (devices || []).filter(function (d) { return d && d.kind === "audiooutput"; });
+      var normalize = function (s) { return String(s || "").trim().toLowerCase(); };
+      var isDefault = function (d) { return normalize(d && d.deviceId) === "default"; };
+      var isCommunications = function (d) { return normalize(d && d.deviceId) === "communications" || /communications|通訊|通话|通話/i.test(String(d && d.label || "")); };
+      var isSpeaker = function (d) { return /speaker|擴音|喇叭/i.test(String(d && d.label || "")); };
+      var nonDefault = outputs.filter(function (d) { return d && !isDefault(d); });
+      var comm = nonDefault.find(isCommunications) || outputs.find(isCommunications) || null;
+      var speaker = nonDefault.find(isSpeaker) || nonDefault[0] || null;
+      var sinkId = wantSpeaker
+        ? String((speaker && speaker.deviceId) || "default").trim() || "default"
+        : String((comm && comm.deviceId) || "default").trim() || "default";
+      await audio.setSinkId(sinkId);
+      if (intercomActive) intercomActive.audioOutputMode = wantSpeaker ? "speaker" : "earpiece";
+      setIntercomPermissionHelp("", false);
+      return true;
+    } catch (e) {
+      setIntercomPermissionHelp("無法切換音訊輸出，請確認瀏覽器允許切換音訊裝置。", false);
+      return false;
+    }
+  }
+
+  function bindIntercomSpeakerButton(modal) {
+    if (!modal) return;
+    var btn = modal.querySelector("#btnIntercomSpeaker");
+    if (!btn) return;
+    var audio = document.getElementById("intercomRemoteAudioMember");
+    var supported = Boolean(audio && typeof audio.setSinkId === "function");
+    btn.hidden = true;
+    btn.dataset.supported = supported ? "1" : "0";
+    btn.disabled = true;
+    btn.innerHTML = "<span>擴音</span>";
+    btn.onclick = async function () {
+      var current = intercomActive && intercomActive.audioOutputMode ? String(intercomActive.audioOutputMode) : "earpiece";
+      var next = current === "speaker" ? "earpiece" : "speaker";
+      var ok = await setIntercomAudioOutputMode(next);
+      if (ok) btn.innerHTML = "<span>" + (next === "speaker" ? "聽筒" : "擴音") + "</span>";
+    };
+  }
+
+  function ensureIntercomHistoryModal() {
+    var modal = ensureModal("intercomHistoryModal90");
+    modal.style.zIndex = "1210";
+    modal.style.setProperty("--modal-width", "90%");
+    modal.style.setProperty("--modal-height", "90%");
+    modal.innerHTML =
+      '<div class="modal-backdrop" data-modal-close="1"></div>' +
+      '<div class="modal-dialog trae-browser-inspect-draggable" role="dialog" aria-modal="true" style="display:flex;flex-direction:column;">' +
+      '<div class="modal-hd"><h3 class="modal-title">通話紀錄</h3>' +
+      '<button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button></div>' +
+      '<div class="modal-body" style="padding:0;min-height:0;flex:1 1 auto;">' +
+      '<iframe id="intercomHistoryIframe" src="" frameborder="0" allow="autoplay; clipboard-write; encrypted-media" style="width:100%;height:100%;display:block;"></iframe>' +
+      '</div></div>';
+    return modal;
+  }
+
+  function openIntercomHistoryModal(opts) {
+    opts = opts || {};
+    var cid = String(opts.communityId || intercomResolveCommunityId() || "").trim();
+    var role = String(opts.toRole || "resident").trim() || "resident";
+    var modal = ensureIntercomHistoryModal();
+    var iframe = modal.querySelector("#intercomHistoryIframe");
+    if (!iframe) return;
+    var q = new URLSearchParams();
+    if (cid) q.set("c", cid);
+    if (role) q.set("toRole", role);
+    var url = q.toString() ? ("./callrecord.html?" + q.toString()) : "./callrecord.html";
+    iframe.src = url;
+    prepareIntercomModal(modal);
+    var detach = function () {};
+    detach = bindModalClose(modal, function () {
+      detach();
+      try { iframe.src = ""; } catch (e) {}
+    });
+  }
+
+  function bindIntercomHistoryButton(modal, opts) {
+    if (!modal) return;
+    var btn = modal.querySelector("#btnIntercomHistory");
+    if (!btn) return;
+    btn.onclick = function () { openIntercomHistoryModal(opts); };
+  }
+
+  function ensureIntercomCallModal() {
+    var modal = document.getElementById("intercomCallModal90");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "intercomCallModal90";
+      document.body.appendChild(modal);
+    }
+    modal.classList.remove("modal", "modal-intercom-incoming", "modal-intercom-call");
+    modal.style.cssText = "";
+    modal.innerHTML =
+      '<div class="chatcall-body">' +
+      '<div class="chatcall-avatar has-image" id="intercomPeerInitialMember" aria-hidden="true">' +
+      '<img id="intercomPeerAvatarMember" src="logo.svg" alt="管理中心" />' +
+      '<span class="intercom-avatar-text">管</span>' +
+      '</div>' +
+      '<h2 class="chatcall-name" id="intercomPeerName">管理中心</h2>' +
+      '<div class="chatcall-sub" id="intercomPeerSub">語音通話</div>' +
+      '<div class="chatcall-status" id="intercomCallState">待命</div>' +
+      '<div class="chatcall-timer" id="intercomTimer">00:00</div>' +
+      '<div class="chatcall-help" id="intercomPermissionHelp" hidden></div>' +
+      '<audio id="intercomRemoteAudioMember" autoplay playsinline></audio>' +
+      '</div>' +
+      '<div class="chatcall-actions" style="margin-top:12px;">' +
+      '<div class="chatcall-actions-row">' +
+      '<button class="chatcall-btn danger" type="button" id="btnIntercomHangup" disabled>掛斷</button>' +
+      '<button class="chatcall-btn success" type="button" id="btnIntercomCallAdmin">呼叫</button>' +
+      '</div>' +
+      '<div class="chatcall-actions-row">' +
+      '<button class="chatcall-btn ghost small" type="button" id="btnIntercomSpeaker" hidden>擴音</button>' +
+      '<button class="chatcall-btn ghost small" type="button" id="btnIntercomHistory">通話紀錄</button>' +
+      '</div>' +
+      '</div>';
+    return modal;
+  }
+
+  function ensureIntercomIncomingModal() {
+    var modal = ensureModal("intercomIncomingModalMember");
+    modal.classList.remove("modal-intercom-incoming", "modal-intercom-call");
+    modal.style.zIndex = "1200";
+    modal.style.setProperty("--modal-width", "90%");
+    modal.style.setProperty("--modal-height", "90%");
+    modal.innerHTML =
+      '<div class="modal-backdrop" data-modal-close="1"></div>' +
+      '<div class="modal-dialog trae-browser-inspect-draggable" role="dialog" aria-modal="true" aria-labelledby="intercomIncomingTitleMember" style="display:flex;flex-direction:column;">' +
+      '<div class="modal-hd">' +
+      '<h3 class="modal-title" id="intercomIncomingTitleMember">通話</h3>' +
+      '<button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>' +
+      '</div>' +
+      '<div class="modal-body chatcall-body">' +
+      '<div class="chatcall-avatar" id="intercomIncomingInitialMember" aria-hidden="true">' +
+      '<img id="intercomIncomingAvatarMember" alt="" hidden />' +
+      '<span class="intercom-avatar-text">—</span>' +
+      '</div>' +
+      '<h2 class="chatcall-name" id="intercomIncomingNameMember">—</h2>' +
+      '<div class="chatcall-sub" id="intercomIncomingSubMember">—</div>' +
+      '<div class="chatcall-status" id="intercomIncomingStateMember">等待接聽</div>' +
+      '</div>' +
+      '<div class="modal-ft" style="justify-content:center;">' +
+      '<div class="chatcall-actions">' +
+      '<button class="chatcall-btn danger" type="button" id="btnIntercomRejectMember">掛斷</button>' +
+      '<button class="chatcall-btn success" type="button" id="btnIntercomAcceptMember">接通</button>' +
+      '</div></div></div>';
+    return modal;
+  }
+
+  async function cleanupIntercomActive(opts) {
+    opts = opts || {};
+    var active = intercomActive;
+    intercomActive = null;
+    stopIntercomRingtone();
+    if (!active) return;
+    if (active.modalEl) {
+      if (Number(opts.closeDelayMs || 0) > 0) scheduleIntercomModalHide(active.modalEl, opts.closeDelayMs);
+      else active.modalEl.hidden = true;
+    }
+    try {
+      if (active.timerId) window.clearInterval(active.timerId);
+    } catch (e) {}
+    try {
+      if (opts.updateStatus && active.callDocRef) {
+        await active.callDocRef.set(
+          {
+            status: String(opts.updateStatus),
+            endedAtMs: Date.now(),
+            endedAt: FieldValue.serverTimestamp(),
+            endedByUid: String(auth.currentUser ? auth.currentUser.uid : ""),
+          },
+          { merge: true }
+        );
+      }
+    } catch (e) {}
+    try { if (active.unsubDoc) active.unsubDoc(); } catch (e) {}
+    try { if (active.unsubCandidates) active.unsubCandidates(); } catch (e) {}
+    try { if (active.unsubCandidates2) active.unsubCandidates2(); } catch (e) {}
+    try { if (active.detachModal) active.detachModal(); } catch (e) {}
+    try { if (active.pc) active.pc.close(); } catch (e) {}
+    try { if (active.localStream) active.localStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+    try {
+      var audio = document.getElementById("intercomRemoteAudioMember");
+      if (audio) {
+        audio.pause();
+        audio.srcObject = null;
+      }
+    } catch (e) {}
+  }
+
+  async function intercomStartOutgoingToAdmin(opts) {
+    opts = opts || {};
+    var cid = String(opts.communityId || intercomResolveCommunityId() || "default").trim() || "default";
+    var user = auth.currentUser;
+    if (!user) return;
+
+    await cleanupIntercomActive();
+    var modal = ensureIntercomCallModal();
+    prepareIntercomModal(modal);
+    bindIntercomSpeakerButton(modal);
+    bindIntercomHistoryButton(modal, { communityId: cid, toRole: "resident" });
+    if (intercomActive) intercomActive.audioOutputMode = "earpiece";
+    var detach = function () {};
+    detach = bindModalClose(modal, function () {
+      detach();
+      cleanupIntercomActive({ updateStatus: "ended" });
+    });
+
+    var hangupBtn = modal.querySelector("#btnIntercomHangup");
+    var callBtn = modal.querySelector("#btnIntercomCallAdmin");
+    if (callBtn) callBtn.disabled = true;
+    // 開始撥號後「掛斷」才可使用
+    if (hangupBtn) hangupBtn.disabled = false;
+    setIntercomSpeakerButtonEnabled(modal, false);
+    setIntercomCallStatus("正在呼叫…", false);
+    var timerEl = modal.querySelector("#intercomTimer");
+    if (timerEl) timerEl.textContent = "00:00";
+    setIntercomPermissionHelp("", false);
+    startIntercomRingtone("waiting");
+
+    // 立即綁定掛斷按鈕，讓「正在呼叫…」期間也能掛斷
+    if (hangupBtn) hangupBtn.onclick = function () {
+      setIntercomCallStatus("通話已結束", false);
+      cleanupIntercomActive({ updateStatus: "ended" }).then(function () {
+        resetIntercomStandby(modal);
+      });
+    };
+
+    var callDocRef = db.collection("calls").doc();
+    var pc = createIntercomPeerConnection();
+    var remoteStream = new MediaStream();
+    attachIntercomRemoteAudio("intercomRemoteAudioMember", remoteStream);
+    var localStream = null;
+
+    pc.ontrack = function (ev) {
+      var list = ev && ev.streams && ev.streams[0] ? ev.streams[0].getTracks() : [];
+      list.forEach(function (t) { remoteStream.addTrack(t); });
+      attachIntercomRemoteAudio("intercomRemoteAudioMember", remoteStream);
+    };
+
+    var offerCandidatesRef = callDocRef.collection("offerCandidates");
+    pc.onicecandidate = function (ev) {
+      if (!ev || !ev.candidate) return;
+      var c = ev.candidate;
+      var json = typeof c.toJSON === "function" ? c.toJSON() : { candidate: c.candidate, sdpMid: c.sdpMid, sdpMLineIndex: c.sdpMLineIndex };
+      offerCandidatesRef.add(Object.assign({}, json, { createdAtMs: Date.now() })).catch(function () {});
+    };
+
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch (err) {
+      stopIntercomRingtone();
+      setIntercomCallStatus("無法開啟麥克風，請確認瀏覽器權限。", true);
+      setIntercomPermissionHelp(buildMicrophonePermissionMessage(err), true);
+      try { pc.close(); } catch (e) {}
+      if (callBtn) callBtn.disabled = false;
+      if (hangupBtn) hangupBtn.disabled = true;
+      return;
+    }
+    localStream.getTracks().forEach(function (t) { pc.addTrack(t, localStream); });
+
+    var fromProfile = await readUserProfileForCall(user.uid);
+    var offer = await pc.createOffer({ offerToReceiveAudio: true });
+    await pc.setLocalDescription(offer);
+
+    try {
+      await callDocRef.set(
+        {
+          community: cid,
+          fromUid: String(user.uid),
+          fromRole: "resident",
+          fromName: String(fromProfile.name || user.email || "住戶").trim(),
+          fromHouseNo: String(fromProfile.houseNo || "").trim(),
+          fromSubHouseNo: String(fromProfile.subUnit || "").trim(),
+          fromAvatarDataUrl: String(fromProfile.avatarDataUrl || "").trim(),
+          toRole: "admin",
+          status: "ringing",
+          createdAt: FieldValue.serverTimestamp(),
+          createdAtMs: Date.now(),
+          offer: { type: offer.type, sdp: offer.sdp },
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      stopIntercomRingtone();
+      setIntercomCallStatus("呼叫失敗，請稍後再試。", true);
+      setIntercomPermissionHelp("請確認網路連線，或稍後再試。", true);
+      try { pc.close(); } catch (e) {}
+      try { localStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+      if (callBtn) callBtn.disabled = false;
+      if (hangupBtn) hangupBtn.disabled = true;
+      return;
+    }
+
+    var unsubDoc = callDocRef.onSnapshot(async function (snap) {
+      var data = snap && snap.exists ? (snap.data() || {}) : null;
+      if (!data) return;
+      var st = String(data.status || "").trim();
+      if (st === "accepted") {
+        if (!pc.currentRemoteDescription && data.answer && data.answer.type && data.answer.sdp) {
+          try { await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); } catch (e) {}
+        }
+        setIntercomCallStatus("已接通", false);
+        stopIntercomRingtone();
+        setIntercomPermissionHelp("", false);
+        if (callBtn) callBtn.hidden = true;
+        setIntercomSpeakerButtonEnabled(modal, true);
+        var audioEl = document.getElementById("intercomRemoteAudioMember");
+        if (audioEl && typeof audioEl.setSinkId === "function") await setIntercomAudioOutputMode("earpiece");
+        if (intercomActive && !intercomActive.timerId) startIntercomTimer(Date.now());
+        return;
+      }
+      if (st === "rejected" || st === "ended" || st === "busy" || st === "missed") {
+        setIntercomCallStatus(st === "busy" ? "後台忙線中" : (st === "rejected" ? "後台已掛斷" : "通話已結束"), false);
+        await cleanupIntercomActive({ closeDelayMs: 1000 });
+        resetIntercomStandby(modal);
+      }
+    });
+
+    var unsubAnswerCandidates = callDocRef.collection("answerCandidates").onSnapshot(function (snap) {
+      (snap.docChanges ? snap.docChanges() : []).forEach(function (ch) {
+        if (!ch || ch.type !== "added") return;
+        var v = ch.doc && ch.doc.data ? (ch.doc.data() || {}) : {};
+        if (!v || !v.candidate) return;
+        try { pc.addIceCandidate(new RTCIceCandidate(v)); } catch (e) {}
+      });
+    });
+
+    intercomActive = {
+      callDocRef: callDocRef,
+      pc: pc,
+      localStream: localStream,
+      remoteStream: remoteStream,
+      audioOutputMode: "earpiece",
+      unsubDoc: unsubDoc,
+      unsubCandidates: unsubAnswerCandidates,
+      detachModal: detach,
+      modalEl: modal,
+    };
+  }
+
+  async function intercomAnswerIncomingCall(callDocRef, data) {
+    var user = auth.currentUser;
+    if (!user) return;
+    var d = data && typeof data === "object" ? data : {};
+    if (!d.offer || !d.offer.type || !d.offer.sdp) return;
+
+    await cleanupIntercomActive();
+    var modal = ensureIntercomCallModal();
+    prepareIntercomModal(modal);
+    bindIntercomSpeakerButton(modal);
+    bindIntercomHistoryButton(modal, { communityId: String(d.community || intercomResolveCommunityId() || "").trim(), toRole: "resident" });
+    if (intercomActive) intercomActive.audioOutputMode = "earpiece";
+    var detach = function () {};
+    detach = bindModalClose(modal, function () {
+      detach();
+      cleanupIntercomActive({ updateStatus: "ended" });
+    });
+
+    var hangupBtn = modal.querySelector("#btnIntercomHangup");
+    var callBtn = modal.querySelector("#btnIntercomCallAdmin");
+    if (callBtn) callBtn.hidden = true;
+    if (hangupBtn) hangupBtn.disabled = false;
+    setIntercomSpeakerButtonEnabled(modal, false);
+    var timerEl = modal.querySelector("#intercomTimer");
+
+    var fromName = String(d.fromName || "社區後台").trim() || "社區後台";
+    var fromSub = String(d.fromHouseNo || "").trim();
+    setIntercomPeerVisual(modal, {
+      avatarSelector: "#intercomPeerInitialMember",
+      imageSelector: "#intercomPeerAvatarMember",
+      nameSelector: "#intercomPeerName",
+      subSelector: "#intercomPeerSub",
+      name: fromName,
+      sub: fromSub || "社區後台",
+      avatarDataUrl: String(d.fromAvatarDataUrl || "").trim(),
+      fallbackInitial: fromName,
+    });
+    if (timerEl) timerEl.textContent = "00:00";
+    setIntercomPermissionHelp("", false);
+    setIntercomCallStatus("接通中…", false);
+
+    // 立即綁定掛斷按鈕，讓「接通中…」期間也能掛斷
+    if (hangupBtn) hangupBtn.onclick = function () {
+      setIntercomCallStatus("通話已結束", false);
+      cleanupIntercomActive({ updateStatus: "ended" }).then(function () {
+        resetIntercomStandby(modal);
+      });
+    };
+
+    var pc = createIntercomPeerConnection();
+    var remoteStream = new MediaStream();
+    attachIntercomRemoteAudio("intercomRemoteAudioMember", remoteStream);
+    var localStream = null;
+
+    pc.ontrack = function (ev) {
+      var list = ev && ev.streams && ev.streams[0] ? ev.streams[0].getTracks() : [];
+      list.forEach(function (t) { remoteStream.addTrack(t); });
+      attachIntercomRemoteAudio("intercomRemoteAudioMember", remoteStream);
+    };
+
+    var answerCandidatesRef = callDocRef.collection("answerCandidates");
+    pc.onicecandidate = function (ev) {
+      if (!ev || !ev.candidate) return;
+      var c = ev.candidate;
+      var json = typeof c.toJSON === "function" ? c.toJSON() : { candidate: c.candidate, sdpMid: c.sdpMid, sdpMLineIndex: c.sdpMLineIndex };
+      answerCandidatesRef.add(Object.assign({}, json, { createdAtMs: Date.now() })).catch(function () {});
+    };
+
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch (err) {
+      setIntercomCallStatus("無法開啟麥克風，請確認瀏覽器權限。", true);
+      setIntercomPermissionHelp(buildMicrophonePermissionMessage(err), true);
+      try { pc.close(); } catch (e) {}
+      return;
+    }
+    localStream.getTracks().forEach(function (t) { pc.addTrack(t, localStream); });
+
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(d.offer));
+    } catch (e) {
+      setIntercomCallStatus("通話初始化失敗。", true);
+      try { pc.close(); } catch (e2) {}
+      return;
+    }
+
+    var fromProfile = await readUserProfileForCall(user.uid);
+    var answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    var startedAtMs = Date.now();
+    await callDocRef.set(
+      {
+        status: "accepted",
+        acceptedAtMs: startedAtMs,
+        acceptedAt: FieldValue.serverTimestamp(),
+        acceptedByUid: String(user.uid),
+        acceptedByName: String(fromProfile.name || user.email || "住戶").trim(),
+        answer: { type: answer.type, sdp: answer.sdp },
+        toUid: String(user.uid),
+        toRole: "resident",
+      },
+      { merge: true }
+    );
+    setIntercomCallStatus("已接通", false);
+    stopIntercomRingtone();
+    setIntercomPermissionHelp("", false);
+    setIntercomSpeakerButtonEnabled(modal, true);
+    var audioEl2 = document.getElementById("intercomRemoteAudioMember");
+    if (audioEl2 && typeof audioEl2.setSinkId === "function") await setIntercomAudioOutputMode("earpiece");
+
+    var unsubOfferCandidates = callDocRef.collection("offerCandidates").onSnapshot(function (snap) {
+      (snap.docChanges ? snap.docChanges() : []).forEach(function (ch) {
+        if (!ch || ch.type !== "added") return;
+        var v = ch.doc && ch.doc.data ? (ch.doc.data() || {}) : {};
+        if (!v || !v.candidate) return;
+        try { pc.addIceCandidate(new RTCIceCandidate(v)); } catch (e) {}
+      });
+    });
+
+    var unsubDoc = callDocRef.onSnapshot(async function (snap) {
+      var v = snap && snap.exists ? (snap.data() || {}) : null;
+      if (!v) return;
+      var st = String(v.status || "").trim();
+      if (st === "ended" || st === "rejected") {
+        setIntercomCallStatus("通話已結束", false);
+        await cleanupIntercomActive({ closeDelayMs: 1000 });
+        resetIntercomStandby(modal);
+      }
+    });
+
+    intercomActive = {
+      callDocRef: callDocRef,
+      pc: pc,
+      localStream: localStream,
+      remoteStream: remoteStream,
+      audioOutputMode: "earpiece",
+      unsubDoc: unsubDoc,
+      unsubCandidates: unsubOfferCandidates,
+      detachModal: detach,
+      modalEl: modal,
+    };
+    startIntercomTimer(startedAtMs);
+    prepareIntercomModal(modal);
+  }
+
+  function startMemberIntercomIncomingListener(communityId) {
+    var cid = String(communityId || "").trim();
+    var user = auth.currentUser;
+    if (!user) return;
+    if (intercomIncomingUnsub) {
+      try { intercomIncomingUnsub(); } catch (e) {}
+      intercomIncomingUnsub = null;
+    }
+    intercomLastIncomingMs = 0;
+    intercomLastIncomingId = "";
+    var minMs = Date.now() - 5 * 60 * 1000;
+    var myUid = String(user.uid || "").trim();
+
+    intercomIncomingUnsub = db
+      .collection("calls")
+      .where("toRole", "==", "resident")
+      .where("toUid", "==", myUid)
+      .where("status", "==", "ringing")
+      .limit(20)
+      .onSnapshot(async function (snap) {
+        var docs = snap && snap.docs ? snap.docs : [];
+        var list = docs
+          .map(function (d) { return Object.assign({ id: d.id }, (d.data() || {})); })
+          .filter(function (x) { return x && String(x.status || "") === "ringing"; })
+          .sort(function (a, b) { return Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0); });
+        var latest = list[0] || null;
+        if (!latest) {
+          closeIntercomIncomingPrompt({ delayMs: 0 });
+          return;
+        }
+        var latestCommunityRaw = String(latest.community || "").trim();
+        var latestCommunityLower = latestCommunityRaw.toLowerCase();
+        var myCid = String(intercomResolveCommunityId() || "").trim();
+        var isUserCommunityMatch = !latestCommunityRaw
+          || latestCommunityRaw === "default"
+          || (cid && latestCommunityRaw === cid)
+          || (myCid && latestCommunityRaw === myCid)
+          || (myCid && myCid.toLowerCase() === latestCommunityLower);
+        if (latestCommunityRaw && !isUserCommunityMatch) {
+          return;
+        }
+        var createdAtMs = Number(latest.createdAtMs || 0);
+        var callId = String(latest.id || "").trim();
+        if (!callId) return;
+        if (callId === intercomIncomingPromptCallId) return;
+        if (callId === intercomLastIncomingId) return;
+        if (createdAtMs && createdAtMs < minMs) return;
+        intercomLastIncomingMs = createdAtMs;
+        intercomLastIncomingId = callId;
+
+        if (intercomActive) {
+          try {
+            await db.collection("calls").doc(callId).set({ status: "busy", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true });
+          } catch (e) {}
+          return;
+        }
+
+        closeIntercomIncomingPrompt({ delayMs: 0 });
+        var prompt = ensureIntercomIncomingModal();
+        prepareIntercomModal(prompt);
+        intercomIncomingPromptEl = prompt;
+        intercomIncomingPromptCallId = callId;
+        var callDocRef = db.collection("calls").doc(callId);
+        if (intercomIncomingPromptUnsubDoc) {
+          try { intercomIncomingPromptUnsubDoc(); } catch (e) {}
+          intercomIncomingPromptUnsubDoc = null;
+        }
+        intercomIncomingPromptUnsubDoc = callDocRef.onSnapshot(function (docSnap) {
+          var v = docSnap && docSnap.exists ? (docSnap.data() || {}) : null;
+          var st = String((v && v.status) || "").trim();
+          if (!v || (st && st !== "ringing")) closeIntercomIncomingPrompt({ delayMs: 0 });
+        }, function () {});
+        var detach2 = function () {};
+        detach2 = bindModalClose(prompt, function () {
+          detach2();
+          callDocRef
+            .set({ status: "missed", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true })
+            .catch(function () {});
+          closeIntercomIncomingPrompt({ delayMs: 0 });
+        });
+        var btnAccept = prompt.querySelector("#btnIntercomAcceptMember");
+        var btnReject = prompt.querySelector("#btnIntercomRejectMember");
+
+        var fromName = String(latest.fromName || "社區後台").trim() || "社區後台";
+        var fromHouse = String(latest.fromHouseNo || "").trim();
+        setIntercomPeerVisual(prompt, {
+          avatarSelector: "#intercomIncomingInitialMember",
+          imageSelector: "#intercomIncomingAvatarMember",
+          nameSelector: "#intercomIncomingNameMember",
+          subSelector: "#intercomIncomingSubMember",
+          name: fromName,
+          sub: fromHouse || "社區後台",
+          avatarDataUrl: String(latest.fromAvatarDataUrl || "").trim(),
+          fallbackInitial: fromName,
+        });
+
+        if (btnReject) {
+          btnReject.onclick = async function () {
+            try { await callDocRef.set({ status: "rejected", endedAtMs: Date.now(), endedAt: FieldValue.serverTimestamp() }, { merge: true }); } catch (e) {}
+            closeIntercomIncomingPrompt({ delayMs: 1000 });
+          };
+        }
+        if (btnAccept) {
+          btnAccept.onclick = async function () {
+            closeIntercomIncomingPrompt({ delayMs: 0 });
+            await intercomAnswerIncomingCall(callDocRef, latest);
+          };
+        }
+
+        startIntercomRingtone("incoming");
+        prepareIntercomModal(prompt);
+      }, function (err) {
+        console.warn("[special-member] 來電監聽失敗", err && err.code);
+      });
+  }
+
+  function openIntercomCallModal() {
+    var cid = intercomResolveCommunityId();
+    var modal = ensureIntercomCallModal();
+    bindIntercomSpeakerButton(modal);
+    bindIntercomHistoryButton(modal, { communityId: cid, toRole: "resident" });
+    var callBtn = modal.querySelector("#btnIntercomCallAdmin");
+    var hangupBtn = modal.querySelector("#btnIntercomHangup");
+    if (callBtn) {
+      callBtn.hidden = false;
+      callBtn.disabled = false;
+      callBtn.onclick = function () { intercomStartOutgoingToAdmin({ communityId: cid }); };
+    }
+    // 未撥號時「掛斷」無作用
+    if (hangupBtn) hangupBtn.disabled = true;
+    if (hangupBtn) hangupBtn.onclick = function () {
+      setIntercomCallStatus("通話已結束", false);
+      cleanupIntercomActive({ updateStatus: "ended" }).then(function () {
+        resetIntercomStandby(modal);
+      });
+    };
+    setIntercomPeerVisual(modal, {
+      avatarSelector: "#intercomPeerInitialMember",
+      imageSelector: "#intercomPeerAvatarMember",
+      nameSelector: "#intercomPeerName",
+      subSelector: "#intercomPeerSub",
+      name: "管理中心",
+      sub: "點擊下方開始撥號",
+      avatarDataUrl: "",
+      defaultAvatar: "logo.svg",
+      fallbackInitial: "管",
+    });
+    setIntercomCallStatus("待命", false);
+    setIntercomPermissionHelp("", false);
+    var timerEl = modal.querySelector("#intercomTimer");
+    if (timerEl) timerEl.textContent = "00:00";
+    openSheet({ node: modal, title: "對講", speakText: "對講" });
+  }
 
   auth.onAuthStateChanged(function (user) {
     if (!user) {
@@ -2197,6 +3282,7 @@
         } catch (e) {}
         renderGreeting();
         renderGreetQr();
+        startMemberIntercomIncomingListener(state.cid);
         return Promise.all([loadParcels(), loadBulletins()]);
       })
       .catch(function (err) {

@@ -1180,3 +1180,110 @@ a { color: inherit; text-decoration: none; }
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* 住戶端「對講」通話視窗：設計參照 special-member.css */
+#intercomCallModal90 .chatcall-avatar {
+  width: 128px;
+  height: 128px;
+  margin: 0 auto 16px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #fde68a, #fca5a5 55%, #c4b5fd);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: calc(40px * var(--fs, 1));
+  font-weight: 900;
+  box-shadow: 0 10px 24px rgba(211, 47, 47, 0.18);
+}
+#intercomCallModal90 .chatcall-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+#intercomCallModal90 .chatcall-avatar.has-image .intercom-avatar-text {
+  display: none;
+}
+#intercomCallModal90 .chatcall-name {
+  margin: 0;
+  font-size: calc(28px * var(--fs, 1));
+  font-weight: 900;
+  color: #111827;
+}
+#intercomCallModal90 .chatcall-sub {
+  margin-top: 6px;
+  color: rgba(31, 41, 55, 0.65);
+  font-size: calc(18px * var(--fs, 1));
+  font-weight: 700;
+}
+#intercomCallModal90 .chatcall-status {
+  margin-top: 18px;
+  color: #374151;
+  font-size: calc(18px * var(--fs, 1));
+  font-weight: 800;
+}
+#intercomCallModal90 .chatcall-timer {
+  margin-top: 8px;
+  color: var(--brand, #d32f2f);
+  font-size: calc(24px * var(--fs, 1));
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+#intercomCallModal90 .chatcall-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+#intercomCallModal90 .chatcall-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+}
+#intercomCallModal90 .chatcall-btn {
+  min-height: 48px;
+  min-width: 120px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 999px;
+  background: #d32f2f;
+  color: #fff;
+  font-size: calc(16px * var(--fs, 1));
+  font-weight: 900;
+  cursor: pointer;
+}
+/* 主要操作按鈕（呼叫、掛斷）：加大尺寸與文字 */
+#intercomCallModal90 .chatcall-btn.danger,
+#intercomCallModal90 .chatcall-btn.success {
+  min-height: 72px;
+  min-width: 160px;
+  padding: 0 32px;
+  font-size: calc(24px * var(--fs, 1));
+}
+#intercomCallModal90 .chatcall-btn.small {
+  min-height: 52px;
+  min-width: 112px;
+  font-size: calc(18px * var(--fs, 1));
+}
+#intercomCallModal90 .chatcall-btn.danger { background: #d32f2f; }
+#intercomCallModal90 .chatcall-btn.success { background: #16a34a; }
+#intercomCallModal90 .chatcall-btn.ghost {
+  background: transparent;
+  border: 1px solid rgba(17, 24, 39, 0.18);
+  color: rgba(31, 41, 55, 0.9);
+}
+/* 未撥號時「掛斷」無作用：顯示灰色 */
+#intercomCallModal90 .chatcall-btn.danger:disabled {
+  background: #c9ccd1;
+  color: #fff;
+  cursor: not-allowed;
+}
+/* 未掛斷時「呼叫」無作用：顯示灰色 */
+#intercomCallModal90 .chatcall-btn.success:disabled {
+  background: #c9ccd1;
+  color: #fff;
+  cursor: not-allowed;
+}

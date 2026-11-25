@@ -245,7 +245,7 @@
       for (const u of units) {
         if (!u || typeof u !== "object") continue;
         if (String(u.id || "").trim().toLowerCase() === hn) {
-          unitNo = String(u.unitNo || "").trim();
+          unitNo = String(u.unitNo || u.id || "").trim();
           break;
         }
       }

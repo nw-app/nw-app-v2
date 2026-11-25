@@ -577,7 +577,7 @@
       const urlCidRaw = readUrlCommunityKey();
       const urlCid = urlCidRaw.toLowerCase();
       if (urlCid) {
-        const found = list.find((x) => x && (String(x.id || "").trim().toLowerCase() === urlCid || String(x.username || "").trim().toLowerCase() === urlCid));
+        const found = list.find((x) => x && (String(x.id || "").trim().toLowerCase() === urlCid || String(x.username || "").trim().toLowerCase() === urlCid || String(x.docId || "").trim().toLowerCase() === urlCid));
         if (found && found.id) {
           localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, found.id);
           return found.id;
@@ -586,8 +586,13 @@
     } catch {}
 
     const saved = localStorage.getItem(STORAGE_ACTIVE_COMMUNITY);
+    const savedMatched = saved ? findCommunityRecordByKey(saved) : null;
+    if (savedMatched && savedMatched.id) {
+      localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, savedMatched.id);
+      return savedMatched.id;
+    }
     const first = list.find((x) => x && x.enabled)?.id || list[0]?.id || "";
-    if (saved && list.some((x) => x && x.id === saved)) return saved;
+    if (saved && !list.length) return saved;
     if (first) {
       localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, first);
       return first;
@@ -602,7 +607,8 @@
     const list = accounts && Array.isArray(accounts.communities) ? accounts.communities : [];
     return list.find((x) => x && (
       String(x.id || "").trim().toLowerCase() === key ||
-      String(x.username || "").trim().toLowerCase() === key
+      String(x.username || "").trim().toLowerCase() === key ||
+      String(x.docId || "").trim().toLowerCase() === key
     )) || null;
   }
 
@@ -737,6 +743,7 @@
         const v = d.data() || {};
         return {
           id: String(v.id || d.id),
+          docId: String(d.id || ""),
           name: String(v.name || ""),
           username: String(v.username || ""),
           enabled: v.enabled !== false,
@@ -14617,7 +14624,7 @@
       const base = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}`;
       const url = new URL("chatphone.html", base);
       url.searchParams.set("c", communityId);
-      url.searchParams.set("v", "126");
+      url.searchParams.set("v", "128");
       if (titleEl) titleEl.textContent = `通話${cname ? `｜${String(cname).trim()}` : ""}`;
       if (frame) frame.src = url.toString();
       modal.hidden = false;
@@ -14911,7 +14918,7 @@
       const base = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}`;
       const url = new URL("chatphone.html", base);
       url.searchParams.set("c", communityId);
-      url.searchParams.set("v", "126");
+      url.searchParams.set("v", "128");
       if (titleEl) titleEl.textContent = `通話${cname ? `｜${String(cname).trim()}` : ""}`;
       if (frame) frame.src = url.toString();
       modal.hidden = false;

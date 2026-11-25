@@ -638,7 +638,7 @@
       const urlCidRaw = readUrlCommunityKey();
       const urlCid = urlCidRaw.toLowerCase();
       if (urlCid) {
-        const found = list.find((x) => x && (String(x.id || "").trim().toLowerCase() === urlCid || String(x.username || "").trim().toLowerCase() === urlCid));
+        const found = list.find((x) => x && (String(x.id || "").trim().toLowerCase() === urlCid || String(x.username || "").trim().toLowerCase() === urlCid || String(x.docId || "").trim().toLowerCase() === urlCid));
         if (found && found.id) {
           localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, found.id);
           return found.id;
@@ -647,8 +647,13 @@
     } catch {}
 
     const saved = localStorage.getItem(STORAGE_ACTIVE_COMMUNITY);
+    const savedMatched = saved ? findCommunityRecordByKey(saved) : null;
+    if (savedMatched && savedMatched.id) {
+      localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, savedMatched.id);
+      return savedMatched.id;
+    }
     const first = list.find((x) => x && x.enabled)?.id || list[0]?.id || "";
-    if (saved && (!list.length || list.some((x) => x && x.id === saved))) return saved;
+    if (saved && !list.length) return saved;
     if (first) {
       localStorage.setItem(STORAGE_ACTIVE_COMMUNITY, first);
       return first;
@@ -663,7 +668,8 @@
     const list = Array.isArray(accounts.communities) ? accounts.communities : [];
     return list.find((x) => x && (
       String(x.id || "").trim().toLowerCase() === key ||
-      String(x.username || "").trim().toLowerCase() === key
+      String(x.username || "").trim().toLowerCase() === key ||
+      String(x.docId || "").trim().toLowerCase() === key
     )) || null;
   }
 
@@ -921,7 +927,7 @@
     db.collection("communities").get().then((snap) => {
       state.communities = snap.docs.map((d) => {
         const v = d.data() || {};
-        return { id: String(v.id || d.id), name: String(v.name || ""), username: String(v.username || ""), enabled: v.enabled !== false };
+        return { id: String(v.id || d.id), docId: String(d.id || ""), name: String(v.name || ""), username: String(v.username || ""), enabled: v.enabled !== false };
       });
       refreshLoginInfo(user);
       ensureConfigSubscription();
@@ -2394,23 +2400,25 @@
           <h3 class="modal-title" id="intercomCallTitleMember">通話</h3>
           <button class="modal-close" type="button" data-modal-close="1" aria-label="關閉">×</button>
         </div>
-        <div class="modal-body chatcall-body">
-          <div class="chatcall-avatar" id="intercomPeerInitialMember" aria-hidden="true">
-            <img id="intercomPeerAvatarMember" alt="" hidden />
-            <span class="intercom-avatar-text">社</span>
+        <div class="chatcall-body">
+          <div class="chatcall-avatar has-image" id="intercomPeerInitialMember" aria-hidden="true">
+            <img id="intercomPeerAvatarMember" src="logo.svg" alt="管理中心" />
+            <span class="intercom-avatar-text">管</span>
           </div>
-          <h2 class="chatcall-name" id="intercomPeerName">社區後台</h2>
+          <h2 class="chatcall-name" id="intercomPeerName">管理中心</h2>
           <div class="chatcall-sub" id="intercomPeerSub">語音通話</div>
           <div class="chatcall-status" id="intercomCallState">待命</div>
           <div class="chatcall-timer" id="intercomTimer">00:00</div>
           <div class="chatcall-help" id="intercomPermissionHelp" hidden></div>
           <audio id="intercomRemoteAudioMember" autoplay playsinline></audio>
         </div>
-        <div class="modal-ft" style="justify-content:center;">
-          <div class="chatcall-actions">
+        <div class="chatcall-actions" style="margin-top:12px;">
+          <div class="chatcall-actions-row">
+            <button class="chatcall-btn danger" type="button" id="btnIntercomHangup" disabled>掛斷</button>
+            <button class="chatcall-btn success" type="button" id="btnIntercomCallAdmin">呼叫</button>
+          </div>
+          <div class="chatcall-actions-row">
             <button class="chatcall-btn ghost small" type="button" id="btnIntercomSpeaker" hidden>擴音</button>
-            <button class="chatcall-btn danger small" type="button" id="btnIntercomHangup">掛斷</button>
-            <button class="chatcall-btn success small" type="button" id="btnIntercomCallAdmin">呼叫</button>
             <button class="chatcall-btn ghost small" type="button" id="btnIntercomHistory">通話紀錄</button>
           </div>
         </div>
@@ -2460,9 +2468,10 @@
   }
 
   async function intercomStartOutgoingToAdmin({ communityId }) {
-    const cid = String(communityId || resolveActiveCommunityId() || "default").trim() || "default";
     const user = auth.currentUser;
     if (!user) return;
+    const fromProfile = await readUserProfileForCall(user.uid);
+    const cid = resolveCanonicalCommunityId(String(communityId || fromProfile.community || resolveActiveCommunityId()).trim() || "default");
 
     await cleanupIntercomActive();
     const modal = ensureIntercomCallModal();
@@ -2479,6 +2488,7 @@
     const hangupBtn = modal.querySelector("#btnIntercomHangup");
     const callBtn = modal.querySelector("#btnIntercomCallAdmin");
     if (callBtn) callBtn.disabled = true;
+    if (hangupBtn) hangupBtn.disabled = false;
     setIntercomSpeakerButtonEnabled(modal, false);
     setIntercomCallStatus("正在呼叫…", false);
     const timerEl = modal.querySelector("#intercomTimer");
@@ -2514,31 +2524,42 @@
       setIntercomPermissionHelp(buildMicrophonePermissionMessage(err), true);
       try { pc.close(); } catch {}
       if (callBtn) callBtn.disabled = false;
+      if (hangupBtn) hangupBtn.disabled = true;
       return;
     }
     localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
 
-    const fromProfile = await readUserProfileForCall(user.uid);
     const offer = await pc.createOffer({ offerToReceiveAudio: true });
     await pc.setLocalDescription(offer);
 
-    await callDocRef.set(
-      {
-        community: cid,
-        fromUid: String(user.uid),
-        fromRole: "resident",
-        fromName: String(fromProfile.name || user.email || "住戶").trim(),
-        fromHouseNo: String(fromProfile.houseNo || "").trim(),
-        fromSubHouseNo: String(fromProfile.subUnit || "").trim(),
-        fromAvatarDataUrl: String(fromProfile.avatarDataUrl || "").trim(),
-        toRole: "admin",
-        status: "ringing",
-        createdAt: FieldValue.serverTimestamp(),
-        createdAtMs: Date.now(),
-        offer: { type: offer.type, sdp: offer.sdp },
-      },
-      { merge: true }
-    );
+    try {
+      await callDocRef.set(
+        {
+          community: cid,
+          fromUid: String(user.uid),
+          fromRole: "resident",
+          fromName: String(fromProfile.name || user.email || "住戶").trim(),
+          fromHouseNo: String(fromProfile.houseNo || "").trim(),
+          fromSubHouseNo: String(fromProfile.subUnit || "").trim(),
+          fromAvatarDataUrl: String(fromProfile.avatarDataUrl || "").trim(),
+          toRole: "admin",
+          status: "ringing",
+          createdAt: FieldValue.serverTimestamp(),
+          createdAtMs: Date.now(),
+          offer: { type: offer.type, sdp: offer.sdp },
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      stopIntercomRingtone();
+      setIntercomCallStatus("呼叫失敗，請稍後再試。", true);
+      setIntercomPermissionHelp("請確認網路連線，或稍後再試。", true);
+      try { pc.close(); } catch {}
+      try { localStream.getTracks().forEach((t) => t.stop()); } catch {}
+      if (callBtn) callBtn.disabled = false;
+      if (hangupBtn) hangupBtn.disabled = true;
+      return;
+    }
 
     if (hangupBtn) hangupBtn.onclick = () => {
       setIntercomCallStatus("通話已結束", false);
@@ -2619,6 +2640,7 @@
     const callBtn = modal.querySelector("#btnIntercomCallAdmin");
     if (callBtn) callBtn.disabled = true;
     if (callBtn) callBtn.hidden = true;
+    if (hangupBtn) hangupBtn.disabled = false;
     setIntercomSpeakerButtonEnabled(modal, false);
     setIntercomCallStatus("正在呼叫…", false);
     const timerEl = modal.querySelector("#intercomTimer");
@@ -2671,6 +2693,7 @@
       try { pc.close(); } catch {}
       if (callBtn) callBtn.disabled = false;
       if (callBtn) callBtn.hidden = false;
+      if (hangupBtn) hangupBtn.disabled = true;
       return;
     }
     localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
@@ -2776,6 +2799,7 @@
     const hangupBtn = modal.querySelector("#btnIntercomHangup");
     const callBtn = modal.querySelector("#btnIntercomCallAdmin");
     if (callBtn) callBtn.hidden = true;
+    if (hangupBtn) hangupBtn.disabled = false;
     setIntercomSpeakerButtonEnabled(modal, false);
     const timerEl = modal.querySelector("#intercomTimer");
 
@@ -2932,6 +2956,7 @@
         const accounts = loadAccounts();
         const userCommunityList = (accounts.communities || []).filter(Boolean);
         const userCommunityIds = userCommunityList.map((x) => String(x.id || "").trim()).filter(Boolean);
+        const userCommunityDocIds = userCommunityList.map((x) => String(x.docId || "").trim()).filter(Boolean);
         const userCommunityUsernames = userCommunityList.map((x) => String(x.username || "").trim()).filter(Boolean);
         const latestCommunityRaw = String(latest.community || "").trim();
         const latestCommunityLower = latestCommunityRaw.toLowerCase();
@@ -2940,6 +2965,8 @@
           || (cid && latestCommunityRaw === cid)
           || userCommunityIds.some((id) => id === latestCommunityRaw)
           || userCommunityIds.some((id) => id.toLowerCase() === latestCommunityLower)
+          || userCommunityDocIds.some((id) => id === latestCommunityRaw)
+          || userCommunityDocIds.some((id) => id.toLowerCase() === latestCommunityLower)
           || userCommunityUsernames.some((un) => un === latestCommunityRaw)
           || userCommunityUsernames.some((un) => un.toLowerCase() === latestCommunityLower);
         if (latestCommunityRaw && !isUserCommunityMatch) {
@@ -3058,19 +3085,22 @@
         callBtn.disabled = false;
         callBtn.onclick = () => intercomStartOutgoingToAdmin({ communityId: resolveActiveCommunityId() });
       }
-      if (hangupBtn) hangupBtn.onclick = () => {
-        setIntercomCallStatus("通話已結束", false);
-        cleanupIntercomActive({ updateStatus: "ended", closeDelayMs: 1000 });
-      };
+      if (hangupBtn) {
+        hangupBtn.disabled = true;
+        hangupBtn.onclick = () => {
+          setIntercomCallStatus("通話已結束", false);
+          cleanupIntercomActive({ updateStatus: "ended", closeDelayMs: 1000 });
+        };
+      }
       setIntercomPeerVisual(modal, {
         avatarSelector: "#intercomPeerInitialMember",
         imageSelector: "#intercomPeerAvatarMember",
         nameSelector: "#intercomPeerName",
         subSelector: "#intercomPeerSub",
-        name: "社區後台",
+        name: "管理中心",
         sub: "點擊下方開始撥號",
-        avatarDataUrl: "",
-        fallbackInitial: "社",
+        avatarDataUrl: "logo.svg",
+        fallbackInitial: "管",
       });
       const timerEl = modal.querySelector("#intercomTimer");
       if (timerEl) timerEl.textContent = "00:00";
