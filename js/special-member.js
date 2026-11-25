@@ -371,7 +371,76 @@
     });
   }
 
-  /* ---------------- 語音報讀 ---------------- */
+  /* ---------------- 語音合成：優先挑選台灣中文女聲 ---------------- */
+
+  // 常見女聲名稱（Chromium／Edge／Windows／Apple）
+  var VOICE_FEMALE_HINTS = [
+    "hsiaochen", "hsiaoyu", "yating", "hanhan", "meijia", "mei-jia", "sinji",
+    "xiaoxiao", "xiaoyi", "xiaomo", "huihui", "yaoyao", "ting-ting", "tingting",
+    "國語", "台灣", "臺灣",
+  ];
+  // 常見男聲名稱，避免被挑中
+  var VOICE_MALE_HINTS = ["zhiwei", "yunjhe", "yunxi", "yunjian", "kangkang", "liang"];
+
+  var _ttsVoice = null;
+
+  function scoreTtsVoice(v) {
+    var name = String(v.name || "").toLowerCase();
+    var lang = String(v.lang || "").toLowerCase().replace(/_/g, "-");
+    var s;
+    if (lang.indexOf("zh-tw") === 0) s = 60;
+    else if (lang.indexOf("zh-hk") === 0) s = 35;
+    else if (lang.indexOf("zh") === 0) s = 30;
+    else return -1;
+    var i;
+    for (i = 0; i < VOICE_FEMALE_HINTS.length; i++) {
+      if (name.indexOf(VOICE_FEMALE_HINTS[i]) >= 0) { s += 25; break; }
+    }
+    for (i = 0; i < VOICE_MALE_HINTS.length; i++) {
+      if (name.indexOf(VOICE_MALE_HINTS[i]) >= 0) { s -= 30; break; }
+    }
+    // Edge 的 Online (Natural) 聲音最接近真人，優先
+    if (name.indexOf("natural") >= 0 || name.indexOf("online") >= 0) s += 10;
+    if (v.localService) s += 2;
+    return s;
+  }
+
+  function ttsVoice() {
+    if (_ttsVoice) return _ttsVoice;
+    if (!("speechSynthesis" in window)) return null;
+    var voices;
+    try { voices = window.speechSynthesis.getVoices() || []; } catch (e) { return null; }
+    if (!voices.length) return null;
+    var best = null;
+    var bestScore = 0;
+    voices.forEach(function (v) {
+      var s = scoreTtsVoice(v);
+      if (s > bestScore) { bestScore = s; best = v; }
+    });
+    if (best) _ttsVoice = best;
+    return best;
+  }
+
+  if ("speechSynthesis" in window) {
+    try {
+      // 語音清單是非同步載入的，載入完成後重新挑一次
+      window.speechSynthesis.onvoiceschanged = function () { _ttsVoice = null; ttsVoice(); };
+      ttsVoice();
+    } catch (e) {}
+  }
+
+  // 套用挑好的聲音（找不到就退回語言設定）
+  function applyTtsVoice(u) {
+    var v = ttsVoice();
+    if (v) {
+      u.voice = v;
+      if (v.lang) u.lang = v.lang;
+    } else {
+      u.lang = "zh-TW";
+    }
+    u.rate = 0.88;
+    return u;
+  }
 
   function speak(text) {
     if (!state.voice) return;
@@ -379,9 +448,7 @@
     if (!msg || !("speechSynthesis" in window)) return;
     try {
       window.speechSynthesis.cancel();
-      var u = new SpeechSynthesisUtterance(msg);
-      u.lang = "zh-TW";
-      u.rate = 0.88;
+      var u = applyTtsVoice(new SpeechSynthesisUtterance(msg));
       // 播放時暫停收音，避免把自己的聲音聽成指令
       u.onstart = function () {
         voiceCtl.suspended = true;
@@ -409,9 +476,7 @@
     if (!state.voice || !msg || !("speechSynthesis" in window)) { done(); return; }
     try {
       window.speechSynthesis.cancel();
-      var u = new SpeechSynthesisUtterance(msg);
-      u.lang = "zh-TW";
-      u.rate = 0.88;
+      var u = applyTtsVoice(new SpeechSynthesisUtterance(msg));
       var guard = setTimeout(done, 12000);
       var finish = function () { clearTimeout(guard); done(); };
       u.onend = finish;
@@ -449,22 +514,57 @@
     timer: null,
     wasGlobal: false,
     asks: [],
+    replies: [],
+    pending: "",
   };
   var voicePanelBackPending = false;
   var voicePanelAfterBack = null;
 
+  // 記錄用的時間戳（HH:MM:SS）
+  function voiceClock() {
+    var d = new Date();
+    var p = function (n) { return (n < 10 ? "0" : "") + n; };
+    return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+  }
+
+  function voiceRecordHtml(time, text) {
+    return '<span class="sp-voice-line">' +
+      '<span class="sp-voice-time">' + escapeHtml(time) + "</span>" +
+      '<span class="sp-voice-body">' + escapeHtml(text) + "</span>" +
+      "</span>";
+  }
+
   function renderVoiceAsk(draft) {
     if (!el.voiceAskText) return;
-    var html = voicePanel.asks.map(function (t) {
-      return '<span class="sp-voice-line">' + escapeHtml(t) + "</span>";
-    }).join("");
-    if (draft) html += '<span class="sp-voice-line">' + escapeHtml(draft) + "</span>";
+    var html = voicePanel.asks.map(function (a) { return voiceRecordHtml(a.time, a.text); }).join("");
+    if (draft) {
+      html += '<span class="sp-voice-line sp-voice-pending"><span class="sp-voice-body">' + escapeHtml(draft) + "</span></span>";
+    }
     el.voiceAskText.innerHTML = html || "請開始說話…";
     el.voiceAskText.scrollTop = el.voiceAskText.scrollHeight;
   }
 
+  function renderVoiceReply() {
+    if (!el.voiceReplyText) return;
+    var html = voicePanel.replies.map(function (r) { return voiceRecordHtml(r.time, r.text); }).join("");
+    if (voicePanel.pending) {
+      html += '<span class="sp-voice-line sp-voice-pending"><span class="sp-voice-body">' + escapeHtml(voicePanel.pending) + "</span></span>";
+    }
+    el.voiceReplyText.innerHTML = html || "…";
+    el.voiceReplyText.scrollTop = el.voiceReplyText.scrollHeight;
+  }
+
+  // 過場訊息（查詢中、提示語）暫時顯示在最後一行，不列入紀錄
   function setVoiceReply(text) {
-    if (el.voiceReplyText) el.voiceReplyText.textContent = String(text || "…");
+    voicePanel.pending = String(text || "");
+    renderVoiceReply();
+  }
+
+  // 正式回覆：加一筆帶時間的紀錄
+  function pushVoiceReply(text) {
+    voicePanel.pending = "";
+    voicePanel.replies.push({ time: voiceClock(), text: String(text || "") });
+    renderVoiceReply();
   }
 
   function voicePanelRestart(delay) {
@@ -515,14 +615,14 @@
   function respondToVoice(text) {
     voicePanel.busy = true;
     try { voicePanel.rec.stop(); } catch (e) {}
-    voicePanel.asks.push(text);
+    voicePanel.asks.push({ time: voiceClock(), text: text });
     renderVoiceAsk("");
     var action = matchVoiceCommand(text);
 
     // 播完回覆後：有 action 就關閉彈窗並開啟功能，否則恢復收音
     var finishReply = function (reply, runnable) {
       if (!voicePanel.open) return;
-      setVoiceReply(reply);
+      pushVoiceReply(reply);
       speakThen(reply, function () {
         if (!voicePanel.open) return;
         if (!runnable) { voicePanel.busy = false; voicePanelRestart(); return; }
@@ -580,6 +680,8 @@
     voicePanel.open = true;
     voicePanel.busy = false;
     voicePanel.asks = [];
+    voicePanel.replies = [];
+    voicePanel.pending = "";
     renderVoiceAsk("");
     setVoiceReply(first ? "…" : "請說出您的需求，例如「看公告」「現在幾點」「今天天氣」…");
     el.voice.hidden = false;

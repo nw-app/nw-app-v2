@@ -4,7 +4,11 @@
 >
 > **技術堆疊**：`Firebase Auth / Firestore / Storage` + `原生 HTML / CSS / JavaScript` + `Service Worker（PWA 離線快取）` + `WebRTC 對講`
 >
-> **目前版本**：CACHE_VERSION `nwapp-v827`（每次升級需同步三項版本，詳見後方部署 SOP）
+> **目前版本**：CACHE_VERSION `nwapp-v829`（每次升級需同步三項版本，詳見後方部署 SOP）
+
+> **2026-11-24**：長者簡易版語音報讀改為自動挑選「台灣中文女聲」：優先選 zh-TW 女聲（Edge Online Natural 的曉臻／曉雨、Windows 的雅婷／涵涵、Chromium 的 Google 國語（臺灣）、Apple 的 Mei-Jia 等），並排除男聲；語音清單為非同步載入，載入完成會自動重挑。
+
+> **2026-11-24**：長者簡易版語音彈窗的「您說的話」與「回覆」改為逐段顯示，每一段獨立成塊並在左側標記時間（HH:MM:SS）；查詢中等過場訊息以淡色顯示、不列入紀錄。
 
 > **2026-11-24**：長者簡易版語音彈窗標題由「語音說話」改為「我是小Q」；開啟彈窗時的語音提示音統一改為「我是小Q，有什麼能幫您的?」（不論按按鈕或說喚醒詞）。
 
@@ -520,7 +524,7 @@
 
 | 項目 | 檔案路徑 / 版本 | 用途說明 |
 |---|---|---|
-| **Service Worker（PWA 快取核心）** | `sw.js`（`CACHE_VERSION = nwapp-v827`） | 離線可用、所有靜態資源版本控管、PWA 安裝到手機桌面 |
+| **Service Worker（PWA 快取核心）** | `sw.js`（`CACHE_VERSION = nwapp-v829`） | 離線可用、所有靜態資源版本控管、PWA 安裝到手機桌面 |
 | **PWA 安裝引導** | `js/pwa.js?v=16` + `css/pwa.css` | 彈窗引導使用者「加到主畫面」安裝 QAi生活網到手機桌面像 App 一樣 |
 | **Firebase 設定 + 權限 Rules** | `js/firebase-config.js`<br>`firebase/firebase.rules` | Auth 登入驗證 / Firestore 資料庫初始化；**權限規則只維護這一份**（`firebase.json` 的 `firestore.rules` 指向此檔），勿再另存副本以免不同步 |
 | **PDF 檢視器** | `pdf-viewer.html` + `js/pdf-viewer.js` + `js/pdf-viewer-launcher.js?v=3` | 所有公告附件 PDF（財報/會議手冊/合約）線上直接檢視，不需強制下載 |

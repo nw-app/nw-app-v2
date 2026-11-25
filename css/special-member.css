@@ -682,9 +682,31 @@ button {
   overflow-wrap: anywhere;
 }
 
+/* 每段紀錄獨立成塊，並標記時間 */
 .sp-voice-line {
   display: block;
-  margin-bottom: 0.3rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.sp-voice-time {
+  display: inline;
+  margin-right: 0.5rem;
+  color: var(--brand);
+  font-size: 0.78em;
+  font-weight: 900;
+}
+
+.sp-voice-body {
+  display: inline;
+  overflow-wrap: anywhere;
+}
+
+/* 過場訊息（查詢中、提示語）：不列為正式紀錄 */
+.sp-voice-pending {
+  border-bottom-color: transparent;
+  color: var(--ink-2);
+  opacity: 0.85;
 }
 
 /* ---------------- 確認彈窗 ---------------- */
