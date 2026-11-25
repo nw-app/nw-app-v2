@@ -23,7 +23,13 @@
   var STORAGE_MEMBER_SETTINGS = "csp_member_settings_v1";
   var STORAGE_ACTIVE_COMMUNITY = "csp_active_community_v1";
 
-  var SCALES = [1, 1.15, 1.32, 1.5];
+  // 固定三種字體尺寸：小／中／大
+  var FONT_SIZES = [
+    { key: "s", label: "小", scale: 0.9 },
+    { key: "m", label: "中", scale: 1 },
+    { key: "l", label: "大", scale: 1.1 },
+  ];
+  var SCALES = FONT_SIZES.map(function (f) { return f.scale; });
 
   var state = {
     uid: "",
@@ -166,29 +172,53 @@
     blocked: false,
     tapped: false,
     timer: null,
-    delay: 600,
+    delay: 250,
   };
+
+  // 即時草稿搶先偵測喚醒詞用（見 initVoice）：wakeWatch 為確認計時器，wakeText 為目前聽到的喚醒後指令
+  var wakeWatch = null;
+  var wakeText = "";
+
+  function wakeWatchClear() {
+    if (wakeWatch) { clearTimeout(wakeWatch); wakeWatch = null; }
+    wakeText = "";
+  }
+
+  // 「附近有什麼」可問的地點關鍵字，命中後產生 Google 地圖搜尋按鈕
+  var VOICE_MAP_POI = [
+    "水電行", "水電", "便利商店", "超商", "藥局", "藥房", "診所", "醫院",
+    "餐廳", "小吃", "麵店", "麵攤", "早餐店", "咖啡", "麵包店", "超市",
+    "菜市場", "市場", "銀行", "郵局", "加油站", "五金行", "機車行",
+    "停車場", "公園", "理髮", "洗衣",
+  ];
 
   // 每個功能對應長輩可能講出來的幾個講法
   var VOICE_COMMANDS = [
     { action: "back", words: ["回上一頁", "關起來", "關閉", "返回", "上一頁", "不要了"] },
     { action: "signout", words: ["登出"] },
-    { action: "parcel", words: ["包裹", "郵件", "快遞", "掛號"] },
-    { action: "bulletin", words: ["公告", "布告", "消息", "社區公告"] },
+    { action: "parcel", words: ["包裹", "郵件", "快遞", "掛號", "宅配"] },
+    { action: "bulletin", words: ["公告", "布告", "社區消息"] },
     { action: "visitor", words: ["訪客", "客人", "有人來", "登記"] },
-    { action: "facility", words: ["公設", "預約", "健身房", "教室", "設施"] },
-    { action: "meter", words: ["水電", "繳費", "費用", "帳單", "電費", "水費", "度數"] },
-    { action: "sos", words: ["求救", "救命", "求助", "救護車"] },
-    { action: "bigger", words: ["字大", "字變大"] },
-    { action: "smaller", words: ["字小", "字變小"] },
+    { action: "facility", words: ["公設", "預約", "健身房", "教室", "設施", "游泳池"] },
+    { action: "meter", words: ["水電", "繳費", "費用", "帳單", "電費", "水費", "度數", "管理費"] },
+    { action: "sos", words: ["求救", "救命", "求助", "救護車", "火災", "失火", "報警", "警察", "救我", "緊急"] },
+    { action: "bigger", words: ["字大", "字變大", "字太小", "看不清楚"] },
+    { action: "smaller", words: ["字小", "字變小", "字太大"] },
     { action: "time", words: ["現在幾點", "幾點", "現在時間", "現在時刻"] },
-    { action: "date", words: ["今天幾號", "幾月幾號", "今天日期", "星期幾", "今天星期"] },
-    { action: "weather", words: ["天氣", "會不會下雨", "溫度", "氣溫", "天氣如何"] },
+    { action: "date", words: ["今天幾號", "幾月幾號", "今天日期", "今天幾日", "星期幾", "今天星期"] },
+    { action: "weather", words: ["天氣", "會不會下雨", "會下雨", "下雨", "溫度", "氣溫", "會不會冷", "會不會熱"] },
     { action: "home", words: ["回首頁", "回到首頁", "回主頁", "首頁", "主頁"] },
-    { action: "support", words: ["功能", "常用服務", "有什麼服務"] },
+    { action: "support", words: ["功能", "常用服務", "有什麼服務", "有哪些服務"] },
     { action: "notice", words: ["通知", "最新通知", "最新消息"] },
-    { action: "profile", words: ["個人", "我的資料", "我的資料頁"] },
-    { action: "call", words: ["打電話", "撥電話", "撥打", "打電話給管理中心", "打給管理中心", "電話"] },
+    { action: "profile", words: ["個人", "我的資料", "個人資料"] },
+    { action: "call", words: ["打電話", "撥電話", "撥打", "打給管理中心", "管理室電話", "管理中心電話", "電話"] },
+    { action: "greet", words: ["你好", "您好", "早安", "午安", "晚安", "哈囉"] },
+    { action: "thanks", words: ["謝謝", "感謝", "多謝"] },
+    { action: "who", words: ["你是誰", "你叫什麼", "你的名字", "你什麼名字", "你會什麼"] },
+    { action: "help", words: ["幫我", "怎麼辦", "不會用", "怎麼用", "教我"] },
+    { action: "myunit", words: ["我的戶號", "住戶編號", "我是哪一戶", "我的社區", "我住哪裡"] },
+    { action: "bye", words: ["再見", "掰掰", "拜拜"] },
+    { action: "maps", words: ["地圖", "帶我去", "哪裡有", "附近有什麼"].concat(VOICE_MAP_POI) },
   ];
 
   var VOICE_WEEKDAYS = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
@@ -210,20 +240,71 @@
     return "今天是" + (now.getMonth() + 1) + "月" + now.getDate() + "日，" + VOICE_WEEKDAYS[now.getDay()] + "。";
   }
 
+  // 判斷要問哪一天：0 今天、1 明天、2 後天、3 大後天、4 未來幾天
+  var VOICE_DAY_NAMES = ["今天", "明天", "後天", "大後天", "未來幾天"];
+  function voiceWeatherRange(text) {
+    var t = String(text || "");
+    if (/未來|一週|一周|這週|這周|這幾天|接下來|往後/.test(t)) return 4;
+    if (/大後天/.test(t)) return 3;
+    if (/後天/.test(t)) return 2;
+    if (/明天|明日|隔天/.test(t)) return 1;
+    return 0;
+  }
+
   // 查天氣：先取定位，失敗則用台北；查完用 cb 回傳可直接播報的文字
-  function fetchVoiceWeather(cb) {
+  function fetchVoiceWeather(cb, range) {
+    var day = typeof range === "number" ? range : 0;
     var done = function (text) { if (cb) cb(text); };
     var load = function (lat, lon) {
       fetch("https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon +
-        "&current=temperature_2m,apparent_temperature,weather_code&timezone=auto&forecast_days=1")
+        "&current=temperature_2m,apparent_temperature,weather_code" +
+        "&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=7")
         .then(function (res) { return res.json(); })
         .then(function (data) {
           var cur = data && data.current;
-          if (!cur) { done("天氣資訊暫時無法取得。"); return; }
+          var daily = data && data.daily;
+          var hasDaily = !!(daily && daily.time && daily.weather_code);
+          // 第 i 天（0=今天）：回傳「多雲，氣溫 22 到 28 度」
+          var dayText = function (i) {
+            if (!hasDaily || !daily.time[i]) return "";
+            var desc = VOICE_WEATHER_CODE[daily.weather_code[i]] || "多雲";
+            var lo = Math.round(daily.temperature_2m_min[i]);
+            var hi = Math.round(daily.temperature_2m_max[i]);
+            return desc + "，氣溫" + lo + "到" + hi + "度";
+          };
+
+          // 未來幾天：逐日唸明天、後天、大後天
+          if (day === 4) {
+            var parts = [];
+            for (var i = 1; i <= 3; i++) {
+              var t = dayText(i);
+              if (t) parts.push(VOICE_DAY_NAMES[i] + "天氣" + t);
+            }
+            done(parts.length ? "未來三天天氣：" + parts.join("；") + "。" : "天氣資訊暫時無法取得。");
+            return;
+          }
+
+          // 明天／後天／大後天
+          if (day > 0) {
+            var dt = dayText(day);
+            done(dt ? VOICE_DAY_NAMES[day] + "天氣" + dt + "。" : "天氣資訊暫時無法取得。");
+            return;
+          }
+
+          // 今天：即時氣溫＋今日高低溫
+          if (!cur) {
+            var todayText = dayText(0);
+            done(todayText ? "今天天氣" + todayText + "。" : "天氣資訊暫時無法取得。");
+            return;
+          }
           var desc = VOICE_WEATHER_CODE[cur.weather_code] || "多雲";
-          var temp = Math.round(cur.temperature_2m);
-          var feel = Math.round(cur.apparent_temperature);
-          done("今天天氣" + desc + "，現在氣溫大約" + temp + "度，體感" + feel + "度。");
+          var say = "今天天氣" + desc + "，現在氣溫大約" + Math.round(cur.temperature_2m) +
+            "度，體感" + Math.round(cur.apparent_temperature) + "度";
+          if (hasDaily && daily.time[0]) {
+            say += "；今天氣溫" + Math.round(daily.temperature_2m_min[0]) +
+              "到" + Math.round(daily.temperature_2m_max[0]) + "度";
+          }
+          done(say + "。");
         })
         .catch(function () { done("天氣資訊暫時無法取得。"); });
     };
@@ -251,19 +332,34 @@
     return hit;
   }
 
+  // 彈窗內用：先比對關鍵字；都沒中但講到「今天／明天／後天」等，就當作在問天氣
+  function resolveVoiceAction(text) {
+    var action = matchVoiceCommand(text);
+    if (!action && /今天|明天|後天|這幾天|一週|一周|未來/.test(String(text || ""))) action = "weather";
+    return action;
+  }
+
   // 喚醒詞「小Q」：回傳喚醒後剩下的字（沒喚醒回傳 null，只喊喚醒詞則回傳空字串）
   var WAKE_GREETING = "我是小Q，有什麼能幫您的?";
+  // 語音辨識常見的同音誤判，一併視為喚醒詞
+  var WAKE_TOKENS = ["小q", "小丘", "小秋"];
   function detectWake(text) {
     var raw = String(text || "");
     var norm = raw.replace(/[\s，,。.、！!？?；;：:]/g, "").toLowerCase();
-    if (norm.indexOf("小q") < 0) return null;
+    var hit = false;
+    for (var i = 0; i < WAKE_TOKENS.length; i++) {
+      if (norm.indexOf(WAKE_TOKENS[i]) >= 0) { hit = true; break; }
+    }
+    if (!hit) return null;
     return raw
       .replace(/哈囉|哈罗|你好|嗨|嘿/g, "")
       .replace(/小\s*[qQ]/g, "")
+      .replace(/小\s*丘/g, "")
+      .replace(/小\s*秋/g, "")
       .replace(/[\s，,。.、！!？?；;：:]+/g, "");
   }
 
-  function runVoiceCommand(action) {
+  function runVoiceCommand(action, text) {
     if (action === "back") {
       if (sheetOpen) hideSheet(false);
       else toast("已經在前面了");
@@ -277,8 +373,16 @@
     if (action === "smaller") { stepScale(-1); return; }
     if (action === "time") { speak(voiceTimeText()); return; }
     if (action === "date") { speak(voiceDateText()); return; }
-    if (action === "weather") { fetchVoiceWeather(function (text) { speak(text); }); return; }
+    if (action === "myunit") { speak(voiceUnitText()); return; }
+    if (action === "weather") {
+      var range = voiceWeatherRange(text);
+      fetchVoiceWeather(function (t) { speak(t); }, range);
+      return;
+    }
+    if (VOICE_CHAT_ACTIONS[action]) { speak(VOICE_REPLY_TEXT[action] || VOICE_REPLY_FALLBACK); return; }
     if (action === "call") { dialPhone(); return; }
+    // 地圖查詢需要按鈕，改用語音彈窗呈現
+    if (action === "maps") { wakeVoice(text); return; }
     handleAction(action);
   }
 
@@ -310,6 +414,7 @@
   function voiceStop() {
     voiceCtl.want = false;
     clearTimeout(voiceCtl.timer);
+    wakeWatchClear();
     if (voiceCtl.rec) { try { voiceCtl.rec.stop(); } catch (e) {} }
     voiceCtl.listening = false;
     renderMic();
@@ -321,25 +426,51 @@
     var rec = new SpeechRec();
     rec.lang = "zh-TW";
     rec.continuous = true;
-    rec.interimResults = false;
+    rec.interimResults = true;
     rec.maxAlternatives = 3;
 
     rec.onstart = function () {
       voiceCtl.listening = true;
       voiceCtl.blocked = false;
-      voiceCtl.delay = 600;
+      voiceCtl.delay = 250;
       renderMic();
     };
     rec.onresult = function (ev) {
+      // 1) 先用「即時草稿」搶先抓喚醒詞「小Q」：一聽到就回應，不必等整段講完
+      if (!voicePanel.open) {
+        var sawWake = false;
+        for (var k = ev.resultIndex; k < ev.results.length; k++) {
+          var rr = ev.results[k];
+          if (rr.isFinal) continue;
+          var draft = String((rr[0] && rr[0].transcript) || "");
+          var wk = detectWake(draft);
+          if (wk === null) continue;
+          sawWake = true;
+          if (wk.length > wakeText.length) wakeText = wk;
+        }
+        if (sawWake) {
+          // 每聽到一段草稿就重新倒數 0.25 秒：讓同一句後面的指令有機會一起進來；真的只喊「小Q」也會在 0.25 秒後立刻喚醒
+          if (wakeWatch) clearTimeout(wakeWatch);
+          wakeWatch = setTimeout(function () {
+            wakeWatch = null;
+            var cmd = wakeText;
+            wakeText = "";
+            if (!voicePanel.open) wakeVoice(cmd);
+          }, 250);
+        }
+      }
+      if (voicePanel.open) return;
+
+      // 2) 最後結果：完整比對喚醒詞與指令
       var last = ev.results[ev.results.length - 1];
       if (!last || !last.isFinal) return;
       for (var i = 0; i < last.length; i++) {
         var text = last[i] && last[i].transcript;
-        // 先判斷喚醒詞「小Q」：喚醒後開啟語音彈窗並回覆提示音
+        // 喚醒詞「小Q」：喚醒後開啟語音彈窗並回覆提示音
         var wake = detectWake(text);
-        if (wake !== null) { wakeVoice(wake); return; }
+        if (wake !== null) { wakeWatchClear(); wakeVoice(wake); return; }
         var action = matchVoiceCommand(text);
-        if (action) { runVoiceCommand(action); return; }
+        if (action) { wakeWatchClear(); runVoiceCommand(action, text); return; }
       }
     };
     rec.onerror = function (ev) {
@@ -503,8 +634,60 @@
     notice: "好的，我幫您看通知。",
     profile: "好的，我幫您看個人資料。",
     call: "好的，我幫您撥打電話。",
+    greet: "您好，我是小Q，有什麼能幫您的?",
+    thanks: "不客氣，能幫上忙我很開心。",
+    bye: "再見，祝您有美好的一天。",
+    who: "我是小Q，社區的語音小幫手。可以幫您看包裹、看公告、訪客登記、公設預約、水電繳費，也可以報時間、日期和天氣。",
+    help: "我可以幫您做這些事：看包裹、看公告、訪客登記、公設預約、水電繳費、現在幾點、今天天氣、打電話。您只要說出需求就可以了。",
   };
   var VOICE_REPLY_FALLBACK = "抱歉，我沒聽清楚，請您再說一次。";
+
+  // 這些只需回話（問候、道謝、閒聊），不會開啟任何功能
+  var VOICE_CHAT_ACTIONS = { greet: 1, thanks: 1, bye: 1, who: 1, help: 1 };
+
+  // 聽不懂時仍要給回覆：複述聽到的內容，並提示可以怎麼說
+  function voiceAskBackText(text) {
+    var t = String(text || "").trim();
+    if (t.length < 2) return VOICE_REPLY_FALLBACK;
+    return "您說的是「" + t + "」。這個我還不會回答，您可以說：看包裹、看公告、看天氣、現在幾點，或是說打電話。";
+  }
+
+  // 報出自己的社區與戶號
+  function voiceUnitText() {
+    var d = state.profile || {};
+    var community = String(state.communityName || (el.communityName ? el.communityName.textContent : "") || "").trim();
+    var houseNo = String(d.houseNo || d.unit || "").trim();
+    var sub = String(d.subUnit || d.subHouseNo || "").trim();
+    if (!community && !houseNo) return "我目前查不到您的社區資料。";
+    return "您住在" + community + (houseNo ? "，戶號" + houseNo + (sub ? "之" + sub : "") : "") + "。";
+  }
+
+  // 電話號碼逐字唸（用空白分隔，語音才會一位一位唸），長輩才聽得清楚
+  function voicePhoneText(phone) {
+    var digits = String(phone || "").replace(/[^0-9]/g, "");
+    if (!digits) return String(phone || "");
+    return digits.split("").join(" ");
+  }
+
+  // 從句子中找出要查的地點關鍵字（取最長命中者）
+  function voiceMapPoi(text) {
+    var t = String(text || "").replace(/[\s,，。、！!？?；;：:]/g, "");
+    var hit = "";
+    VOICE_MAP_POI.forEach(function (w) {
+      if (t.indexOf(w) >= 0 && w.length > hit.length) hit = w;
+    });
+    return hit;
+  }
+
+  // 用地點關鍵字開啟 Google 地圖搜尋（帶入使用者目前位置附近）
+  function openVoiceMap(poi) {
+    var q = String(poi || "").trim();
+    if (!q) return;
+    var url = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent("附近的" + q);
+    var win = null;
+    try { win = window.open(url, "_blank", "noopener"); } catch (e) {}
+    if (!win) { try { location.href = url; } catch (e2) {} }
+  }
 
   var voicePanel = {
     open: false,
@@ -527,16 +710,21 @@
     return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
   }
 
-  function voiceRecordHtml(time, text) {
-    return '<span class="sp-voice-line">' +
-      '<span class="sp-voice-time">' + escapeHtml(time) + "</span>" +
-      '<span class="sp-voice-body">' + escapeHtml(text) + "</span>" +
+  function voiceRecordHtml(item) {
+    var html = '<span class="sp-voice-line">' +
+      '<span class="sp-voice-time">' + escapeHtml(item.time) + "</span>" +
+      '<span class="sp-voice-body">' + escapeHtml(item.text) + "</span>" +
       "</span>";
+    if (item.map) {
+      html += '<button type="button" class="sp-voice-map" data-map="' + escapeHtml(item.map) +
+        '"><span class="sp-voice-map-icon">🗺</span>開啟地圖看「' + escapeHtml(item.map) + '」</button>';
+    }
+    return html;
   }
 
   function renderVoiceAsk(draft) {
     if (!el.voiceAskText) return;
-    var html = voicePanel.asks.map(function (a) { return voiceRecordHtml(a.time, a.text); }).join("");
+    var html = voicePanel.asks.map(voiceRecordHtml).join("");
     if (draft) {
       html += '<span class="sp-voice-line sp-voice-pending"><span class="sp-voice-body">' + escapeHtml(draft) + "</span></span>";
     }
@@ -546,7 +734,7 @@
 
   function renderVoiceReply() {
     if (!el.voiceReplyText) return;
-    var html = voicePanel.replies.map(function (r) { return voiceRecordHtml(r.time, r.text); }).join("");
+    var html = voicePanel.replies.map(voiceRecordHtml).join("");
     if (voicePanel.pending) {
       html += '<span class="sp-voice-line sp-voice-pending"><span class="sp-voice-body">' + escapeHtml(voicePanel.pending) + "</span></span>";
     }
@@ -560,10 +748,10 @@
     renderVoiceReply();
   }
 
-  // 正式回覆：加一筆帶時間的紀錄
-  function pushVoiceReply(text) {
+  // 正式回覆：加一筆帶時間的紀錄（map 為地點關鍵字時，附上「開啟地圖」按鈕）
+  function pushVoiceReply(text, map) {
     voicePanel.pending = "";
-    voicePanel.replies.push({ time: voiceClock(), text: String(text || "") });
+    voicePanel.replies.push({ time: voiceClock(), text: String(text || ""), map: map || "" });
     renderVoiceReply();
   }
 
@@ -617,12 +805,12 @@
     try { voicePanel.rec.stop(); } catch (e) {}
     voicePanel.asks.push({ time: voiceClock(), text: text });
     renderVoiceAsk("");
-    var action = matchVoiceCommand(text);
+    var action = resolveVoiceAction(text);
 
     // 播完回覆後：有 action 就關閉彈窗並開啟功能，否則恢復收音
-    var finishReply = function (reply, runnable) {
+    var finishReply = function (reply, runnable, map) {
       if (!voicePanel.open) return;
-      pushVoiceReply(reply);
+      pushVoiceReply(reply, map);
       speakThen(reply, function () {
         if (!voicePanel.open) return;
         if (!runnable) { voicePanel.busy = false; voicePanelRestart(); return; }
@@ -633,28 +821,51 @@
       });
     };
 
-    // 時間／日期：直接播報答案，不開啟任何功能
+    // 時間／日期／自己的社區戶號：直接播報答案，不開啟任何功能
     if (action === "time") { finishReply(voiceTimeText(), ""); return; }
     if (action === "date") { finishReply(voiceDateText(), ""); return; }
+    if (action === "myunit") { finishReply(voiceUnitText(), ""); return; }
 
-    // 天氣：查詢後播報答案
-    if (action === "weather") {
-      setVoiceReply("正在為您查詢天氣…");
-      fetchVoiceWeather(function (reply) { finishReply(reply, ""); });
+    // 地圖：找出要問的地點，回覆並附上「開啟地圖」按鈕
+    if (action === "maps") {
+      var poi = voiceMapPoi(text);
+      if (!poi) {
+        finishReply("您想找附近的什麼呢？例如水電行、藥局、便利商店、餐廳。", "");
+        return;
+      }
+      finishReply("好的，我幫您找附近的" + poi + "，請點下面的按鈕開啟地圖。", "", poi);
       return;
     }
 
-    // 打電話：先找號碼，有號碼才撥
+    // 天氣：依問的「今天／明天／後天／未來幾天」查詢後播報
+    if (action === "weather") {
+      var range = voiceWeatherRange(text);
+      setVoiceReply("正在為您查詢" + VOICE_DAY_NAMES[range] + "的天氣…");
+      fetchVoiceWeather(function (reply) { finishReply(reply, ""); }, range);
+      return;
+    }
+
+    // 打電話：問號碼就報號碼，否則直接撥
     if (action === "call") {
       setVoiceReply("正在為您查詢電話…");
+      var askNumber = /幾號|多少|是什麼|號碼/.test(String(text));
       resolveDialPhone(function (phone) {
-        if (phone) finishReply("好的，正在為您撥打管理中心的電話。", "call");
-        else finishReply("目前沒有設定管理中心的電話，請洽管理中心。", "");
+        if (!phone) { finishReply("目前沒有設定管理中心的電話，請洽管理中心。", ""); return; }
+        if (askNumber) { finishReply("管理中心的電話是" + voicePhoneText(phone) + "。", ""); return; }
+        finishReply("好的，正在為您撥打" + voicePhoneText(phone) + "。", "call");
       });
       return;
     }
 
-    finishReply(VOICE_REPLY_TEXT[action] || VOICE_REPLY_FALLBACK, action);
+    if (action) {
+      // 問候、道謝、閒聊類只回話，不開啟任何功能
+      var runnable = VOICE_CHAT_ACTIONS[action] ? "" : action;
+      finishReply(VOICE_REPLY_TEXT[action] || VOICE_REPLY_FALLBACK, runnable);
+      return;
+    }
+
+    // 聽不懂也要回覆：複述聽到的內容並提示可以怎麼說
+    finishReply(voiceAskBackText(text), "");
   }
 
   function runVoiceAction(action) {
@@ -683,7 +894,7 @@
     voicePanel.replies = [];
     voicePanel.pending = "";
     renderVoiceAsk("");
-    setVoiceReply(first ? "…" : "請說出您的需求，例如「看公告」「現在幾點」「今天天氣」…");
+    setVoiceReply(first ? "…" : "請說出您的需求，例如「看公告」「今天天氣」「明天會不會下雨」「現在幾點」…");
     el.voice.hidden = false;
     try { history.pushState({ __spVoice: true }, ""); } catch (e) {}
     // 暫停主頁的背景語音，改用彈窗專屬的收音
@@ -717,11 +928,43 @@
         }
       } catch (e) {}
     }
-    if (voicePanel.wasGlobal && !voiceCtl.blocked) voiceStart();
+    // 關閉彈窗後一定要恢復「小Q」常駐收音，否則喚醒詞會失效、要喊多次才有反應
+    if (!voiceCtl.blocked) voiceStart();
     return didBack;
   }
 
   /* ---------------- 字級 ---------------- */
+
+  // 把任意舊字級對應到最接近的固定字級（小／中／大）
+  function nearestScale(scale) {
+    var best = SCALES[1];
+    var bestDiff = Infinity;
+    SCALES.forEach(function (v) {
+      var d = Math.abs(v - scale);
+      if (d < bestDiff) { bestDiff = d; best = v; }
+    });
+    return best;
+  }
+
+  // 目前字級對應「小／中／大」的標籤
+  function fontSizeLabel(scale) {
+    var best = null;
+    var bestDiff = Infinity;
+    FONT_SIZES.forEach(function (f) {
+      var d = Math.abs(f.scale - scale);
+      if (d < bestDiff) { bestDiff = d; best = f; }
+    });
+    return best ? best.label : "中";
+  }
+
+  // 同步「小／中／大」三顆按鈕的選取狀態
+  function syncFontButtons() {
+    var nodes = document.querySelectorAll('[data-action="font-size"]');
+    for (var i = 0; i < nodes.length; i++) {
+      var s = parseFloat(nodes[i].getAttribute("data-scale"));
+      nodes[i].classList.toggle("is-active", isFinite(s) && Math.abs(s - state.scale) < 0.001);
+    }
+  }
 
   function applyScale(scale) {
     state.scale = scale;
@@ -729,7 +972,8 @@
     try { localStorage.setItem(STORAGE_SCALE, String(scale)); } catch (e) {}
     if (el.fontDown) el.fontDown.disabled = scale <= SCALES[0];
     if (el.fontUp) el.fontUp.disabled = scale >= SCALES[SCALES.length - 1];
-    if (el.fontStatus) el.fontStatus.textContent = scale <= 1 ? "目前標準" : "目前 " + Math.round(scale * 100) + "%";
+    if (el.fontStatus) el.fontStatus.textContent = "字體：" + fontSizeLabel(scale);
+    syncFontButtons();
   }
 
   function stepScale(direction) {
@@ -743,6 +987,13 @@
     if (SCALES[next] === state.scale) return;
     applyScale(SCALES[next]);
     speak(direction > 0 ? "字變大了" : "字變小了");
+  }
+
+  // 指定固定字級（小／中／大）
+  function setFontSize(scale) {
+    if (!isFinite(scale)) return;
+    applyScale(scale);
+    speak("字體改成" + fontSizeLabel(scale));
   }
 
   /* ---------------- 確認彈窗（不可點背景關閉） ---------------- */
@@ -1470,13 +1721,22 @@
           '<div class="sp-profile-field">戶號：' + escapeHtml(unit) + "</div>" +
         "</div>" +
         '<div class="sp-sheet-action-list">' +
-          '<button class="sp-btn sp-btn-ghost" type="button" data-action="font-down">字體縮小</button>' +
+          '<div class="sp-font-sizes" role="group" aria-label="字體大小">' +
+            '<div class="sp-font-sizes-label">字體大小</div>' +
+            '<div class="sp-font-sizes-row">' +
+              FONT_SIZES.map(function (f) {
+                return '<button class="sp-font-size" type="button" data-action="font-size" data-scale="' +
+                  f.scale + '">' + f.label + "</button>";
+              }).join("") +
+            "</div>" +
+          "</div>" +
           '<button class="sp-btn sp-btn-ghost" type="button" data-action="toggle-voice"><span id="spProfileVoiceText">' + (state.voice ? "語音報讀：開啟" : "語音報讀：關閉") + "</span></button>" +
           '<button class="sp-btn sp-btn-ghost" type="button" id="spProfileSignOut">登出</button>' +
         "</div>",
       speakText: "我的資料，" + name + "，戶號 " + unit,
       silent: !!(opt && opt.silent),
     });
+    syncFontButtons();
   }
 
   function toggleVoice() {
@@ -1552,6 +1812,7 @@
       var action = String(actionButton.getAttribute("data-action") || "");
       if (action === "toggle-voice") toggleVoice();
       else if (action === "font-down") stepScale(-1);
+      else if (action === "font-size") setFontSize(parseFloat(actionButton.getAttribute("data-scale")));
       else handleAction(action);
     });
 
@@ -1588,6 +1849,16 @@
 
     if (el.voiceClose) el.voiceClose.addEventListener("click", function () { closeVoicePanel(false); });
 
+    // 語音回覆區的「開啟地圖」按鈕（事件代理，回覆內容會動態重建）
+    if (el.voiceReplyText) {
+      el.voiceReplyText.addEventListener("click", function (ev) {
+        var node = ev.target;
+        var btn = node && node.closest ? node.closest(".sp-voice-map") : null;
+        if (!btn) return;
+        openVoiceMap(btn.getAttribute("data-map"));
+      });
+    }
+
     document.addEventListener("keydown", function (ev) {
       if (ev.key !== "Escape") return;
       if (voicePanel.open) { closeVoicePanel(false); return; }
@@ -1609,8 +1880,8 @@
   /* ---------------- 啟動 ---------------- */
 
   function restorePreferences() {
-    var scale = parseFloat(localStorage.getItem(STORAGE_SCALE) || "");
-    if (!isFinite(scale) || SCALES.indexOf(scale) < 0) scale = SCALES[1];
+    var stored = parseFloat(localStorage.getItem(STORAGE_SCALE) || "");
+    var scale = isFinite(stored) ? nearestScale(stored) : SCALES[1];
     applyScale(scale);
 
     var voice = localStorage.getItem(STORAGE_VOICE);

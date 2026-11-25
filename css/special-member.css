@@ -709,6 +709,35 @@ button {
   opacity: 0.85;
 }
 
+/* 「開啟地圖」按鈕（附在回覆下方） */
+.sp-voice-map {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0.4rem 0 0.6rem;
+  padding: 0.9rem 1rem;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
+  color: #fff;
+  font-size: 1.3rem;
+  font-weight: 900;
+  line-height: 1.2;
+  text-align: center;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.16);
+}
+
+.sp-voice-map:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.16);
+}
+
+.sp-voice-map-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
 /* ---------------- 確認彈窗 ---------------- */
 .sp-dialog {
   position: fixed;
@@ -1679,4 +1708,42 @@ body {
 .sp-font-step:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* 字體大小：小／中／大三顆固定選項 */
+.sp-font-sizes {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.sp-font-sizes-label {
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: var(--ink-2);
+}
+
+.sp-font-sizes-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+}
+
+.sp-font-size {
+  min-height: 4.6rem;
+  border-radius: 1rem;
+  border: 3px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 1.6rem;
+  font-weight: 900;
+}
+
+.sp-font-size.is-active {
+  border-color: var(--brand-dark);
+  background: var(--brand);
+  color: #fff;
+}
+
+.sp-font-size:active {
+  transform: translateY(2px);
 }
