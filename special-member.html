@@ -10,7 +10,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="apple-touch-icon" href="icon-192.png?v=2" />
-    <link rel="stylesheet" href="css/special-member.css?v=36" />
+    <link rel="stylesheet" href="css/special-member.css?v=51" />
   </head>
   <body>
     <div class="sp-shell">
@@ -23,18 +23,18 @@
         </div>
 
         <section class="sp-greet">
-          <div class="sp-greet-tip" id="spGreetingLine">早安，今天過得還好嗎？</div>
-          <div class="sp-greet-qr" id="spGreetQr" hidden>
-            <img class="sp-greet-qr-img" id="spGreetQrImg" alt="我的 QR Code" />
+          <div class="sp-greet-unit" id="spGreetUnit">
+            <span aria-hidden="true">⌂</span>
+            <span id="spCommunityName">社區服務系統</span>
+            <span class="sp-unit-divider" aria-hidden="true"></span>
+            <span class="sp-unit-text" id="spGreetUnitText">住戶</span>
           </div>
           <div class="sp-greet-info-row">
-            <div class="sp-greet-unit" id="spGreetUnit">
-              <span aria-hidden="true">⌂</span>
-              <span id="spCommunityName">社區服務系統</span>
-              <span class="sp-unit-divider" aria-hidden="true"></span>
-              <span class="sp-unit-text" id="spGreetUnitText">住戶</span>
-            </div>
+            <div class="sp-greet-tip" id="spGreetingLine">早安，今天過得還好嗎？</div>
             <div class="sp-greet-name" id="spGreetName">您好</div>
+          </div>
+          <div class="sp-greet-qr" id="spGreetQr" hidden>
+            <img class="sp-greet-qr-img" id="spGreetQrImg" alt="我的 QR Code" />
           </div>
           <div class="sp-avatar" id="spAvatar" aria-hidden="true" hidden>
             <img class="sp-avatar-img" id="spAvatarImg" alt="" hidden />
@@ -86,10 +86,10 @@
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10Z" fill="currentColor"/></svg><span>首頁</span>
         </button>
         <button class="sp-nav-btn" type="button" id="spSupportNav">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.8"/></svg><span>功能</span>
+          <span class="sp-nav-icon-wrap"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.8"/></svg><span class="sp-nav-badge" id="spNavBadge" hidden>0</span></span><span>功能</span>
         </button>
-        <button class="sp-nav-btn" type="button" id="spNoticeNav" data-action="bulletin">
-          <span class="sp-nav-icon-wrap"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8 12h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sp-nav-badge" id="spNavBadge" hidden>0</span></span><span>通知</span>
+        <button class="sp-nav-btn" type="button" id="spIntercomNav" data-action="intercom">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.86 19.86 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>對講</span>
         </button>
         <button class="sp-nav-btn" type="button" id="spProfileNav">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="3.5" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c.7-4.1 3.4-6.2 8-6.2s7.3 2.1 8 6.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>個人</span>
@@ -144,27 +144,8 @@
           <span class="sp-tile-label">公設預約</span>
           <span class="sp-tile-sub">借教室、健身房</span>
         </button>
-
-        <button class="sp-tile" type="button" data-action="meter">
-          <span class="sp-tile-icon"><img src="photo/a06.png" alt="" /></span>
-          <span class="sp-tile-label">水電繳費</span>
-          <span class="sp-tile-sub">看錶數與費用</span>
-        </button>
       </div>
     </section>
-
-    <!-- 重要通知：改由「通知」分頁顯示（開啟面板時由 JS 搬入面板內容） -->
-    <button class="sp-notice-card" id="spNoticeCard" type="button" data-action="parcel" hidden>
-      <span class="sp-notice-heading">
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5v5m0 3v.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <strong>重要通知（請慢看）</strong>
-      </span>
-      <span class="sp-notice-body">
-        <span class="sp-notice-icon" aria-hidden="true">▱</span>
-        <span class="sp-notice-copy"><strong id="spNoticeTitle">正在查看您的包裹</strong><span id="spNoticeText">點這裡查看包裹與社區公告。</span></span>
-        <span class="sp-notice-count" id="spNoticeCount" hidden>0</span>
-      </span>
-    </button>
 
     <section class="sp-voice" id="spVoice" hidden role="dialog" aria-modal="true" aria-labelledby="spVoiceTitle">
       <div class="sp-voice-box">
@@ -217,7 +198,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="js/qrcode-generator.js?v=1"></script>
     <script src="js/firebase-config.js"></script>
-    <script src="js/special-member.js?v=30"></script>
+    <script src="js/special-member.js?v=46"></script>
   </body>
 </html>

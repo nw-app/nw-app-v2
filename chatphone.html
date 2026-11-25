@@ -274,6 +274,11 @@
 
       #chatCallModal .modal-ft {
         justify-content: center;
+        gap: 16px;
+      }
+
+      #chatCallModal .modal-ft .chatcall-btn[hidden] {
+        display: none;
       }
 
       #chatHistoryModal {
@@ -325,7 +330,9 @@
           <div class="chatcall-help" id="chatCallHelp" hidden></div>
         </div>
         <div class="modal-ft">
-          <button class="chatcall-btn" type="button" id="btnChatCallHangup">掛斷</button>
+          <button class="chatcall-btn ghost" type="button" id="btnChatCallReject" hidden>拒絕</button>
+          <button class="chatcall-btn success" type="button" id="btnChatCallAnswer" hidden>接聽</button>
+          <button class="chatcall-btn danger" type="button" id="btnChatCallHangup">掛斷</button>
         </div>
       </div>
       <audio id="chatCallRemoteAudio" autoplay playsinline></audio>
@@ -389,6 +396,8 @@
         const callTimerEl = document.getElementById("chatCallTimer");
         const callHelpEl = document.getElementById("chatCallHelp");
         const callHangupBtn = document.getElementById("btnChatCallHangup");
+        const callAnswerBtn = document.getElementById("btnChatCallAnswer");
+        const callRejectBtn = document.getElementById("btnChatCallReject");
         const callCloseBtn = document.getElementById("btnChatCallClose");
 
         let allAccounts = [];
@@ -398,10 +407,14 @@
         let currentCommunityKey = "";
         let viewerIsAdminLike = false;
         let chatCallState = null;
-        let _unsubResidentMissedCounts = null;
+        let _unsubIncomingCalls = null;
+        let _incomingActiveCallId = null;
+        let _unsubResidentMissedCounts = [];
         let _residentMissedCountsCid = "";
         let _residentMissedCountsByUid = new Map();
         let _residentMissedCountsByUnitKey = new Map();
+        /* 依狀態分別快取未接來電文件，合併後重算 */
+        let _residentMissedDocsByStatus = new Map();
         /* 未接來電原始清單（不套用隱藏），供隱藏清單變動時即時重算 */
         let _residentMissedRaw = [];
         let _hiddenCallIdsUid = "";
@@ -509,13 +522,15 @@
         }
 
         function stopResidentMissedCountsSubscription() {
-          if (_unsubResidentMissedCounts) {
-            try { _unsubResidentMissedCounts(); } catch {}
-            _unsubResidentMissedCounts = null;
-          }
+          const list = Array.isArray(_unsubResidentMissedCounts) ? _unsubResidentMissedCounts : [];
+          list.forEach((fn) => {
+            try { if (typeof fn === "function") fn(); } catch {}
+          });
+          _unsubResidentMissedCounts = [];
           _residentMissedCountsCid = "";
           _residentMissedCountsByUid = new Map();
           _residentMissedCountsByUnitKey = new Map();
+          _residentMissedDocsByStatus = new Map();
           _residentMissedRaw = [];
         }
 
@@ -563,6 +578,32 @@
           return `${h}__${s || "_"}`;
         }
 
+        function normalizeCallRole(raw) {
+          const v = String(raw || "").trim().toLowerCase();
+          if (v === "resident" || v === "住戶") return "resident";
+          if (v === "admin" || v === "系統管理員" || v === "系統管理者" || v === "system" || v === "community" || v === "社區") return "admin";
+          return "";
+        }
+
+        function isAnsweredIntercomCall(data) {
+          const d = data && typeof data === "object" ? data : {};
+          const st = String(d.status || "").trim();
+          if (st === "accepted") return true;
+          const ans = d.answer && typeof d.answer === "object" ? d.answer : null;
+          if (ans && ans.sdp) return true;
+          return false;
+        }
+
+        /* 「未接」定義與通話紀錄一致：未被應答且狀態為 missed/rejected/busy/ended */
+        function isMissedIntercomCall(data) {
+          const d = data && typeof data === "object" ? data : {};
+          if (isAnsweredIntercomCall(d)) return false;
+          const st = String(d.status || "").trim();
+          if (st === "missed" || st === "rejected" || st === "busy") return true;
+          if (st === "ended") return true;
+          return false;
+        }
+
         function updateResidentMissedBadgesInGrid() {
           if (!gridEl) return;
           Array.from(gridEl.querySelectorAll(".account-card")).forEach((card) => {
@@ -598,6 +639,34 @@
           updateResidentMissedBadgesInGrid();
         }
 
+        /* 合併各狀態的未接文件後，重建原始未接清單並重算 */
+        function mergeResidentMissedDocsCache() {
+          const byId = new Map();
+          Array.from(_residentMissedDocsByStatus.values()).forEach((arr) => {
+            (Array.isArray(arr) ? arr : []).forEach((it) => {
+              const id = String(it && it.id ? it.id : "").trim();
+              if (!id) return;
+              byId.set(id, it);
+            });
+          });
+          const rawList = [];
+          byId.forEach((it) => {
+            const d = it && it.data && typeof it.data === "object" ? it.data : {};
+            if (!isMissedIntercomCall(d)) return;
+            if (normalizeCallRole(d.fromRole) !== "resident") return;
+            if (normalizeCallRole(d.toRole) !== "admin") return;
+            const fromUid = String(d.fromUid || "").trim();
+            if (!fromUid) return;
+            rawList.push({
+              callId: String(it.id || "").trim(),
+              fromUid,
+              fromUnitKey: buildUnitKey(d.fromHouseNo, d.fromSubHouseNo || d.fromSubUnit || d.subUnit),
+            });
+          });
+          _residentMissedRaw = rawList;
+          recomputeResidentMissedCounts();
+        }
+
         function ensureResidentMissedCountsSubscription(cid) {
           const communityId = String(cid || "").trim();
           if (!communityId) {
@@ -605,52 +674,32 @@
             updateResidentMissedBadgesInGrid();
             return;
           }
-          if (_residentMissedCountsCid === communityId && _unsubResidentMissedCounts) {
+          if (
+            _residentMissedCountsCid === communityId &&
+            Array.isArray(_unsubResidentMissedCounts) &&
+            _unsubResidentMissedCounts.length
+          ) {
             updateResidentMissedBadgesInGrid();
             return;
           }
           stopResidentMissedCountsSubscription();
           _residentMissedCountsCid = communityId;
           try {
-            const baseQuery = viewerIsAdminLike
-              ? db.collection("calls").where("community", "==", communityId).limit(150)
-              : db.collection("calls").where("community", "==", communityId).where("toRole", "==", "admin").where("status", "==", "missed");
-
-            _unsubResidentMissedCounts = baseQuery.onSnapshot((snap) => {
-              const rawList = [];
-              try {
-                snap.forEach((doc) => {
-                  const callId = String(doc && doc.id ? doc.id : "").trim();
-                  const d = doc && doc.data ? (doc.data() || {}) : {};
-                  const st = String(d.status || "").trim();
-                  if (st !== "missed") return;
-
-                  const fromUid = String(d.fromUid || "").trim();
-                  const toUid = String(d.toUid || "").trim();
-                  const fromRoleRaw = String(d.fromRole || "").trim().toLowerCase();
-                  const toRoleRaw = String(d.toRole || "").trim().toLowerCase();
-                  const normCallRole = (raw) => {
-                    const v = String(raw || "").trim().toLowerCase();
-                    if (v === "resident" || v === "住戶") return "resident";
-                    if (v === "admin" || v === "系統管理員" || v === "系統管理者" || v === "system" || v === "community" || v === "社區") return "admin";
-                    return "";
-                  };
-                  const fromRole = normCallRole(fromRoleRaw);
-                  const toRole = normCallRole(toRoleRaw);
-
-                  if (toRole !== "admin") return;
-                  if (fromRole !== "resident") return;
-                  if (!fromUid) return;
-                  rawList.push({
-                    callId,
-                    fromUid,
-                    fromUnitKey: buildUnitKey(d.fromHouseNo, d.fromSubHouseNo || d.fromSubUnit || d.subUnit),
-                  });
-                });
-              } catch {}
-              _residentMissedRaw = rawList;
-              recomputeResidentMissedCounts();
-            }, () => {});
+            /* 未接不限於 status=missed，需合併多種「未應答」狀態，避免漏算 */
+            const statuses = ["missed", "rejected", "busy", "ended"];
+            _residentMissedDocsByStatus = new Map();
+            _unsubResidentMissedCounts = statuses.map((st) =>
+              db
+                .collection("calls")
+                .where("community", "==", communityId)
+                .where("toRole", "==", "admin")
+                .where("status", "==", st)
+                .onSnapshot((snap) => {
+                  const next = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: d.id, data: (d.data() || {}) }));
+                  _residentMissedDocsByStatus.set(st, next);
+                  mergeResidentMissedDocsCache();
+                }, () => {})
+            );
           } catch {
             stopResidentMissedCountsSubscription();
           }
@@ -735,9 +784,25 @@
           setCallHelp("", false);
           if (callTimerEl) callTimerEl.textContent = "00:00";
           startChatCallRingtone("waiting");
+          setCallControls("outgoing");
           if (callModalEl) {
             callModalEl.hidden = false;
             callModalEl.dataset.hideToken = "";
+          }
+        }
+
+        // mode: "incoming" | "outgoing" | "connected"
+        function setCallControls(mode) {
+          if (!callHangupBtn || !callAnswerBtn || !callRejectBtn) return;
+          const isIncoming = mode === "incoming";
+          const isConnected = mode === "connected";
+          callAnswerBtn.hidden = !isIncoming;
+          callRejectBtn.hidden = !isIncoming;
+          callHangupBtn.hidden = isIncoming;
+          if (isIncoming) {
+            callHangupBtn.classList.remove("danger");
+          } else {
+            callHangupBtn.classList.add("danger");
           }
         }
 
@@ -770,6 +835,7 @@
         async function cleanupChatCall({ updateStatus, closeDelayMs = 0 } = {}) {
           const active = chatCallState;
           chatCallState = null;
+          _incomingActiveCallId = null;
           stopChatCallRingtone();
           if (active) {
             try {
@@ -805,6 +871,7 @@
         async function releaseChatCallResources({ keepModalOpen = false } = {}) {
           const active = chatCallState;
           chatCallState = null;
+          _incomingActiveCallId = null;
           if (!active) return;
           try {
             if (active.timerId) window.clearInterval(active.timerId);
@@ -1046,7 +1113,7 @@
           const communityDoc = await resolveCommunityDoc(communityKey);
           const communityData = communityDoc ? (communityDoc.data || {}) : {};
           const nameText = String(communityData.name || communityData.displayName || communityData.title || communityData.communityName || (await resolveCommunityName(communityKey))).trim() || "社區名稱";
-          communityNameEl.textContent = "聯絡人";
+          communityNameEl.textContent = viewerIsAdminLike ? "住戶聯絡人" : "管理中心";
 
           const unitMetaMap = buildUnitMetaMap(communityData.units);
           buildingOptions = Array.from(new Set(Array.from(unitMetaMap.values()).map((item) => item && item.building).filter(Boolean)));
@@ -1088,7 +1155,12 @@
                 .map((doc) => {
                   const data = doc.data() || {};
                   const role = normalizeSessionRoleText(data.role);
-                  if (role !== "resident") return null;
+                  // 管理員端顯示住戶清單；住戶端只顯示管理中心（admin/community）
+                  if (viewerIsAdminLike) {
+                    if (role !== "resident") return null;
+                  } else {
+                    if (role !== "admin" && role !== "community") return null;
+                  }
                   if (String(doc.id || "").trim() === String(user.uid || "").trim()) return null;
                   const houseNo = normalizeUnit(data.houseNo || data.unit);
                   const subUnit = normalizeUnit(data.subUnit || data.subHouseNo);
@@ -1109,7 +1181,7 @@
           ).sort((a, b) => compareUnit(a.houseNo, b.houseNo) || compareUnit(a.subUnit, b.subUnit) || compareUnit(a.displayName, b.displayName));
 
           if (!allAccounts.length) {
-            setStatus("目前沒有住戶帳號資料");
+            setStatus(viewerIsAdminLike ? "目前沒有住戶帳號資料" : "目前沒有管理中心帳號資料");
             renderFilters();
             return;
           }
@@ -1221,7 +1293,7 @@
               fromSubHouseNo,
               fromAvatarDataUrl: String((currentUserData && currentUserData.avatarDataUrl) || user.photoURL || "").trim(),
               toUid: uid,
-              toRole: "resident",
+              toRole: viewerIsAdminLike ? "resident" : "admin",
               toName: String(target.displayName || "").trim(),
               toHouseNo: normalizeUnit(target.houseNo),
               toSubUnit: normalizeUnit(target.subUnit),
@@ -1246,6 +1318,7 @@
             const st = String(data.status || "").trim();
             if (st === "accepted") {
               stopChatCallRingtone();
+              setCallControls("connected");
               if (!pc.currentRemoteDescription && data.answer && data.answer.type && data.answer.sdp) {
                 try { await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); } catch {}
               }
@@ -1275,6 +1348,249 @@
           }
         }
 
+        // ==================== 來電接聽 ====================
+
+        function setupIncomingCallListener(user) {
+          if (_unsubIncomingCalls) {
+            try { _unsubIncomingCalls(); } catch {}
+            _unsubIncomingCalls = null;
+          }
+          if (!user) return;
+          const myUid = String(user.uid || "").trim();
+          if (!myUid) return;
+          const baseQuery = db.collection("calls")
+            .where("toUid", "==", myUid)
+            .where("status", "==", "ringing");
+          _unsubIncomingCalls = baseQuery.onSnapshot((snap) => {
+            (snap.docChanges ? snap.docChanges() : []).forEach((ch) => {
+              if (!ch || ch.type !== "added") return;
+              const doc = ch.doc;
+              if (!doc || !doc.exists) return;
+              const data = doc.data() || {};
+              // 略過自己發起的通話（理論上 toUid 不會是自己，但保險起見）
+              if (String(data.fromUid || "").trim() === myUid) return;
+              // 若已有進行中的來電，忽略新來電
+              if (_incomingActiveCallId || chatCallState) return;
+              showIncomingCall(data, doc.id);
+            });
+          }, (err) => {
+            console.error("[incoming] listener error:", err);
+          });
+        }
+
+        function showIncomingCall(data, callId) {
+          const fromName = String(data.fromName || "聯絡人").trim() || "聯絡人";
+          const fromHouseNo = normalizeUnit(data.fromHouseNo);
+          const fromSubUnit = normalizeUnit(data.fromSubUnit || data.fromSubHouseNo);
+          const avatar = String(data.fromAvatarDataUrl || "").trim();
+          _incomingActiveCallId = String(callId || "").trim();
+
+          setCallPeer({
+            displayName: fromName,
+            houseNo: fromHouseNo,
+            subUnit: fromSubUnit,
+            avatarDataUrl: avatar,
+          });
+          setCallStatus("來電中…", false);
+          setCallHelp("", false);
+          if (callTimerEl) callTimerEl.textContent = "00:00";
+          setCallControls("incoming");
+          startChatCallRingtone("incoming");
+          if (callModalEl) {
+            callModalEl.hidden = false;
+            callModalEl.dataset.hideToken = "";
+          }
+        }
+
+        async function answerIncomingCall() {
+          const callId = _incomingActiveCallId;
+          if (!callId) return;
+          const user = auth.currentUser;
+          if (!user) return;
+
+          // 先停止來電鈴聲
+          stopChatCallRingtone();
+          setCallStatus("接通中…", false);
+
+          let pc = null;
+          let localStream = null;
+          const remoteStream = new MediaStream();
+          const callDocRef = db.collection("calls").doc(callId);
+
+          try {
+            pc = createIntercomPeerConnection();
+          } catch {
+            setCallStatus("此裝置/瀏覽器不支援通話。", true);
+            _incomingActiveCallId = null;
+            return;
+          }
+
+          chatCallState = {
+            pc,
+            localStream: null,
+            callDocRef,
+            unsubDoc: null,
+            unsubCandidates: null,
+            timerId: null,
+            canUpdateStatus: true,
+            isIncoming: true,
+          };
+
+          attachRemoteAudio(remoteStream);
+          pc.ontrack = (ev) => {
+            const list = ev && ev.streams && ev.streams[0] ? ev.streams[0].getTracks() : [];
+            list.forEach((t) => remoteStream.addTrack(t));
+            attachRemoteAudio(remoteStream);
+          };
+
+          // 傳送本地 ICE candidates 到 answerCandidates
+          const answerCandidatesRef = callDocRef.collection("answerCandidates");
+          pc.onicecandidate = (ev) => {
+            if (!ev || !ev.candidate) return;
+            const c = ev.candidate;
+            const json = typeof c.toJSON === "function"
+              ? c.toJSON()
+              : { candidate: c.candidate, sdpMid: c.sdpMid, sdpMLineIndex: c.sdpMLineIndex };
+            answerCandidatesRef.add({ ...json, createdAtMs: Date.now() }).catch(() => {});
+          };
+
+          try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          } catch (err) {
+            setCallStatus("無法開啟麥克風。", true);
+            setCallHelp(buildMicrophonePermissionMessage(err), true);
+            await releaseChatCallResources({ keepModalOpen: true });
+            _incomingActiveCallId = null;
+            return;
+          }
+          localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+          if (chatCallState) chatCallState.localStream = localStream;
+
+          // 讀取通話文件取得 offer
+          let callSnap;
+          try {
+            callSnap = await callDocRef.get();
+          } catch (err) {
+            console.error(err);
+            setCallStatus("取得通話資料失敗。", true);
+            await releaseChatCallResources({ keepModalOpen: true });
+            _incomingActiveCallId = null;
+            return;
+          }
+          const callData = callSnap && callSnap.exists ? (callSnap.data() || {}) : null;
+          const offer = callData && callData.offer ? callData.offer : null;
+          if (!offer || !offer.type || !offer.sdp) {
+            setCallStatus("通話已失效，請重撥。", true);
+            await releaseChatCallResources({ keepModalOpen: true });
+            _incomingActiveCallId = null;
+            return;
+          }
+
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+          } catch (err) {
+            console.error(err);
+            setCallStatus("連線設定失敗。", true);
+            await releaseChatCallResources({ keepModalOpen: true });
+            _incomingActiveCallId = null;
+            return;
+          }
+
+          let answer;
+          try {
+            answer = await pc.createAnswer({ offerToReceiveAudio: true });
+            await pc.setLocalDescription(answer);
+          } catch (err) {
+            console.error(err);
+            setCallStatus("建立通話回應失敗。", true);
+            await releaseChatCallResources({ keepModalOpen: true });
+            _incomingActiveCallId = null;
+            return;
+          }
+
+          try {
+            await callDocRef.set({
+              status: "accepted",
+              answer: { type: answer.type, sdp: answer.sdp },
+              answeredAtMs: Date.now(),
+              answeredAt: FieldValue.serverTimestamp(),
+            }, { merge: true });
+          } catch (err) {
+            console.error(err);
+            setCallStatus("回應通話失敗。", true);
+            await releaseChatCallResources({ keepModalOpen: true });
+            _incomingActiveCallId = null;
+            return;
+          }
+
+          // 接聽成功，切換為通話中模式（顯示掛斷按鈕）
+          setCallControls("connected");
+          setCallStatus("已接通", false);
+          setCallHelp("", false);
+          if (chatCallState && !chatCallState.timerId) chatCallState.timerId = startCallTimer();
+
+          // 監聽通話文件狀態變化（對方掛斷）
+          const unsubDoc = callDocRef.onSnapshot((snap) => {
+            const d = snap && snap.exists ? (snap.data() || {}) : null;
+            if (!d) return;
+            const st = String(d.status || "").trim();
+            if (st === "ended" || st === "rejected" || st === "missed") {
+              setCallStatus(st === "rejected" ? "對方已掛斷" : "通話已結束", false);
+              cleanupChatCall({ closeDelayMs: 1000 }).catch(() => {});
+            }
+          });
+
+          // 監聽對方的 ICE candidates（offerCandidates）
+          const unsubCandidates = callDocRef.collection("offerCandidates").onSnapshot((snap) => {
+            (snap.docChanges ? snap.docChanges() : []).forEach((ch) => {
+              if (!ch || ch.type !== "added") return;
+              const v = ch.doc && ch.doc.data ? (ch.doc.data() || {}) : {};
+              if (!v || !v.candidate) return;
+              try { pc.addIceCandidate(new RTCIceCandidate(v)); } catch {}
+            });
+          });
+
+          if (chatCallState) {
+            chatCallState.unsubDoc = unsubDoc;
+            chatCallState.unsubCandidates = unsubCandidates;
+          }
+          _incomingActiveCallId = null;
+        }
+
+        async function rejectIncomingCall() {
+          const callId = _incomingActiveCallId;
+          if (!callId) return;
+          stopChatCallRingtone();
+          try {
+            await db.collection("calls").doc(callId).set({
+              status: "rejected",
+              rejectedAtMs: Date.now(),
+              rejectedAt: FieldValue.serverTimestamp(),
+            }, { merge: true });
+          } catch (err) {
+            console.error(err);
+          }
+          _incomingActiveCallId = null;
+          setCallStatus("已拒絕", false);
+          setCallControls("outgoing");
+          if (callModalEl) callModalEl.hidden = true;
+        }
+
+        if (callAnswerBtn) {
+          callAnswerBtn.onclick = () => {
+            answerIncomingCall().catch((err) => {
+              console.error(err);
+              setCallStatus("接聽失敗，請稍後再試。", true);
+            });
+          };
+        }
+
+        if (callRejectBtn) {
+          callRejectBtn.onclick = () => {
+            rejectIncomingCall().catch(() => {});
+          };
+        }
+
         if (callHangupBtn) {
           callHangupBtn.onclick = () => {
             setCallStatus("通話已結束", false);
@@ -1286,6 +1602,11 @@
 
         if (callCloseBtn) {
           callCloseBtn.onclick = () => {
+            // 來電模式下按關閉 = 拒絕
+            if (_incomingActiveCallId) {
+              rejectIncomingCall().catch(() => {});
+              return;
+            }
             if (callHangupBtn && typeof callHangupBtn.onclick === "function") {
               callHangupBtn.onclick();
               return;
@@ -1320,6 +1641,7 @@
           if (currentCommunityKey) q.set("c", String(currentCommunityKey));
           q.set("peer", id);
           if (viewerIsAdminLike) q.set("toRole", "admin");
+          q.set("v", "2");
           const url = q.toString() ? `./callrecord.html?${q.toString()}` : "./callrecord.html";
           historyIframeEl.src = url;
           historyModalEl.hidden = false;
@@ -1371,9 +1693,14 @@
         auth.onAuthStateChanged((user) => {
           if (!user) {
             setStatus("請先登入");
+            if (_unsubIncomingCalls) {
+              try { _unsubIncomingCalls(); } catch {}
+              _unsubIncomingCalls = null;
+            }
             return;
           }
           ensureHiddenCallIdsSubscription(user.uid);
+          setupIncomingCallListener(user);
           setStatus("載入中...");
           loadAccounts(user).catch((err) => {
             console.error(err);

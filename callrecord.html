@@ -654,7 +654,17 @@
         async function hideSelectedCalls() {
           const ids = Array.from(selectedCallIdSet).filter(Boolean);
           if (!currentUserId || !ids.length || deletingSelection) return;
-          const ok = window.confirm(`確定要刪除 ${ids.length} 筆通話紀錄嗎？\n此操作只會隱藏你自己的紀錄顯示。`);
+          const message = `確定要刪除 ${ids.length} 筆通話紀錄嗎？\n此操作只會隱藏你自己的紀錄顯示。`;
+          // 內嵌 iframe（管理端預覽）中原生 confirm 可能被瀏覽器封鎖而直接回傳 false，
+          // 造成點了刪除卻沒反應，故優先使用專案自訂的 nwConfirm。
+          const ok = await (typeof window.nwConfirm === "function"
+            ? window.nwConfirm({
+                title: "刪除通話紀錄",
+                message,
+                okText: "刪除",
+                cancelText: "取消",
+              })
+            : Promise.resolve(window.confirm(message)));
           if (!ok) return;
           deletingSelection = true;
           updateSelectionUi();

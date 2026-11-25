@@ -1,4 +1,4 @@
-const CACHE_VERSION = "nwapp-v837";
+const CACHE_VERSION = "nwapp-v864";
 const IS_LOCALHOST = ["localhost", "127.0.0.1"].includes(String(self.location && self.location.hostname || "").trim().toLowerCase());
 const PRECACHE = Array.from(new Set([
   "./",
@@ -6,8 +6,8 @@ const PRECACHE = Array.from(new Set([
   "./system.html",
   "./admin.html",
   "./member.html?v=15",
-  "./special-member.html?v=48",
-  "./css/special-member.css?v=36",
+  "./special-member.html?v=69",
+  "./css/special-member.css?v=50",
   "./photo/logo.png",
   "./parking.html?v=8",
   "./parking-view.html?v=11",
@@ -34,6 +34,7 @@ const PRECACHE = Array.from(new Set([
   "./fee-notice.html?v=1",
   "./visitor-resident.html?v=8",
   "./live-meeting.html?v=31",
+  "./chatphone.html",
   "./qai.html?v=15",
   "./qrcode-scan.html?v=14",
   "./election-count.html?v=17",
@@ -45,14 +46,15 @@ const PRECACHE = Array.from(new Set([
   "./css/member.css?v=10",
   "./css/worker-clean.css?v=65",
   "./js/index.js?v=11",
-  "./js/special-member.js?v=30",
+  "./js/qrcode-generator.js?v=1",
+  "./js/special-member.js?v=46",
   "./js/system.js?v=43",
-  "./js/admin.js?v=455",
+  "./js/admin.js?v=458",
   "./js/admin-clean.js?v=9",
   "./js/admin-duty.js?v=24",
   "./js/finance.js?v=35",
   "./js/fee-notice.js?v=3",
-  "./js/member.js?v=71",
+  "./js/member.js?v=76",
   "./js/notify.js?v=1",
   "./js/parking.js?v=32",
   "./js/parking-view.js?v=11",

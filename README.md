@@ -4,7 +4,49 @@
 >
 > **技術堆疊**：`Firebase Auth / Firestore / Storage` + `原生 HTML / CSS / JavaScript` + `Service Worker（PWA 離線快取）` + `WebRTC 對講`
 >
-> **目前版本**：CACHE_VERSION `nwapp-v837`（每次升級需同步三項版本，詳見後方部署 SOP）
+> **目前版本**：CACHE_VERSION `nwapp-v864`（每次升級需同步三項版本，詳見後方部署 SOP）
+
+> **2026-11-25**：對講「住戶按呼叫、管理中心沒響」修復：根因是住戶端寫入 `calls` 文件的 `community` 欄位值與管理中心監聽查詢用的社區 ID 不一致（社區文件 **doc ID**（如 `oOo7WB8YSRo8FGcebLg6`）與文件內 **`id` 欄位值**（如 `jL3Iwdz2dE9Akr8D3Q8s`）不同）。當住戶端 `resolveActiveCommunityId()` 只比對 `id`/`username` 而無法比對 doc ID 時，會退化為 `first`（清單第一個社區）甚至 `default`，導致寫入的 `community` 不是自己的社區（寫 `default` 還會被 `calls` 建立規則的 `userCanAccessUserCommunity` 拒絕、且原程式碼無 `.catch` 而靜默失敗，住戶端一直停在「正在呼叫…」，管理中心永遠收不到）。修正：(1) `member.js` 社區清單映射新增 `docId`，`findCommunityRecordByKey` 與 `resolveActiveCommunityId`（URL `c`、localStorage 已存值）皆改為可依 `id` / `username` / `docId` 比對，並優先以住戶自身 profile 的 `community` 經 `resolveCanonicalCommunityId()` 正規化；(2) `intercomStartOutgoingToAdmin`（`member.js` / `special-member.js`）的 `calls` 寫入改為 `try/catch`，失敗時顯示「呼叫失敗，請稍後再試」並還原按鈕狀態；(3) 住戶端來電監聽的社區比對同步加入 `docId`（修復後台撥入住戶時的 community mismatch）。版本：`member.js` `v=76`、`special-member.js` `v=46`、`admin.js` `v=458`（管理中心 `resolveActiveCommunityId` / `findCommunityRecordByKey` 同步改為可依 `docId` 比對）、`sw.js` CACHE_VERSION `nwapp-v864`。
+
+> **2026-11-25**：長者簡易版對講頭像與字級調整：(1) **頭像放大並改為 QAi Logo 圓形**：`.chatcall-avatar` 寬高由 88px 放大至 128px，維持 `border-radius: 999px` 圓形；`setIntercomPeerVisual` 新增 `defaultAvatar` 參數，無頭像時預設顯示 `logo.svg`（不再隱藏 img、不再顯示文字首字）；`ensureIntercomCallModal` 的 img 預設 `src="logo.svg"`。新增 `.chatcall-avatar.has-image .intercom-avatar-text { display: none; }` 避免文字覆蓋圖片。(2) **名稱改為「管理中心」**：`ensureIntercomCallModal` 預設 h2 文字、`openIntercomCallModal` 與 `resetIntercomStandby` 中的 `setIntercomPeerVisual` 呼叫的 `name` 由「社區後台」改為「管理中心」、`fallbackInitial` 改為「管」。(3) **加大所有字級**：名稱 22→28px、副標 14→18px、狀態 15→18px、計時器 15→24px、呼叫/掛斷按鈕 20→24px（尺寸 140×64→160×72）、通話紀錄/擴音按鈕 15→18px（96×44→112×52）。版本：html js `v=44`、css `v=50`、`sw.js` CACHE_VERSION `nwapp-v863`。
+
+> **2026-11-25**：長者簡易版對講按鈕版面調整：(1) 按鈕分為兩行——第一行為主要操作「呼叫」「掛斷」，第二行為次要操作「擴音」「通話紀錄」（HTML 改為兩層 `.chatcall-actions-row`，`.chatcall-actions` 改為 `flex-direction: column`）。(2) 「呼叫」「掛斷」按鈕加大：移除 `small` class，新增 `.chatcall-btn.danger/.success` 樣式（min-height 64px、min-width 140px、padding 0 28px、font-size 20px）；「通話紀錄」「擴音」維持 `small`（96px × 44px、15px）。版本：html js `v=43`、`sw.js` CACHE_VERSION `nwapp-v862`。
+
+> **2026-11-25**：長者簡易版對講「掛斷」按鈕修復：(1) **掛斷按鈕綁定時機提前**：原來 `hangupBtn.onclick` 在 `intercomStartOutgoingToAdmin` / `intercomAnswerIncomingCall` 中是在 `getUserMedia`、`createOffer`、`callDocRef.set` 等多個 `await` 之後才綁定，導致「正在呼叫…」期間點擊掛斷無反應。改為在 `ensureIntercomCallModal()` 之後立即綁定。(2) **掛斷後重置為待機狀態**：新增 `resetIntercomStandby(modal)` helper，掛斷後將狀態重置為「待命」、重新啟用「呼叫」按鈕、重置計時器、顯示面板（因 `ensureIntercomCallModal` 會重建 innerHTML 導致呼叫按鈕 onclick 遺失，需在 reset 中重新綁定）。(3) 遠端掛斷（`onSnapshot` 偵測 `ended`/`rejected`）後同樣呼叫 `resetIntercomStandby`，避免分頁空白。版本：html js `v=42`、`sw.js` CACHE_VERSION `nwapp-v861`。
+
+> **2026-11-25**：長者簡易版對講改為**內嵌分頁內容區（非彈跳視窗）**：將 `member.js` 的完整對講實作移植到 `js/special-member.js`（ES5 風格），包含撥出給管理中心、來電接聽、聽筒/擴音切換、通話紀錄。「對講」按鈕改為呼叫 `openIntercomCallModal()`，將 `#intercomCallModal90`（含「社區後台」頭像、「待命」狀態、呼叫/掛斷/擴音/通話紀錄按鈕）透過 `openSheet({ node, title: "對講" })` 直接渲染到分頁內容區 `#spSheetBody`，不再使用 `.modal` 彈跳視窗或 iframe 載入 `chatphone.html`。`openSheet`/`hideSheet` 切換分頁時若偵測到 `#intercomCallModal90`，會呼叫 `cleanupIntercomActive({ updateStatus: "ended" })` 清理 WebRTC 連線。`special-member.css` 補齊 `.chatcall-*` 樣式（因 `special-member.html` 未載入 `pwa.css`）。`onAuthStateChanged` 中 `state.cid` 設定後啟動 `startMemberIntercomIncomingListener` 監聽來電。版本：html js `v=41`、css `v=49`、`sw.js` CACHE_VERSION `nwapp-v860`。
+
+> **2026-11-25**：對講功能「來電接聽」實作：`chatphone.html` 新增完整接收端流程——(1) 來電監聽 `setupIncomingCallListener`：即時監聽 `calls` collection 中 `toUid=自己` 且 `status=ringing` 的文件；(2) 來電 UI：通話模態框新增「接聽」（綠）與「拒絕」（灰）按鈕，來電時隱藏掛斷按鈕、播放來電鈴聲；(3) `answerIncomingCall`：建立 WebRTC PeerConnection、設定 offer 為 remote description、取得麥克風、建立 answer 並寫回 `calls` 文件（`status=accepted`）、交換 ICE candidates（`offerCandidates`/`answerCandidates`）；(4) `rejectIncomingCall`：將 `status` 設為 `rejected`；(5) 接通後切換為「掛斷」按鈕、啟動通話計時器、監聽對方掛斷。管理員端與住戶端共用此接聽邏輯。
+
+> **2026-11-25**：對講功能修正：住戶端（`special-member.html`）開啟 `chatphone.html` 時，聯絡人清單**只顯示管理中心（admin/community）帳號**，不再顯示其他住戶；通話 `toRole` 由 `resident` 改為 `admin`（住戶打給管理中心）。標題依身分動態顯示：管理員端顯示「住戶聯絡人」、住戶端顯示「管理中心」。
+
+> **2026-11-25**：長者簡易版底部導覽列「通知」按鈕改為「對講」：點擊開啟 `chatphone.html`（Q 對講機），以 iframe 嵌入面板方式呈現；圖示改為電話圖示；包裹數量 badge 移至「功能」按鈕（因「我的包裹」在功能頁內）。同時新增「對講」語音指令（對講／對講機／呼叫）與語音回覆。`chatphone.html` 加入 SW precache 以支援離線。
+
+> **2026-11-25**：長者簡易版 QR code 修復（第三版，最終）：(1) 將 `qrcode-generator@1.4.4` 函式庫下載為本機檔案 `js/qrcode-generator.js?v=1`，不再依賴 unpkg CDN（離線可用、PWA 快取）；(2) QR 產生改為使用函式庫內建的 `qr.createDataURL(4, 2)` 輸出 GIF base64 data URL；(3) **真正根因修正**：`resolveQrToken()` 在住戶 `qrToken` 為空時，需以 `<社區code>-A<unitNo>ADDT-<sub>` 動態組出 token，但部分社區（如「西北保全」）的 units 只有 `id` 欄位沒有 `unitNo`，導致 token 為空、QR 不出現。修正為 `unitNo = u.unitNo || u.id`，無 `unitNo` 時回退使用戶號 `id`。header 右上角與「我的資料」面板 QR 皆恢復顯示。
+
+> **2026-11-25**：長者簡易版兩項調整：(1) 移除首頁「重要通知（請慢看）」卡片（`spNoticeCard`），相關 `parkNotice`、`noticeTitle`/`noticeText`/`noticeCount` 邏輯一併移除，包裹數量仍顯示在底部導覽「通知」鈕的 badge；(2) 底部導覽「首頁」按鈕改為直接關閉所有面板並清空堆疊回到首頁，不再只退一層面板。
+
+> **2026-11-25**：長者簡易版 QR code 修復：原本依賴外部 `api.qrserver.com` 產生 QR 圖片，該服務可能被擋或載入失敗導致 QR 不出現。改為引入 `qrcode-generator@1.4.4` 函式庫，於客戶端直接產生 SVG 格式的 QR code（header 與「我的資料」面板皆同），離線可用、不需外部 API；僅在函式庫未載入時才回退到外部服務。
+
+> **2026-11-25**：長者簡易版三項調整：(1)「功能」頁移除「水電繳費」按鈕；(2) 服務磚標題 `.sp-tile-label` 字級放大為 `clamp(1.2rem, 5.2vw, 1.55rem)`；(3) 面板新增「返回堆疊」機制：從「功能」頁進入「我的包裹」等子頁後，按「回上一頁」會回到「功能」頁，而非直接關閉回首頁（支援按鈕與瀏覽器返回鍵）。
+
+> **2026-11-25**：長者簡易版縮小功能面板（首頁以外頁面）的 header 高度：`.sp-sheet-hd` padding 由 `0.8rem 1rem` 改為 `0.5rem 0.8rem`；標題 `.sp-sheet-title` 字級由 `1.7rem` 改為 `1.35rem`；返回／朗讀按鈕由 `3.6rem×3.6rem` 縮為 `2.8rem×2.8rem`，圖示由 `2rem` 縮為 `1.5rem`。
+
+> **2026-11-25**：長者簡易版首頁副標題字體放大：日期星期（`.sp-info-copy strong`）與三大按鈕副標題（`.sp-sos-copy span`、`.sp-notice-btn-copy span`、`.sp-mic .sp-tool-copy > span`，含「緊急連絡」「看社區公告」「準備中」等）字級由 `clamp(0.82rem, 3vw, 0.98rem)` 提升為 `clamp(1.05rem, 3.6vw, 1.3rem)`；`max-height:700px` 情境同步放大。
+
+> **2026-11-25**：長者簡易版首頁字體放大：SOS／通知／語音說話三大按鈕標題（`.sp-sos-copy strong`、`.sp-notice-btn-copy strong`、`.sp-mic .sp-tool-copy strong`）與時鐘（`.sp-info-label`）字級由 `clamp(1.45rem, 5.2vw, 1.8rem)` 提升為 `clamp(1.8rem, 6.5vw, 2.2rem)`；`max-height:700px` 情境同步放大。
+
+> **2026-11-25**：長者簡易版 header 微調：社區／戶號標籤（`.sp-greet-unit`）左側改為與 logo 圖示及問候語切齊同一左緣（移除原內縮）。
+
+> **2026-11-25**：長者簡易版 header 佈局調整（依設計圖）：社區／戶號標籤（`.sp-greet-unit`）移至品牌列下方並內縮對齊「QAi生活網」文字起點；問候語（`.sp-greet-tip`）與住戶姓名（`.sp-greet-name`）改為同一列左右分開顯示（問候語靠左、姓名靠右）。
+
+> **2026-11-25**：長者簡易版問候列調整：社區／戶號標籤（`.sp-greet-unit`）移至問候語下方獨立一行顯示；問候語改為依時段顯示（00-03「很晚囉！該睡覺了。」、03-06「還沒天亮！再睡一下。」、06-09「早安！來做運動身體好。」、09-12「上午好！今天該做什麼事呢？」、12-15「午安！吃飽沒？」、15-18「下午囉！來點下午茶。」、18-21「晚上好！今天過的好嗎？」、21-24「晚安！祝您有個好夢。」），並隨時鐘每秒檢查跨整點自動更新。
+
+> **2026-11-25**：長者簡易版語音撥打電話改為「直接撥出、不需再按按鍵確認」：語音辨識到「請打電話給○○」等指令的同步脈絡中立即執行 `tel:` 撥號（聯絡人電話與管理中心電話皆同），不再等待語音回覆播完才撥，減少瀏覽器彈出確認的機會。
+
+> **2026-11-25**：修正上一版頁尾列過高的問題：頁尾底部留白改為只在 PWA standalone 模式套用（`@media (display-mode: standalone)`），瀏覽器模式維持原本高度；PWA 模式仍以 `max(env(safe-area-inset-bottom), 0.85rem)` 避免被 Android 系統導覽列遮住。
+
+> **2026-11-25**：修正長者簡易版 PWA 在 Android 手機上「頁尾底部導覽列被系統導覽按鈕列遮住」的問題：`.sp-bar` 與 `.sp-home` 的底部 padding 由 `env(safe-area-inset-bottom)` 改為 `max(env(safe-area-inset-bottom), 0.85rem)`（Android 上 safe-area 常為 0，改用最小保證值讓導覽列圖示不被系統列蓋住）。
 
 > **2026-11-25**：長者簡易版「我的資料」卡版面調整：大頭照與 QR code 同列，姓名／社區／戶號等資料文字改為另起一行（佔滿整列）顯示；「電話設定」清單項目的姓名／暱稱／電話文字加上自動換行（`overflow-wrap`／`word-break`），避免長字串與編輯／刪除按鈕重疊。
 
@@ -540,7 +582,7 @@
 
 | 項目 | 檔案路徑 / 版本 | 用途說明 |
 |---|---|---|
-| **Service Worker（PWA 快取核心）** | `sw.js`（`CACHE_VERSION = nwapp-v837`） | 離線可用、所有靜態資源版本控管、PWA 安裝到手機桌面 |
+| **Service Worker（PWA 快取核心）** | `sw.js`（`CACHE_VERSION = nwapp-v859`） | 離線可用、所有靜態資源版本控管、PWA 安裝到手機桌面 |
 | **PWA 安裝引導** | `js/pwa.js?v=16` + `css/pwa.css` | 彈窗引導使用者「加到主畫面」安裝 QAi生活網到手機桌面像 App 一樣 |
 | **Firebase 設定 + 權限 Rules** | `js/firebase-config.js`<br>`firebase/firebase.rules` | Auth 登入驗證 / Firestore 資料庫初始化；**權限規則只維護這一份**（`firebase.json` 的 `firestore.rules` 指向此檔），勿再另存副本以免不同步 |
 | **PDF 檢視器** | `pdf-viewer.html` + `js/pdf-viewer.js` + `js/pdf-viewer-launcher.js?v=3` | 所有公告附件 PDF（財報/會議手冊/合約）線上直接檢視，不需強制下載 |
