@@ -1033,20 +1033,21 @@ body {
   min-height: 5rem;
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.85rem;
   margin: 0;
-  padding: 0.7rem 1.15rem;
+  padding: 0.6rem 1rem;
   border: 2px solid #fff;
   border-radius: 2.6rem;
   color: #fff;
   text-align: left;
+  overflow: hidden;
   background: linear-gradient(115deg, #e34336, #c81910);
   box-shadow: 0 0.85rem 1.7rem rgba(174, 37, 23, 0.22);
 }
 
 .sp-info-icon {
-  width: 3rem;
-  height: 3rem;
+  width: 2.6rem;
+  height: 2.6rem;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
@@ -1057,8 +1058,8 @@ body {
 }
 
 .sp-info-icon svg {
-  width: 1.9rem;
-  height: 1.9rem;
+  width: 1.7rem;
+  height: 1.7rem;
 }
 
 .sp-info-copy {
@@ -1066,29 +1067,29 @@ body {
   flex: 1 1 0;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  line-height: 1.17;
+  gap: 0.2rem;
+  line-height: 1.05;
 }
 
 .sp-info-label {
-  font-size: clamp(1.7rem, 6.5vw, 2rem);
+  font-size: clamp(1.45rem, 5.2vw, 1.8rem);
   font-weight: 900;
-  line-height: 1.1;
+  line-height: 1.05;
 }
 
 .sp-info-row {
   display: flex;
   align-items: baseline;
-  gap: 0.6rem;
+  gap: 0.5rem;
   min-width: 0;
 }
 
 .sp-info-copy strong {
   overflow: hidden;
   color: rgba(255, 255, 255, 0.92);
-  font-size: clamp(0.9rem, 3.5vw, 1.05rem);
+  font-size: clamp(0.82rem, 3vw, 0.98rem);
   font-weight: 800;
-  line-height: 1.25;
+  line-height: 1.2;
   overflow-wrap: anywhere;
 }
 
@@ -1174,6 +1175,15 @@ body {
   background: linear-gradient(115deg, #2f6fd0, #123f8f);
   outline: 3px solid #9dc0f0;
   outline-offset: 2px;
+  color: #ffd9de;
+}
+
+.sp-mic.is-listening .sp-tool-copy strong {
+  color: #ffd9de;
+}
+
+.sp-mic.is-listening .sp-tool-copy > span {
+  color: rgba(255, 217, 222, 0.9);
 }
 
 .sp-mic.is-listening .sp-tool-icon {
@@ -1578,30 +1588,35 @@ body {
   }
   .sp-sos-card,
   .sp-notice-btn,
-  .sp-mic {
+  .sp-mic,
+  .sp-info-card {
     padding: 0.5rem 0.9rem;
     gap: 0.7rem;
   }
   .sp-sos-icon,
   .sp-notice-btn-icon,
-  .sp-mic .sp-tool-icon {
+  .sp-mic .sp-tool-icon,
+  .sp-info-icon {
     width: 2.3rem;
     height: 2.3rem;
   }
   .sp-sos-icon svg,
   .sp-notice-btn-icon svg,
-  .sp-mic .sp-tool-icon svg {
+  .sp-mic .sp-tool-icon svg,
+  .sp-info-icon svg {
     width: 1.5rem;
     height: 1.5rem;
   }
   .sp-sos-copy strong,
   .sp-notice-btn-copy strong,
-  .sp-mic .sp-tool-copy strong {
+  .sp-mic .sp-tool-copy strong,
+  .sp-info-label {
     font-size: clamp(1.25rem, 4.6vw, 1.6rem);
   }
   .sp-sos-copy span,
   .sp-notice-btn-copy span,
-  .sp-mic .sp-tool-copy > span {
+  .sp-mic .sp-tool-copy > span,
+  .sp-info-copy strong {
     font-size: clamp(0.75rem, 2.7vw, 0.9rem);
   }
 }

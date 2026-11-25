@@ -174,7 +174,7 @@
     { action: "back", words: ["回上一頁", "關起來", "關閉", "返回", "上一頁", "不要了"] },
     { action: "signout", words: ["登出"] },
     { action: "parcel", words: ["包裹", "郵件", "快遞", "掛號"] },
-    { action: "bulletin", words: ["公告", "布告", "消息", "通知"] },
+    { action: "bulletin", words: ["公告", "布告", "消息", "社區公告"] },
     { action: "visitor", words: ["訪客", "客人", "有人來", "登記"] },
     { action: "facility", words: ["公設", "預約", "健身房", "教室", "設施"] },
     { action: "meter", words: ["水電", "繳費", "費用", "帳單", "電費", "水費", "度數"] },
@@ -184,6 +184,11 @@
     { action: "time", words: ["現在幾點", "幾點", "現在時間", "現在時刻"] },
     { action: "date", words: ["今天幾號", "幾月幾號", "今天日期", "星期幾", "今天星期"] },
     { action: "weather", words: ["天氣", "會不會下雨", "溫度", "氣溫", "天氣如何"] },
+    { action: "home", words: ["回首頁", "回到首頁", "回主頁", "首頁", "主頁"] },
+    { action: "support", words: ["功能", "常用服務", "有什麼服務"] },
+    { action: "notice", words: ["通知", "最新通知", "最新消息"] },
+    { action: "profile", words: ["個人", "我的資料", "我的資料頁"] },
+    { action: "call", words: ["打電話", "撥電話", "撥打", "打電話給管理中心", "打給管理中心", "電話"] },
   ];
 
   var VOICE_WEEKDAYS = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
@@ -246,6 +251,18 @@
     return hit;
   }
 
+  // 喚醒詞「小Q」：回傳喚醒後剩下的字（沒喚醒回傳 null，只喊喚醒詞則回傳空字串）
+  var WAKE_GREETING = "我是小Q，有什麼能幫您的?";
+  function detectWake(text) {
+    var raw = String(text || "");
+    var norm = raw.replace(/[\s，,。.、！!？?；;：:]/g, "").toLowerCase();
+    if (norm.indexOf("小q") < 0) return null;
+    return raw
+      .replace(/哈囉|哈罗|你好|嗨|嘿/g, "")
+      .replace(/小\s*[qQ]/g, "")
+      .replace(/[\s，,。.、！!？?；;：:]+/g, "");
+  }
+
   function runVoiceCommand(action) {
     if (action === "back") {
       if (sheetOpen) hideSheet(false);
@@ -261,6 +278,7 @@
     if (action === "time") { speak(voiceTimeText()); return; }
     if (action === "date") { speak(voiceDateText()); return; }
     if (action === "weather") { fetchVoiceWeather(function (text) { speak(text); }); return; }
+    if (action === "call") { dialPhone(); return; }
     handleAction(action);
   }
 
@@ -316,7 +334,11 @@
       var last = ev.results[ev.results.length - 1];
       if (!last || !last.isFinal) return;
       for (var i = 0; i < last.length; i++) {
-        var action = matchVoiceCommand(last[i] && last[i].transcript);
+        var text = last[i] && last[i].transcript;
+        // 先判斷喚醒詞「小Q」：喚醒後開啟語音彈窗並回覆提示音
+        var wake = detectWake(text);
+        if (wake !== null) { wakeVoice(wake); return; }
+        var action = matchVoiceCommand(text);
         if (action) { runVoiceCommand(action); return; }
       }
     };
@@ -411,6 +433,11 @@
     smaller: "好的，字會變小喔。",
     signout: "好的，我幫您登出。",
     back: "好的，回到上一頁。",
+    home: "好的，回到首頁。",
+    support: "好的，我幫您打開功能。",
+    notice: "好的，我幫您看通知。",
+    profile: "好的，我幫您看個人資料。",
+    call: "好的，我幫您撥打電話。",
   };
   var VOICE_REPLY_FALLBACK = "抱歉，我沒聽清楚，請您再說一次。";
 
@@ -492,34 +519,42 @@
     renderVoiceAsk("");
     var action = matchVoiceCommand(text);
 
-    // 時間／日期／天氣：直接播報答案，不開啟任何功能
-    if (action === "time" || action === "date" || action === "weather") {
-      var sayDynamic = function (reply) {
+    // 播完回覆後：有 action 就關閉彈窗並開啟功能，否則恢復收音
+    var finishReply = function (reply, runnable) {
+      if (!voicePanel.open) return;
+      setVoiceReply(reply);
+      speakThen(reply, function () {
         if (!voicePanel.open) return;
-        setVoiceReply(reply);
-        speakThen(reply, function () {
-          if (!voicePanel.open) return;
-          voicePanel.busy = false;
-          voicePanelRestart();
-        });
-      };
-      if (action === "time") { sayDynamic(voiceTimeText()); return; }
-      if (action === "date") { sayDynamic(voiceDateText()); return; }
+        if (!runnable) { voicePanel.busy = false; voicePanelRestart(); return; }
+        // 關閉彈窗（會退回一筆歷史）後才開啟功能，避免歷史堆疊錯亂
+        var didBack = closeVoicePanel(false);
+        if (didBack) voicePanelAfterBack = function () { runVoiceAction(runnable); };
+        else runVoiceAction(runnable);
+      });
+    };
+
+    // 時間／日期：直接播報答案，不開啟任何功能
+    if (action === "time") { finishReply(voiceTimeText(), ""); return; }
+    if (action === "date") { finishReply(voiceDateText(), ""); return; }
+
+    // 天氣：查詢後播報答案
+    if (action === "weather") {
       setVoiceReply("正在為您查詢天氣…");
-      fetchVoiceWeather(sayDynamic);
+      fetchVoiceWeather(function (reply) { finishReply(reply, ""); });
       return;
     }
 
-    var reply = VOICE_REPLY_TEXT[action] || VOICE_REPLY_FALLBACK;
-    setVoiceReply(reply);
-    speakThen(reply, function () {
-      if (!voicePanel.open) return;
-      if (!action) { voicePanel.busy = false; voicePanelRestart(); return; }
-      // 關閉彈窗（會退回一筆歷史）後才開啟功能，避免歷史堆疊錯亂
-      var didBack = closeVoicePanel(false);
-      if (didBack) voicePanelAfterBack = function () { runVoiceAction(action); };
-      else runVoiceAction(action);
-    });
+    // 打電話：先找號碼，有號碼才撥
+    if (action === "call") {
+      setVoiceReply("正在為您查詢電話…");
+      resolveDialPhone(function (phone) {
+        if (phone) finishReply("好的，正在為您撥打管理中心的電話。", "call");
+        else finishReply("目前沒有設定管理中心的電話，請洽管理中心。", "");
+      });
+      return;
+    }
+
+    finishReply(VOICE_REPLY_TEXT[action] || VOICE_REPLY_FALLBACK, action);
   }
 
   function runVoiceAction(action) {
@@ -527,17 +562,26 @@
     if (action === "signout") { if (el.signOut) el.signOut.click(); return; }
     if (action === "bigger") { stepScale(1); return; }
     if (action === "smaller") { stepScale(-1); return; }
+    if (action === "call") { dialPhone(); return; }
     handleAction(action, true);
   }
 
-  function openVoicePanel() {
+  // 被喚醒詞「小Q」喚醒：開啟語音彈窗、回覆提示音；若同一句還有指令就直接執行
+  function wakeVoice(firstCommand) {
+    if (voicePanel.open) return;
+    openVoicePanel(WAKE_GREETING, firstCommand);
+  }
+
+  function openVoicePanel(greeting, firstCommand) {
     if (!el.voice) return;
     if (!voiceCtl.supported) { toast("這個瀏覽器不支援語音輸入"); return; }
+    var greet = String(greeting || "").trim() || WAKE_GREETING;
+    var first = String(firstCommand || "").trim();
     voicePanel.open = true;
     voicePanel.busy = false;
     voicePanel.asks = [];
     renderVoiceAsk("");
-    setVoiceReply("請說出您的需求，例如「看公告」…");
+    setVoiceReply(first ? "…" : "請說出您的需求，例如「看公告」「現在幾點」「今天天氣」…");
     el.voice.hidden = false;
     try { history.pushState({ __spVoice: true }, ""); } catch (e) {}
     // 暫停主頁的背景語音，改用彈窗專屬的收音
@@ -545,7 +589,11 @@
     voiceStop();
     clearTimeout(voicePanel.timer);
     voicePanelRec();
-    speakThen("語音說話，請說出您的需求", function () { if (voicePanel.open) voicePanelRestart(200); });
+    speakThen(greet, function () {
+      if (!voicePanel.open) return;
+      if (first) { respondToVoice(first); return; }
+      voicePanelRestart(200);
+    });
   }
 
   // 回傳 true 表示有呼叫 history.back()（歷史會在稍後由 popstate 收尾）
@@ -1221,6 +1269,21 @@
     });
   }
 
+  // 找出可撥打的電話：優先用住戶自訂號碼，其次用社區設定的管理中心電話
+  function resolveDialPhone(cb) {
+    var ms = loadMemberSettings();
+    if (ms.sosMode === "custom" && ms.sosCustomPhone) { cb(ms.sosCustomPhone); return; }
+    loadSosConfig().then(function (cfg) { cb(String(cfg.phone || "").trim()); });
+  }
+
+  function dialPhone() {
+    resolveDialPhone(function (phone) {
+      if (!phone) { toast("目前沒有設定管理中心的電話，請洽管理中心"); return; }
+      toast("正在為您撥號：" + phone);
+      location.href = "tel:" + phone;
+    });
+  }
+
   /* ---------------- 六大功能點擊 ---------------- */
 
   function openFrame(title, url) {
@@ -1234,9 +1297,21 @@
     return page + (q.length ? "?" + q.join("&") : "");
   }
 
+  function goHome() {
+    if (sheetOpen) hideSheet(false);
+    if (el.home) el.home.scrollTo({ top: 0, behavior: "smooth" });
+    setActiveNav(el.homeNav);
+  }
+
   function handleAction(action, silent) {
-    if (action === "support") { openSupportSheet({ silent: !!silent }); return; }
-    if (action === "profile") { openProfileSheet({ silent: !!silent }); return; }
+    if (action === "home") { if (!silent) speak("首頁"); goHome(); return; }
+    if (action === "support") { if (!silent) speak("功能"); openSupportSheet({ silent: !!silent }); return; }
+    if (action === "notice") {
+      if (!silent) speak("通知");
+      loadBulletins().then(function () { openBulletinSheet({ silent: !!silent, title: "通知" }); });
+      return;
+    }
+    if (action === "profile") { if (!silent) speak("個人"); openProfileSheet({ silent: !!silent }); return; }
     if (action === "parcel") {
       if (!silent) speak("我的包裹");
       loadParcels().then(openParcelSheet);
@@ -1348,9 +1423,7 @@
     });
 
     if (el.homeNav) el.homeNav.addEventListener("click", function () {
-      if (sheetOpen) hideSheet(false);
-      if (el.home) el.home.scrollTo({ top: 0, behavior: "smooth" });
-      setActiveNav(el.homeNav);
+      goHome();
       speak("首頁");
     });
     if (el.supportNav) el.supportNav.addEventListener("click", function () {
