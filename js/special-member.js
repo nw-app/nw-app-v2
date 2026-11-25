@@ -22,6 +22,7 @@
   var STORAGE_VOICE = "csp_special_voice_v1";
   var STORAGE_MEMBER_SETTINGS = "csp_member_settings_v1";
   var STORAGE_ACTIVE_COMMUNITY = "csp_active_community_v1";
+  var STORAGE_PHONE_LIST = "csp_special_phone_list_v1";
 
   // 固定三種字體尺寸：小／中／大
   var FONT_SIZES = [
@@ -91,10 +92,14 @@
     sheetBody: document.getElementById("spSheetBody"),
     sheetFt: document.getElementById("spSheetFt"),
     sheetSpeak: document.getElementById("spSheetSpeak"),
+    sheetBack: document.getElementById("spSheetBack"),
     voice: document.getElementById("spVoice"),
     voiceAskText: document.getElementById("spVoiceAskText"),
     voiceReplyText: document.getElementById("spVoiceReplyText"),
     voiceClose: document.getElementById("spVoiceClose"),
+    phone: document.getElementById("spPhone"),
+    phoneBody: document.getElementById("spPhoneBody"),
+    phoneClose: document.getElementById("spPhoneClose"),
     dialog: document.getElementById("spDialog"),
     dialogIcon: document.getElementById("spDialogIcon"),
     dialogTitle: document.getElementById("spDialogTitle"),
@@ -380,7 +385,12 @@
       return;
     }
     if (VOICE_CHAT_ACTIONS[action]) { speak(VOICE_REPLY_TEXT[action] || VOICE_REPLY_FALLBACK); return; }
-    if (action === "call") { dialPhone(); return; }
+    if (action === "call") {
+      var contact = matchPhoneContact(text);
+      if (contact) { dialContact(contact); return; }
+      dialPhone();
+      return;
+    }
     // 地圖查詢需要按鈕，改用語音彈窗呈現
     if (action === "maps") { wakeVoice(text); return; }
     handleAction(action);
@@ -815,9 +825,13 @@
         if (!voicePanel.open) return;
         if (!runnable) { voicePanel.busy = false; voicePanelRestart(); return; }
         // 關閉彈窗（會退回一筆歷史）後才開啟功能，避免歷史堆疊錯亂
+        var run = function () {
+          if (typeof runnable === "function") runnable();
+          else runVoiceAction(runnable);
+        };
         var didBack = closeVoicePanel(false);
-        if (didBack) voicePanelAfterBack = function () { runVoiceAction(runnable); };
-        else runVoiceAction(runnable);
+        if (didBack) voicePanelAfterBack = run;
+        else run();
       });
     };
 
@@ -845,8 +859,15 @@
       return;
     }
 
-    // 打電話：問號碼就報號碼，否則直接撥
+    // 打電話：先看是不是「請打電話給<姓名/暱稱>」，問號碼就報號碼，否則直接撥管理中心
     if (action === "call") {
+      var contact = matchPhoneContact(text);
+      if (contact) {
+        finishReply("好的，正在為您撥打" + String(contact.name || "對方") + "的電話。", (function (c) {
+          return function () { dialContact(c); };
+        })(contact));
+        return;
+      }
       setVoiceReply("正在為您查詢電話…");
       var askNumber = /幾號|多少|是什麼|號碼/.test(String(text));
       resolveDialPhone(function (phone) {
@@ -1119,6 +1140,7 @@
   window.addEventListener("popstate", function () {
     // 忽略自己呼叫 history.back() 造成的那一次 popstate，避免把剛開啟的面板關掉
     if (sheetBackPending) { sheetBackPending = false; return; }
+    if (phonePanelBackPending) { phonePanelBackPending = false; return; }
     if (voicePanelBackPending) {
       voicePanelBackPending = false;
       // 彈窗關閉後要接續執行的功能（例如「看公告」）
@@ -1128,6 +1150,7 @@
       return;
     }
     if (voicePanel.open) { closeVoicePanel(true); return; }
+    if (phonePanel.open) { closePhonePanel(true); return; }
     if (sheetOpen) hideSheet(true);
   });
 
@@ -1136,6 +1159,13 @@
     if (state.voice) speak(text);
     else toast("語音報讀已關閉，可按右下角「語音開」打開");
   });
+
+  if (el.sheetBack) {
+    el.sheetBack.addEventListener("click", function () {
+      hideSheet(false);
+      if (state.voice) speak("回上一頁");
+    });
+  }
 
   /* ---------------- 社區與住戶資料 ---------------- */
 
@@ -1255,57 +1285,56 @@
   }
 
   /* 問候區上方顯示本人 QR code（未自訂時採動態預設碼：社區編號-A戶號編號ADDT-子戶號） */
+  // 解析本人 QR code 的內容 token（無則回空字串）
+  function resolveQrToken() {
+    return new Promise(function (resolve) {
+      var d = state.profile || {};
+      var sub = String(d.subUnit || d.subHouseNo || d.sub || "").trim();
+
+      var custom = String(d.qrToken || "").trim();
+      if (custom && custom !== "A000ADDT") { resolve(custom); return; }
+
+      var cid = String(state.cid || "").trim();
+      var houseNo = String(d.houseNo || d.unit || "").trim();
+      if (!cid || cid === "default" || !houseNo) { resolve(""); return; }
+
+      db.collection("communities").doc(cid).get()
+        .then(function (doc) {
+          var v = doc && doc.exists ? (doc.data() || {}) : {};
+          var code = String(v.username || state.code || "").trim();
+          var key = houseNo.toLowerCase();
+          var unitNo = "";
+          var units = Array.isArray(v.units) ? v.units : [];
+          for (var i = 0; i < units.length; i++) {
+            var u = units[i];
+            if (u && String(u.id || "").trim().toLowerCase() === key) {
+              unitNo = String(u.unitNo || "").trim();
+              break;
+            }
+          }
+          if (!code || !unitNo) { resolve(""); return; }
+          var base = code + "-A" + unitNo + "ADDT";
+          resolve(sub ? base + "-" + sub : base);
+        })
+        .catch(function () { resolve(""); });
+    });
+  }
+
+  function qrImageUrl(token) {
+    return token ? "https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=" + encodeURIComponent(token) : "";
+  }
+
   function renderGreetQr() {
     if (!el.greetQr || !el.greetQrImg) return;
-    var d = state.profile || {};
-    var sub = String(d.subUnit || d.subHouseNo || d.sub || "").trim();
-
-    function applyToken(t) {
-      t = String(t || "").trim();
-      if (!t) {
+    resolveQrToken().then(function (token) {
+      if (!token) {
         el.greetQr.hidden = true;
         el.greetQrImg.removeAttribute("src");
         return;
       }
-      el.greetQrImg.src = "https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=" + encodeURIComponent(t);
+      el.greetQrImg.src = qrImageUrl(token);
       el.greetQr.hidden = false;
-    }
-
-    var custom = String(d.qrToken || "").trim();
-    if (custom && custom !== "A000ADDT") {
-      applyToken(custom);
-      return;
-    }
-
-    var cid = String(state.cid || "").trim();
-    var houseNo = String(d.houseNo || d.unit || "").trim();
-    if (!cid || cid === "default" || !houseNo) {
-      applyToken("");
-      return;
-    }
-
-    db.collection("communities").doc(cid).get()
-      .then(function (doc) {
-        var v = doc && doc.exists ? (doc.data() || {}) : {};
-        var code = String(v.username || state.code || "").trim();
-        var key = houseNo.toLowerCase();
-        var unitNo = "";
-        var units = Array.isArray(v.units) ? v.units : [];
-        for (var i = 0; i < units.length; i++) {
-          var u = units[i];
-          if (u && String(u.id || "").trim().toLowerCase() === key) {
-            unitNo = String(u.unitNo || "").trim();
-            break;
-          }
-        }
-        if (!code || !unitNo) {
-          applyToken("");
-          return;
-        }
-        var base = code + "-A" + unitNo + "ADDT";
-        applyToken(sub ? base + "-" + sub : base);
-      })
-      .catch(function () { applyToken(""); });
+    });
   }
 
   /* ---------------- 我的包裹 ---------------- */
@@ -1712,13 +1741,30 @@
     var sub = String(profile.subUnit || profile.subHouseNo || "").trim();
     var unit = houseNo ? houseNo + (sub ? "-" + sub : "") : "尚未設定";
     var community = state.communityName || "社區服務系統";
+
+    // 大頭照：優先用住戶資料，其次用登入帳號頭像，都沒有則顯示姓名首字
+    var avatarUrl = String(profile.avatarDataUrl || profile.avatar || "").trim();
+    if (!avatarUrl) {
+      try { avatarUrl = String((auth.currentUser && auth.currentUser.photoURL) || "").trim(); } catch (e) {}
+    }
+    var initial = (name ? name.slice(0, 1) : "") || "住";
+    var photoHtml = avatarUrl
+      ? '<img class="sp-profile-photo-img" src="' + escapeHtml(avatarUrl) + '" alt="大頭照">'
+      : '<span class="sp-profile-photo-initial">' + escapeHtml(initial) + "</span>";
+
     openSheet({
       title: "我的資料",
       html:
         '<div class="sp-profile-card">' +
-          '<div class="sp-profile-name">' + escapeHtml(name) + "</div>" +
-          '<div class="sp-profile-field">社區：' + escapeHtml(community) + "</div>" +
-          '<div class="sp-profile-field">戶號：' + escapeHtml(unit) + "</div>" +
+          '<div class="sp-profile-photo">' + photoHtml + "</div>" +
+          '<div class="sp-profile-info">' +
+            '<div class="sp-profile-name">' + escapeHtml(name) + "</div>" +
+            '<div class="sp-profile-field">社區：' + escapeHtml(community) + "</div>" +
+            '<div class="sp-profile-field">戶號：' + escapeHtml(unit) + "</div>" +
+          "</div>" +
+          '<div class="sp-profile-qr" id="spProfileQr" hidden>' +
+            '<img id="spProfileQrImg" alt="QR code">' +
+          "</div>" +
         "</div>" +
         '<div class="sp-sheet-action-list">' +
           '<div class="sp-font-sizes" role="group" aria-label="字體大小">' +
@@ -1731,12 +1777,22 @@
             "</div>" +
           "</div>" +
           '<button class="sp-btn sp-btn-ghost" type="button" data-action="toggle-voice"><span id="spProfileVoiceText">' + (state.voice ? "語音報讀：開啟" : "語音報讀：關閉") + "</span></button>" +
+          '<button class="sp-btn sp-btn-ghost" type="button" data-action="phone-settings">電話設定</button>' +
           '<button class="sp-btn sp-btn-ghost" type="button" id="spProfileSignOut">登出</button>' +
         "</div>",
       speakText: "我的資料，" + name + "，戶號 " + unit,
       silent: !!(opt && opt.silent),
     });
     syncFontButtons();
+
+    // QR code 圖片（開卡後非同步解析再顯示）
+    resolveQrToken().then(function (token) {
+      var box = document.getElementById("spProfileQr");
+      var img = document.getElementById("spProfileQrImg");
+      if (!token || !box || !img) return;
+      img.src = qrImageUrl(token);
+      box.hidden = false;
+    });
   }
 
   function toggleVoice() {
@@ -1748,6 +1804,206 @@
     try { localStorage.setItem(STORAGE_VOICE, state.voice ? "1" : "0"); } catch (e) {}
     if (state.voice) speak("語音已打開");
     else stopSpeak();
+  }
+
+  /* ---------------- 電話設定（常用電話，供小Q語音撥打） ---------------- */
+
+  var phonePanel = { open: false, formOpen: false, editingId: "" };
+  var phonePanelBackPending = false;
+
+  function phoneListKey() {
+    return String(state.cid || "default") + "::" + String(state.uid || "anon");
+  }
+
+  function loadPhoneList() {
+    try {
+      var map = JSON.parse(localStorage.getItem(STORAGE_PHONE_LIST) || "{}") || {};
+      var arr = map[phoneListKey()];
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function savePhoneList(list) {
+    try {
+      var map = JSON.parse(localStorage.getItem(STORAGE_PHONE_LIST) || "{}") || {};
+      map[phoneListKey()] = Array.isArray(list) ? list : [];
+      localStorage.setItem(STORAGE_PHONE_LIST, JSON.stringify(map));
+    } catch (e) {}
+  }
+
+  function newPhoneId() {
+    return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function findPhone(id) {
+    var found = null;
+    loadPhoneList().forEach(function (item) {
+      if (item && item.id === id) found = item;
+    });
+    return found;
+  }
+
+  // 從句子中找出要撥打的聯絡人：比對電話清單的姓名或暱稱（取最長命中者）
+  function matchPhoneContact(text) {
+    var t = String(text || "").replace(/[\s，,。.、！!？?；;：:]/g, "");
+    if (!t) return null;
+    var best = null;
+    var bestLen = 0;
+    loadPhoneList().forEach(function (item) {
+      [String(item.name || "").trim(), String(item.nick || "").trim()].forEach(function (alias) {
+        var a = alias.replace(/[\s，,。.、！!？?；;：:]/g, "");
+        if (a && t.indexOf(a) >= 0 && a.length > bestLen) { bestLen = a.length; best = item; }
+      });
+    });
+    return best;
+  }
+
+  function dialContact(item) {
+    var tel = String((item && item.tel) || "").trim();
+    if (!tel) { toast("這筆電話沒有號碼"); return; }
+    toast("正在為您撥號：" + tel);
+    location.href = "tel:" + tel;
+  }
+
+  function phoneFormHtml() {
+    var editing = phonePanel.editingId ? findPhone(phonePanel.editingId) : null;
+    var name = editing ? String(editing.name || "") : "";
+    var nick = editing ? String(editing.nick || "") : "";
+    var tel = editing ? String(editing.tel || "") : "";
+    return '<div class="sp-phone-form">' +
+      '<div class="sp-phone-form-title">' + (editing ? "編輯電話" : "新增電話") + "</div>" +
+      '<label class="sp-phone-field"><span>姓名（必填）</span>' +
+        '<input type="text" id="spPhoneName" autocomplete="name" value="' + escapeHtml(name) + '" placeholder="例如：王小明"></label>' +
+      '<label class="sp-phone-field"><span>暱稱（選填，也可用來呼叫）</span>' +
+        '<input type="text" id="spPhoneNick" autocomplete="nickname" value="' + escapeHtml(nick) + '" placeholder="例如：兒子、王醫師"></label>' +
+      '<label class="sp-phone-field"><span>電話號碼（必填）</span>' +
+        '<input type="tel" id="spPhoneTel" inputmode="tel" value="' + escapeHtml(tel) + '" placeholder="例如：0912345678"></label>' +
+      '<div class="sp-btn-row sp-btn-row-2">' +
+        '<button class="sp-btn sp-btn-ghost" type="button" data-phone-action="cancel">取消</button>' +
+        '<button class="sp-btn sp-btn-primary" type="button" data-phone-action="save">儲存</button>' +
+      "</div>" +
+    "</div>";
+  }
+
+  function renderPhoneList() {
+    if (!el.phoneBody) return;
+    var list = loadPhoneList();
+    var html = "";
+    if (phonePanel.formOpen) html += phoneFormHtml();
+    if (list.length) {
+      list.forEach(function (item) {
+        html += '<div class="sp-phone-item">' +
+          '<div class="sp-phone-item-main">' +
+            '<div class="sp-phone-item-name">' + escapeHtml(item.name || "未命名") + "</div>" +
+            (item.nick ? '<div class="sp-phone-item-nick">暱稱：' + escapeHtml(item.nick) + "</div>" : "") +
+            '<div class="sp-phone-item-tel">' + escapeHtml(item.tel || "") + "</div>" +
+          "</div>" +
+          '<button class="sp-phone-item-btn" type="button" data-phone-action="edit" data-id="' + escapeHtml(item.id) + '">編輯</button>' +
+          '<button class="sp-phone-item-btn is-danger" type="button" data-phone-action="delete" data-id="' + escapeHtml(item.id) + '">刪除</button>' +
+        "</div>";
+      });
+    } else if (!phonePanel.formOpen) {
+      html += '<div class="sp-phone-empty">還沒有設定電話。<br>按下面的「新增電話」把常用電話記下來，之後只要對小Q說「請打電話給○○」就可以直接撥號。</div>';
+    }
+    if (!phonePanel.formOpen) {
+      html += '<button class="sp-btn sp-btn-primary" type="button" data-phone-action="add">＋ 新增電話</button>';
+    }
+    el.phoneBody.innerHTML = html;
+  }
+
+  function focusPhoneForm() {
+    var nameNode = document.getElementById("spPhoneName");
+    if (nameNode) { try { nameNode.focus(); } catch (e) {} }
+  }
+
+  function savePhoneForm() {
+    var nameNode = document.getElementById("spPhoneName");
+    var nickNode = document.getElementById("spPhoneNick");
+    var telNode = document.getElementById("spPhoneTel");
+    var name = nameNode ? String(nameNode.value || "").trim() : "";
+    var nick = nickNode ? String(nickNode.value || "").trim() : "";
+    var tel = telNode ? String(telNode.value || "").replace(/[^0-9+#*]/g, "").trim() : "";
+    if (!name) { toast("請輸入姓名"); if (nameNode) nameNode.focus(); speak("請輸入姓名"); return; }
+    if (!tel) { toast("請輸入電話號碼"); if (telNode) telNode.focus(); speak("請輸入電話號碼"); return; }
+    var list = loadPhoneList();
+    if (phonePanel.editingId) {
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].id === phonePanel.editingId) {
+          list[i].name = name; list[i].nick = nick; list[i].tel = tel;
+          break;
+        }
+      }
+    } else {
+      list.push({ id: newPhoneId(), name: name, nick: nick, tel: tel });
+    }
+    savePhoneList(list);
+    phonePanel.formOpen = false;
+    phonePanel.editingId = "";
+    renderPhoneList();
+    toast("已儲存");
+    speak("已儲存" + name + "的電話");
+  }
+
+  function deletePhoneItem(id) {
+    var list = loadPhoneList();
+    var target = null;
+    list.forEach(function (it) { if (it.id === id) target = it; });
+    if (!target) return;
+    confirmDialog({
+      icon: "🗑️",
+      title: "要刪除嗎？",
+      text: "要刪除「" + (target.name || "這筆電話") + "」嗎？",
+      okText: "要刪除",
+      cancelText: "不要",
+    }).then(function (ok) {
+      if (!ok) return;
+      var next = list.filter(function (it) { return it.id !== id; });
+      savePhoneList(next);
+      if (phonePanel.editingId === id) { phonePanel.editingId = ""; phonePanel.formOpen = false; }
+      renderPhoneList();
+      toast("已刪除");
+      speak("已刪除");
+    });
+  }
+
+  function openPhonePanel() {
+    if (!el.phone) return;
+    phonePanel.open = true;
+    phonePanel.formOpen = false;
+    phonePanel.editingId = "";
+    el.phone.hidden = false;
+    try { history.pushState({ __spPhone: true }, ""); } catch (e) {}
+    renderPhoneList();
+    speak("電話設定，可以新增、編輯或刪除常用電話");
+  }
+
+  function closePhonePanel(fromPop) {
+    if (!phonePanel.open) return false;
+    phonePanel.open = false;
+    phonePanel.formOpen = false;
+    phonePanel.editingId = "";
+    if (el.phone) el.phone.hidden = true;
+    var didBack = false;
+    if (!fromPop) {
+      try {
+        if (history.state && history.state.__spPhone) {
+          phonePanelBackPending = true;
+          history.back();
+          didBack = true;
+        }
+      } catch (e) {}
+    }
+    return didBack;
+  }
+
+  function handlePhoneAction(action, id) {
+    if (action === "add") { phonePanel.formOpen = true; phonePanel.editingId = ""; renderPhoneList(); focusPhoneForm(); speak("新增電話"); return; }
+    if (action === "edit") { phonePanel.formOpen = true; phonePanel.editingId = id; renderPhoneList(); focusPhoneForm(); speak("編輯電話"); return; }
+    if (action === "cancel") { phonePanel.formOpen = false; phonePanel.editingId = ""; renderPhoneList(); return; }
+    if (action === "save") { savePhoneForm(); return; }
+    if (action === "delete") { deletePhoneItem(id); }
   }
 
   /* ---------------- 事件綁定 ---------------- */
@@ -1811,6 +2067,7 @@
       if (!actionButton) return;
       var action = String(actionButton.getAttribute("data-action") || "");
       if (action === "toggle-voice") toggleVoice();
+      else if (action === "phone-settings") openPhonePanel();
       else if (action === "font-down") stepScale(-1);
       else if (action === "font-size") setFontSize(parseFloat(actionButton.getAttribute("data-scale")));
       else handleAction(action);
@@ -1849,6 +2106,16 @@
 
     if (el.voiceClose) el.voiceClose.addEventListener("click", function () { closeVoicePanel(false); });
 
+    // 電話設定彈窗：關閉鈕與清單／表單的事件代理（內容會動態重建）
+    if (el.phoneClose) el.phoneClose.addEventListener("click", function () { closePhonePanel(false); });
+    if (el.phoneBody) {
+      el.phoneBody.addEventListener("click", function (ev) {
+        var btn = ev.target && ev.target.closest ? ev.target.closest("[data-phone-action]") : null;
+        if (!btn) return;
+        handlePhoneAction(String(btn.getAttribute("data-phone-action") || ""), String(btn.getAttribute("data-id") || ""));
+      });
+    }
+
     // 語音回覆區的「開啟地圖」按鈕（事件代理，回覆內容會動態重建）
     if (el.voiceReplyText) {
       el.voiceReplyText.addEventListener("click", function (ev) {
@@ -1863,6 +2130,7 @@
       if (ev.key !== "Escape") return;
       if (voicePanel.open) { closeVoicePanel(false); return; }
       if (!el.dialog.hidden) return;
+      if (phonePanel.open) { closePhonePanel(false); return; }
       if (sheetOpen) hideSheet(false);
     });
   }

@@ -10,7 +10,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="apple-touch-icon" href="icon-192.png?v=2" />
-    <link rel="stylesheet" href="css/special-member.css?v=33" />
+    <link rel="stylesheet" href="css/special-member.css?v=36" />
   </head>
   <body>
     <div class="sp-shell">
@@ -99,6 +99,11 @@
 
     <section class="sp-sheet" id="spSheet" hidden aria-modal="true" role="dialog" aria-labelledby="spSheetTitle">
       <div class="sp-sheet-hd">
+        <button class="sp-sheet-back" type="button" id="spSheetBack" aria-label="回上一頁">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M15 5 8 12l7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
         <h2 class="sp-sheet-title" id="spSheetTitle">標題</h2>
         <button class="sp-sheet-speak" type="button" id="spSheetSpeak" aria-label="朗讀內容">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -178,6 +183,17 @@
       </div>
     </section>
 
+    <!-- 電話設定（90% 彈窗）：管理常用電話，供小Q語音撥打 -->
+    <section class="sp-phone" id="spPhone" hidden role="dialog" aria-modal="true" aria-labelledby="spPhoneTitle">
+      <div class="sp-phone-box">
+        <div class="sp-phone-hd">
+          <h2 class="sp-phone-title" id="spPhoneTitle">電話設定</h2>
+          <button class="sp-phone-close" type="button" id="spPhoneClose" aria-label="關閉">✕</button>
+        </div>
+        <div class="sp-phone-bd" id="spPhoneBody"></div>
+      </div>
+    </section>
+
     <div class="sp-dialog" id="spDialog" hidden role="dialog" aria-modal="true" aria-labelledby="spDialogTitle">
       <div class="sp-dialog-box">
         <div class="sp-dialog-icon" id="spDialogIcon" aria-hidden="true">❓</div>
@@ -202,6 +218,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="js/firebase-config.js"></script>
-    <script src="js/special-member.js?v=28"></script>
+    <script src="js/special-member.js?v=30"></script>
   </body>
 </html>

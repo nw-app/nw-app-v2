@@ -435,6 +435,28 @@ button {
   line-height: 1.2;
 }
 
+.sp-sheet-back {
+  flex: 0 0 auto;
+  width: 3.6rem;
+  height: 3.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  border: 3px solid rgba(255, 255, 255, 0.7);
+  color: #fff;
+}
+
+.sp-sheet-back svg {
+  width: 2rem;
+  height: 2rem;
+}
+
+.sp-sheet-back:active {
+  transform: translateY(2px);
+}
+
 .sp-sheet-speak {
   width: 3.6rem;
   height: 3.6rem;
@@ -736,6 +758,176 @@ button {
 .sp-voice-map-icon {
   font-size: 1.4rem;
   line-height: 1;
+}
+
+/* ---------------- 電話設定彈窗（90% 版面） ---------------- */
+.sp-phone {
+  position: fixed;
+  inset: 0;
+  z-index: 78;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(17, 24, 39, 0.62);
+}
+
+.sp-phone-box {
+  width: 90%;
+  height: 90%;
+  max-width: 40rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.9rem;
+  border-radius: 1.6rem;
+  border: 4px solid var(--brand);
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.sp-phone-hd {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.sp-phone-title {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--brand-dark);
+  font-size: 1.5rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.sp-phone-close {
+  flex: 0 0 auto;
+  width: 2.8rem;
+  height: 2.8rem;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font-size: 1.4rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.sp-phone-bd {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.sp-phone-empty {
+  padding: 1.2rem 0.5rem;
+  color: var(--ink-2);
+  font-size: 1.05rem;
+  text-align: center;
+}
+
+.sp-phone-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
+  border: 2px solid var(--line);
+  border-radius: 1rem;
+  background: #fffdfa;
+}
+
+.sp-phone-item-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.sp-phone-item-name {
+  color: var(--ink);
+  font-size: 1.25rem;
+  font-weight: 900;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.sp-phone-item-nick {
+  color: var(--brand-dark);
+  font-size: 0.95rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.sp-phone-item-tel {
+  color: var(--ink-2);
+  font-size: 1.05rem;
+  font-weight: 800;
+  word-break: break-all;
+}
+
+.sp-phone-item-btn {
+  flex: 0 0 auto;
+  min-height: 2.9rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.8rem;
+  border: 2px solid var(--brand);
+  background: #fff;
+  color: var(--brand-dark);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.sp-phone-item-btn.is-danger {
+  border-color: var(--ink-2);
+  color: var(--ink-2);
+}
+
+.sp-phone-form {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.8rem;
+  border: 2px dashed var(--brand);
+  border-radius: 1rem;
+  background: var(--brand-soft);
+}
+
+.sp-phone-form-title {
+  color: var(--brand-dark);
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+.sp-phone-field {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.sp-phone-field span {
+  color: var(--ink-2);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.sp-phone-field input {
+  font: inherit;
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border: 2px solid var(--line);
+  border-radius: 0.8rem;
+  background: #fff;
+  color: var(--ink);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.sp-phone-form .sp-btn-row {
+  margin-top: 0.2rem;
 }
 
 /* ---------------- 確認彈窗 ---------------- */
@@ -1672,8 +1864,7 @@ body {
   }
 }
 
-.sp-support-intro,
-.sp-profile-card {
+.sp-support-intro {
   margin-bottom: 1rem;
   padding: 1rem;
   border: 2px solid var(--line);
@@ -1683,6 +1874,75 @@ body {
   font-size: 1.1rem;
   font-weight: 800;
   line-height: 1.6;
+}
+
+/* 個人資料卡：大頭照與 QR code 同列，資料文字另起一行顯示 */
+.sp-profile-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 2px solid var(--line);
+  border-radius: 1.25rem;
+  color: var(--ink-2);
+  background: #fffdfa;
+  font-size: 1.1rem;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
+.sp-profile-photo {
+  order: 1;
+  flex: 0 0 auto;
+  width: 6rem;
+  height: 6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  border: 3px solid var(--brand);
+  color: var(--brand-dark);
+  font-size: 2.6rem;
+  font-weight: 900;
+}
+
+.sp-profile-photo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sp-profile-photo-initial {
+  line-height: 1;
+}
+
+/* 資料文字（姓名／社區／戶號）：換到下一行並佔滿整列 */
+.sp-profile-info {
+  order: 3;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.sp-profile-qr {
+  order: 2;
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sp-profile-qr img {
+  width: 6rem;
+  height: 6rem;
+  display: block;
+  border-radius: 0.6rem;
+  background: #fff;
 }
 
 .sp-profile-name {
