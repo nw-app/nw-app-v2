@@ -10,7 +10,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="apple-touch-icon" href="icon-192.png?v=2" />
-    <link rel="stylesheet" href="css/special-member.css?v=52" />
+    <link rel="stylesheet" href="css/special-member.css?v=58" />
   </head>
   <body>
     <div class="sp-shell">
@@ -147,10 +147,14 @@
       </div>
     </section>
 
-    <section class="sp-voice" id="spVoice" hidden role="dialog" aria-modal="true" aria-labelledby="spVoiceTitle">
+    <section class="sp-voice" id="spVoice" hidden role="dialog" aria-modal="true" aria-label="西北寶寶">
       <div class="sp-voice-box">
         <div class="sp-voice-hd">
-          <h2 class="sp-voice-title" id="spVoiceTitle">我是小Q</h2>
+          <div class="sp-voice-name" aria-hidden="true">
+            <span class="sp-voice-name-1">我是</span>
+            <span class="sp-voice-name-2">西北寶寶</span>
+          </div>
+          <video class="sp-voice-video" id="spVoiceVideo" src="nwbb.mp4" muted playsinline preload="auto" aria-label="西北寶寶"></video>
           <button class="sp-voice-close" type="button" id="spVoiceClose" aria-label="關閉">✕</button>
         </div>
         <div class="sp-voice-block sp-voice-top">
@@ -164,7 +168,7 @@
       </div>
     </section>
 
-    <!-- 電話設定（90% 彈窗）：管理常用電話，供小Q語音撥打 -->
+    <!-- 電話設定（90% 彈窗）：管理常用電話，供西北寶寶語音撥打 -->
     <section class="sp-phone" id="spPhone" hidden role="dialog" aria-modal="true" aria-labelledby="spPhoneTitle">
       <div class="sp-phone-box">
         <div class="sp-phone-hd">
@@ -200,6 +204,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="js/qrcode-generator.js?v=1"></script>
     <script src="js/firebase-config.js"></script>
-    <script src="js/special-member.js?v=49"></script>
+    <script src="js/special-member.js?v=52"></script>
   </body>
 </html>

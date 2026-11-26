@@ -4,7 +4,23 @@
 >
 > **技術堆疊**：`Firebase Auth / Firestore / Storage` + `原生 HTML / CSS / JavaScript` + `Service Worker（PWA 離線快取）` + `WebRTC 對講`
 >
-> **目前版本**：CACHE_VERSION `nwapp-v871`（每次升級需同步三項版本，詳見後方部署 SOP）
+> **目前版本**：CACHE_VERSION `nwapp-v879`（每次升級需同步三項版本，詳見後方部署 SOP）
+
+> **2026-11-26**：長者簡易版語音彈窗影片左側名稱字級調整：`.sp-voice-name-1`（我是）與 `.sp-voice-name-2`（西北寶寶）的 `font-size` 統一改為 `1.35rem`，與對話文字 `.sp-voice-text`（`#spVoiceAskText`／`#spVoiceReplyText`）同尺寸。版本：`css/special-member.css` `v=58`、`sw.js` CACHE_VERSION `nwapp-v879`。
+
+> **2026-11-26**：長者簡易版語音彈窗影片左側加上兩行名稱：`special-member.html` 於 `.sp-voice-hd` 內、影片前新增 `.sp-voice-name`（`<span class="sp-voice-name-1">我是</span>` 黑字 ＋ `<span class="sp-voice-name-2">西北寶寶</span>` 紅字）；`css/special-member.css` 新增 `.sp-voice-name`（絕對定位靠左、`flex-direction: column`、`align-items: flex-start`、`text-align: left`，兩行靠左對齊）與 `.sp-voice-name-1`（`color: var(--ink)`）／`.sp-voice-name-2`（`color: var(--brand)`）。版本：`css/special-member.css` `v=57`、`special-member.html` `v=75`、`sw.js` CACHE_VERSION `nwapp-v878`。
+
+> **2026-11-26**：長者簡易版語音彈窗的「西北寶寶」動畫（`nwbb.mp4`）水平置中：`css/special-member.css` 的 `.sp-voice-hd` 加 `position: relative` 與 `justify-content: center`，並將關閉鈕 `.sp-voice-close` 改為絕對定位（`position: absolute; top: 50%; right: 0; transform: translateY(-50%)`），不再佔用版面寬度，使影片在彈窗（頁面）中水平置中。版本：`css/special-member.css` `v=56`、`sw.js` CACHE_VERSION `nwapp-v877`。
+
+> **2026-11-26**：長者簡易版語音彈窗的「西北寶寶」動畫（`nwbb.mp4`）去除黑底：`css/special-member.css` 的 `.sp-voice-video` 背景由 `background: #000` 改為 `background: #fff`，讓影片區塊維持白色底（不再出現黑屏）。版本：`css/special-member.css` `v=55`、`sw.js` CACHE_VERSION `nwapp-v876`。
+
+> **2026-11-26**：長者簡易版語音彈窗改為「西北寶寶」動畫＋喚醒詞更名：(1) 彈窗標題（`special-member.html` `#spVoiceTitle`）刪除文字，改為播放根目錄 `nwbb.mp4`（`<video id="spVoiceVideo" src="nwbb.mp4" muted playsinline preload="auto">`，`.sp-voice-video` 置於 `.sp-voice-hd`、`object-fit: contain`）；(2) `js/special-member.js` 新增 `playNwbb()`——開啟彈窗（`openVoicePanel`）與每次 `speak()`／`speakThen()`（回覆或說話）各播放一次、不循環，並以 500ms 節流避免「開啟＋問候語」同時觸發而重複播放；(3) 喚醒詞由「小Q／小丘／小秋」改為「**西北寶寶**」及同音相關詞（`WAKE_TOKENS`：`西北寶寶`／`西寶寶`／`西寶寶寶`／`西北包包`／`西北飽飽`／`西貝寶寶`），`detectWake()` 的去除樣式同步改寫。版本：`js/special-member.js` `v=52`、`css/special-member.css` `v=54`、`special-member.html` `v=74`、`sw.js` CACHE_VERSION `nwapp-v875`。
+
+> **2026-11-26**：長者簡易版語音助理「小Q」更名為「西北寶寶」＋語音音色改為男童聲／男聲：`js/special-member.js` 的 `scoreTtsVoice()` 由「優先台灣中文女聲」反轉為「**優先男童聲，其次男聲**」——新增 `VOICE_BOY_HINTS`（`boy`／`child`／`kid`／`童` 等，+50）、`VOICE_MALE_HINTS` 擴充（`zhiwei`／`yunjhe`／`yunxi`／`yunjian`／`yunyang`／`kangkang`／`liang` 等，+45），女聲改為 −40 避免被挑中；並排除粵語（`zh-hk`／`yue`）以免腔調不合。若裝置無男聲／男童聲則自動退回可用的國語聲音。文字：語音彈窗標題（`special-member.html` `#spVoiceTitle`）「我是小Q」→「我是西北寶寶」；喚醒提示音 `WAKE_GREETING` 與問候回覆 `greet`「我是小Q，有什麼能幫您的?」→「我是西北寶寶，有什麼能為您服務的?」；自我介紹 `who` 一併更名。**喚醒詞仍為「小Q」（`WAKE_TOKENS` 未變動）**。版本：`js/special-member.js` `v=51`、`special-member.html` `v=73`、`sw.js` CACHE_VERSION `nwapp-v874`。
+
+> **2026-11-26**：長者簡易版「我是小Q」語音面板改版：面板（`.sp-voice-box`）由原本 90%×90%（`max-width: 40rem` 上限）放大為 **98%×98%**（移除 `max-width`，真正貼近瀏覽器視窗大小）；內部三個區塊改為 **2:4:4** 高度比例——標題列 `.sp-voice-hd`（`flex: 2 1 0`）＋「您說的話」`.sp-voice-top` 與「回覆」`.sp-voice-bottom`（`.sp-voice-block` `flex: 4 1 0`），上下兩區塊等高、各佔 4 份。版本：`css/special-member.css` `v=53`、`sw.js` CACHE_VERSION `nwapp-v873`。
+
+> **2026-11-26**：長者簡易版（`special-member.html`）開啟內嵌模組頁（訪客登記／公設預約／水電繳費等）時的語音提示，由「看完請按最下面的回上一頁」改為「看完了請按左上角的回上一頁」，以符合實際按鈕位置（回上一頁按鈕位於面板標題列最左側、畫面左上角）。版本：`special-member.js` `v=50`、`sw.js` CACHE_VERSION `nwapp-v872`。
 
 > **2026-11-26**：PWA（standalone）頁尾被 Android 系統導覽列遮住修正：Android 的 `env(safe-area-inset-bottom)` 常為 `0`，導致 PWA 模式下頁尾列（底部導覽／廣告列）貼齊畫面最底而被系統導覽列蓋住（瀏覽器模式因網址列撐開而正常）。於 `css/pwa.css` 的 `@media (display-mode: standalone)` 內，把 `.layout`／`.parcel-layout`／`.wrap`／`.v-page` 與 `body` 的 `padding-bottom` 由 `env(safe-area-inset-bottom)` 改為 `max(env(safe-area-inset-bottom), var(--wc-bottom-overlay, 0px), 1.5rem)`（`var(--wc-bottom-overlay)` 由 `js/pwa.js` 依 `visualViewport` 計算），確保 PWA 模式至少有 1.5rem 底部留白；瀏覽器模式不受影響。長者簡易版 `css/special-member.css` 的 `.sp-bar`／`.sp-home` 同值調整（原 `0.85rem` → `1.5rem`）。版本：`css/pwa.css` `v=5`、`css/special-member.css` `v=52`、`member.html` `v=18`、`special-member.html` `v=72`、`sw.js` CACHE_VERSION `nwapp-v871`。
 

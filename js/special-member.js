@@ -90,6 +90,7 @@
     sheetSpeak: document.getElementById("spSheetSpeak"),
     sheetBack: document.getElementById("spSheetBack"),
     voice: document.getElementById("spVoice"),
+    voiceVideo: document.getElementById("spVoiceVideo"),
     voiceAskText: document.getElementById("spVoiceAskText"),
     voiceReplyText: document.getElementById("spVoiceReplyText"),
     voiceClose: document.getElementById("spVoiceClose"),
@@ -341,10 +342,10 @@
     return action;
   }
 
-  // 喚醒詞「小Q」：回傳喚醒後剩下的字（沒喚醒回傳 null，只喊喚醒詞則回傳空字串）
-  var WAKE_GREETING = "我是小Q，有什麼能幫您的?";
+  // 喚醒詞「西北寶寶」：回傳喚醒後剩下的字（沒喚醒回傳 null，只喊喚醒詞則回傳空字串）
+  var WAKE_GREETING = "我是西北寶寶，有什麼能為您服務的?";
   // 語音辨識常見的同音誤判，一併視為喚醒詞
-  var WAKE_TOKENS = ["小q", "小丘", "小秋"];
+  var WAKE_TOKENS = ["西北寶寶", "西寶寶", "西寶寶寶", "西北包包", "西北飽飽", "西貝寶寶"];
   function detectWake(text) {
     var raw = String(text || "");
     var norm = raw.replace(/[\s，,。.、！!？?；;：:]/g, "").toLowerCase();
@@ -355,9 +356,9 @@
     if (!hit) return null;
     return raw
       .replace(/哈囉|哈罗|你好|嗨|嘿/g, "")
-      .replace(/小\s*[qQ]/g, "")
-      .replace(/小\s*丘/g, "")
-      .replace(/小\s*秋/g, "")
+      .replace(/西\s*[北貝贝杯]?\s*[寶包飽保]\s*[寶包飽保]?/g, "")
+      .replace(/[北貝贝]\s*[寶包飽保]\s*[寶包飽保]?/g, "")
+      .replace(/[寶包飽保]\s*[寶包飽保]+/g, "")
       .replace(/[\s，,。.、！!？?；;：:]+/g, "");
   }
 
@@ -443,7 +444,7 @@
       renderMic();
     };
     rec.onresult = function (ev) {
-      // 1) 先用「即時草稿」搶先抓喚醒詞「小Q」：一聽到就回應，不必等整段講完
+      // 1) 先用「即時草稿」搶先抓喚醒詞「西北寶寶」：一聽到就回應，不必等整段講完
       if (!voicePanel.open) {
         var sawWake = false;
         for (var k = ev.resultIndex; k < ev.results.length; k++) {
@@ -456,7 +457,7 @@
           if (wk.length > wakeText.length) wakeText = wk;
         }
         if (sawWake) {
-          // 每聽到一段草稿就重新倒數 0.25 秒：讓同一句後面的指令有機會一起進來；真的只喊「小Q」也會在 0.25 秒後立刻喚醒
+          // 每聽到一段草稿就重新倒數 0.25 秒：讓同一句後面的指令有機會一起進來；真的只喊「西北寶寶」也會在 0.25 秒後立刻喚醒
           if (wakeWatch) clearTimeout(wakeWatch);
           wakeWatch = setTimeout(function () {
             wakeWatch = null;
@@ -473,7 +474,7 @@
       if (!last || !last.isFinal) return;
       for (var i = 0; i < last.length; i++) {
         var text = last[i] && last[i].transcript;
-        // 喚醒詞「小Q」：喚醒後開啟語音彈窗並回覆提示音
+        // 喚醒詞「西北寶寶」：喚醒後開啟語音彈窗並回覆提示音
         var wake = detectWake(text);
         if (wake !== null) { wakeWatchClear(); wakeVoice(wake); return; }
         var action = matchVoiceCommand(text);
@@ -509,34 +510,52 @@
     });
   }
 
-  /* ---------------- 語音合成：優先挑選台灣中文女聲 ---------------- */
+  /* ---------------- 語音合成：優先挑選男童聲，其次男聲（台灣中文優先） ---------------- */
 
-  // 常見女聲名稱（Chromium／Edge／Windows／Apple）
+  // 男童聲名稱（最優先；部分引擎會提供童聲）
+  var VOICE_BOY_HINTS = ["boy", "child", "kid", "童", "小男孩", "男孩子"];
+  // 常見男聲名稱（Chromium／Edge／Windows）
+  var VOICE_MALE_HINTS = [
+    "zhiwei", "yunjhe", "yunxi", "yunjian", "yunyang", "yunye", "yunhao",
+    "kangkang", "liang", "danny", "wanlung",
+  ];
+  // 常見女聲名稱，避免被挑中
   var VOICE_FEMALE_HINTS = [
     "hsiaochen", "hsiaoyu", "yating", "hanhan", "meijia", "mei-jia", "sinji",
     "xiaoxiao", "xiaoyi", "xiaomo", "huihui", "yaoyao", "ting-ting", "tingting",
-    "國語", "台灣", "臺灣",
+    "xiaoshuang", "hiugaai", "hiumaan", "tracy", "國語", "台灣", "臺灣",
   ];
-  // 常見男聲名稱，避免被挑中
-  var VOICE_MALE_HINTS = ["zhiwei", "yunjhe", "yunxi", "yunjian", "kangkang", "liang"];
 
   var _ttsVoice = null;
 
   function scoreTtsVoice(v) {
     var name = String(v.name || "").toLowerCase();
     var lang = String(v.lang || "").toLowerCase().replace(/_/g, "-");
+    // 只考慮國語（華語）聲音；粵語（zh-hk／yue）腔調不合，不列入
+    if (lang.indexOf("zh-hk") === 0 || lang.indexOf("yue") === 0) return -1;
     var s;
     if (lang.indexOf("zh-tw") === 0) s = 60;
-    else if (lang.indexOf("zh-hk") === 0) s = 35;
-    else if (lang.indexOf("zh") === 0) s = 30;
+    else if (lang.indexOf("zh") === 0) s = 55;
     else return -1;
     var i;
-    for (i = 0; i < VOICE_FEMALE_HINTS.length; i++) {
-      if (name.indexOf(VOICE_FEMALE_HINTS[i]) >= 0) { s += 25; break; }
+    var gender = "";
+    for (i = 0; i < VOICE_BOY_HINTS.length; i++) {
+      if (name.indexOf(VOICE_BOY_HINTS[i]) >= 0) { gender = "boy"; break; }
     }
-    for (i = 0; i < VOICE_MALE_HINTS.length; i++) {
-      if (name.indexOf(VOICE_MALE_HINTS[i]) >= 0) { s -= 30; break; }
+    if (!gender) {
+      for (i = 0; i < VOICE_MALE_HINTS.length; i++) {
+        if (name.indexOf(VOICE_MALE_HINTS[i]) >= 0) { gender = "male"; break; }
+      }
     }
+    if (!gender) {
+      for (i = 0; i < VOICE_FEMALE_HINTS.length; i++) {
+        if (name.indexOf(VOICE_FEMALE_HINTS[i]) >= 0) { gender = "female"; break; }
+      }
+    }
+    // 男童聲最優先，其次男聲；女聲盡量避免
+    if (gender === "boy") s += 50;
+    else if (gender === "male") s += 45;
+    else if (gender === "female") s -= 40;
     // Edge 的 Online (Natural) 聲音最接近真人，優先
     if (name.indexOf("natural") >= 0 || name.indexOf("online") >= 0) s += 10;
     if (v.localService) s += 2;
@@ -580,10 +599,27 @@
     return u;
   }
 
+  // 「西北寶寶」動畫（nwbb.mp4）：每次觸發只播放一次（不循環）
+  var _nwbbPlayedAt = 0;
+  function playNwbb() {
+    var v = el.voiceVideo;
+    if (!v || !el.voice || el.voice.hidden) return;
+    var now = Date.now();
+    // 開啟彈窗與問候語幾乎同時觸發，避免同一時間重複播放
+    if (now - _nwbbPlayedAt < 500) return;
+    _nwbbPlayedAt = now;
+    try {
+      v.currentTime = 0;
+      var p = v.play();
+      if (p && typeof p.catch === "function") p.catch(function () {});
+    } catch (e) {}
+  }
+
   function speak(text) {
     if (!state.voice) return;
     var msg = String(text || "").trim();
     if (!msg || !("speechSynthesis" in window)) return;
+    playNwbb();
     try {
       window.speechSynthesis.cancel();
       var u = applyTtsVoice(new SpeechSynthesisUtterance(msg));
@@ -612,6 +648,7 @@
     var done = function () { if (onDone) onDone(); };
     var msg = String(text || "").trim();
     if (!state.voice || !msg || !("speechSynthesis" in window)) { done(); return; }
+    playNwbb();
     try {
       window.speechSynthesis.cancel();
       var u = applyTtsVoice(new SpeechSynthesisUtterance(msg));
@@ -642,10 +679,10 @@
     intercom: "好的，我幫您打開對講。",
     profile: "好的，我幫您看個人資料。",
     call: "好的，我幫您撥打電話。",
-    greet: "您好，我是小Q，有什麼能幫您的?",
+    greet: "您好，我是西北寶寶，有什麼能為您服務的?",
     thanks: "不客氣，能幫上忙我很開心。",
     bye: "再見，祝您有美好的一天。",
-    who: "我是小Q，社區的語音小幫手。可以幫您看包裹、看公告、訪客登記、公設預約、水電繳費、對講，也可以報時間、日期和天氣。",
+    who: "我是西北寶寶，社區的語音小幫手。可以幫您看包裹、看公告、訪客登記、公設預約、水電繳費、對講，也可以報時間、日期和天氣。",
     help: "我可以幫您做這些事：看包裹、看公告、訪客登記、公設預約、水電繳費、對講、現在幾點、今天天氣、打電話。您只要說出需求就可以了。",
   };
   var VOICE_REPLY_FALLBACK = "抱歉，我沒聽清楚，請您再說一次。";
@@ -905,7 +942,7 @@
     handleAction(action, true);
   }
 
-  // 被喚醒詞「小Q」喚醒：開啟語音彈窗、回覆提示音；若同一句還有指令就直接執行
+  // 被喚醒詞「西北寶寶」喚醒：開啟語音彈窗、回覆提示音；若同一句還有指令就直接執行
   function wakeVoice(firstCommand) {
     if (voicePanel.open) return;
     openVoicePanel(WAKE_GREETING, firstCommand);
@@ -924,6 +961,7 @@
     renderVoiceAsk("");
     setVoiceReply(first ? "…" : "請說出您的需求，例如「看公告」「今天天氣」「明天會不會下雨」「現在幾點」…");
     el.voice.hidden = false;
+    playNwbb();
     try { history.pushState({ __spVoice: true }, ""); } catch (e) {}
     // 暫停主頁的背景語音，改用彈窗專屬的收音
     voicePanel.wasGlobal = Boolean(voiceCtl.want || voiceCtl.listening);
@@ -956,7 +994,7 @@
         }
       } catch (e) {}
     }
-    // 關閉彈窗後一定要恢復「小Q」常駐收音，否則喚醒詞會失效、要喊多次才有反應
+    // 關閉彈窗後一定要恢復「西北寶寶」常駐收音，否則喚醒詞會失效、要喊多次才有反應
     if (!voiceCtl.blocked) voiceStart();
     return didBack;
   }
@@ -1720,7 +1758,7 @@
   /* ---------------- 六大功能點擊 ---------------- */
 
   function openFrame(title, url) {
-    openSheet({ title: title, frameUrl: url, speakText: title + "，打開了。看完請按最下面的回上一頁" });
+    openSheet({ title: title, frameUrl: url, speakText: title + "，打開了。看完了請按左上角的回上一頁" });
   }
 
   function moduleUrl(page, extra) {
@@ -1894,7 +1932,7 @@
     else stopSpeak();
   }
 
-  /* ---------------- 電話設定（常用電話，供小Q語音撥打） ---------------- */
+  /* ---------------- 電話設定（常用電話，供西北寶寶語音撥打） ---------------- */
 
   var phonePanel = { open: false, formOpen: false, editingId: "" };
   var phonePanelBackPending = false;
@@ -1993,7 +2031,7 @@
         "</div>";
       });
     } else if (!phonePanel.formOpen) {
-      html += '<div class="sp-phone-empty">還沒有設定電話。<br>按下面的「新增電話」把常用電話記下來，之後只要對小Q說「請打電話給○○」就可以直接撥號。</div>';
+      html += '<div class="sp-phone-empty">還沒有設定電話。<br>按下面的「新增電話」把常用電話記下來，之後只要對西北寶寶說「請打電話給○○」就可以直接撥號。</div>';
     }
     if (!phonePanel.formOpen) {
       html += '<button class="sp-btn sp-btn-primary" type="button" data-phone-action="add">＋ 新增電話</button>';

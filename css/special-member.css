@@ -611,7 +611,7 @@ button {
   }
 }
 
-/* ---------------- 語音說話彈窗（90% 版面，上下兩區塊） ---------------- */
+/* ---------------- 語音說話彈窗（98% 版面，上下兩區塊 2:4:4） ---------------- */
 .sp-voice {
   position: fixed;
   inset: 0;
@@ -624,9 +624,8 @@ button {
 }
 
 .sp-voice-box {
-  width: 90%;
-  height: 90%;
-  max-width: 40rem;
+  width: 98%;
+  height: 98%;
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
@@ -638,22 +637,57 @@ button {
 }
 
 .sp-voice-hd {
-  flex: 0 0 auto;
+  flex: 2 1 0;
+  min-height: 0;
+  position: relative;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.7rem;
 }
 
-.sp-voice-title {
+.sp-voice-video {
   flex: 1 1 auto;
-  margin: 0;
-  color: var(--brand-dark);
-  font-size: 1.5rem;
+  min-width: 0;
+  height: 100%;
+  max-height: 100%;
+  display: block;
+  object-fit: contain;
+  border-radius: 0.9rem;
+  background: #fff;
+}
+
+/* 影片左側名稱：兩行、靠左對齊（「我是」黑字／「西北寶寶」紅字） */
+.sp-voice-name {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  line-height: 1.15;
+  pointer-events: none;
+}
+
+.sp-voice-name-1 {
+  font-size: 1.35rem;
   font-weight: 900;
-  line-height: 1.2;
+  color: var(--ink);
+}
+
+.sp-voice-name-2 {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: var(--brand);
 }
 
 .sp-voice-close {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
   flex: 0 0 auto;
   width: 2.8rem;
   height: 2.8rem;
@@ -666,7 +700,7 @@ button {
 }
 
 .sp-voice-block {
-  flex: 1 1 0;
+  flex: 4 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
