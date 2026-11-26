@@ -10,6 +10,42 @@
 (function () {
   "use strict";
 
+  function isStandalonePwa() {
+    try {
+      if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) return true;
+    } catch (e) {}
+    return Boolean(window.navigator && window.navigator.standalone);
+  }
+
+  function updatePwaBottomInset() {
+    var bottomInset = 0;
+    var viewport = window.visualViewport;
+    if (isStandalonePwa() && viewport) {
+      var baseHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
+      bottomInset = Math.max(0, Math.round(baseHeight - (viewport.height + viewport.offsetTop)));
+    }
+    document.documentElement.style.setProperty("--wc-bottom-overlay", bottomInset + "px");
+  }
+
+  function schedulePwaBottomInset() {
+    updatePwaBottomInset();
+    [120, 360, 900].forEach(function (delay) {
+      window.setTimeout(updatePwaBottomInset, delay);
+    });
+  }
+
+  schedulePwaBottomInset();
+  window.addEventListener("resize", schedulePwaBottomInset, { passive: true });
+  window.addEventListener("orientationchange", schedulePwaBottomInset, { passive: true });
+  window.addEventListener("pageshow", schedulePwaBottomInset, { passive: true });
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) schedulePwaBottomInset();
+  }, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", schedulePwaBottomInset, { passive: true });
+    window.visualViewport.addEventListener("scroll", schedulePwaBottomInset, { passive: true });
+  }
+
   var firebaseConfig = window.FIREBASE_CONFIG;
   if (!firebaseConfig) throw new Error("Missing FIREBASE_CONFIG");
   try { firebase.initializeApp(firebaseConfig); } catch (e) {}
@@ -1233,6 +1269,7 @@
     sheetOpen = false;
     currentSheetOpt = null;
     sheetStack = [];
+    setActiveNav(el.homeNav);
     stopSpeak();
     // 底部導覽移回主頁面
     if (el.bar && el.shell && el.bar.parentNode !== el.shell) el.shell.appendChild(el.bar);

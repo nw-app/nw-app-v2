@@ -4,7 +4,15 @@
 >
 > **技術堆疊**：`Firebase Auth / Firestore / Storage` + `原生 HTML / CSS / JavaScript` + `Service Worker（PWA 離線快取）` + `WebRTC 對講`
 >
-> **目前版本**：CACHE_VERSION `nwapp-v896`（每次升級需同步三項版本，詳見後方部署 SOP）
+> **目前版本**：CACHE_VERSION `nwapp-v900`（每次升級需同步三項版本，詳見後方部署 SOP）
+
+> **2026-11-27**：後台「功能」清單頻道編號由小至大排序修正：原 `parseFloat("N001")` 會得到 `NaN`，導致帶字母前綴的編號退回依名稱排序；新增 `liveChannelOrderRank()` 擷取編號中的數字，讓 `N001`、`N002`、`N010` 等格式依數值正確排序。無有效編號者維持排最後，同編號依名稱排序。版本：`system.html` `js/system.js?v=61`、`sw.js` CACHE_VERSION `nwapp-v900`。
+
+> **2026-11-27**：修正住戶登入首頁在 PWA 模式下底部導覽被手機系統列遮擋：一般版 `.layout` 改為以 `1fr` 分配內容列、由頁尾內容決定導覽列高度，並於 standalone 模式固定填滿可視畫面，使系統安全區留白不再與固定 `vh` 列高重疊；長者版 `special-member.js` 新增 standalone `visualViewport` 底部遮擋偵測，更新既有 `--wc-bottom-overlay`，在登入／初次渲染及視窗變更後重算頁尾留白。版本：`member.html` CSS `v=15`、`special-member.html` `v=81`、`js/special-member.js` `v=58`、`sw.js` CACHE_VERSION `nwapp-v899`。
+
+> **2026-11-27**：四個影音頁移除頁首文字標題，將搜尋欄與「我的最愛」按鈕移至 Logo 右側的固定 `header`；頁首貼齊視窗頂端左右邊界並置於內容上層。`.ltv-wrap` 改為滿版欄式配置，`main.ltv-grid` 設定可觸控垂直捲動，修正手機無法上下滑動頻道的問題。版本：`livetv.html` `v=10`、`livemusic.html`／`broadcasttv.html`／`videotv.html` `v=9`、`sw.js` CACHE_VERSION `nwapp-v898`。
+
+> **2026-11-27**：長者簡易版從「功能」面板按上一頁或瀏覽器返回、關閉最後一層面板回到首頁時，底部導覽原會保留「功能」的作用中狀態。修正 `hideSheet()` 在返回首頁時同步將頁尾導覽切回「首頁」，並更新 `special-member.html`／`js/special-member.js` 快取版本。版本：`special-member.html` `v=80`、`js/special-member.js` `v=57`、`sw.js` CACHE_VERSION `nwapp-v897`。
 
 > **2026-11-27**：四個播放頁的節目表面板 `.ltv-sched` 寬度由 30% 調整為**瀏覽器寬度 50%**；面板標題下方新增獨立搜尋框 `#ltvSchedSearch`（比對頻道編號與名稱）及紅心篩選鈕 `#ltvSchedFavOnly`（只列出該頁我的最愛）。每列最愛頻道顯示紅心標記，從頁面頻道卡切換最愛時，節目表清單同步更新；原本面板排序與點選切換播放行為維持不變。版本：`livetv.html` `v=9`、`livemusic.html`／`broadcasttv.html`／`videotv.html` `v=8`、`sw.js` CACHE_VERSION `nwapp-v896`。
 

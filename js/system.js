@@ -912,12 +912,16 @@
       .filter((it) => it.order || it.name || it.image || it.youtubeUrl);
   }
 
+  function liveChannelOrderRank(order) {
+    const match = String(order == null ? "" : order).match(/\d+(?:\.\d+)?/);
+    const rank = match ? Number(match[0]) : Number.POSITIVE_INFINITY;
+    return Number.isFinite(rank) ? rank : Number.POSITIVE_INFINITY;
+  }
+
   function sortLiveChannels(list) {
     return (Array.isArray(list) ? list.slice() : []).sort((a, b) => {
-      const an = parseFloat(a.order);
-      const bn = parseFloat(b.order);
-      const av = Number.isFinite(an) ? an : Number.POSITIVE_INFINITY;
-      const bv = Number.isFinite(bn) ? bn : Number.POSITIVE_INFINITY;
+      const av = liveChannelOrderRank(a && a.order);
+      const bv = liveChannelOrderRank(b && b.order);
       if (av !== bv) return av - bv;
       return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
     });

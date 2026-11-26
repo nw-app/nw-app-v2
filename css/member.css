@@ -323,9 +323,17 @@ a { color: inherit; text-decoration: none; }
   height: 100svh;
   display: grid;
   grid-template-columns: 1fr;
-  grid-template-rows: minmax(56px, 8vh) minmax(56px, 8vh) minmax(0, 76vh) minmax(56px, 8vh);
+  grid-template-rows: minmax(56px, 8vh) minmax(56px, 8vh) minmax(0, 1fr) auto;
   background: var(--bg);
   padding-bottom: 0;
+}
+@media (display-mode: standalone) {
+  .layout {
+    position: fixed;
+    inset: 0;
+    height: auto;
+    min-height: 0;
+  }
 }
 .frame-hd {
   display: flex;
