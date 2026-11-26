@@ -1186,7 +1186,8 @@
     if (opt.frameUrl) {
       var frame = document.createElement("iframe");
       frame.className = "sp-frame";
-      frame.setAttribute("allow", "camera; microphone; clipboard-write; autoplay");
+      frame.setAttribute("allow", "camera; microphone; clipboard-write; autoplay; fullscreen");
+      frame.setAttribute("allowfullscreen", "true");
       frame.src = String(opt.frameUrl);
       el.sheetBody.appendChild(frame);
     } else if (opt.node) {
@@ -1859,6 +1860,26 @@
     if (action === "facility") {
       if (!silent) speak("公設預約");
       openFrame("公設預約", moduleUrl("facility.html"));
+      return;
+    }
+    if (action === "live-news") {
+      if (!silent) speak("直播新聞");
+      openFrame("直播新聞", moduleUrl("livetv.html"));
+      return;
+    }
+    if (action === "live-music") {
+      if (!silent) speak("創作音樂");
+      openFrame("創作音樂", moduleUrl("livemusic.html"));
+      return;
+    }
+    if (action === "live-broadcast") {
+      if (!silent) speak("線上廣播");
+      openFrame("線上廣播", moduleUrl("broadcasttv.html"));
+      return;
+    }
+    if (action === "live-video") {
+      if (!silent) speak("熱門影片");
+      openFrame("熱門影片", moduleUrl("videotv.html"));
       return;
     }
     if (action === "meter") {

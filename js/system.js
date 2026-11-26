@@ -23,7 +23,7 @@
   const STORAGE_LAST_PAGE = "csp_system_page_v1";
   const STORAGE_AREA_FILTER = "csp_community_area_filter_v1";
   const STORAGE_ROW_D_RULES_MIGRATION = "csp_rowd_rules_migration_v1";
-  const PAGES = ["accounts", "community", "board", "table", "shop", "links"];
+  const PAGES = ["accounts", "community", "board", "table", "shop", "features", "links"];
   const ACCOUNT_ROLE_META = Object.freeze({
     resident: { label: "住戶", roleValue: "住戶", sessionRole: "resident", page: "member.html" },
     board: { label: "看板", roleValue: "看板", sessionRole: "board", page: "ead.html" },
@@ -852,6 +852,359 @@
       }
     });
   }
+
+  // ---------------- 功能分頁（子分頁：電視／音樂／廣播／影片） ----------------
+  const FEATURES_TABS = {
+    tv: { label: "電視", itemLabel: "頻道", storeKey: "liveTvChannels", page: "livetv.html" },
+    music: { label: "音樂", itemLabel: "頻道", storeKey: "liveMusicChannels", page: "livemusic.html" },
+    broadcast: { label: "廣播", itemLabel: "頻道", storeKey: "liveBroadcastChannels", page: "broadcasttv.html" },
+    video: { label: "影片", itemLabel: "影片", storeKey: "liveVideoChannels", page: "videotv.html" },
+  };
+  const FEATURES_TAB_ORDER = ["tv", "music", "broadcast", "video"];
+  // 四個社區播放頁不分社區／帳號，所有帳號看到的內容統一一樣：
+  // 頻道設定一律讀寫這份固定文件（= A001「西北保全」的 app_config，內含既有頻道資料）。
+  const FEATURES_GLOBAL_CID = "oOo7WB8YSRo8FGcebLg6";
+
+  let featuresActiveTab = "tv";
+  let featuresChannels = [];
+  let featuresEditingId = "";
+
+  function featuresTabConfig(tabId) {
+    return FEATURES_TABS[String(tabId || "")] || FEATURES_TABS.tv;
+  }
+
+  function setActiveFeaturesTab(tabId) {
+    const next = FEATURES_TABS[String(tabId || "")] ? String(tabId || "") : "tv";
+    featuresActiveTab = next;
+    // 子分頁按鈕置於頂部列（#areaFilter，樣式同 filter-btn）
+    document.querySelectorAll("[data-features-tab]").forEach((b) => {
+      const on = String(b.getAttribute("data-features-tab") || "") === next;
+      b.setAttribute("aria-selected", on ? "true" : "false");
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      b.classList.toggle("active", on);
+    });
+    // 四個子分頁共用同一份表單與清單，切換時重新載入對應資料
+    if (state.currentPage === "features") loadFeaturesTab();
+  }
+
+  function featureItemId() {
+    return "ft_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
+  }
+
+  function featureYoutubeId(url) {
+    const u = String(url || "").trim();
+    if (!u) return "";
+    const m = u.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/|live\/))([A-Za-z0-9_-]{6,})/);
+    if (m && m[1]) return m[1];
+    return "";
+  }
+
+  function normalizeLiveChannels(raw) {
+    const list = Array.isArray(raw) ? raw : [];
+    return list
+      .map((it) => ({
+        id: String(it && it.id ? it.id : featureItemId()),
+        order: String(it && it.order != null ? it.order : "").trim(),
+        name: String(it && it.name != null ? it.name : "").trim(),
+        image: String(it && it.image ? it.image : ""),
+        youtubeUrl: String(it && it.youtubeUrl ? it.youtubeUrl : "").trim(),
+      }))
+      .filter((it) => it.order || it.name || it.image || it.youtubeUrl);
+  }
+
+  function sortLiveChannels(list) {
+    return (Array.isArray(list) ? list.slice() : []).sort((a, b) => {
+      const an = parseFloat(a.order);
+      const bn = parseFloat(b.order);
+      const av = Number.isFinite(an) ? an : Number.POSITIVE_INFINITY;
+      const bv = Number.isFinite(bn) ? bn : Number.POSITIVE_INFINITY;
+      if (av !== bv) return av - bv;
+      return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
+    });
+  }
+
+  function loadLiveChannels(storeKey, communityId) {
+    const cid = String(communityId || "default");
+    const key = String(storeKey || "liveTvChannels");
+    let raw = null;
+    try {
+      raw = state.configByCommunityId.get(cid) || null;
+    } catch {}
+    return sortLiveChannels(normalizeLiveChannels(raw && raw[key]));
+  }
+
+  async function saveLiveChannels(storeKey, channels, communityId) {
+    const cid = String(communityId || "default");
+    const key = String(storeKey || "liveTvChannels");
+    await configDocRef(cid).set(
+      { [key]: channels, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    try {
+      const prev = state.configByCommunityId.get(cid) || {};
+      state.configByCommunityId.set(cid, { ...prev, [key]: channels });
+    } catch {}
+  }
+
+  const featureFileToDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("read-failed"));
+    reader.onload = () => {
+      const raw = String(reader.result || "");
+      const img = new Image();
+      img.onerror = () => reject(new Error("image-decode-failed"));
+      img.onload = () => {
+        const srcW = img.naturalWidth || 0;
+        const srcH = img.naturalHeight || 0;
+        if (!srcW || !srcH) {
+          reject(new Error("bad-image"));
+          return;
+        }
+        // GIF 動畫檔過大，一律與其他格式相同：縮圖後重新編碼為靜態圖（不保留動畫）
+        const maxEdge = 360;
+        let targetW = srcW;
+        let targetH = srcH;
+        if (srcW > maxEdge || srcH > maxEdge) {
+          const scale = Math.min(maxEdge / srcW, maxEdge / srcH);
+          targetW = Math.max(1, Math.round(srcW * scale));
+          targetH = Math.max(1, Math.round(srcH * scale));
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("no-canvas"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, targetW, targetH);
+        const isPng = /image\/png/i.test(String((file && file.type) || ""));
+        let out = isPng ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", 0.82);
+        if (out.length > 220 * 1024) out = canvas.toDataURL("image/jpeg", 0.62);
+        if (out.length > 360 * 1024) out = canvas.toDataURL("image/jpeg", 0.45);
+        resolve(out);
+      };
+      img.src = raw;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function setFeaturesStatus(text, isError) {
+    const el = document.getElementById("featuresStatus");
+    if (!el) return;
+    el.textContent = text || "";
+    el.classList.toggle("error", !!isError);
+  }
+
+  function renderFeaturesList() {
+    const listEl = document.getElementById("featList");
+    if (!listEl) return;
+    const tab = featuresTabConfig(featuresActiveTab);
+    const items = sortLiveChannels(featuresChannels);
+    if (!items.length) {
+      listEl.innerHTML = `<div class="tv-empty">尚未新增${tab.itemLabel}，請由上方表單新增。</div>`;
+      return;
+    }
+    listEl.innerHTML = items
+      .map((it) => `
+        <div class="tv-item" data-feat-id="${escapeHtml(it.id)}">
+          <div class="tv-thumb">${
+            it.image
+              ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" />`
+              : '<span class="tv-thumb-ph">無圖</span>'
+          }</div>
+          <div class="tv-meta">
+            <div class="tv-name">${it.order ? `<span class="tv-order">${escapeHtml(it.order)}</span>` : ""}${escapeHtml(it.name || `（未命名${tab.itemLabel}）`)}</div>
+            <div class="tv-url">${escapeHtml(it.youtubeUrl || "未設定網址")}</div>
+          </div>
+          <div class="tv-actions">
+            <button class="btn" type="button" data-feat-edit="${escapeHtml(it.id)}">編輯</button>
+            <button class="btn" type="button" data-feat-del="${escapeHtml(it.id)}">刪除</button>
+          </div>
+        </div>
+      `)
+      .join("");
+  }
+
+  function resetFeaturesForm() {
+    featuresEditingId = "";
+    const tab = featuresTabConfig(featuresActiveTab);
+    const setVal = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.value = v;
+    };
+    setVal("featOrder", "");
+    setVal("featName", "");
+    setVal("featYoutube", "");
+    const fileEl = document.getElementById("featImage");
+    if (fileEl) fileEl.value = "";
+    const addBtn = document.getElementById("btnFeatAdd");
+    if (addBtn) addBtn.textContent = `新增${tab.itemLabel}`;
+    const cancelBtn = document.getElementById("btnFeatCancel");
+    if (cancelBtn) cancelBtn.hidden = true;
+  }
+
+  function fillFeaturesForm(ch) {
+    featuresEditingId = ch.id;
+    const setVal = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.value = v;
+    };
+    setVal("featOrder", ch.order || "");
+    setVal("featName", ch.name || "");
+    setVal("featYoutube", ch.youtubeUrl || "");
+    const fileEl = document.getElementById("featImage");
+    if (fileEl) fileEl.value = "";
+    const tab = featuresTabConfig(featuresActiveTab);
+    const addBtn = document.getElementById("btnFeatAdd");
+    if (addBtn) addBtn.textContent = `更新${tab.itemLabel}`;
+    const cancelBtn = document.getElementById("btnFeatCancel");
+    if (cancelBtn) cancelBtn.hidden = false;
+  }
+
+  function loadFeaturesTab() {
+    const tab = featuresTabConfig(featuresActiveTab);
+    featuresChannels = loadLiveChannels(tab.storeKey, FEATURES_GLOBAL_CID);
+    const previewLink = document.getElementById("featPreviewLink");
+    if (previewLink) {
+      previewLink.href = tab.page;
+      previewLink.textContent = `預覽${tab.label}頁`;
+    }
+    const tabNameEl = document.getElementById("featTabName");
+    if (tabNameEl) tabNameEl.textContent = tab.label;
+    renderFeaturesList();
+    resetFeaturesForm();
+    setFeaturesStatus("");
+  }
+
+  function refreshFeaturesIfActive() {
+    if (state.currentPage !== "features") return;
+    if (!document.getElementById("featList")) return;
+    const tab = featuresTabConfig(featuresActiveTab);
+    featuresChannels = loadLiveChannels(tab.storeKey, FEATURES_GLOBAL_CID);
+    renderFeaturesList();
+  }
+
+  function bindFeaturesHandlers() {
+    const cid = FEATURES_GLOBAL_CID;
+    const addBtn = document.getElementById("btnFeatAdd");
+    const cancelBtn = document.getElementById("btnFeatCancel");
+    const listEl = document.getElementById("featList");
+
+    if (addBtn) {
+      addBtn.addEventListener("click", async () => {
+        const tab = featuresTabConfig(featuresActiveTab);
+        const order = normalizeText((document.getElementById("featOrder") || {}).value || "");
+        const name = normalizeText((document.getElementById("featName") || {}).value || "");
+        const ytUrl = normalizeText((document.getElementById("featYoutube") || {}).value || "");
+        const fileEl = document.getElementById("featImage");
+        const file = fileEl && fileEl.files ? fileEl.files[0] : null;
+
+        if (!order && !name) {
+          setFeaturesStatus("請至少填寫「編號」或「名稱」。", true);
+          return;
+        }
+        if (ytUrl && !featureYoutubeId(ytUrl)) {
+          setFeaturesStatus("YouTube 網址無法辨識，請確認格式（例：https://www.youtube.com/watch?v=xxxx）。", true);
+          return;
+        }
+        if (file && !/^image\/(png|jpeg|gif)$/i.test(String(file.type || ""))) {
+          setFeaturesStatus("圖片僅支援 PNG／JPG／GIF。", true);
+          return;
+        }
+
+        setBusy(true);
+        try {
+          let image = "";
+          if (featuresEditingId) {
+            const prev = featuresChannels.find((x) => x.id === featuresEditingId);
+            image = prev ? prev.image : "";
+          }
+          if (file) image = await featureFileToDataUrl(file);
+
+          let next = featuresChannels.slice();
+          if (featuresEditingId) {
+            const idx = next.findIndex((x) => x.id === featuresEditingId);
+            if (idx >= 0) {
+              next[idx] = { ...next[idx], order, name, youtubeUrl: ytUrl, image };
+            }
+          } else {
+            next.push({ id: featureItemId(), order, name, youtubeUrl: ytUrl, image });
+          }
+          next = sortLiveChannels(next);
+          if (JSON.stringify(next).length > 900 * 1024) {
+            setFeaturesStatus("圖片總容量過大，請改用較小的圖片後再儲存。", true);
+            return;
+          }
+
+          featuresChannels = next;
+          await saveLiveChannels(tab.storeKey, featuresChannels, cid);
+          renderFeaturesList();
+          resetFeaturesForm();
+          setFeaturesStatus("已儲存設定。");
+        } catch {
+          setFeaturesStatus("儲存失敗，請稍後再試。", true);
+        } finally {
+          setBusy(false);
+        }
+      });
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener("click", () => {
+        resetFeaturesForm();
+        setFeaturesStatus("");
+      });
+    }
+
+    if (listEl && !listEl._boundFeat) {
+      listEl._boundFeat = true;
+      listEl.addEventListener("click", async (e) => {
+        const target = e.target;
+        if (!target || !target.closest) return;
+        const tab = featuresTabConfig(featuresActiveTab);
+        const editBtn = target.closest("[data-feat-edit]");
+        if (editBtn) {
+          const id = editBtn.getAttribute("data-feat-edit");
+          const ch = featuresChannels.find((x) => x.id === id);
+          if (ch) {
+            fillFeaturesForm(ch);
+            setFeaturesStatus("編輯中，修改後按「更新」。");
+          }
+          return;
+        }
+        const delBtn = target.closest("[data-feat-del]");
+        if (delBtn) {
+          const id = delBtn.getAttribute("data-feat-del");
+          const ch = featuresChannels.find((x) => x.id === id);
+          const label = ch && ch.name ? ch.name : `此${tab.itemLabel}`;
+          if (!window.confirm(`確定要刪除「${label}」嗎？`)) return;
+          setBusy(true);
+          try {
+            featuresChannels = featuresChannels.filter((x) => x.id !== id);
+            await saveLiveChannels(tab.storeKey, featuresChannels, cid);
+            if (featuresEditingId === id) resetFeaturesForm();
+            renderFeaturesList();
+            setFeaturesStatus("已刪除。");
+          } catch {
+            setFeaturesStatus("刪除失敗，請稍後再試。", true);
+          } finally {
+            setBusy(false);
+          }
+        }
+      });
+    }
+  }
+
+  function renderFeatures() {
+    const host = document.getElementById("content");
+    host.innerHTML = "";
+    const node = document.getElementById("tplFeatures").content.cloneNode(true);
+    host.appendChild(node);
+    bindFeaturesHandlers();
+    loadFeaturesTab();
+  }
+
 
   function renderAccounts() {
     const host = document.getElementById("content");
@@ -4272,7 +4625,7 @@
   function renderAreaFilterBar() {
     const bar = document.getElementById("areaFilter");
     if (!bar) return;
-    const shouldShow = state.currentPage === "community" || state.currentPage === "board" || state.currentPage === "table" || state.currentPage === "shop" || state.currentPage === "accounts";
+    const shouldShow = state.currentPage === "community" || state.currentPage === "board" || state.currentPage === "table" || state.currentPage === "shop" || state.currentPage === "accounts" || state.currentPage === "features";
     bar.hidden = !shouldShow;
     if (!shouldShow) return;
 
@@ -4309,6 +4662,12 @@
       bar.innerHTML = `<button type="button" class="filter-btn active" data-area="桌板設定" aria-pressed="true">桌板設定</button>`;
     } else if (state.currentPage === "shop") {
       bar.innerHTML = `<button type="button" class="filter-btn active" data-area="商店設定" aria-pressed="true">商店設定</button>`;
+    } else if (state.currentPage === "features") {
+      bar.innerHTML = FEATURES_TAB_ORDER.map((id) => {
+        const t = FEATURES_TABS[id];
+        const on = featuresActiveTab === id;
+        return `<button type="button" class="filter-btn ${on ? "active" : ""}" data-features-tab="${id}" aria-pressed="${on ? "true" : "false"}">${t.label}</button>`;
+      }).join("");
     }
 
     // 移除旧的事件绑定，重新绑定
@@ -4323,6 +4682,11 @@
         state.accountsRoleView = v;
         state.categoryFilter = "__all__";
         openPage("accounts");
+        return;
+      }
+      const ftBtn = e.target && e.target.closest ? e.target.closest("[data-features-tab]") : null;
+      if (ftBtn && state.currentPage === "features") {
+        setActiveFeaturesTab(ftBtn.getAttribute("data-features-tab"));
       }
     });
   }
@@ -4397,6 +4761,8 @@
         const activeName = accounts.communities.find((c) => c.id === activeId)?.name || activeId;
         if (subEl) subEl.textContent = `設定「社區後台」與「住戶前台」按鈕功能與連結（社區：${activeName}）`;
         renderLinks();
+      } else if (state.currentPage === "features") {
+        refreshFeaturesIfActive();
       }
     }).catch(() => {
       state.configByCommunityId.set(cid, {});
@@ -4428,6 +4794,14 @@
       titleEl.textContent = "社區列表";
       subEl.textContent = "";
       renderCommunity();
+      renderAreaFilterBar();
+      return;
+    }
+    if (nextPage === "features") {
+      titleEl.textContent = "功能";
+      subEl.textContent = "";
+      ensureConfigSubscription(FEATURES_GLOBAL_CID);
+      renderFeatures();
       renderAreaFilterBar();
       return;
     }

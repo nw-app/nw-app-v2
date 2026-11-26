@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>社區電視｜QAi生活網</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg?v=5" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#d32f2f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="icon-192.png?v=2" />
+    <link rel="stylesheet" href="css/pwa.css" />
+    <style>
+      :root {
+        --brand: #d32f2f;
+        --ink: #1f2937;
+        --muted: #6b7280;
+        --bg: #f2f3f5;
+        --border: rgba(17, 24, 39, 0.12);
+        --radius: 16px;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", Arial, sans-serif;
+      }
+      .ltv-wrap {
+        min-height: 100dvh;
+        padding: max(14px, env(safe-area-inset-top)) 14px max(20px, env(safe-area-inset-bottom));
+      }
+      .ltv-hd {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: var(--radius);
+        background: #fff;
+        box-shadow: 0 10px 26px rgba(17, 24, 39, 0.08);
+        margin-bottom: 16px;
+      }
+      .ltv-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+      .ltv-brand img { width: 38px; height: 38px; flex: 0 0 auto; }
+      .ltv-title { font-size: 18px; font-weight: 900; }
+      .ltv-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 14px;
+      }
+      .ltv-tile {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: #fff;
+        padding: 10px;
+        cursor: pointer;
+        display: grid;
+        gap: 10px;
+        text-align: left;
+        transition: transform 120ms ease, box-shadow 120ms ease;
+      }
+      .ltv-tile:hover { transform: translateY(-2px); box-shadow: 0 16px 32px rgba(17, 24, 39, 0.14); }
+      .ltv-tile-img {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 3 / 2;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #f3f4f6;
+        display: grid;
+        place-items: center;
+      }
+      .ltv-tile-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .ltv-tile-ph { font-size: 13px; color: var(--muted); }
+      .ltv-tile-order {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        min-width: 24px;
+        height: 24px;
+        padding: 0 7px;
+        display: inline-grid;
+        place-items: center;
+        border-radius: 999px;
+        background: rgba(211, 47, 47, 0.92);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 900;
+      }
+      .ltv-tile-name {
+        font-weight: 800;
+        font-size: 15px;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ltv-empty {
+        padding: 40px 18px;
+        border-radius: var(--radius);
+        border: 1px dashed rgba(17, 24, 39, 0.2);
+        background: #fff;
+        color: var(--muted);
+        text-align: center;
+      }
+      .ltv-player {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: #000;
+        display: flex;
+        flex-direction: column;
+      }
+      .ltv-player[hidden] { display: none; }
+      .ltv-player-frame { position: relative; flex: 1 1 auto; min-height: 0; background: #000; }
+      .ltv-player-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+      .ltv-player-msg {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 15px;
+        padding: 24px;
+        text-align: center;
+      }
+      .ltv-player-close {
+        position: absolute;
+        top: max(12px, env(safe-area-inset-top));
+        right: max(12px, env(safe-area-inset-right));
+        z-index: 2;
+        width: 44px;
+        height: 44px;
+        border-radius: 999px;
+        border: 0;
+        background: rgba(255, 255, 255, 0.92);
+        color: #111827;
+        font-size: 24px;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .ltv-player-name {
+        flex: 0 0 auto;
+        padding: max(10px, env(safe-area-inset-bottom)) 16px;
+        color: #fff;
+        font-size: 15px;
+        font-weight: 700;
+        text-align: center;
+        background: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ltv-wrap">
+      <header class="ltv-hd">
+        <div class="ltv-brand">
+          <img src="logo.svg?v=5" alt="" />
+          <div>
+            <div class="ltv-title">直播新聞</div>
+          </div>
+        </div>
+      </header>
+      <main class="ltv-grid" id="ltvGrid"></main>
+      <div class="ltv-empty" id="ltvEmpty" hidden>尚未設定任何頻道。</div>
+    </div>
+
+    <div class="ltv-player" id="ltvPlayer" hidden>
+      <div class="ltv-player-frame" id="ltvFrame"></div>
+      <button class="ltv-player-close" type="button" id="ltvClose" aria-label="關閉">×</button>
+      <div class="ltv-player-name" id="ltvPlayerName"></div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/pwa.js?v=16"></script>
+    <script>
+      (function () {
+        "use strict";
+
+        const cfg = window.FIREBASE_CONFIG;
+        if (!cfg) return;
+        try {
+          firebase.initializeApp(cfg);
+        } catch (e) {}
+        const db = firebase.firestore();
+        try {
+          db.settings({
+            experimentalAutoDetectLongPolling: true,
+            experimentalForceLongPolling: true,
+            useFetchStreams: false,
+          });
+        } catch (e) {}
+
+        function youtubeVideoId(url) {
+          const u = String(url || "").trim();
+          if (!u) return "";
+          const m = u.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/|live\/))([A-Za-z0-9_-]{6,})/);
+          if (m && m[1]) return m[1];
+          try {
+            const uo = new URL(u);
+            if (uo.hostname.indexOf("youtube.com") !== -1 || uo.hostname.indexOf("youtu.be") !== -1) {
+              const v = uo.searchParams.get("v");
+              if (v) return v;
+            }
+          } catch (e) {}
+          return "";
+        }
+
+        function escapeHtml(s) {
+          return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          })[c]);
+        }
+
+        // 四個播放頁不分社區／帳號：一律讀取同一份固定頻道設定（與後台「功能」分頁同一份）。
+        const GLOBAL_CONFIG_CID = "oOo7WB8YSRo8FGcebLg6";
+
+        function sortChannels(list) {
+          return (Array.isArray(list) ? list.slice() : []).sort((a, b) => {
+            const an = parseFloat(a.order);
+            const bn = parseFloat(b.order);
+            const av = Number.isFinite(an) ? an : Number.POSITIVE_INFINITY;
+            const bv = Number.isFinite(bn) ? bn : Number.POSITIVE_INFINITY;
+            if (av !== bv) return av - bv;
+            return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
+          });
+        }
+
+        function normalizeChannels(raw) {
+          const list = Array.isArray(raw) ? raw : [];
+          return sortChannels(
+            list
+              .map((it) => ({
+                id: String(it && it.id ? it.id : ""),
+                order: String(it && it.order != null ? it.order : "").trim(),
+                name: String(it && it.name != null ? it.name : "").trim(),
+                image: String(it && it.image ? it.image : ""),
+                youtubeUrl: String(it && it.youtubeUrl ? it.youtubeUrl : "").trim(),
+              }))
+              .filter((it) => it.order || it.name || it.image || it.youtubeUrl)
+          );
+        }
+
+        const gridEl = document.getElementById("ltvGrid");
+        const emptyEl = document.getElementById("ltvEmpty");
+        const playerEl = document.getElementById("ltvPlayer");
+        const frameEl = document.getElementById("ltvFrame");
+        const playerNameEl = document.getElementById("ltvPlayerName");
+        const cid = GLOBAL_CONFIG_CID;
+
+        function renderGrid(channels) {
+          if (!channels.length) {
+            gridEl.innerHTML = "";
+            emptyEl.hidden = false;
+            return;
+          }
+          emptyEl.hidden = true;
+          gridEl.innerHTML = channels
+            .map((it) => `
+              <button class="ltv-tile" type="button" data-tv-open="${escapeHtml(it.id)}">
+                <span class="ltv-tile-img">
+                  ${it.order ? `<span class="ltv-tile-order">${escapeHtml(it.order)}</span>` : ""}
+                  ${
+                    it.image
+                      ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" />`
+                      : '<span class="ltv-tile-ph">無圖片</span>'
+                  }
+                </span>
+                <span class="ltv-tile-name">${escapeHtml(it.name || "（未命名頻道）")}</span>
+              </button>
+            `)
+            .join("");
+        }
+
+        let channels = [];
+
+        function load() {
+          return db
+            .collection("communities")
+            .doc(cid)
+            .collection("settings")
+            .doc("app_config")
+            .get()
+            .then((doc) => {
+              const data = doc && doc.exists ? doc.data() || {} : {};
+              channels = normalizeChannels(data.liveTvChannels);
+              renderGrid(channels);
+            })
+            .catch(() => {
+              channels = [];
+              renderGrid(channels);
+            });
+        }
+
+        function closePlayer() {
+          if (document.fullscreenElement) {
+            try { document.exitFullscreen(); } catch (e) {}
+          }
+          frameEl.innerHTML = "";
+          playerEl.hidden = true;
+          playerNameEl.textContent = "";
+        }
+
+        function openPlayer(ch) {
+          const vid = youtubeVideoId(ch.youtubeUrl);
+          frameEl.innerHTML = "";
+          if (vid) {
+            const iframe = document.createElement("iframe");
+            iframe.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture; fullscreen");
+            iframe.setAttribute("allowfullscreen", "true");
+            iframe.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+            iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(vid)}?rel=0&autoplay=1&playsinline=1&modestbranding=1`;
+            frameEl.appendChild(iframe);
+          } else {
+            const msg = document.createElement("div");
+            msg.className = "ltv-player-msg";
+            msg.textContent = ch.youtubeUrl ? "此直播網址無法播放。" : "此頻道尚未設定直播網址。";
+            frameEl.appendChild(msg);
+          }
+          playerNameEl.textContent = [ch.order ? `第 ${ch.order} 台` : "", ch.name || ""].filter(Boolean).join("　");
+          playerEl.hidden = false;
+          if (playerEl.requestFullscreen) {
+            try {
+              const p = playerEl.requestFullscreen();
+              if (p && p.catch) p.catch(() => {});
+            } catch (e) {}
+          }
+        }
+
+        gridEl.addEventListener("click", (e) => {
+          const btn = e.target && e.target.closest ? e.target.closest("[data-tv-open]") : null;
+          if (!btn) return;
+          const id = btn.getAttribute("data-tv-open");
+          const ch = channels.find((x) => x.id === id);
+          if (ch) openPlayer(ch);
+        });
+
+        document.getElementById("ltvClose").addEventListener("click", closePlayer);
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape" && !playerEl.hidden) closePlayer();
+        });
+
+        load();
+      })();
+    </script>
+  </body>
+</html>

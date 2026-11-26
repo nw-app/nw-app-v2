@@ -10,7 +10,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="apple-touch-icon" href="icon-192.png?v=2" />
-    <link rel="stylesheet" href="css/system.css?v=10" />
+    <link rel="stylesheet" href="css/system.css?v=13" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="css/pwa.css" />
   </head>
@@ -90,6 +90,15 @@
             <span class="label">商店</span>
             <span class="hint">Shop</span>
           </button>
+          <button type="button" data-page="features" aria-current="false">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3.5" y="5" width="17" height="11" rx="2" stroke="rgba(31,41,55,0.85)" stroke-width="1.7"/>
+              <path d="M9 19.5h6M12 16v3.5" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M7 12.6 9.6 9l2.4 3.5L14.4 9 17 12.6" stroke="rgba(31,41,55,0.85)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="label">功能</span>
+            <span class="hint">Func</span>
+          </button>
           <button type="button" data-page="links" aria-current="false">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M10.5 13.5 8 16a3 3 0 0 1-4.2-4.2l2.5-2.5" stroke="rgba(31,41,55,0.85)" stroke-width="1.7" stroke-linecap="round"/>
@@ -137,6 +146,51 @@
       </div>
 
       <div class="status" id="linksStatus" style="margin-top:12px;">提示：連結支援 #community/parcel 或 #resident/resident-bulletin 或 https://...（示意）。</div>
+    </template>
+
+    <template id="tplFeatures">
+      <div class="grid grid-1">
+        <section class="card">
+          <div class="card-hd">
+            <div>
+              <h2><span class="feat-tab-name" id="featTabName">電視</span>功能</h2>
+              <p>社區數位功能設定</p>
+            </div>
+            <span class="tag red">功能</span>
+          </div>
+          <div class="card-bd">
+            <div class="unit-tab-panel" role="tabpanel">
+              <div class="tv-form" id="featForm">
+                <div class="field">
+                  <label for="featOrder">編號</label>
+                  <input type="text" id="featOrder" inputmode="numeric" placeholder="例：1" />
+                </div>
+                <div class="field">
+                  <label for="featName">頻道名稱</label>
+                  <input type="text" id="featName" placeholder="例：中視新聞台" />
+                </div>
+                <div class="field">
+                  <label for="featImage">頻道圖片（3:2，PNG／JPG／GIF）</label>
+                  <input type="file" id="featImage" accept="image/png,image/jpeg,image/gif" />
+                </div>
+                <div class="field tv-form-url">
+                  <label for="featYoutube">YouTube 網址（直播或一般影片）</label>
+                  <input type="text" id="featYoutube" placeholder="https://www.youtube.com/watch?v=..." />
+                </div>
+                <div class="tv-form-actions">
+                  <button class="btn btn-primary" type="button" id="btnFeatAdd">新增頻道</button>
+                  <button class="btn" type="button" id="btnFeatCancel" hidden>取消編輯</button>
+                </div>
+              </div>
+              <div class="tv-list" id="featList"></div>
+              <div class="tv-foot">
+                <a class="btn" id="featPreviewLink" href="livetv.html" target="_blank" rel="noopener">預覽電視頁</a>
+              </div>
+              <div class="status" id="featuresStatus"></div>
+            </div>
+          </div>
+        </section>
+      </div>
     </template>
 
     <template id="tplAccounts">
@@ -502,7 +556,7 @@
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <script src="js/firebase-config.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="js/system.js?v=52"></script>
+    <script src="js/system.js?v=60"></script>
     <script src="js/pwa.js?v=16"></script>
 
     <div class="modal" id="profileModal" hidden>
