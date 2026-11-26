@@ -4,7 +4,13 @@
 >
 > **技術堆疊**：`Firebase Auth / Firestore / Storage` + `原生 HTML / CSS / JavaScript` + `Service Worker（PWA 離線快取）` + `WebRTC 對講`
 >
-> **目前版本**：CACHE_VERSION `nwapp-v879`（每次升級需同步三項版本，詳見後方部署 SOP）
+> **目前版本**：CACHE_VERSION `nwapp-v882`（每次升級需同步三項版本，詳見後方部署 SOP）
+
+> **2026-11-26**：長者簡易版語音 TTS「沒有男童／男聲時的降調模擬」：`js/special-member.js` 抽出 `ttsVoiceGender()` 判斷音色性別並記錄於 `_ttsVoiceGender`；`applyTtsVoice()` 依性別設定 `utterance.pitch`——男童聲 `1`、男聲 `0.9`、女聲／未知 `0.6`（降低音高模擬低沉男聲，避免尖細女聲），`rate` 維持 `0.88`。此為手機未安裝男童／男聲時的保底方案。版本：`js/special-member.js` `v=55`、`special-member.html` `v=78`、`sw.js` CACHE_VERSION `nwapp-v882`。
+
+> **2026-11-26**：長者簡易版對講語音操作：`js/special-member.js` 對講面板的撥出按鈕文字由「呼叫」改為「**撥號**」（`#btnIntercomCallAdmin`）；新增 `handleIntercomVoice()`——對講面板（`#intercomCallModal90`）開著時**不需喚醒詞**，說「撥號／撥出／撥打」會自動按下撥號鈕撥出（未撥號、按鈕可用時），說「掛斷／掛掉／結束通話」會自動按下掛斷鈕掛斷（通話中、按鈕可用時）；於全域語音辨識的最終結果迴圈中優先呼叫（`rec.onresult`）。版本：`js/special-member.js` `v=54`、`special-member.html` `v=77`、`sw.js` CACHE_VERSION `nwapp-v881`。
+
+> **2026-11-26**：長者簡易版語音助理新增「聽不懂改用 Google 回覆」：`js/special-member.js` 的 `respondToVoice()` 在無法辨識指令時，不再只回「我還不會回答」，改為——(1) 以新增的 `looksLikePlace()`（`VOICE_PLACE_RE` 比對地址／地名／店家名關鍵字，如路街巷弄號、市區里村、店／公司／銀行／診所／藥局／餐廳／便利商店／超市、公園／車站／捷運／夜市…，以及「在哪／哪裡／怎麼去」等問法）判斷；(2) 是地址／地名／店家 → 回覆並附上「開啟地圖看「…」」按鈕（沿用 `openVoiceMap()`）；(3) 其他問題 → 回覆並附上「用 Google 搜尋「…」」按鈕（新增 `openVoiceSearch()`，開 `https://www.google.com/search?q=`）。回覆紀錄新增 `search` 欄位與按鈕渲染，`voiceReplyText` 事件代理同步支援 `.sp-voice-search`；`css/special-member.css` 新增 `.sp-voice-search`（Google 藍）。版本：`js/special-member.js` `v=53`、`css/special-member.css` `v=59`、`special-member.html` `v=76`、`sw.js` CACHE_VERSION `nwapp-v880`。
 
 > **2026-11-26**：長者簡易版語音彈窗影片左側名稱字級調整：`.sp-voice-name-1`（我是）與 `.sp-voice-name-2`（西北寶寶）的 `font-size` 統一改為 `1.35rem`，與對話文字 `.sp-voice-text`（`#spVoiceAskText`／`#spVoiceReplyText`）同尺寸。版本：`css/special-member.css` `v=58`、`sw.js` CACHE_VERSION `nwapp-v879`。
 

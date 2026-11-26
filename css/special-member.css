@@ -794,6 +794,11 @@ button {
   line-height: 1;
 }
 
+/* 「Google 搜尋」按鈕：沿用「開啟地圖」樣式，改用 Google 藍以區別 */
+.sp-voice-search {
+  background: linear-gradient(135deg, #1a73e8 0%, #174ea6 100%);
+}
+
 /* ---------------- 電話設定彈窗（90% 版面） ---------------- */
 .sp-phone {
   position: fixed;

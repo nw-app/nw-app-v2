@@ -474,6 +474,8 @@
       if (!last || !last.isFinal) return;
       for (var i = 0; i < last.length; i++) {
         var text = last[i] && last[i].transcript;
+        // 對講面板開著時：說「撥號」撥出、說「掛斷」掛斷（不需喚醒詞）
+        if (handleIntercomVoice(text)) { wakeWatchClear(); return; }
         // 喚醒詞「西北寶寶」：喚醒後開啟語音彈窗並回覆提示音
         var wake = detectWake(text);
         if (wake !== null) { wakeWatchClear(); wakeVoice(wake); return; }
@@ -527,6 +529,17 @@
   ];
 
   var _ttsVoice = null;
+  var _ttsVoiceGender = "";
+
+  // 從聲音名稱判斷性別（boy／male／female／未知）
+  function ttsVoiceGender(v) {
+    var name = String((v && v.name) || "").toLowerCase();
+    var i;
+    for (i = 0; i < VOICE_BOY_HINTS.length; i++) { if (name.indexOf(VOICE_BOY_HINTS[i]) >= 0) return "boy"; }
+    for (i = 0; i < VOICE_MALE_HINTS.length; i++) { if (name.indexOf(VOICE_MALE_HINTS[i]) >= 0) return "male"; }
+    for (i = 0; i < VOICE_FEMALE_HINTS.length; i++) { if (name.indexOf(VOICE_FEMALE_HINTS[i]) >= 0) return "female"; }
+    return "";
+  }
 
   function scoreTtsVoice(v) {
     var name = String(v.name || "").toLowerCase();
@@ -537,21 +550,7 @@
     if (lang.indexOf("zh-tw") === 0) s = 60;
     else if (lang.indexOf("zh") === 0) s = 55;
     else return -1;
-    var i;
-    var gender = "";
-    for (i = 0; i < VOICE_BOY_HINTS.length; i++) {
-      if (name.indexOf(VOICE_BOY_HINTS[i]) >= 0) { gender = "boy"; break; }
-    }
-    if (!gender) {
-      for (i = 0; i < VOICE_MALE_HINTS.length; i++) {
-        if (name.indexOf(VOICE_MALE_HINTS[i]) >= 0) { gender = "male"; break; }
-      }
-    }
-    if (!gender) {
-      for (i = 0; i < VOICE_FEMALE_HINTS.length; i++) {
-        if (name.indexOf(VOICE_FEMALE_HINTS[i]) >= 0) { gender = "female"; break; }
-      }
-    }
+    var gender = ttsVoiceGender(v);
     // 男童聲最優先，其次男聲；女聲盡量避免
     if (gender === "boy") s += 50;
     else if (gender === "male") s += 45;
@@ -574,7 +573,7 @@
       var s = scoreTtsVoice(v);
       if (s > bestScore) { bestScore = s; best = v; }
     });
-    if (best) _ttsVoice = best;
+    if (best) { _ttsVoice = best; _ttsVoiceGender = ttsVoiceGender(best); }
     return best;
   }
 
@@ -587,15 +586,21 @@
   }
 
   // 套用挑好的聲音（找不到就退回語言設定）
+  // 手機若沒有男童／男聲，改用現有聲音並「降低音高」模擬低沉男聲，避免尖細女聲
   function applyTtsVoice(u) {
     var v = ttsVoice();
+    var gender = _ttsVoiceGender;
     if (v) {
       u.voice = v;
       if (v.lang) u.lang = v.lang;
     } else {
       u.lang = "zh-TW";
+      gender = ""; // 無法判斷時，保守以偏男聲處理
     }
     u.rate = 0.88;
+    if (gender === "boy") u.pitch = 1;
+    else if (gender === "male") u.pitch = 0.9;
+    else u.pitch = 0.6; // 女聲／未知：降音高模擬男聲
     return u;
   }
 
@@ -734,6 +739,33 @@
     if (!win) { try { location.href = url; } catch (e2) {} }
   }
 
+  // 判斷是否為「地址／地名／店家名」：是的話給 Google 地圖按鈕，否則給 Google 搜尋按鈕
+  var VOICE_PLACE_RE = new RegExp([
+    "地址", "路", "街", "巷", "弄", "號", "樓", "段", "大道", "圓環", "廣場",
+    "市", "區", "里", "村", "鄰",
+    "店", "公司", "企業", "商行", "銀行", "診所", "藥局", "藥房", "醫院", "餐廳",
+    "咖啡", "超商", "便利商店", "超市", "賣場", "百貨", "加油站", "機車行", "五金行",
+    "郵局", "飯店", "旅館", "民宿", "學校", "幼兒園", "補習班", "髮廊", "理髮", "洗衣",
+    "眼鏡", "麵包店", "飲料店", "小吃",
+    "公園", "廟", "寺", "宮", "教堂", "車站", "捷運", "火車站", "高鐵", "機場", "夜市",
+    "市場", "圖書館", "運動中心", "大樓", "社區", "風景區", "老街", "博物館", "美術館",
+    "動物園", "觀光", "景點",
+    "在哪", "哪裡", "那裏", "怎麼去", "怎麼走", "怎麼到", "帶我去",
+  ].join("|"));
+  function looksLikePlace(text) {
+    return VOICE_PLACE_RE.test(String(text || ""));
+  }
+
+  // 用關鍵字開啟 Google 搜尋
+  function openVoiceSearch(query) {
+    var q = String(query || "").trim();
+    if (!q) return;
+    var url = "https://www.google.com/search?q=" + encodeURIComponent(q);
+    var win = null;
+    try { win = window.open(url, "_blank", "noopener"); } catch (e) {}
+    if (!win) { try { location.href = url; } catch (e2) {} }
+  }
+
   var voicePanel = {
     open: false,
     busy: false,
@@ -764,6 +796,10 @@
       html += '<button type="button" class="sp-voice-map" data-map="' + escapeHtml(item.map) +
         '"><span class="sp-voice-map-icon">🗺</span>開啟地圖看「' + escapeHtml(item.map) + '」</button>';
     }
+    if (item.search) {
+      html += '<button type="button" class="sp-voice-map sp-voice-search" data-search="' + escapeHtml(item.search) +
+        '"><span class="sp-voice-map-icon">🔍</span>用 Google 搜尋「' + escapeHtml(item.search) + '」</button>';
+    }
     return html;
   }
 
@@ -793,10 +829,10 @@
     renderVoiceReply();
   }
 
-  // 正式回覆：加一筆帶時間的紀錄（map 為地點關鍵字時，附上「開啟地圖」按鈕）
-  function pushVoiceReply(text, map) {
+  // 正式回覆：加一筆帶時間的紀錄（map 為地點關鍵字時附「開啟地圖」按鈕、search 為關鍵字時附「Google 搜尋」按鈕）
+  function pushVoiceReply(text, map, search) {
     voicePanel.pending = "";
-    voicePanel.replies.push({ time: voiceClock(), text: String(text || ""), map: map || "" });
+    voicePanel.replies.push({ time: voiceClock(), text: String(text || ""), map: map || "", search: search || "" });
     renderVoiceReply();
   }
 
@@ -853,9 +889,9 @@
     var action = resolveVoiceAction(text);
 
     // 播完回覆後：有 action 就關閉彈窗並開啟功能，否則恢復收音
-    var finishReply = function (reply, runnable, map) {
+    var finishReply = function (reply, runnable, map, search) {
       if (!voicePanel.open) return;
-      pushVoiceReply(reply, map);
+      pushVoiceReply(reply, map, search);
       speakThen(reply, function () {
         if (!voicePanel.open) return;
         if (!runnable) { voicePanel.busy = false; voicePanelRestart(); return; }
@@ -926,6 +962,17 @@
       // 問候、道謝、閒聊類只回話，不開啟任何功能
       var runnable = VOICE_CHAT_ACTIONS[action] ? "" : action;
       finishReply(VOICE_REPLY_TEXT[action] || VOICE_REPLY_FALLBACK, runnable);
+      return;
+    }
+
+    // 聽不懂時：先判斷是不是地址／地名／店家名——是就給 Google 地圖按鈕，否則給 Google 搜尋按鈕
+    var q = String(text || "").trim();
+    if (q.length >= 2) {
+      if (looksLikePlace(q)) {
+        finishReply("我幫您在 Google 地圖上找「" + q + "」，請點下面的按鈕查看。", "", q);
+      } else {
+        finishReply("這個我幫您用 Google 搜尋「" + q + "」，請點下面的按鈕查看。", "", "", q);
+      }
       return;
     }
 
@@ -2262,12 +2309,14 @@
       });
     }
 
-    // 語音回覆區的「開啟地圖」按鈕（事件代理，回覆內容會動態重建）
+    // 語音回覆區的「開啟地圖／Google 搜尋」按鈕（事件代理，回覆內容會動態重建）
     if (el.voiceReplyText) {
       el.voiceReplyText.addEventListener("click", function (ev) {
         var node = ev.target;
         var btn = node && node.closest ? node.closest(".sp-voice-map") : null;
         if (!btn) return;
+        var search = btn.getAttribute("data-search");
+        if (search) { openVoiceSearch(search); return; }
         openVoiceMap(btn.getAttribute("data-map"));
       });
     }
@@ -2605,6 +2654,25 @@
     });
   }
 
+  // 對講面板開著時（不需喚醒詞）：說「撥號」自動按下撥號鈕撥出、說「掛斷」自動按下掛斷鈕掛斷
+  function handleIntercomVoice(text) {
+    var modal = document.getElementById("intercomCallModal90");
+    if (!modal || modal.hidden) return false;
+    var t = String(text || "").replace(/[\s,，。、！!？?；;：:]/g, "");
+    if (!t) return false;
+    // 掛斷：通話中（掛斷鈕可用）才處理
+    if (/掛斷|掛掉|結束通話|不講了|關掉通話|斷話|斷線/.test(t)) {
+      var hangupBtn = modal.querySelector("#btnIntercomHangup");
+      if (hangupBtn && !hangupBtn.disabled) { hangupBtn.click(); return true; }
+    }
+    // 撥號：未撥號（撥號鈕可用且顯示）才處理
+    if (/撥號|撥出|撥打|開始撥/.test(t)) {
+      var callBtn = modal.querySelector("#btnIntercomCallAdmin");
+      if (callBtn && !callBtn.disabled && !callBtn.hidden) { callBtn.click(); return true; }
+    }
+    return false;
+  }
+
   function attachIntercomRemoteAudio(audioId, remoteStream) {
     var audio = document.getElementById(String(audioId || ""));
     if (!audio) return null;
@@ -2809,7 +2877,7 @@
       '<div class="chatcall-actions" style="margin-top:12px;">' +
       '<div class="chatcall-actions-row">' +
       '<button class="chatcall-btn danger" type="button" id="btnIntercomHangup" disabled>掛斷</button>' +
-      '<button class="chatcall-btn success" type="button" id="btnIntercomCallAdmin">呼叫</button>' +
+      '<button class="chatcall-btn success" type="button" id="btnIntercomCallAdmin">撥號</button>' +
       '</div>' +
       '<div class="chatcall-actions-row">' +
       '<button class="chatcall-btn ghost small" type="button" id="btnIntercomSpeaker" hidden>擴音</button>' +
