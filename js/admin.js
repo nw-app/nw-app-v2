@@ -20753,6 +20753,10 @@
 
   function startIntercomRingtone(mode = "incoming") {
     stopIntercomRingtone();
+    try {
+      const sw = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (sw) sw.postMessage({ type: "INTERCOM_RING_STOP" });
+    } catch {}
     const m = String(mode || "incoming").trim() || "incoming";
     try {
       intercomRingAudio = new Audio("./mp3/ring.mp3");

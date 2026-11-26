@@ -1857,6 +1857,32 @@
     });
   }
 
+  /* 大頭照連續點 5 次：切換回一般版（member.html），並記住版本供下次登入 */
+  var avatarTapCount = 0;
+  var avatarTapTimer = null;
+
+  function switchToGeneralVersion() {
+    try {
+      if (state.uid) {
+        db.collection("users").doc(state.uid).set({ specialMode: false }, { merge: true });
+      }
+    } catch (e) {}
+    var key = String(state.code || state.cid || "").trim();
+    location.href = "member.html" + (key ? "?c=" + encodeURIComponent(key) : "");
+  }
+
+  function registerAvatarTap() {
+    avatarTapCount += 1;
+    if (avatarTapTimer) clearTimeout(avatarTapTimer);
+    if (avatarTapCount >= 5) {
+      avatarTapCount = 0;
+      if (avatarTapTimer) { clearTimeout(avatarTapTimer); avatarTapTimer = null; }
+      switchToGeneralVersion();
+      return;
+    }
+    avatarTapTimer = setTimeout(function () { avatarTapCount = 0; avatarTapTimer = null; }, 2000);
+  }
+
   function toggleVoice() {
     state.voice = !state.voice;
     if (el.voiceToggle) el.voiceToggle.setAttribute("aria-pressed", state.voice ? "true" : "false");
@@ -2124,6 +2150,8 @@
     if (el.sheetBody) el.sheetBody.addEventListener("click", function (ev) {
       var signOut = ev.target && ev.target.closest ? ev.target.closest("#spProfileSignOut") : null;
       if (signOut) { if (el.signOut) el.signOut.click(); return; }
+      var avatarEl = ev.target && ev.target.closest ? ev.target.closest(".sp-profile-photo-img, .sp-profile-photo-initial") : null;
+      if (avatarEl) { registerAvatarTap(); return; }
       var actionButton = ev.target && ev.target.closest ? ev.target.closest("[data-action]") : null;
       if (!actionButton) return;
       var action = String(actionButton.getAttribute("data-action") || "");
@@ -2349,6 +2377,10 @@
 
   function startIntercomRingtone(mode) {
     stopIntercomRingtone();
+    try {
+      var sw = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (sw) sw.postMessage({ type: "INTERCOM_RING_STOP" });
+    } catch (e) {}
     var m = String(mode || "incoming").trim() || "incoming";
     try {
       intercomRingAudio = new Audio("./mp3/ring.mp3");

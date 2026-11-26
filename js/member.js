@@ -501,8 +501,7 @@
     { name: "財務報表", icon: "photo/a07.png", url: "bulletin-finance.html" },
     { name: "區大直播", icon: "photo/a08.png", url: "live-meeting.html" },
     { name: "會議記錄", icon: "photo/a09.png", url: "bulletin-meeting.html" },
-    { name: "清潔通報", icon: "photo/a10.png", url: "bulletin-clean.html" },
-    { name: "通知清潔", icon: "photo/k08.png", url: "clean-report.html" },
+    { name: "通知清潔", icon: "photo/a10.png", url: "clean-report.html" },
     { name: "社區活動", icon: "photo/a11.png", url: "bulletin-activity.html" },
     { name: "AI對話", icon: "photo/a12.png", url: "https://gemini.google.com/?hl=zh-TW", openExternal: true },
   ];
@@ -809,7 +808,27 @@
   let memberIntercomMissedHiddenUnsub = null;
   let memberIntercomMissedCount = 0;
   let memberIntercomMissedCallIdSet = new Set();
+  let memberIntercomMissedDocsByStatus = new Map();
   let memberIntercomHiddenCallIdSet = new Set();
+  let memberIntercomReadCallIdSet = new Set();
+
+  const MEMBER_INTERCOM_MISSED_STATUSES = ["missed", "rejected", "busy", "ended"];
+
+  function isMemberIntercomAnsweredCall(d) {
+    const data = d && typeof d === "object" ? d : {};
+    const st = String(data.status || "").trim();
+    if (st === "accepted") return true;
+    const ans = data.answer && typeof data.answer === "object" ? data.answer : null;
+    return Boolean(ans && ans.sdp);
+  }
+
+  function isMemberIntercomMissedCall(d) {
+    const data = d && typeof d === "object" ? d : {};
+    const st = String(data.status || "").trim();
+    if (st === "ringing" || st === "accepted") return false;
+    if (isMemberIntercomAnsweredCall(data)) return false;
+    return MEMBER_INTERCOM_MISSED_STATUSES.indexOf(st) !== -1;
+  }
 
   function formatHeaderBadgeNumber(value) {
     const n = Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -840,12 +859,45 @@
   }
 
   function recomputeMemberIntercomMissedCount() {
-    let count = 0;
-    memberIntercomMissedCallIdSet.forEach((id) => {
-      if (!memberIntercomHiddenCallIdSet.has(id)) count += 1;
+    const byId = new Map();
+    (memberIntercomMissedDocsByStatus ? Array.from(memberIntercomMissedDocsByStatus.values()) : []).forEach((arr) => {
+      (Array.isArray(arr) ? arr : []).forEach((it) => {
+        const id = String(it && it.id ? it.id : "").trim();
+        if (!id) return;
+        byId.set(id, it);
+      });
     });
+    const missedIdSet = new Set();
+    let count = 0;
+    byId.forEach((it, id) => {
+      const d = it && it.data && typeof it.data === "object" ? it.data : {};
+      if (!isMemberIntercomMissedCall(d)) return;
+      missedIdSet.add(id);
+      if (memberIntercomHiddenCallIdSet.has(id)) return;
+      if (memberIntercomReadCallIdSet.has(id)) return;
+      count += 1;
+    });
+    memberIntercomMissedCallIdSet = missedIdSet;
     memberIntercomMissedCount = count;
     updateMemberIntercomMissedBadgeUI();
+  }
+
+  async function markMemberIntercomMissedAsRead() {
+    try {
+      const ids = Array.from(memberIntercomMissedCallIdSet)
+        .map((id) => String(id || "").trim())
+        .filter((id) => id && !memberIntercomReadCallIdSet.has(id));
+      if (!ids.length) return;
+      ids.forEach((id) => memberIntercomReadCallIdSet.add(id));
+      recomputeMemberIntercomMissedCount();
+      const me = auth && auth.currentUser ? auth.currentUser : null;
+      const uid = me && me.uid ? String(me.uid) : "";
+      if (!uid) return;
+      await db.collection("users").doc(uid).set(
+        { readCallIds: FieldValue.arrayUnion(...ids) },
+        { merge: true }
+      );
+    } catch {}
   }
 
   function applyChatphoneHeaderVisibility() {
@@ -869,7 +921,9 @@
     memberIntercomMissedUnsub = null;
     memberIntercomMissedHiddenUnsub = null;
     memberIntercomMissedCallIdSet = new Set();
+    memberIntercomMissedDocsByStatus = new Map();
     memberIntercomHiddenCallIdSet = new Set();
+    memberIntercomReadCallIdSet = new Set();
     memberIntercomMissedCount = 0;
     updateMemberIntercomMissedBadgeUI();
   }
@@ -883,29 +937,34 @@
     try {
       memberIntercomMissedHiddenUnsub = db.collection("users").doc(uid).onSnapshot((doc) => {
         const data = doc && doc.exists ? (doc.data() || {}) : {};
-        const raw = Array.isArray(data.hiddenCallIds) ? data.hiddenCallIds : [];
-        memberIntercomHiddenCallIdSet = new Set(raw.map((id) => String(id || "").trim()).filter(Boolean));
+        const rawHidden = Array.isArray(data.hiddenCallIds) ? data.hiddenCallIds : [];
+        memberIntercomHiddenCallIdSet = new Set(rawHidden.map((id) => String(id || "").trim()).filter(Boolean));
+        const rawRead = Array.isArray(data.readCallIds) ? data.readCallIds : [];
+        memberIntercomReadCallIdSet = new Set(rawRead.map((id) => String(id || "").trim()).filter(Boolean));
         recomputeMemberIntercomMissedCount();
       }, () => {
         memberIntercomHiddenCallIdSet = new Set();
+        memberIntercomReadCallIdSet = new Set();
         recomputeMemberIntercomMissedCount();
       });
-      memberIntercomMissedUnsub = db
+      memberIntercomMissedDocsByStatus = new Map();
+      const unsubs = MEMBER_INTERCOM_MISSED_STATUSES.map((st) => db
         .collection("calls")
         .where("community", "==", cid)
         .where("toRole", "==", "resident")
         .where("toUid", "==", uid)
-        .where("status", "==", "missed")
+        .where("status", "==", st)
         .onSnapshot((snap) => {
-          memberIntercomMissedCallIdSet = new Set(
-            (snap && snap.docs ? snap.docs : []).map((doc) => String(doc && doc.id || "").trim()).filter(Boolean)
-          );
+          const next = (snap && snap.docs ? snap.docs : []).map((d) => ({ id: String(d && d.id || "").trim(), data: (d.data() || {}) }));
+          memberIntercomMissedDocsByStatus.set(st, next);
           recomputeMemberIntercomMissedCount();
         }, () => {
-          memberIntercomMissedCallIdSet = new Set();
-          memberIntercomMissedCount = 0;
-          updateMemberIntercomMissedBadgeUI();
-        });
+          memberIntercomMissedDocsByStatus.set(st, []);
+          recomputeMemberIntercomMissedCount();
+        }));
+      memberIntercomMissedUnsub = () => {
+        unsubs.forEach((fn) => { try { fn(); } catch {} });
+      };
     } catch {
       memberIntercomMissedUnsub = null;
       memberIntercomMissedHiddenUnsub = null;
@@ -2027,6 +2086,10 @@
 
   function startIntercomRingtone(mode = "incoming") {
     stopIntercomRingtone();
+    try {
+      const sw = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (sw) sw.postMessage({ type: "INTERCOM_RING_STOP" });
+    } catch {}
     const m = String(mode || "incoming").trim() || "incoming";
     try {
       intercomRingAudio = new Audio("./mp3/ring.mp3");
@@ -2268,6 +2331,7 @@
   function openIntercomHistoryModal({ communityId, toRole } = {}) {
     const cid = String(communityId || resolveActiveCommunityId() || "").trim();
     const role = String(toRole || "resident").trim() || "resident";
+    try { markMemberIntercomMissedAsRead(); } catch {}
     const modal = ensureIntercomHistoryModal();
     const iframe = modal.querySelector("#intercomHistoryIframe");
     if (!iframe) return;
@@ -3144,6 +3208,44 @@
   };
   bindSignOut();
   document.addEventListener("DOMContentLoaded", bindSignOut);
+
+  // 大頭照連續點 5 次：切換到長者簡易版（special-member.html），並記住版本供下次登入
+  const switchToSpecialVersion = async () => {
+    try {
+      const user = auth && auth.currentUser ? auth.currentUser : null;
+      if (user && user.uid) {
+        await db.collection("users").doc(String(user.uid)).set({ specialMode: true }, { merge: true });
+      }
+    } catch {}
+    const key = readUrlCommunityKey() || String(resolveActiveCommunityId() || "").trim();
+    location.href = `special-member.html${key ? `?c=${encodeURIComponent(key)}` : ""}`;
+  };
+
+  const bindAvatarVersionSwitch = () => {
+    const modal = document.getElementById("profileModal");
+    if (!modal || modal._boundVersionSwitch) return;
+    modal._boundVersionSwitch = true;
+    let taps = 0;
+    let timer = null;
+    modal.addEventListener("click", (e) => {
+      const t = e.target;
+      if (!t || !t.closest) return;
+      if (t.closest("#btnEditAvatar") || t.closest("#profileAvatarFile")) return;
+      const avatar = t.closest("#profileAvatarImg") || t.closest("#profileAvatarFallback");
+      if (!avatar) return;
+      taps += 1;
+      if (timer) clearTimeout(timer);
+      if (taps >= 5) {
+        taps = 0;
+        timer = null;
+        switchToSpecialVersion();
+        return;
+      }
+      timer = setTimeout(() => { taps = 0; timer = null; }, 2000);
+    });
+  };
+  bindAvatarVersionSwitch();
+  document.addEventListener("DOMContentLoaded", bindAvatarVersionSwitch);
 
   // 頁面載入時初始化日期時間和天氣
   document.addEventListener('DOMContentLoaded', initDateTimeWeather);

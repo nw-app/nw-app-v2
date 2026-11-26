@@ -4,7 +4,21 @@
 >
 > **技術堆疊**：`Firebase Auth / Firestore / Storage` + `原生 HTML / CSS / JavaScript` + `Service Worker（PWA 離線快取）` + `WebRTC 對講`
 >
-> **目前版本**：CACHE_VERSION `nwapp-v864`（每次升級需同步三項版本，詳見後方部署 SOP）
+> **目前版本**：CACHE_VERSION `nwapp-v869`（每次升級需同步三項版本，詳見後方部署 SOP）
+
+> **2026-11-26**：住戶端「大頭照連點 5 次切換版本」＋登入記住版本：一般版（`member.html`）大頭照（`#profileAvatarImg`／`#profileAvatarFallback`）連續點 5 次（2 秒內累計，逾時歸零）→ 立即切換到長者簡易版 `special-member.html`；長者簡易版（`special-member.html`）大頭照（`.sp-profile-photo-img`／`.sp-profile-photo-initial`）連續點 5 次 → 切換回 `member.html`。切換**不需登出再登入**，會直接跳頁並保留目前社區參數（`?c=`）。同時把選擇的版本寫入住戶文件 `users/{uid}.specialMode`（一般版 `false`／簡易版 `true`），沿用既有 `index.js` 的 `isSpecialResident()`／`residentHomeUrl()` 登入導向邏輯，因此住戶端**所有登入（含表單登入與已登入自動轉導）都會回到登出前所在的版本頁面**。版本：`member.js` `v=81`、`special-member.js` `v=48`、`member.html` `v=16`、`special-member.html` `v=70`、`sw.js` CACHE_VERSION `nwapp-v869`。
+
+> **2026-11-26**：住戶版功能磚「清潔」按鈕整併：原本同時有「清潔通報」（`bulletin-clean.html`／`photo/a10.png`）與「通知清潔」（`clean-report.html`／`photo/k08.png`）兩個按鈕，現整併為一個——保留 `photo/a10.png` 圖示與原位置，名稱與內容改為「通知清潔」（連到 `clean-report.html`），移除 k08 的舊按鈕。同步更新系統後台預設：`js/system.js` 的 `defaultRowDButtons` 一併改為 `{ name: "通知清潔", icon: "photo/a10.png", url: "clean-report.html" }`。版本：`member.js` `v=80`、`system.js` `v=52`、`sw.js` CACHE_VERSION `nwapp-v868`。
+
+> **2026-11-26**：對講來電「App 未開啟也能響鈴＋未接推播＋點擊前往通話紀錄」實作：
+> (1) **未開啟時來電響鈴**：`sw.js` 新增背景響鈴機制 `startNwRing()`——收到對講來電推播（`data.callId` 且非未接）時，以 `setInterval` 每 6 秒重新 `showNotification`（`requireInteraction: true`、`renotify: true`、加強 `vibrate`、附「接通／拒接」按鈕），最多重複 9 次模擬持續響鈴；通知 tag 統一為 `intercom_call_{callId}`（同通來電只會有一則，避免疊通知）。
+> (2) **未接後推播**：`functions/index.js` 新增 Firestore trigger `onCallUpdated`（`calls/{callId}` `onUpdate`）——僅在「`ringing` → `missed`/`ended`」且雙方皆未接聽（無 `status=="accepted"`、無 `answer.sdp`）時，對被叫方送出一則 `missed="1"` 的資料型推播（標題「QAi生活網｜未接來電」，`url` 指向 `callrecord.html?c=…&toRole=…`）。`sw.js` 收到 `missed==="1"` 時會**停止背景響鈴、關閉響鈴通知**，改顯示未接通知（tag `intercom_missed_{callId}`、`data.type="intercom-missed"`）。
+> (3) **點擊前往通話紀錄**：`sw.js` `notificationclick` 依通知 `data.url`（未接通知即 `callrecord.html`）開啟對應頁面；並在點擊時 `stopNwRing(callId)` 停止響鈴。
+> (4) **App 接手停止背景響鈴**：`member.js`／`admin.js`／`special-member.js` 的 `startIntercomRingtone()` 開頭對 Service Worker `postMessage({ type: "INTERCOM_RING_STOP" })`；`sw.js` `message` 監聽收到後呼叫 `stopNwRing("")`＋`closeNwRingNotifications("")`，避免 App 已顯示來電畫面時背景通知仍持續響。
+> 版本：`functions/index.js`（新增 `onCallUpdated`）、`sw.js` CACHE_VERSION `nwapp-v867`、`admin.js` `v=459`、`member.js` `v=79`、`special-member.js` `v=47`。
+> ⚠️ **部署提醒**：`functions/index.js` 與 `sw.js` 需重新部署才生效（`firebase deploy --only functions,hosting`）。
+
+> **2026-11-26**：住戶版（`member.html`）右上角通話鈕未接來電泡泡修正（兩個問題）：(1) **未接數值不準（始終為 1）**：管理中心連續撥給住戶、住戶未接時，撥出方（管理中心）掛斷會把 `calls` 文件寫成 `status="ended"`，而住戶端泡泡的監聽查詢只取 `status=="missed"`，導致未接來電不計入。修正為比照 `admin.js` 邏輯：住戶端改以四個狀態分別訂閱 `missed`/`rejected`/`busy`/`ended`，合併後再以「是否已接聽」過濾（`status=="accepted"` 或文件存在 `answer.sdp` 者視為已接聽、不計入），即可正確反映真實未接數。(2) **讀取後未歸零**：`#btnNotificationBadge` 點開「通話紀錄」後不會清除。修正：住戶本人文件新增 `readCallIds` 已讀清單，與既有 `hiddenCallIds`（刪除隱藏）分開，`recomputeMemberIntercomMissedCount` 計數時同時排除「隱藏」與「已讀」；新增 `markMemberIntercomMissedAsRead()`，於 `openIntercomHistoryModal()`（點「通話紀錄」開啟時）先本機樂觀標記已讀並即時歸零，再以 `FieldValue.arrayUnion` 寫回 `readCallIds`，之後新進未接會重新累計。版本：`member.js` `v=78`、`sw.js` CACHE_VERSION `nwapp-v866`。
 
 > **2026-11-25**：對講「住戶按呼叫、管理中心沒響」修復：根因是住戶端寫入 `calls` 文件的 `community` 欄位值與管理中心監聽查詢用的社區 ID 不一致（社區文件 **doc ID**（如 `oOo7WB8YSRo8FGcebLg6`）與文件內 **`id` 欄位值**（如 `jL3Iwdz2dE9Akr8D3Q8s`）不同）。當住戶端 `resolveActiveCommunityId()` 只比對 `id`/`username` 而無法比對 doc ID 時，會退化為 `first`（清單第一個社區）甚至 `default`，導致寫入的 `community` 不是自己的社區（寫 `default` 還會被 `calls` 建立規則的 `userCanAccessUserCommunity` 拒絕、且原程式碼無 `.catch` 而靜默失敗，住戶端一直停在「正在呼叫…」，管理中心永遠收不到）。修正：(1) `member.js` 社區清單映射新增 `docId`，`findCommunityRecordByKey` 與 `resolveActiveCommunityId`（URL `c`、localStorage 已存值）皆改為可依 `id` / `username` / `docId` 比對，並優先以住戶自身 profile 的 `community` 經 `resolveCanonicalCommunityId()` 正規化；(2) `intercomStartOutgoingToAdmin`（`member.js` / `special-member.js`）的 `calls` 寫入改為 `try/catch`，失敗時顯示「呼叫失敗，請稍後再試」並還原按鈕狀態；(3) 住戶端來電監聽的社區比對同步加入 `docId`（修復後台撥入住戶時的 community mismatch）。版本：`member.js` `v=76`、`special-member.js` `v=46`、`admin.js` `v=458`（管理中心 `resolveActiveCommunityId` / `findCommunityRecordByKey` 同步改為可依 `docId` 比對）、`sw.js` CACHE_VERSION `nwapp-v864`。
 

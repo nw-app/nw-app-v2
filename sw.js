@@ -1,12 +1,12 @@
-const CACHE_VERSION = "nwapp-v864";
+const CACHE_VERSION = "nwapp-v869";
 const IS_LOCALHOST = ["localhost", "127.0.0.1"].includes(String(self.location && self.location.hostname || "").trim().toLowerCase());
 const PRECACHE = Array.from(new Set([
   "./",
   "./index.html",
   "./system.html",
   "./admin.html",
-  "./member.html?v=15",
-  "./special-member.html?v=69",
+  "./member.html?v=16",
+  "./special-member.html?v=70",
   "./css/special-member.css?v=50",
   "./photo/logo.png",
   "./parking.html?v=8",
@@ -47,14 +47,14 @@ const PRECACHE = Array.from(new Set([
   "./css/worker-clean.css?v=65",
   "./js/index.js?v=11",
   "./js/qrcode-generator.js?v=1",
-  "./js/special-member.js?v=46",
-  "./js/system.js?v=43",
-  "./js/admin.js?v=458",
+  "./js/special-member.js?v=48",
+  "./js/system.js?v=52",
+  "./js/admin.js?v=459",
   "./js/admin-clean.js?v=9",
   "./js/admin-duty.js?v=24",
   "./js/finance.js?v=35",
   "./js/fee-notice.js?v=3",
-  "./js/member.js?v=76",
+  "./js/member.js?v=81",
   "./js/notify.js?v=1",
   "./js/parking.js?v=32",
   "./js/parking-view.js?v=11",
@@ -113,22 +113,88 @@ function resolveAppUrl(raw) {
   return v;
 }
 
+// 對講來電響鈴：App 未開啟時，以重複顯示通知的方式模擬持續響鈴
+const NW_RING_TAG_PREFIX = "intercom_call_";
+const NW_MISSED_TAG_PREFIX = "intercom_missed_";
+const nwRingLoops = new Map();
+
+function stopNwRing(callId) {
+  const cid = String(callId || "").trim();
+  if (cid) {
+    const t = nwRingLoops.get(cid);
+    if (t) { try { clearInterval(t); } catch {} }
+    nwRingLoops.delete(cid);
+    return;
+  }
+  nwRingLoops.forEach((t) => { try { clearInterval(t); } catch {} });
+  nwRingLoops.clear();
+}
+
+function closeNwRingNotifications(callId) {
+  const cid = String(callId || "").trim();
+  try {
+    return self.registration.getNotifications().then((list) => {
+      (list || []).forEach((n) => {
+        const tag = String((n && n.tag) || "");
+        if (!tag.startsWith(NW_RING_TAG_PREFIX)) return;
+        if (cid && tag !== `${NW_RING_TAG_PREFIX}${cid}`) return;
+        try { n.close(); } catch {}
+      });
+    }).catch(() => {});
+  } catch {}
+  return Promise.resolve();
+}
+
+function startNwRing(callId, title, options) {
+  const cid = String(callId || "").trim();
+  if (!cid) return;
+  stopNwRing(cid);
+  let count = 0;
+  const timer = setInterval(() => {
+    count += 1;
+    if (count > 9) { stopNwRing(cid); return; }
+    try { self.registration.showNotification(title, options); } catch {}
+  }, 6000);
+  nwRingLoops.set(cid, timer);
+}
+
 try {
   if (__nwMessaging && typeof __nwMessaging.onBackgroundMessage === "function") {
     __nwMessaging.onBackgroundMessage(async (payload) => {
       const data = (payload && payload.data) ? payload.data : {};
       const callId = String(data.callId || "").trim();
 
-      // 對講機來電（維持既有行為）
+      // 對講機來電 / 未接來電
       if (callId) {
         const community = String(data.community || "").trim();
         const toRole = String(data.toRole || "").trim();
         const url = resolveAppUrl(String(data.url || "").trim() || "./");
         const title = String(data.title || "QAi生活網｜來電").trim() || "QAi生活網｜來電";
         const body = String(data.body || "點此開啟QAi生活網接聽/拒接").trim();
+        const missed = String(data.missed || "").trim() === "1";
+
+        // 未接來電通知：停止響鈴、關閉響鈴通知，改顯示未接通知（點擊前往通話紀錄）
+        if (missed) {
+          stopNwRing(callId);
+          await closeNwRingNotifications(callId);
+          try {
+            await self.registration.showNotification(title, {
+              body,
+              icon: "./logo.svg?v=5",
+              badge: "./icon-192.png?v=2",
+              tag: `${NW_MISSED_TAG_PREFIX}${callId}`,
+              renotify: true,
+              requireInteraction: false,
+              vibrate: [90, 70, 90],
+              data: { type: "intercom-missed", callId, community, toRole, url, missed: true },
+            });
+          } catch {}
+          return;
+        }
+
         const autoOpen = String(data.autoOpen || "").trim() === "1";
 
-        const tag = `intercom_${callId}`;
+        const tag = `${NW_RING_TAG_PREFIX}${callId}`;
         const options = {
           body,
           icon: "./logo.svg?v=5",
@@ -136,11 +202,12 @@ try {
           tag,
           renotify: true,
           requireInteraction: true,
+          silent: false,
           actions: [
             { action: "answer", title: "接通" },
             { action: "reject", title: "拒接" },
           ],
-          vibrate: [120, 80, 120, 80, 220],
+          vibrate: [400, 200, 400, 200, 400, 200, 400],
           data: {
             type: "intercom",
             callId,
@@ -164,6 +231,7 @@ try {
         } catch {}
 
         try { await self.registration.showNotification(title, options); } catch {}
+        startNwRing(callId, title, options);
         return;
       }
 
@@ -207,6 +275,7 @@ self.addEventListener("notificationclick", (event) => {
     const d = n && n.data ? n.data : {};
     const baseUrl = resolveAppUrl(String(d.url || "./").trim() || "./");
     const callId = String(d.callId || "").trim();
+    if (callId) stopNwRing(callId);
     const action = String(event.action || "").trim();
     const isModuleNotify = String(d.type || "").trim() === "notify";
     let url = baseUrl;
@@ -266,6 +335,12 @@ self.addEventListener("message", (event) => {
   const data = event && event.data ? event.data : null;
   if (data && data.type === "SKIP_WAITING") {
     self.skipWaiting();
+    return;
+  }
+  // App 已接手響鈴（開啟來電畫面/接聽/拒接/結束）→ 停止背景響鈴並關閉響鈴通知
+  if (data && data.type === "INTERCOM_RING_STOP") {
+    stopNwRing("");
+    closeNwRingNotifications("");
   }
 });
 
