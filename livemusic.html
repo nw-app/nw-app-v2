@@ -177,7 +177,8 @@
         flex-direction: column;
       }
       .ltv-player[hidden] { display: none; }
-      .ltv-player-frame { position: relative; flex: 1 1 auto; min-height: 0; background: #000; }
+      .ltv-player-body { position: relative; flex: 1 1 auto; min-height: 0; background: #000; }
+      .ltv-player-frame { position: absolute; inset: 0; background: #000; }
       .ltv-player-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
       .ltv-player-msg {
         position: absolute;
@@ -206,9 +207,9 @@
       }
       .ltv-player-full {
         position: absolute;
-        top: max(12px, env(safe-area-inset-top));
-        right: calc(max(12px, env(safe-area-inset-right)) + 52px);
-        z-index: 2;
+        right: max(12px, env(safe-area-inset-right));
+        bottom: max(12px, env(safe-area-inset-bottom));
+        z-index: 3;
         width: 44px;
         height: 44px;
         padding: 0;
@@ -222,6 +223,138 @@
       }
       .ltv-player-full svg {
         display: block;
+      }
+      .ltv-player-sched {
+        position: absolute;
+        top: max(12px, env(safe-area-inset-top));
+        left: max(12px, env(safe-area-inset-left));
+        z-index: 3;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        border: 0;
+        background: rgba(255, 255, 255, 0.92);
+        color: #111827;
+        cursor: pointer;
+      }
+      .ltv-player-sched svg { display: block; }
+      /* 節目表：由左側滑入，寬度為瀏覽器 50%，靠左貼齊，黑底 50% 透明 */
+      .ltv-sched {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 50%;
+        z-index: 4;
+        display: flex;
+        flex-direction: column;
+        background: rgba(0, 0, 0, 0.5);
+        color: #fff;
+        transform: translateX(-100%);
+        transition: transform 240ms ease;
+        overflow: hidden;
+      }
+      .ltv-sched.is-open { transform: translateX(0); }
+      .ltv-sched-hd {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: max(12px, env(safe-area-inset-top)) 12px 10px;
+        font-size: 15px;
+        font-weight: 900;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+      }
+      .ltv-sched-tools {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+      }
+      .ltv-sched-search {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 38px;
+        padding: 0 12px;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 999px;
+        outline: none;
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff;
+        font: inherit;
+        font-size: 14px;
+      }
+      .ltv-sched-search::placeholder { color: rgba(255, 255, 255, 0.72); }
+      .ltv-sched-fav {
+        flex: 0 0 38px;
+        width: 38px;
+        height: 38px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff;
+        cursor: pointer;
+      }
+      .ltv-sched-fav svg { display: block; }
+      .ltv-sched-fav[aria-pressed="true"] { color: #ff4d5e; }
+      .ltv-sched-fav[aria-pressed="true"] svg { fill: currentColor; }
+      .ltv-sched-list {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 10px;
+        display: grid;
+        gap: 8px;
+        align-content: start;
+      }
+      .ltv-sched-empty {
+        padding: 14px 8px;
+        color: rgba(255, 255, 255, 0.78);
+        font-size: 14px;
+        text-align: center;
+      }
+      .ltv-sched-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+        font-size: 14px;
+        text-align: left;
+        cursor: pointer;
+      }
+      .ltv-sched-item.is-active {
+        border-color: #fff;
+        background: rgba(255, 255, 255, 0.24);
+      }
+      .ltv-sched-item-order {
+        flex: 0 0 auto;
+        font-weight: 900;
+      }
+      .ltv-sched-item-fav {
+        flex: 0 0 auto;
+        display: grid;
+        color: #ff4d5e;
+      }
+      .ltv-sched-item-fav svg { display: block; fill: currentColor; }
+      .ltv-sched-item-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .ltv-player-name {
         flex: 0 0 auto;
@@ -256,9 +389,24 @@
     </div>
 
     <div class="ltv-player" id="ltvPlayer" hidden>
-      <div class="ltv-player-frame" id="ltvFrame"></div>
-      <button class="ltv-player-close" type="button" id="ltvClose" aria-label="關閉">×</button>
-      <button class="ltv-player-full" type="button" id="ltvFull" aria-label="全螢幕"></button>
+      <div class="ltv-player-body">
+        <div class="ltv-player-frame" id="ltvFrame"></div>
+        <button class="ltv-player-close" type="button" id="ltvClose" aria-label="關閉">×</button>
+        <button class="ltv-player-full" type="button" id="ltvFull" aria-label="全螢幕"></button>
+        <button class="ltv-player-sched" type="button" id="ltvSchedBtn" aria-label="節目表" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        </button>
+        <aside class="ltv-sched" id="ltvSched" aria-hidden="true" aria-label="節目表">
+          <div class="ltv-sched-hd">節目表</div>
+          <div class="ltv-sched-tools">
+            <input class="ltv-sched-search" id="ltvSchedSearch" type="search" autocomplete="off" placeholder="搜尋頻道／編號" aria-label="搜尋節目表頻道" />
+            <button class="ltv-sched-fav" type="button" id="ltvSchedFavOnly" aria-pressed="false" aria-label="只顯示我的最愛" title="只顯示我的最愛">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21.2l7.8-7.8 1.1-1.1a5.5 5.5 0 0 0-.1-7.7z"/></svg>
+            </button>
+          </div>
+          <div class="ltv-sched-list" id="ltvSchedList"></div>
+        </aside>
+      </div>
       <div class="ltv-player-name" id="ltvPlayerName"></div>
     </div>
 
@@ -443,14 +591,68 @@
               const data = doc && doc.exists ? doc.data() || {} : {};
               channels = normalizeChannels(data[STORE_KEY]);
               renderGrid();
+              renderSched();
             })
             .catch(() => {
               channels = [];
               renderGrid();
+              renderSched();
             });
         }
 
         const fullBtn = document.getElementById("ltvFull");
+        const schedBtn = document.getElementById("ltvSchedBtn");
+        const schedEl = document.getElementById("ltvSched");
+        const schedListEl = document.getElementById("ltvSchedList");
+        const schedSearchEl = document.getElementById("ltvSchedSearch");
+        const schedFavOnlyEl = document.getElementById("ltvSchedFavOnly");
+        let currentId = "";
+
+        function visibleSchedChannels() {
+          const q = String(schedSearchEl.value || "").trim().toLowerCase();
+          let list = channels;
+          if (q) {
+            list = list.filter((it) =>
+              String(it.order || "").toLowerCase().indexOf(q) !== -1 ||
+              String(it.name || "").toLowerCase().indexOf(q) !== -1
+            );
+          }
+          if (schedFavOnlyEl.getAttribute("aria-pressed") === "true") {
+            list = list.filter((it) => isFav(it.id));
+          }
+          return list;
+        }
+
+        // 節目表：依編號由小至大、上至下列出本頁所有頻道，點選可切換播放
+        function renderSched() {
+          if (!schedListEl) return;
+          const list = visibleSchedChannels();
+          if (!list.length) {
+            schedListEl.innerHTML = '<div class="ltv-sched-empty">沒有符合的頻道。</div>';
+            return;
+          }
+          schedListEl.innerHTML = list
+            .map(
+              (it) => `
+              <button class="ltv-sched-item${it.id === currentId ? " is-active" : ""}" type="button" data-sched-open="${escapeHtml(it.id)}">
+                ${it.order ? `<span class="ltv-sched-item-order">${escapeHtml(it.order)}</span>` : ""}
+                <span class="ltv-sched-item-name">${escapeHtml(it.name || "（未命名頻道）")}</span>
+                ${isFav(it.id) ? `<span class="ltv-sched-item-fav" aria-label="我的最愛">${FAV_ICON}</span>` : ""}
+              </button>
+            `
+            )
+            .join("");
+        }
+
+        function setSched(open) {
+          if (!schedEl) return;
+          schedEl.classList.toggle("is-open", !!open);
+          schedEl.setAttribute("aria-hidden", open ? "false" : "true");
+          if (schedBtn) schedBtn.setAttribute("aria-expanded", open ? "true" : "false");
+        }
+
+        function closeSched() { setSched(false); }
+
         const ICON_FULLSCREEN = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
         const ICON_EXIT_FULLSCREEN = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
 
@@ -496,9 +698,11 @@
           if (document.fullscreenElement) {
             try { document.exitFullscreen(); } catch (e) {}
           }
+          closeSched();
           frameEl.innerHTML = "";
           playerEl.hidden = true;
           playerNameEl.textContent = "";
+          currentId = "";
         }
 
         function openPlayer(ch) {
@@ -518,6 +722,9 @@
             frameEl.appendChild(msg);
           }
           playerNameEl.textContent = [ch.order ? `第 ${ch.order} 台` : "", ch.name || ""].filter(Boolean).join("　");
+          currentId = ch.id;
+          renderSched();
+          closeSched();
           playerEl.hidden = false;
           if (playerEl.requestFullscreen) {
             try {
@@ -535,6 +742,7 @@
             e.stopPropagation();
             toggleFav(favEl.getAttribute("data-tv-fav"));
             renderGrid();
+            renderSched();
             return;
           }
           const btn = target && target.closest ? target.closest("[data-tv-open]") : null;
@@ -554,6 +762,7 @@
           e.stopPropagation();
           toggleFav(favEl.getAttribute("data-tv-fav"));
           renderGrid();
+          renderSched();
         });
 
         searchEl.addEventListener("input", renderGrid);
@@ -562,13 +771,36 @@
           favOnlyEl.setAttribute("aria-pressed", on ? "false" : "true");
           renderGrid();
         });
+        schedSearchEl.addEventListener("input", renderSched);
+        schedFavOnlyEl.addEventListener("click", () => {
+          const on = schedFavOnlyEl.getAttribute("aria-pressed") === "true";
+          schedFavOnlyEl.setAttribute("aria-pressed", on ? "false" : "true");
+          renderSched();
+        });
 
         document.getElementById("ltvClose").addEventListener("click", closePlayer);
         fullBtn.addEventListener("click", toggleFullscreen);
         document.addEventListener("fullscreenchange", syncFullBtn);
         syncFullBtn();
+
+        if (schedBtn) {
+          schedBtn.addEventListener("click", () => setSched(!(schedEl && schedEl.classList.contains("is-open"))));
+        }
+        if (schedListEl) {
+          schedListEl.addEventListener("click", (e) => {
+            const target = e.target;
+            const btn = target && target.closest ? target.closest("[data-sched-open]") : null;
+            if (!btn) return;
+            const id = btn.getAttribute("data-sched-open");
+            const ch = channels.find((x) => x.id === id);
+            if (ch) openPlayer(ch);
+          });
+        }
+
         document.addEventListener("keydown", (e) => {
-          if (e.key === "Escape" && !playerEl.hidden) closePlayer();
+          if (e.key !== "Escape" || playerEl.hidden) return;
+          if (schedEl && schedEl.classList.contains("is-open")) closeSched();
+          else closePlayer();
         });
 
         load();

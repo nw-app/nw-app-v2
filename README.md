@@ -4,7 +4,11 @@
 >
 > **技術堆疊**：`Firebase Auth / Firestore / Storage` + `原生 HTML / CSS / JavaScript` + `Service Worker（PWA 離線快取）` + `WebRTC 對講`
 >
-> **目前版本**：CACHE_VERSION `nwapp-v894`（每次升級需同步三項版本，詳見後方部署 SOP）
+> **目前版本**：CACHE_VERSION `nwapp-v896`（每次升級需同步三項版本，詳見後方部署 SOP）
+
+> **2026-11-27**：四個播放頁的節目表面板 `.ltv-sched` 寬度由 30% 調整為**瀏覽器寬度 50%**；面板標題下方新增獨立搜尋框 `#ltvSchedSearch`（比對頻道編號與名稱）及紅心篩選鈕 `#ltvSchedFavOnly`（只列出該頁我的最愛）。每列最愛頻道顯示紅心標記，從頁面頻道卡切換最愛時，節目表清單同步更新；原本面板排序與點選切換播放行為維持不變。版本：`livetv.html` `v=9`、`livemusic.html`／`broadcasttv.html`／`videotv.html` `v=8`、`sw.js` CACHE_VERSION `nwapp-v896`。
+
+> **2026-11-27**：四個社區播放頁播放器新增「**節目表**」滑入選單，並調整全螢幕鍵位置。播放器結構改為三層：`.ltv-player` 內新增相對定位容器 `.ltv-player-body`（`flex: 1 1 auto`），`.ltv-player-frame` 改為 `position: absolute; inset: 0` 置於其內，使按鈕可相對播放器區域定位。全螢幕鍵 `#ltvFull`（`.ltv-player-full`）由原本的右上角（關閉鍵左側）移至**播放器右下角**（`right`／`bottom: max(12px, env(safe-area-inset-*))`，`z-index: 3`）；`iframe` **左上角**新增圓形圖示鈕 `#ltvSchedBtn`（`.ltv-player-sched`，44×44 白色圓形、行內 SVG 清單圖示、`aria-expanded`）。按下後由左側滑入節目表面板 `.ltv-sched`（`position: absolute; left: 0; top: 0; bottom: 0; width: 30%`，即**瀏覽器 30% 寬度並靠左貼齊左側邊**；背景 `rgba(0, 0, 0, 0.5)` **黑底 50% 透明**；預設 `transform: translateX(-100%)`，加上 `.is-open` 時 `translateX(0)` 並以 `transition: transform 240ms` 呈現滑入動畫）。面板列出**該頁所有頻道**（依 `sortChannels()`／`orderRank()` 由編號小至大、上至下排列，每列顯示編號 `span.ltv-sched-item-order` 與名稱 `span.ltv-sched-item-name`），點選任一頻道即以 `openPlayer()` 切換播放並自動收起面板；目前播放中的頻道以 `.is-active` 標示。再次點擊左上角鈕可收合；按 Esc 時若面板為開啟狀態會先收合面板，否則才關閉播放器。版本：`livetv.html` `v=8`、`livemusic.html`／`broadcasttv.html`／`videotv.html` `v=7`、`sw.js` CACHE_VERSION `nwapp-v895`。
 
 > **2026-11-26**：四個社區播放頁新增「**我的最愛**」與「**篩選**」功能。每張頻道卡（`.ltv-tile`）右上角新增紅心鈕（`.ltv-tile-fav`，行內 SVG；點選以 `stopPropagation()` 隔離，不觸發播放器開啟；亦可用鍵盤 Enter／空白鍵操作），點選切換最愛狀態。頻道卡上方（`<main class="ltv-grid">` 之前）新增工具列 `.ltv-tools`：搜尋框 `#ltvSearch`（比對**頻道編號或名稱**，即時過濾）與「我的最愛」切換鈕 `#ltvFavOnly`（`aria-pressed` 控制僅顯示最愛）。最愛清單以 `localStorage` 儲存，依頁面各自獨立（鍵：`nwapp.livetv.favs`／`nwapp.livemusic.favs`／`nwapp.broadcasttv.favs`／`nwapp.videotv.favs`）；篩選結果為空時顯示「沒有符合的頻道／影片。」。版本：`livetv.html` `v=7`、`livemusic.html`／`broadcasttv.html`／`videotv.html` `v=6`、`sw.js` CACHE_VERSION `nwapp-v894`。
 
