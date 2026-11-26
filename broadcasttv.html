@@ -50,6 +50,69 @@
         grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
         gap: 14px;
       }
+      /* 手機直屏：一行 2 個頻道 */
+      @media (max-width: 560px) {
+        .ltv-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+      }
+      .ltv-tools {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      .ltv-search {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 44px;
+        padding: 0 14px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: #fff;
+        color: var(--ink);
+        font-size: 15px;
+      }
+      .ltv-fav-toggle {
+        flex: 0 0 auto;
+        height: 44px;
+        padding: 0 16px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: #fff;
+        color: var(--ink);
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .ltv-fav-toggle svg { display: block; }
+      .ltv-fav-toggle[aria-pressed="true"] {
+        border-color: var(--brand);
+        background: #fdecec;
+        color: var(--brand);
+      }
+      .ltv-fav-toggle[aria-pressed="true"] svg { fill: currentColor; }
+      .ltv-tile-fav {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 1;
+        width: 36px;
+        height: 36px;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: rgba(17, 24, 39, 0.42);
+        color: #fff;
+        cursor: pointer;
+      }
+      .ltv-tile-fav svg { display: block; }
+      .ltv-tile-fav.is-on { color: #ff4d5e; }
+      .ltv-tile-fav.is-on svg { fill: currentColor; }
       .ltv-tile {
         border: 1px solid var(--border);
         border-radius: var(--radius);
@@ -78,20 +141,20 @@
         position: absolute;
         top: 8px;
         left: 8px;
-        min-width: 24px;
-        height: 24px;
-        padding: 0 7px;
+        min-width: 30px;
+        height: 30px;
+        padding: 0 9px;
         display: inline-grid;
         place-items: center;
         border-radius: 999px;
         background: rgba(211, 47, 47, 0.92);
         color: #fff;
-        font-size: 12px;
+        font-size: 15px;
         font-weight: 900;
       }
       .ltv-tile-name {
         font-weight: 800;
-        font-size: 15px;
+        font-size: 18px;
         text-align: center;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -141,6 +204,25 @@
         line-height: 1;
         cursor: pointer;
       }
+      .ltv-player-full {
+        position: absolute;
+        top: max(12px, env(safe-area-inset-top));
+        right: calc(max(12px, env(safe-area-inset-right)) + 52px);
+        z-index: 2;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        border: 0;
+        background: rgba(255, 255, 255, 0.92);
+        color: #111827;
+        cursor: pointer;
+      }
+      .ltv-player-full svg {
+        display: block;
+      }
       .ltv-player-name {
         flex: 0 0 auto;
         padding: max(10px, env(safe-area-inset-bottom)) 16px;
@@ -162,6 +244,13 @@
           </div>
         </div>
       </header>
+      <div class="ltv-tools">
+        <input class="ltv-search" id="ltvSearch" type="search" enterkeyhint="search" autocomplete="off" placeholder="輸入關鍵字或頻道編號" aria-label="搜尋頻道" />
+        <button class="ltv-fav-toggle" type="button" id="ltvFavOnly" aria-pressed="false" aria-label="只顯示我的最愛">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21.2l7.8-7.8 1.1-1.1a5.5 5.5 0 0 0-.1-7.7z"/></svg>
+          <span>我的最愛</span>
+        </button>
+      </div>
       <main class="ltv-grid" id="ltvGrid"></main>
       <div class="ltv-empty" id="ltvEmpty" hidden>尚未設定任何頻道。</div>
     </div>
@@ -169,6 +258,7 @@
     <div class="ltv-player" id="ltvPlayer" hidden>
       <div class="ltv-player-frame" id="ltvFrame"></div>
       <button class="ltv-player-close" type="button" id="ltvClose" aria-label="關閉">×</button>
+      <button class="ltv-player-full" type="button" id="ltvFull" aria-label="全螢幕"></button>
       <div class="ltv-player-name" id="ltvPlayerName"></div>
     </div>
 
@@ -223,12 +313,20 @@
         // 四個播放頁不分社區／帳號：一律讀取同一份固定頻道設定（與後台「功能」分頁同一份）。
         const GLOBAL_CONFIG_CID = "oOo7WB8YSRo8FGcebLg6";
 
+        // 編號排序：支援「N001」這類含前導字母／補零的編號，取數字部分由小至大
+        function orderRank(v) {
+          const s = String(v == null ? "" : v).trim();
+          if (!s) return Number.POSITIVE_INFINITY;
+          const m = s.match(/\d+/);
+          if (m) return Number(m[0]);
+          const n = parseFloat(s);
+          return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
+        }
+
         function sortChannels(list) {
           return (Array.isArray(list) ? list.slice() : []).sort((a, b) => {
-            const an = parseFloat(a.order);
-            const bn = parseFloat(b.order);
-            const av = Number.isFinite(an) ? an : Number.POSITIVE_INFINITY;
-            const bv = Number.isFinite(bn) ? bn : Number.POSITIVE_INFINITY;
+            const av = orderRank(a.order);
+            const bv = orderRank(b.order);
             if (av !== bv) return av - bv;
             return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
           });
@@ -251,20 +349,70 @@
 
         const gridEl = document.getElementById("ltvGrid");
         const emptyEl = document.getElementById("ltvEmpty");
+        const searchEl = document.getElementById("ltvSearch");
+        const favOnlyEl = document.getElementById("ltvFavOnly");
         const playerEl = document.getElementById("ltvPlayer");
         const frameEl = document.getElementById("ltvFrame");
         const playerNameEl = document.getElementById("ltvPlayerName");
         const cid = GLOBAL_CONFIG_CID;
 
-        function renderGrid(channels) {
-          if (!channels.length) {
+        // 我的最愛：以 localStorage 記錄頻道 id，依頁面各自獨立
+        const FAV_KEY = "nwapp.broadcasttv.favs";
+        const FAV_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21.2l7.8-7.8 1.1-1.1a5.5 5.5 0 0 0-.1-7.7z"/></svg>';
+
+        function loadFavorites() {
+          try {
+            const arr = JSON.parse(localStorage.getItem(FAV_KEY) || "[]");
+            return new Set(Array.isArray(arr) ? arr.map(String) : []);
+          } catch (e) {
+            return new Set();
+          }
+        }
+
+        let favorites = loadFavorites();
+
+        function isFav(id) { return favorites.has(String(id)); }
+
+        function saveFavorites() {
+          try { localStorage.setItem(FAV_KEY, JSON.stringify(Array.from(favorites))); } catch (e) {}
+        }
+
+        function toggleFav(id) {
+          const k = String(id);
+          if (favorites.has(k)) favorites.delete(k);
+          else favorites.add(k);
+          saveFavorites();
+        }
+
+        // 依搜尋關鍵字（比對編號或名稱）與「我的最愛」開關篩選
+        function visibleChannels() {
+          const q = String(searchEl.value || "").trim().toLowerCase();
+          let list = channels;
+          if (q) {
+            list = list.filter((it) =>
+              String(it.order || "").toLowerCase().indexOf(q) !== -1 ||
+              String(it.name || "").toLowerCase().indexOf(q) !== -1
+            );
+          }
+          if (favOnlyEl.getAttribute("aria-pressed") === "true") {
+            list = list.filter((it) => isFav(it.id));
+          }
+          return list;
+        }
+
+        function renderGrid() {
+          const list = visibleChannels();
+          if (!list.length) {
             gridEl.innerHTML = "";
+            emptyEl.textContent = channels.length ? "沒有符合的頻道。" : "尚未設定任何頻道。";
             emptyEl.hidden = false;
             return;
           }
           emptyEl.hidden = true;
-          gridEl.innerHTML = channels
-            .map((it) => `
+          gridEl.innerHTML = list
+            .map((it) => {
+              const on = isFav(it.id);
+              return `
               <button class="ltv-tile" type="button" data-tv-open="${escapeHtml(it.id)}">
                 <span class="ltv-tile-img">
                   ${it.order ? `<span class="ltv-tile-order">${escapeHtml(it.order)}</span>` : ""}
@@ -273,10 +421,12 @@
                       ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.name)}" />`
                       : '<span class="ltv-tile-ph">無圖片</span>'
                   }
+                  <span class="ltv-tile-fav${on ? " is-on" : ""}" role="button" tabindex="0" data-tv-fav="${escapeHtml(it.id)}" aria-pressed="${on ? "true" : "false"}" aria-label="${on ? "移除我的最愛" : "加入我的最愛"}">${FAV_ICON}</span>
                 </span>
                 <span class="ltv-tile-name">${escapeHtml(it.name || "（未命名頻道）")}</span>
               </button>
-            `)
+            `;
+            })
             .join("");
         }
 
@@ -292,15 +442,57 @@
             .then((doc) => {
               const data = doc && doc.exists ? doc.data() || {} : {};
               channels = normalizeChannels(data[STORE_KEY]);
-              renderGrid(channels);
+              renderGrid();
             })
             .catch(() => {
               channels = [];
-              renderGrid(channels);
+              renderGrid();
             });
         }
 
+        const fullBtn = document.getElementById("ltvFull");
+        const ICON_FULLSCREEN = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+        const ICON_EXIT_FULLSCREEN = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
+
+        // 全螢幕按鍵：點一下可翻轉為全螢幕（並嘗試鎖定橫向）觀賞，再點一下退出
+        function syncFullBtn() {
+          if (!fullBtn) return;
+          const on = !!document.fullscreenElement;
+          fullBtn.innerHTML = on ? ICON_EXIT_FULLSCREEN : ICON_FULLSCREEN;
+          fullBtn.setAttribute("aria-label", on ? "退出全螢幕" : "全螢幕");
+        }
+
+        function lockLandscape() {
+          try {
+            if (screen.orientation && screen.orientation.lock) {
+              const p = screen.orientation.lock("landscape");
+              if (p && p.catch) p.catch(() => {});
+            }
+          } catch (e) {}
+        }
+
+        function unlockOrientation() {
+          try {
+            if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+          } catch (e) {}
+        }
+
+        function toggleFullscreen() {
+          if (document.fullscreenElement) {
+            unlockOrientation();
+            try { document.exitFullscreen(); } catch (e) {}
+            return;
+          }
+          if (!playerEl.requestFullscreen) return;
+          try {
+            const p = playerEl.requestFullscreen();
+            if (p && p.then) p.then(lockLandscape, () => {});
+            else lockLandscape();
+          } catch (e) {}
+        }
+
         function closePlayer() {
+          unlockOrientation();
           if (document.fullscreenElement) {
             try { document.exitFullscreen(); } catch (e) {}
           }
@@ -330,20 +522,51 @@
           if (playerEl.requestFullscreen) {
             try {
               const p = playerEl.requestFullscreen();
-              if (p && p.catch) p.catch(() => {});
+              if (p && p.then) p.then(lockLandscape, () => {});
             } catch (e) {}
           }
         }
 
         gridEl.addEventListener("click", (e) => {
-          const btn = e.target && e.target.closest ? e.target.closest("[data-tv-open]") : null;
+          const target = e.target;
+          const favEl = target && target.closest ? target.closest("[data-tv-fav]") : null;
+          if (favEl) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleFav(favEl.getAttribute("data-tv-fav"));
+            renderGrid();
+            return;
+          }
+          const btn = target && target.closest ? target.closest("[data-tv-open]") : null;
           if (!btn) return;
           const id = btn.getAttribute("data-tv-open");
           const ch = channels.find((x) => x.id === id);
           if (ch) openPlayer(ch);
         });
 
+        // 紅心可用鍵盤（Enter／空白鍵）操作
+        gridEl.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
+          const target = e.target;
+          const favEl = target && target.closest ? target.closest("[data-tv-fav]") : null;
+          if (!favEl) return;
+          e.preventDefault();
+          e.stopPropagation();
+          toggleFav(favEl.getAttribute("data-tv-fav"));
+          renderGrid();
+        });
+
+        searchEl.addEventListener("input", renderGrid);
+        favOnlyEl.addEventListener("click", () => {
+          const on = favOnlyEl.getAttribute("aria-pressed") === "true";
+          favOnlyEl.setAttribute("aria-pressed", on ? "false" : "true");
+          renderGrid();
+        });
+
         document.getElementById("ltvClose").addEventListener("click", closePlayer);
+        fullBtn.addEventListener("click", toggleFullscreen);
+        document.addEventListener("fullscreenchange", syncFullBtn);
+        syncFullBtn();
         document.addEventListener("keydown", (e) => {
           if (e.key === "Escape" && !playerEl.hidden) closePlayer();
         });
