@@ -99,6 +99,20 @@ html, body {
   }
 }
 
+/* PWA（standalone）底部安全距離保證：
+   Android 的 env(safe-area-inset-bottom) 常為 0，系統導覽列會蓋住頁尾列，
+   故在 PWA 模式下確保底部至少有 1.5rem 留白（瀏覽器模式完全不受影響）。
+   置於檔案最後，確保不被上方其他安全區域規則覆蓋。 */
+@media (display-mode: standalone) {
+  body,
+  .wrap,
+  .layout,
+  .parcel-layout,
+  .v-page {
+    padding-bottom: max(env(safe-area-inset-bottom), var(--wc-bottom-overlay, 0px), 1.5rem);
+  }
+}
+
 .pwa-install[hidden] { display: none; }
 .pwa-install {
   position: fixed;

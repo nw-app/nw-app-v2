@@ -4,7 +4,11 @@
 >
 > **技術堆疊**：`Firebase Auth / Firestore / Storage` + `原生 HTML / CSS / JavaScript` + `Service Worker（PWA 離線快取）` + `WebRTC 對講`
 >
-> **目前版本**：CACHE_VERSION `nwapp-v869`（每次升級需同步三項版本，詳見後方部署 SOP）
+> **目前版本**：CACHE_VERSION `nwapp-v871`（每次升級需同步三項版本，詳見後方部署 SOP）
+
+> **2026-11-26**：PWA（standalone）頁尾被 Android 系統導覽列遮住修正：Android 的 `env(safe-area-inset-bottom)` 常為 `0`，導致 PWA 模式下頁尾列（底部導覽／廣告列）貼齊畫面最底而被系統導覽列蓋住（瀏覽器模式因網址列撐開而正常）。於 `css/pwa.css` 的 `@media (display-mode: standalone)` 內，把 `.layout`／`.parcel-layout`／`.wrap`／`.v-page` 與 `body` 的 `padding-bottom` 由 `env(safe-area-inset-bottom)` 改為 `max(env(safe-area-inset-bottom), var(--wc-bottom-overlay, 0px), 1.5rem)`（`var(--wc-bottom-overlay)` 由 `js/pwa.js` 依 `visualViewport` 計算），確保 PWA 模式至少有 1.5rem 底部留白；瀏覽器模式不受影響。長者簡易版 `css/special-member.css` 的 `.sp-bar`／`.sp-home` 同值調整（原 `0.85rem` → `1.5rem`）。版本：`css/pwa.css` `v=5`、`css/special-member.css` `v=52`、`member.html` `v=18`、`special-member.html` `v=72`、`sw.js` CACHE_VERSION `nwapp-v871`。
+
+> **2026-11-26**：住戶端 LOGO「連續快按 3 下重新整理頁面」：一般版（`member.html`，LOGO `#brandLogoReload`）與長者簡易版（`special-member.html`，LOGO `#spBrandLogo`）的 LOGO 連續快按 3 下（600ms 內累計，逾時歸零）→ `location.reload()`。`member.html` 的 LOGO 原以 `<a>` 連到外部網站（qailifeweb-h9keujwr.manus.space），依需求改為**單點不再開外部連結，僅連點 3 下才動作**（已移除外部連結）。版本：`member.js` `v=82`、`special-member.js` `v=49`、`member.html` `v=17`、`special-member.html` `v=71`、`sw.js` CACHE_VERSION `nwapp-v870`。
 
 > **2026-11-26**：住戶端「大頭照連點 5 次切換版本」＋登入記住版本：一般版（`member.html`）大頭照（`#profileAvatarImg`／`#profileAvatarFallback`）連續點 5 次（2 秒內累計，逾時歸零）→ 立即切換到長者簡易版 `special-member.html`；長者簡易版（`special-member.html`）大頭照（`.sp-profile-photo-img`／`.sp-profile-photo-initial`）連續點 5 次 → 切換回 `member.html`。切換**不需登出再登入**，會直接跳頁並保留目前社區參數（`?c=`）。同時把選擇的版本寫入住戶文件 `users/{uid}.specialMode`（一般版 `false`／簡易版 `true`），沿用既有 `index.js` 的 `isSpecialResident()`／`residentHomeUrl()` 登入導向邏輯，因此住戶端**所有登入（含表單登入與已登入自動轉導）都會回到登出前所在的版本頁面**。版本：`member.js` `v=81`、`special-member.js` `v=48`、`member.html` `v=16`、`special-member.html` `v=70`、`sw.js` CACHE_VERSION `nwapp-v869`。
 

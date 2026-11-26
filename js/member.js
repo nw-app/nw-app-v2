@@ -3247,6 +3247,29 @@
   bindAvatarVersionSwitch();
   document.addEventListener("DOMContentLoaded", bindAvatarVersionSwitch);
 
+  // LOGO 連續快按 3 下：重新整理頁面
+  const bindLogoReload = () => {
+    const logo = document.getElementById("brandLogoReload");
+    if (!logo || logo._boundLogoReload) return;
+    logo._boundLogoReload = true;
+    let taps = 0;
+    let timer = null;
+    logo.addEventListener("click", (e) => {
+      e.preventDefault();
+      taps += 1;
+      if (timer) clearTimeout(timer);
+      if (taps >= 3) {
+        taps = 0;
+        timer = null;
+        location.reload();
+        return;
+      }
+      timer = setTimeout(() => { taps = 0; timer = null; }, 600);
+    });
+  };
+  bindLogoReload();
+  document.addEventListener("DOMContentLoaded", bindLogoReload);
+
   // 頁面載入時初始化日期時間和天氣
   document.addEventListener('DOMContentLoaded', initDateTimeWeather);
   

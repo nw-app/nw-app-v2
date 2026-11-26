@@ -1733,10 +1733,10 @@ body {
    故只在 PWA 模式下加上額外底部留白，瀏覽器模式維持原本高度 */
 @media (display-mode: standalone) {
   .sp-bar {
-    padding-bottom: calc(0.55rem + max(env(safe-area-inset-bottom), 0.85rem));
+    padding-bottom: calc(0.55rem + max(env(safe-area-inset-bottom), var(--wc-bottom-overlay, 0px), 1.5rem));
   }
   .sp-home {
-    padding-bottom: calc(1rem + max(env(safe-area-inset-bottom), 0.85rem));
+    padding-bottom: calc(1rem + max(env(safe-area-inset-bottom), var(--wc-bottom-overlay, 0px), 1.5rem));
   }
 }
 

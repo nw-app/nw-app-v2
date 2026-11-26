@@ -2162,6 +2162,25 @@
       else handleAction(action);
     });
 
+    // LOGO 連續快按 3 下：重新整理頁面
+    var brandLogo = document.getElementById("spBrandLogo");
+    if (brandLogo) {
+      var logoTaps = 0;
+      var logoTimer = null;
+      brandLogo.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        logoTaps += 1;
+        if (logoTimer) clearTimeout(logoTimer);
+        if (logoTaps >= 3) {
+          logoTaps = 0;
+          logoTimer = null;
+          location.reload();
+          return;
+        }
+        logoTimer = setTimeout(function () { logoTaps = 0; logoTimer = null; }, 600);
+      });
+    }
+
     if (el.fontDown) el.fontDown.addEventListener("click", function () { stepScale(-1); });
     if (el.fontUp) el.fontUp.addEventListener("click", function () { stepScale(1); });
 
