@@ -4,7 +4,9 @@
 >
 > **技術堆疊**：`Firebase Auth / Firestore / Storage` + `原生 HTML / CSS / JavaScript` + `Service Worker（PWA 離線快取）` + `WebRTC 對講`
 >
-> **目前版本**：CACHE_VERSION `nwapp-v900`（每次升級需同步三項版本，詳見後方部署 SOP）
+> **目前版本**：CACHE_VERSION `nwapp-v901`（每次升級需同步三項版本，詳見後方部署 SOP）
+
+> **2026-11-27**：長者簡易版語音辨識修正兩處。一、包裹相關詞彙擴大：`VOICE_COMMANDS` 的 `parcel` 新增「信件」「信」「掛號信」「包裏」「貨運」「物流」「寄件」「取件」「領件」「收件」等，只要語音提到信件／快遞／包裹就開啟「我的包裹」查詢紀錄。並將問候／道謝／閒聊類指令（`greet`／`thanks`／`who`／`help`／`bye`）移到 `VOICE_COMMANDS` 最後，命中長度相同時讓功能類指令優先（例如「幫我看包裹」會開包裹、「幫我找銀行」會開地圖，而非回覆說明文字）。二、地圖／Google 搜尋改用清乾淨的關鍵字：新增 `voiceSearchQuery()` 移除「請幫我找」「我想找」「附近的」「查一下」等口語用語與語尾助詞，因此「請幫我找洗衣店」會以「洗衣店」查詢，不再把整句拿去搜尋。版本：`js/special-member.js` `v=59`、`special-member.html` `v=82`、`sw.js` CACHE_VERSION `nwapp-v901`。
 
 > **2026-11-27**：後台「功能」清單頻道編號由小至大排序修正：原 `parseFloat("N001")` 會得到 `NaN`，導致帶字母前綴的編號退回依名稱排序；新增 `liveChannelOrderRank()` 擷取編號中的數字，讓 `N001`、`N002`、`N010` 等格式依數值正確排序。無有效編號者維持排最後，同編號依名稱排序。版本：`system.html` `js/system.js?v=61`、`sw.js` CACHE_VERSION `nwapp-v900`。
 

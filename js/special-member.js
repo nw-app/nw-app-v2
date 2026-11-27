@@ -234,7 +234,7 @@
   var VOICE_COMMANDS = [
     { action: "back", words: ["回上一頁", "關起來", "關閉", "返回", "上一頁", "不要了"] },
     { action: "signout", words: ["登出"] },
-    { action: "parcel", words: ["包裹", "郵件", "快遞", "掛號", "宅配"] },
+    { action: "parcel", words: ["包裹", "包裏", "郵件", "信件", "信", "快遞", "掛號", "掛號信", "宅配", "貨運", "物流", "寄件", "取件", "領件", "收件"] },
     { action: "bulletin", words: ["公告", "布告", "社區消息"] },
     { action: "visitor", words: ["訪客", "客人", "有人來", "登記"] },
     { action: "facility", words: ["公設", "預約", "健身房", "教室", "設施", "游泳池"] },
@@ -251,13 +251,15 @@
     { action: "intercom", words: ["對講", "對講機", "呼叫", "室內對講", "門口對講"] },
     { action: "profile", words: ["個人", "我的資料", "個人資料"] },
     { action: "call", words: ["打電話", "撥電話", "撥打", "打給管理中心", "管理室電話", "管理中心電話", "電話"] },
+    { action: "myunit", words: ["我的戶號", "住戶編號", "我是哪一戶", "我的社區", "我住哪裡"] },
+    { action: "maps", words: ["地圖", "帶我去", "哪裡有", "附近有什麼"].concat(VOICE_MAP_POI) },
+    // 問候／道謝／閒聊放最後：命中長度相同時，讓功能類指令優先
+    // （例如「幫我看包裹」要開包裹、「幫我找銀行」要開地圖，而不是回說明）
     { action: "greet", words: ["你好", "您好", "早安", "午安", "晚安", "哈囉"] },
     { action: "thanks", words: ["謝謝", "感謝", "多謝"] },
     { action: "who", words: ["你是誰", "你叫什麼", "你的名字", "你什麼名字", "你會什麼"] },
     { action: "help", words: ["幫我", "怎麼辦", "不會用", "怎麼用", "教我"] },
-    { action: "myunit", words: ["我的戶號", "住戶編號", "我是哪一戶", "我的社區", "我住哪裡"] },
     { action: "bye", words: ["再見", "掰掰", "拜拜"] },
-    { action: "maps", words: ["地圖", "帶我去", "哪裡有", "附近有什麼"].concat(VOICE_MAP_POI) },
   ];
 
   var VOICE_WEEKDAYS = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
@@ -765,6 +767,25 @@
     return hit;
   }
 
+  // 口語要求用語：搜尋／地圖查詢前先去掉，避免把整句拿去搜尋
+  // 例如「請幫我找洗衣店」→「洗衣店」
+  var VOICE_QUERY_FILLERS = [
+    "請幫我找", "請幫我查", "請幫我搜尋", "請幫我", "幫我找", "幫我查", "幫我搜尋", "幫我",
+    "我想要找", "我想要", "我想找", "我想", "我要找", "我要",
+    "請你", "請問", "麻煩你", "麻煩", "請", "告訴我", "跟我說",
+    "搜尋", "搜索", "查詢", "查一下", "查一查", "查", "找一下", "找找", "找", "看一下", "看看",
+    "附近的", "附近", "哪裡有", "哪有", "帶我去", "帶我去找",
+    "一下", "好嗎", "可以嗎", "謝謝",
+  ];
+  function voiceSearchQuery(text) {
+    var q = String(text || "").replace(/[\s,，。、！!？?；;：:]/g, "");
+    if (!q) return "";
+    VOICE_QUERY_FILLERS.forEach(function (w) { q = q.split(w).join(""); });
+    q = q.replace(/[嗎呢吧啊啦喔哦耶呀]/g, "");
+    q = q.replace(/^(有|在|去|到|是|這是|那是)+/, "");
+    return q;
+  }
+
   // 用地點關鍵字開啟 Google 地圖搜尋（帶入使用者目前位置附近）
   function openVoiceMap(poi) {
     var q = String(poi || "").trim();
@@ -950,6 +971,9 @@
     // 地圖：找出要問的地點，回覆並附上「開啟地圖」按鈕
     if (action === "maps") {
       var poi = voiceMapPoi(text);
+      var term = voiceSearchQuery(text);
+      // 用清乾淨的詞查（例如「洗衣店」），不要用整句「請幫我找洗衣店」
+      if (poi && term.length > poi.length && term.indexOf(poi) >= 0 && term.length <= 16) poi = term;
       if (!poi) {
         finishReply("您想找附近的什麼呢？例如水電行、藥局、便利商店、餐廳。", "");
         return;
@@ -1004,10 +1028,12 @@
     // 聽不懂時：先判斷是不是地址／地名／店家名——是就給 Google 地圖按鈕，否則給 Google 搜尋按鈕
     var q = String(text || "").trim();
     if (q.length >= 2) {
-      if (looksLikePlace(q)) {
-        finishReply("我幫您在 Google 地圖上找「" + q + "」，請點下面的按鈕查看。", "", q);
+      // 去掉「請幫我找…」等口語用語，只留關鍵字再查
+      var term = voiceSearchQuery(q) || q;
+      if (looksLikePlace(term)) {
+        finishReply("我幫您在 Google 地圖上找「" + term + "」，請點下面的按鈕查看。", "", term);
       } else {
-        finishReply("這個我幫您用 Google 搜尋「" + q + "」，請點下面的按鈕查看。", "", "", q);
+        finishReply("這個我幫您用 Google 搜尋「" + term + "」，請點下面的按鈕查看。", "", "", term);
       }
       return;
     }
